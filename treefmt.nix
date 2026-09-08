@@ -75,7 +75,6 @@ in
     };
   };
 
-
   settings.global.excludes = [
     "fixtures/**"
     "openspec/**"

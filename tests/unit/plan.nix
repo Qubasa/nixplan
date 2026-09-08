@@ -44,7 +44,6 @@ let
   worked = support.workedResult;
   workedPlan = worked.plan;
 
-
   fixture = fromJSON (readFile (folder + "/plan/backup.json"));
 
   join = path: name: if path == "" then name else "${path}.${name}";
@@ -129,7 +128,6 @@ let
         ${field} = value;
       };
     };
-
 
   collapse =
     s:

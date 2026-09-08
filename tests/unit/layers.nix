@@ -47,7 +47,6 @@ let
 
   topLevelNames = attrNames (entriesOf repoRoot);
 
-
   classOf = {
     "lib" = "the library";
     "image" = "a realiser";
@@ -58,6 +57,7 @@ let
     "perf" = "the performance harness";
     "docs" = "the documentation of the library";
     "README.md" = "the documentation of the library";
+    "CLAUDE.md" = "the invariants an author has to keep";
     "openspec" = "the specification records";
     "treefmt.nix" = "the formatter's own configuration";
     "styles" = "the formatter's own configuration";
@@ -65,6 +65,8 @@ let
     "flake.nix" = "the flake";
     "flake.lock" = "the flake";
     "flake-module.nix" = "the flake";
+    "devshells.nix" = "the flake";
+    "pytest-env.nix" = "the flake";
     "ruff.toml" = "the formatter's own configuration";
     ".envrc" = "the checkout's own configuration";
     ".gitignore" = "the checkout's own configuration";
@@ -88,7 +90,6 @@ let
 
   hasRootDocument = pathExists (repoRoot + "/README.md");
   rootDocument = if hasRootDocument then readFile (repoRoot + "/README.md") else "";
-
 
   tokensIn =
     text:
@@ -175,7 +176,6 @@ let
       rootOf = _: repoRoot;
     };
 
-
   e2ePathsOf =
     folder:
     let
@@ -239,7 +239,6 @@ let
     )
   );
 
-
   scannedDirectories = [
     "lib"
     "image"
@@ -263,7 +262,6 @@ let
       filter (p: !(pathExists p.resolved)) repoNamedPaths
     )
   );
-
 
   proseFiles =
     map (rel: {
@@ -289,7 +287,6 @@ let
     );
 
   dangling = sorted (concatLists (map danglingIn proseFiles));
-
 
   systemBinaries = [
     "portablectl"
@@ -361,6 +358,7 @@ in
     expected = {
       perDirectory = [ ];
       harness = [
+        "conftest.py"
         "delivery.py"
         "guest.nix"
         "runner.py"

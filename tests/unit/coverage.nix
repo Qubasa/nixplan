@@ -30,7 +30,6 @@ let
     ;
   inherit (support) filesUnder lines;
 
-
   lowerLetters = [
     "a"
     "b"
@@ -103,7 +102,6 @@ let
   snakeName = title: "test_" + concatStringsSep "_" (words title);
   camelName = title: "test" + concatStringsSep "" (map capitalise (words title));
 
-
   accountable = [
     "implement-minimal-typed-edge/specs/planner/typed-edge/spec.md"
     "implement-minimal-typed-edge/specs/planner/diagnostics/spec.md"
@@ -123,6 +121,8 @@ let
     "strip-planner-tests-to-unit-and-e2e/specs/tooling/nix-unit-suite/spec.md"
     "strip-planner-tests-to-unit-and-e2e/specs/tooling/scenario-suite/spec.md"
     "strip-planner-tests-to-unit-and-e2e/specs/tooling/test-layers/spec.md"
+    "resume-e2e-machines-from-snapshots/specs/tooling/machine-snapshots/spec.md"
+    "resume-e2e-machines-from-snapshots/specs/delivery/real-cluster/spec.md"
     "clean-up-transplant-residue/specs/tooling/repository-shape/spec.md"
     "clean-up-transplant-residue/specs/tooling/nix-unit-suite/spec.md"
     "clean-up-transplant-residue/specs/tooling/evaluation-performance/spec.md"
@@ -140,7 +140,6 @@ let
     "declare-service-state/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of declare-service-state has been done, so nothing in this package claims to satisfy it yet";
   };
-
 
   isSpecFile = path: match ".*/spec\\.md" path != null;
   discovered = filter isSpecFile (filesUnder changesRoot);
@@ -165,7 +164,6 @@ let
   );
 
   located = scenario: "${scenario.path} :: ${scenario.title}";
-
 
   unitNamed = concatLists (
     map (
@@ -255,7 +253,6 @@ let
   e2eFiles = filesByName e2eNamed;
   existing = filesByName (unitNamed ++ e2eNamed ++ besideNamed);
 
-
   omitted = {
     "A module's own code raises an uncatchable error" =
       "an abort and a missing attribute are what `builtins.tryEval` does not catch, so a test asserting the propagation would abort this suite rather than fail it; `testAModulesOwnCodeRaisesACatchableError` asserts the half that is containable and `docs/diagnostics.md` names the class.";
@@ -300,7 +297,6 @@ let
     "No test double is involved" = "test_every_participant_is_the_real_one";
     "Nothing else changes with it" = "testAnAddressChanges";
   };
-
 
   hasTest = title: existing ? ${snakeName title} || existing ? ${camelName title};
 
