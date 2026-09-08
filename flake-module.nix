@@ -92,9 +92,7 @@ in
         '';
       };
 
-      pytestEnv = pkgs.python3.withPackages (ps: [ ps.pytest ]);
-
-      clusterPytestEnv = pkgs.python313.withPackages (ps: [ ps.pytest ]);
+      pytestEnv = import ./pytest-env.nix pkgs;
 
       imageBuilder = import ./image {
         inherit (pkgs) lib;
@@ -131,49 +129,12 @@ in
           export PLANNER_WIRED_PAIR_DEPLOYMENT=${./tests/e2e/wired-pair/deployment}
           export PLANNER_PORTABLE_IMAGE=${portableImageArtifacts}
           export PLANNER_E2E_GUEST_IMAGE=${e2eGuest}/nixos.qcow2
+          export PLANNER_E2E_SSH_KEY=${e2eGuest.sshPrivateKey}
           export PLANNER_E2E=${./tests/e2e}
-          exec ${clusterPytestEnv}/bin/python3 ${./tests/e2e/runner.py} "$@"
+          exec ${pytestEnv}/bin/python3 ${./tests/e2e/runner.py} "$@"
         '';
       };
 
-      onPythonPath = dir: ''
-        case ":''${PYTHONPATH-}:" in
-          *":${dir}:"*) ;;
-          *) export PYTHONPATH="${dir}''${PYTHONPATH:+:$PYTHONPATH}" ;;
-        esac
-      '';
-
-      plannerShell = pkgs.mkShell {
-        packages = [ pytestEnv ];
-        shellHook = ''
-          planner_root="$(git rev-parse --show-toplevel)"
-          # A check copies `delivery.py` in beside the tests; here it is a path.
-          # Without it the two cluster suites fail to import rather than skip.
-          ${onPythonPath "$planner_root/tests/e2e"}
-        '';
-      };
-
-      clusterShell = pkgs.mkShell {
-        packages = [
-          clusterPytestEnv
-          pkgs.nix
-          pkgs.openssh
-        ];
-        shellHook = ''
-          planner_root="$(git rev-parse --show-toplevel)"
-          export PLANNER_WIRED_PAIR=${wiredPairArtifacts}
-          export PLANNER_WIRED_PAIR_DEPLOYMENT="$planner_root/tests/e2e/wired-pair/deployment"
-          export PLANNER_PORTABLE_IMAGE=${portableImageArtifacts}
-          export PLANNER_E2E_GUEST_IMAGE=${e2eGuest}/nixos.qcow2
-          ${onPythonPath "$planner_root/tests/e2e"}
-          if rookery_env=$(${clusterPytestEnv}/bin/python3 ${./tests/e2e/runner.py} --print-env); then
-            eval "$rookery_env"
-          else
-            echo "planner-cluster: no rookery, so the end-to-end tests will skip themselves" >&2
-          fi
-          echo "planner-cluster: pytest tests/e2e/<folder>/test_<folder>.py" >&2
-        '';
-      };
     in
     {
       checks.planner-tests =
@@ -223,9 +184,6 @@ in
       packages.planner-e2e-wired-pair = wiredPairArtifacts;
       packages.planner-e2e-guest = e2eGuest;
       packages.planner-e2e-portable-image = portableImageArtifacts;
-
-      devShells.planner = plannerShell;
-      devShells.planner-cluster = clusterShell;
 
       apps.planner-e2e = {
         type = "app";

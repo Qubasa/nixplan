@@ -236,7 +236,7 @@ def require_one_interpreter(rookery_python: str) -> None:
                     "",
                     "rookery reaches pytest through PYTHONPATH, which only holds",
                     "within one minor version. Rebuild the runner's environment on",
-                    f"{rookery_python} (flake-module.nix, clusterPytestEnv),",
+                    f"{rookery_python} (pytest-env.nix picks the newest one),",
                     "or point $ROOKERY_FLAKE at a rookery built for " + ours + ".",
                 ],
             )

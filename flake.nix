@@ -34,6 +34,7 @@
       imports = [
         inputs.treefmt-nix.flakeModule
         ./flake-module.nix
+        ./devshells.nix
       ];
 
       perSystem =
