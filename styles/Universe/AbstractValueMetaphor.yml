@@ -1,0 +1,8 @@
+extends: existence
+message: "'%s' is an abstract value metaphor. Say what the reader can do instead."
+level: error
+ignorecase: true
+tokens:
+  - '\b(?:is|are|was|were|becomes?|became|remains?) the (?:real |true )?(?:asset|currency|moat|superpower|differentiator|foundation|bedrock|cornerstone|linchpin|backbone)\b'
+  - '\b(?:holds|owns|keeps) nothing\b'
+  - '\bwhat you (?:really )?own is\b'

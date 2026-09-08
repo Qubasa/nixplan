@@ -1,0 +1,580 @@
+{
+  "machine:alpha": {
+    "address": "alpha.example",
+    "key": "sha256-5840440439b3bbf1",
+    "serviceManager": "systemd",
+    "system": "x86_64-linux",
+    "tags": [
+      "always-on",
+      "backed-up"
+    ]
+  },
+  "machine:beta": {
+    "address": "beta.example",
+    "key": "sha256-a515feee51d2fc42",
+    "serviceManager": "systemd",
+    "system": "aarch64-linux",
+    "tags": [
+      "always-on",
+      "backed-up"
+    ]
+  },
+  "machine:gamma": {
+    "address": "gamma.example",
+    "key": "sha256-2b728258e1f935d5",
+    "serviceManager": "systemd",
+    "system": "x86_64-linux",
+    "tags": [
+      "backed-up"
+    ]
+  },
+  "machine:vault": {
+    "address": "vault.example",
+    "key": "sha256-faa763b1d2703255",
+    "serviceManager": "systemd",
+    "system": "x86_64-linux",
+    "tags": [
+      "always-on"
+    ]
+  },
+  "nightly:client@alpha": {
+    "closure": [
+      "/nix/store/1w9k3zc7yq2mb5xj8vdl4rns6fga0h1p-openssh-9.8p1",
+      "/nix/store/3q8xk1p7v2mz9jd4rlnb6ycsfwg0h5aq-borgbackup-1.4.0"
+    ],
+    "dependsOn": [
+      "machine:alpha@sha256-5840440439b3bbf1"
+    ],
+    "env": {
+      "BORG_QUOTA_GIB": "500",
+      "BORG_RSH": "/nix/store/1w9k3zc7yq2mb5xj8vdl4rns6fga0h1p-openssh-9.8p1/bin/ssh -i /run/vars/hostKey/ssh_host_ed25519_key"
+    },
+    "key": "sha256-2d3474aed7b9bb34",
+    "placement": {
+      "reason": "every",
+      "tags": [
+        "backed-up"
+      ]
+    },
+    "provides": {
+      "identity": {
+        "declaringFile": "interfaces/default.nix",
+        "exports": {
+          "privateKey": {
+            "plane": "reference",
+            "readBy": [],
+            "secrecy": "secret",
+            "value": "/run/vars/hostKey/ssh_host_ed25519_key"
+          },
+          "publicKey": {
+            "plane": "env",
+            "readBy": [
+              "vault-repo:server@vault"
+            ],
+            "secrecy": "public",
+            "value": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICCyXFCyCrjDXgk161ICmYQX0iXoZgMe5sDtDnhA13q+ root@alpha"
+          }
+        },
+        "interface": "ssh-host-identity",
+        "keysetEqualsInterface": true
+      }
+    },
+    "reads": {
+      "repo": {
+        "delivered": true,
+        "entry": "vault-repo:server@vault",
+        "reach": "one",
+        "reads": [
+          "url",
+          "quota"
+        ],
+        "values": {
+          "quota": 500,
+          "url": "ssh://borg@vault.example:22/srv/borg"
+        },
+        "wire": {
+          "instance": "vault-repo",
+          "provides": "repo"
+        }
+      }
+    },
+    "settings": {
+      "client": {
+        "path": {
+          "source": "deployment",
+          "value": "/home"
+        }
+      }
+    },
+    "storeDir": "/nix/store",
+    "target": {
+      "address": "alpha.example",
+      "serviceManager": "systemd",
+      "system": {
+        "config": "x86_64-unknown-linux-gnu",
+        "libc": "glibc",
+        "linuxArch": "x86_64",
+        "parsed": {
+          "abi": {
+            "name": "gnu"
+          },
+          "cpu": {
+            "arch": "x86-64",
+            "bits": 64,
+            "family": "x86",
+            "name": "x86_64",
+            "significantByte": {
+              "name": "littleEndian"
+            }
+          },
+          "kernel": {
+            "execFormat": {
+              "name": "elf"
+            },
+            "families": {},
+            "name": "linux"
+          }
+        },
+        "system": "x86_64-linux",
+        "useLLVM": false
+      }
+    },
+    "units": {
+      "borgPush": {
+        "command": "/nix/store/3q8xk1p7v2mz9jd4rlnb6ycsfwg0h5aq-borgbackup-1.4.0/bin/borg create --stats ssh://borg@vault.example:22/srv/borg::{now} /home",
+        "env": {
+          "BORG_QUOTA_GIB": "500",
+          "BORG_RSH": "/nix/store/1w9k3zc7yq2mb5xj8vdl4rns6fga0h1p-openssh-9.8p1/bin/ssh -i /run/vars/hostKey/ssh_host_ed25519_key"
+        }
+      }
+    },
+    "vars": {
+      "hostKey": {
+        "files": {
+          "ssh_host_ed25519_key": {
+            "inPlan": "reference",
+            "path": "/run/vars/hostKey/ssh_host_ed25519_key",
+            "secrecy": "secret"
+          },
+          "ssh_host_ed25519_key.pub": {
+            "inPlan": "value",
+            "path": "/run/vars/hostKey/ssh_host_ed25519_key.pub",
+            "secrecy": "public"
+          }
+        }
+      }
+    }
+  },
+  "nightly:client@beta": {
+    "closure": [
+      "/nix/store/1w9k3zc7yq2mb5xj8vdl4rns6fga0h1p-openssh-9.8p1",
+      "/nix/store/3q8xk1p7v2mz9jd4rlnb6ycsfwg0h5aq-borgbackup-1.4.0"
+    ],
+    "dependsOn": [
+      "machine:beta@sha256-a515feee51d2fc42"
+    ],
+    "env": {
+      "BORG_QUOTA_GIB": "500",
+      "BORG_RSH": "/nix/store/1w9k3zc7yq2mb5xj8vdl4rns6fga0h1p-openssh-9.8p1/bin/ssh -i /run/vars/hostKey/ssh_host_ed25519_key"
+    },
+    "key": "sha256-338d8a382d62b543",
+    "placement": {
+      "reason": "every",
+      "tags": [
+        "backed-up"
+      ]
+    },
+    "provides": {
+      "identity": {
+        "declaringFile": "interfaces/default.nix",
+        "exports": {
+          "privateKey": {
+            "plane": "reference",
+            "readBy": [],
+            "secrecy": "secret",
+            "value": "/run/vars/hostKey/ssh_host_ed25519_key"
+          },
+          "publicKey": {
+            "plane": "env",
+            "readBy": [
+              "vault-repo:server@vault"
+            ],
+            "secrecy": "public",
+            "value": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH2zYlcrdY8a7DJlJ8Az4edUdWjYfHMxcCuOpwUzwdQt root@beta"
+          }
+        },
+        "interface": "ssh-host-identity",
+        "keysetEqualsInterface": true
+      }
+    },
+    "reads": {
+      "repo": {
+        "delivered": true,
+        "entry": "vault-repo:server@vault",
+        "reach": "one",
+        "reads": [
+          "url",
+          "quota"
+        ],
+        "values": {
+          "quota": 500,
+          "url": "ssh://borg@vault.example:22/srv/borg"
+        },
+        "wire": {
+          "instance": "vault-repo",
+          "provides": "repo"
+        }
+      }
+    },
+    "settings": {
+      "client": {
+        "path": {
+          "source": "deployment",
+          "value": "/home"
+        }
+      }
+    },
+    "storeDir": "/nix/store",
+    "target": {
+      "address": "beta.example",
+      "serviceManager": "systemd",
+      "system": {
+        "config": "aarch64-unknown-linux-gnu",
+        "gcc": {
+          "arch": "armv8-a"
+        },
+        "libc": "glibc",
+        "linuxArch": "arm64",
+        "parsed": {
+          "abi": {
+            "name": "gnu"
+          },
+          "cpu": {
+            "arch": "armv8-a",
+            "bits": 64,
+            "family": "arm",
+            "name": "aarch64",
+            "significantByte": {
+              "name": "littleEndian"
+            },
+            "version": "8"
+          },
+          "kernel": {
+            "execFormat": {
+              "name": "elf"
+            },
+            "families": {},
+            "name": "linux"
+          }
+        },
+        "system": "aarch64-linux",
+        "useLLVM": false
+      }
+    },
+    "units": {
+      "borgPush": {
+        "command": "/nix/store/3q8xk1p7v2mz9jd4rlnb6ycsfwg0h5aq-borgbackup-1.4.0/bin/borg create --stats ssh://borg@vault.example:22/srv/borg::{now} /home",
+        "env": {
+          "BORG_QUOTA_GIB": "500",
+          "BORG_RSH": "/nix/store/1w9k3zc7yq2mb5xj8vdl4rns6fga0h1p-openssh-9.8p1/bin/ssh -i /run/vars/hostKey/ssh_host_ed25519_key"
+        }
+      }
+    },
+    "vars": {
+      "hostKey": {
+        "files": {
+          "ssh_host_ed25519_key": {
+            "inPlan": "reference",
+            "path": "/run/vars/hostKey/ssh_host_ed25519_key",
+            "secrecy": "secret"
+          },
+          "ssh_host_ed25519_key.pub": {
+            "inPlan": "value",
+            "path": "/run/vars/hostKey/ssh_host_ed25519_key.pub",
+            "secrecy": "public"
+          }
+        }
+      }
+    }
+  },
+  "nightly:client@gamma": {
+    "closure": [
+      "/nix/store/1w9k3zc7yq2mb5xj8vdl4rns6fga0h1p-openssh-9.8p1",
+      "/nix/store/3q8xk1p7v2mz9jd4rlnb6ycsfwg0h5aq-borgbackup-1.4.0"
+    ],
+    "dependsOn": [
+      "machine:gamma@sha256-2b728258e1f935d5"
+    ],
+    "env": {
+      "BORG_QUOTA_GIB": "500",
+      "BORG_RSH": "/nix/store/1w9k3zc7yq2mb5xj8vdl4rns6fga0h1p-openssh-9.8p1/bin/ssh -i /run/vars/hostKey/ssh_host_ed25519_key"
+    },
+    "key": "sha256-18d6b76d91af9218",
+    "placement": {
+      "reason": "every",
+      "tags": [
+        "backed-up"
+      ]
+    },
+    "provides": {
+      "identity": {
+        "declaringFile": "interfaces/default.nix",
+        "exports": {
+          "privateKey": {
+            "bytes": "absent",
+            "plane": "reference",
+            "readBy": [],
+            "rows": [],
+            "secrecy": "secret",
+            "value": "/run/vars/hostKey/ssh_host_ed25519_key"
+          },
+          "publicKey": {
+            "bytes": "absent",
+            "plane": "env",
+            "readBy": [
+              "vault-repo:server@vault"
+            ],
+            "rows": [
+              {
+                "id": "set-entry-absent",
+                "subject": "vault-repo:server@vault"
+              }
+            ],
+            "secrecy": "public",
+            "value": null
+          }
+        },
+        "interface": "ssh-host-identity",
+        "keysetEqualsInterface": true
+      }
+    },
+    "reads": {
+      "repo": {
+        "delivered": true,
+        "entry": "vault-repo:server@vault",
+        "reach": "one",
+        "reads": [
+          "url",
+          "quota"
+        ],
+        "values": {
+          "quota": 500,
+          "url": "ssh://borg@vault.example:22/srv/borg"
+        },
+        "wire": {
+          "instance": "vault-repo",
+          "provides": "repo"
+        }
+      }
+    },
+    "settings": {
+      "client": {
+        "path": {
+          "source": "deployment",
+          "value": "/home"
+        }
+      }
+    },
+    "storeDir": "/nix/store",
+    "target": {
+      "address": "gamma.example",
+      "serviceManager": "systemd",
+      "system": {
+        "config": "x86_64-unknown-linux-gnu",
+        "libc": "glibc",
+        "linuxArch": "x86_64",
+        "parsed": {
+          "abi": {
+            "name": "gnu"
+          },
+          "cpu": {
+            "arch": "x86-64",
+            "bits": 64,
+            "family": "x86",
+            "name": "x86_64",
+            "significantByte": {
+              "name": "littleEndian"
+            }
+          },
+          "kernel": {
+            "execFormat": {
+              "name": "elf"
+            },
+            "families": {},
+            "name": "linux"
+          }
+        },
+        "system": "x86_64-linux",
+        "useLLVM": false
+      }
+    },
+    "units": {
+      "borgPush": {
+        "command": "/nix/store/3q8xk1p7v2mz9jd4rlnb6ycsfwg0h5aq-borgbackup-1.4.0/bin/borg create --stats ssh://borg@vault.example:22/srv/borg::{now} /home",
+        "env": {
+          "BORG_QUOTA_GIB": "500",
+          "BORG_RSH": "/nix/store/1w9k3zc7yq2mb5xj8vdl4rns6fga0h1p-openssh-9.8p1/bin/ssh -i /run/vars/hostKey/ssh_host_ed25519_key"
+        }
+      }
+    },
+    "vars": {
+      "hostKey": {
+        "files": {
+          "ssh_host_ed25519_key": {
+            "bytes": "absent",
+            "inPlan": "reference",
+            "path": "/run/vars/hostKey/ssh_host_ed25519_key",
+            "secrecy": "secret"
+          },
+          "ssh_host_ed25519_key.pub": {
+            "bytes": "absent",
+            "inPlan": "value",
+            "path": "/run/vars/hostKey/ssh_host_ed25519_key.pub",
+            "secrecy": "public"
+          }
+        }
+      }
+    }
+  },
+  "vault-repo:server@vault": {
+    "alloc": {
+      "ports": {
+        "ssh": 22
+      }
+    },
+    "closure": [
+      "/nix/store/3q8xk1p7v2mz9jd4rlnb6ycsfwg0h5aq-borgbackup-1.4.0"
+    ],
+    "configData": {
+      "/srv/borg/.ssh/authorized_keys": {
+        "computed": false,
+        "mode": "0600",
+        "reload": [
+          "borgRepo"
+        ],
+        "row": {
+          "id": "set-entry-absent",
+          "subject": "vault-repo:server@vault"
+        }
+      }
+    },
+    "dependsOn": [
+      "machine:vault@sha256-faa763b1d2703255"
+    ],
+    "key": "sha256-a090a60d56683eba",
+    "placement": {
+      "machines": [
+        "vault"
+      ],
+      "reason": "every"
+    },
+    "provides": {
+      "repo": {
+        "declaringFile": "interfaces/default.nix",
+        "exports": {
+          "quota": {
+            "plane": "env",
+            "readBy": [
+              "nightly:client@alpha",
+              "nightly:client@beta",
+              "nightly:client@gamma"
+            ],
+            "secrecy": "public",
+            "value": 500
+          },
+          "url": {
+            "plane": "env",
+            "readBy": [
+              "nightly:client@alpha",
+              "nightly:client@beta",
+              "nightly:client@gamma"
+            ],
+            "secrecy": "public",
+            "value": "ssh://borg@vault.example:22/srv/borg"
+          }
+        },
+        "interface": "borg-repository",
+        "keysetEqualsInterface": true
+      }
+    },
+    "reads": {
+      "clients": {
+        "delivered": true,
+        "entries": {
+          "nightly:client@alpha": {
+            "publicKey": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICCyXFCyCrjDXgk161ICmYQX0iXoZgMe5sDtDnhA13q+ root@alpha"
+          },
+          "nightly:client@beta": {
+            "publicKey": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH2zYlcrdY8a7DJlJ8Az4edUdWjYfHMxcCuOpwUzwdQt root@beta"
+          },
+          "nightly:client@gamma": {
+            "bytes": "absent",
+            "publicKey": null,
+            "row": {
+              "id": "set-entry-absent",
+              "subject": "vault-repo:server@vault"
+            }
+          }
+        },
+        "reach": "all",
+        "reads": [
+          "publicKey"
+        ],
+        "wire": {
+          "instance": "nightly",
+          "provides": "identity"
+        }
+      }
+    },
+    "settings": {
+      "server": {
+        "port": {
+          "source": "fixed",
+          "value": 22
+        },
+        "quota": {
+          "source": "deployment",
+          "value": 500
+        }
+      }
+    },
+    "storeDir": "/nix/store",
+    "target": {
+      "address": "vault.example",
+      "serviceManager": "systemd",
+      "system": {
+        "config": "x86_64-unknown-linux-gnu",
+        "libc": "glibc",
+        "linuxArch": "x86_64",
+        "parsed": {
+          "abi": {
+            "name": "gnu"
+          },
+          "cpu": {
+            "arch": "x86-64",
+            "bits": 64,
+            "family": "x86",
+            "name": "x86_64",
+            "significantByte": {
+              "name": "littleEndian"
+            }
+          },
+          "kernel": {
+            "execFormat": {
+              "name": "elf"
+            },
+            "families": {},
+            "name": "linux"
+          }
+        },
+        "system": "x86_64-linux",
+        "useLLVM": false
+      }
+    },
+    "units": {
+      "borgRepo": {
+        "command": "/nix/store/3q8xk1p7v2mz9jd4rlnb6ycsfwg0h5aq-borgbackup-1.4.0/bin/borg serve --restrict-to-path /srv/borg"
+      }
+    }
+  }
+}

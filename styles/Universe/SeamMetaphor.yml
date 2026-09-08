@@ -1,0 +1,7 @@
+extends: existence
+message: "'%s' is an LLM tell. Say what the artifact is and what crosses it."
+level: error
+ignorecase: true
+tokens:
+  - '\b(?:is|are|was|were|becomes?|became|remains?|stays?|serves as|acts as) the seam\b'
+  - '\bthe seam (?:between|that separates)\b'

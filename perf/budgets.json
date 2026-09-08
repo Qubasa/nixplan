@@ -1,0 +1,177 @@
+{
+  "margin": 0.15,
+  "growth": {
+    "bound": 1.25,
+    "sizes": [
+      4,
+      16,
+      64,
+      256
+    ],
+    "note": "The bound applies to every fixture measured at more than one size, and it is 1.25 because the cost per plan entry has to stay flat as the fleet grows: `fleet` grows the number of entries and keeps each entry's own work constant, `mesh` grows one entry's work with the fleet and keeps the plan linear in it, and a quarter of slack absorbs constant-factor noise without admitting any super-linear term."
+  },
+  "fixtures": {
+    "worked": {
+      "fixture": "worked",
+      "interpreter": "2.34.8",
+      "date": "2026-09-08",
+      "margin": 0.15,
+      "perEntry": {
+        "nrThunks": 844.625,
+        "nrFunctionCalls": 473.875,
+        "nrPrimOpCalls": 317.625,
+        "values.number": 1059.75,
+        "sets.bytes": 14642,
+        "envs.bytes": 10528,
+        "list.elements": 209.75,
+        "nrOpUpdateValuesCopied": 67.875,
+        "gc.totalBytes": 53950
+      },
+      "note": "Moved by the `worked` argument `perf/eval.nix` gained in clean-up-transplant-residue: a measurement's inputs are now the library, the harness, the fixture and the fixture's loader named separately rather than one copy of the whole tree, so the argument set the harness applies carries one attribute more. Measured with perf/measure.sh on nix 2.34.8, per plan entry: envs.bytes 10528, gc.totalBytes 53950, nrFunctionCalls 473.875, sets.bytes 14642, values.number 1059.75; the largest move was +0.105%."
+    },
+    "fleet-4": {
+      "fixture": "fleet",
+      "interpreter": "2.34.8",
+      "date": "2026-09-08",
+      "margin": 0.15,
+      "perEntry": {
+        "nrThunks": 762.6667,
+        "nrFunctionCalls": 418,
+        "nrPrimOpCalls": 291.6667,
+        "values.number": 938.8889,
+        "sets.bytes": 12968.8889,
+        "envs.bytes": 9216,
+        "list.elements": 186.2223,
+        "nrOpUpdateValuesCopied": 45.8889,
+        "gc.totalBytes": 46515.5556
+      },
+      "note": "Moved by the `worked` argument `perf/eval.nix` gained in clean-up-transplant-residue: a measurement's inputs are now the library, the harness, the fixture and the fixture's loader named separately rather than one copy of the whole tree, so the argument set the harness applies carries one attribute more. Measured with perf/measure.sh on nix 2.34.8, per plan entry: envs.bytes 9216, gc.totalBytes 46515.5556, sets.bytes 12968.8889; the largest move was +0.034%."
+    },
+    "fleet-16": {
+      "fixture": "fleet",
+      "interpreter": "2.34.8",
+      "date": "2026-09-08",
+      "margin": 0.15,
+      "perEntry": {
+        "nrThunks": 460,
+        "nrFunctionCalls": 288.9091,
+        "nrPrimOpCalls": 203.9091,
+        "values.number": 560.4243,
+        "sets.bytes": 7573.8182,
+        "envs.bytes": 5911.2728,
+        "list.elements": 135.8788,
+        "nrOpUpdateValuesCopied": 16.6364,
+        "gc.totalBytes": 28327.7576
+      },
+      "note": "Moved by the `worked` argument `perf/eval.nix` gained in clean-up-transplant-residue: a measurement's inputs are now the library, the harness, the fixture and the fixture's loader named separately rather than one copy of the whole tree, so the argument set the harness applies carries one attribute more. Measured with perf/measure.sh on nix 2.34.8, per plan entry: envs.bytes 5911.2728, sets.bytes 7573.8182; the largest move was +0.006%."
+    },
+    "fleet-64": {
+      "fixture": "fleet",
+      "interpreter": "2.34.8",
+      "date": "2026-09-08",
+      "margin": 0.15,
+      "perEntry": {
+        "nrThunks": 375.5349,
+        "nrFunctionCalls": 252.8838,
+        "nrPrimOpCalls": 179.4187,
+        "values.number": 454.8063,
+        "sets.bytes": 6066.2326,
+        "envs.bytes": 4989.0233,
+        "list.elements": 121.8295,
+        "nrOpUpdateValuesCopied": 8.3489,
+        "gc.totalBytes": 22753.4884
+      },
+      "note": "Moved by the `worked` argument `perf/eval.nix` gained in clean-up-transplant-residue: a measurement's inputs are now the library, the harness, the fixture and the fixture's loader named separately rather than one copy of the whole tree, so the argument set the harness applies carries one attribute more. Measured with perf/measure.sh on nix 2.34.8, per plan entry: envs.bytes 4989.0233, sets.bytes 6066.2326; the largest move was +0.002%."
+    },
+    "fleet-256": {
+      "fixture": "fleet",
+      "interpreter": "2.34.8",
+      "date": "2026-09-08",
+      "margin": 0.15,
+      "perEntry": {
+        "nrThunks": 353.8012,
+        "nrFunctionCalls": 243.6141,
+        "nrPrimOpCalls": 173.117,
+        "values.number": 427.6297,
+        "sets.bytes": 5678.3158,
+        "envs.bytes": 4751.7193,
+        "list.elements": 118.2145,
+        "nrOpUpdateValuesCopied": 6.2164,
+        "gc.totalBytes": 21311.4386
+      },
+      "note": "Moved by the `worked` argument `perf/eval.nix` gained in clean-up-transplant-residue: a measurement's inputs are now the library, the harness, the fixture and the fixture's loader named separately rather than one copy of the whole tree, so the argument set the harness applies carries one attribute more. Measured with perf/measure.sh on nix 2.34.8, per plan entry: envs.bytes 4751.7193, sets.bytes 5678.3158; the largest move was +0.001%."
+    },
+    "mesh-4": {
+      "fixture": "mesh",
+      "interpreter": "2.34.8",
+      "date": "2026-09-08",
+      "margin": 0.15,
+      "perEntry": {
+        "nrThunks": 827.8889,
+        "nrFunctionCalls": 473.4445,
+        "nrPrimOpCalls": 343.1112,
+        "values.number": 1032.4445,
+        "sets.bytes": 13966.2223,
+        "envs.bytes": 10225.7778,
+        "list.elements": 228,
+        "nrOpUpdateValuesCopied": 46.2223,
+        "gc.totalBytes": 51397.3334
+      },
+      "note": "Moved by the `worked` argument `perf/eval.nix` gained in clean-up-transplant-residue: a measurement's inputs are now the library, the harness, the fixture and the fixture's loader named separately rather than one copy of the whole tree, so the argument set the harness applies carries one attribute more. Measured with perf/measure.sh on nix 2.34.8, per plan entry: envs.bytes 10225.7778, sets.bytes 13966.2223; the largest move was +0.013%."
+    },
+    "mesh-16": {
+      "fixture": "mesh",
+      "interpreter": "2.34.8",
+      "date": "2026-09-08",
+      "margin": 0.15,
+      "perEntry": {
+        "nrThunks": 531.6061,
+        "nrFunctionCalls": 350.6364,
+        "nrPrimOpCalls": 261.2425,
+        "values.number": 663.7576,
+        "sets.bytes": 8695.2728,
+        "envs.bytes": 7025.4546,
+        "list.elements": 182.1819,
+        "nrOpUpdateValuesCopied": 17.091,
+        "gc.totalBytes": 33795.8788
+      },
+      "note": "Moved by the `worked` argument `perf/eval.nix` gained in clean-up-transplant-residue: a measurement's inputs are now the library, the harness, the fixture and the fixture's loader named separately rather than one copy of the whole tree, so the argument set the harness applies carries one attribute more. Measured with perf/measure.sh on nix 2.34.8, per plan entry: envs.bytes 7025.4546, sets.bytes 8695.2728; the largest move was +0.006%."
+    },
+    "mesh-64": {
+      "fixture": "mesh",
+      "interpreter": "2.34.8",
+      "date": "2026-09-08",
+      "margin": 0.15,
+      "perEntry": {
+        "nrThunks": 448.9225,
+        "nrFunctionCalls": 316.3024,
+        "nrPrimOpCalls": 238.3644,
+        "values.number": 560.8683,
+        "sets.bytes": 7222.3256,
+        "envs.bytes": 6131.3489,
+        "list.elements": 169.3954,
+        "nrOpUpdateValuesCopied": 8.8373,
+        "gc.totalBytes": 28207.1318
+      },
+      "note": "Moved by the `worked` argument `perf/eval.nix` gained in clean-up-transplant-residue: a measurement's inputs are now the library, the harness, the fixture and the fixture's loader named separately rather than one copy of the whole tree, so the argument set the harness applies carries one attribute more. Measured with perf/measure.sh on nix 2.34.8, per plan entry: envs.bytes 6131.3489, sets.bytes 7222.3256; the largest move was +0.002%."
+    },
+    "mesh-256": {
+      "fixture": "mesh",
+      "interpreter": "2.34.8",
+      "date": "2026-09-08",
+      "margin": 0.15,
+      "perEntry": {
+        "nrThunks": 427.6472,
+        "nrFunctionCalls": 307.4679,
+        "nrPrimOpCalls": 232.4776,
+        "values.number": 534.3938,
+        "sets.bytes": 6843.3217,
+        "envs.bytes": 5901.2866,
+        "list.elements": 166.1053,
+        "nrOpUpdateValuesCopied": 6.7135,
+        "gc.totalBytes": 26804.5848
+      },
+      "note": "Moved by the `worked` argument `perf/eval.nix` gained in clean-up-transplant-residue: a measurement's inputs are now the library, the harness, the fixture and the fixture's loader named separately rather than one copy of the whole tree, so the argument set the harness applies carries one attribute more. Measured with perf/measure.sh on nix 2.34.8, per plan entry: envs.bytes 5901.2866, sets.bytes 6843.3217; the largest move was +0.000%."
+    }
+  }
+}

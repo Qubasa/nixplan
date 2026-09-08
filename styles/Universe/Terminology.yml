@@ -1,0 +1,7 @@
+extends: substitution
+message: "Use '%s', not '%s'."
+level: error
+ignorecase: true
+swap:
+  manifests: deployment plans
+  manifest: deployment plan

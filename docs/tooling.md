@@ -1,0 +1,295 @@
+# Running it
+
+Every command below is run from the repository root and needs no network beyond
+resolving the pinned inputs. The one exception is the machine layer, which
+resolves rookery at run time and boots virtual machines.
+
+## Look at the worked deployment
+
+```bash
+nix eval --json .#planner.worked.plan | jq keys      # the eight entries
+nix eval --json .#planner.worked.diagnostics | jq    # the rows, as records
+nix eval --raw  .#planner.rendered                   # the rows, rendered
+nix eval --json .#planner.worked.applicable          # false: one row is an error
+```
+
+`.#lib` is the library itself, for a caller that wants `mkPlan` from another
+flake.
+
+## The two layers
+
+A planner test is one of two things, and there is no third:
+
+- a **nix-unit suite** under `tests/unit/`, whose subject is a
+  value an evaluation can hold;
+- an **end-to-end test** under `tests/e2e/<name>/`, whose subject
+  needs a booted machine.
+
+Which layer a test belongs to is decided by its subject, and each fact is
+asserted in one layer and never in both. A property no pure evaluation can
+observe is asserted on a machine; everything else is asserted in evaluation,
+where a failure is an attribute path rather than a boot.
+
+The rule is checked rather than advised. `tests/unit/layers.nix` reads the tree
+it is evaluated from and fails a build when it has drifted: the tests root holds
+those two directories and nothing else beside `default.nix` and `report.nix`,
+the evaluating layer is Nix and only Nix, each end-to-end directory holds
+exactly one `test_*.py` with its fixture inside it, no directory reaches into a
+sibling by path or by name, a fixture two of them need lives at the layer root,
+nothing names a directory that has been deleted, and no test writes an
+executable standing in for `portablectl`, `systemctl`, `nix-store` or `ssh`. One
+behaviour asserted in both layers is a failure too, reported with both files, by
+`tests/unit/coverage.nix`.
+
+## Run the evaluating layer
+
+```bash
+nix build .#checks.x86_64-linux.planner-tests -L      # 237 tests through nix-unit
+```
+
+The last line is the count: `🎉 237/237 successful`. Take the number from there
+rather than from this page.
+
+Faster, while iterating - the same suites evaluated directly, with no derivation
+in the way:
+
+```bash
+nix eval --json .#planner.failures                    # [] on a green tree
+nix eval --json .#planner.failuresBySuite             # suite -> its failing test names
+nix eval --json .#planner.suites.plan.testThePlanSerialises | jq   # expr vs expected
+nix eval --json .#planner.suites --apply 'builtins.mapAttrs (_: builtins.attrNames)'
+```
+
+`git add` a new file before evaluating: the flake does not see an untracked
+path, and the failure looks like a missing file rather than an unstaged one.
+
+The suites, and how many tests each holds:
+
+| Suite | Tests | Subject |
+| --- | --- | --- |
+| `interfaces` | 12 | interface identity by value, export atoms, the omission rule |
+| `composition` | 16 | roots, members, the settings namespace, defaults and fixed |
+| `resolution` | 17 | wiring, arity, secrecy, placement, keyset equality |
+| `diagnostics` | 13 | totality, ordering, severity, rendering, and the scan that finds no raising call under `lib/` |
+| `plan` | 20 | keys, planes, absences, dependencies, serialisation, the golden fixture |
+| `postgres` | 10 | one provider instance and two consumers, planned |
+| `exclusions` | 18 | one deployment per excluded construct, each refused |
+| `units` | 31 | the portable unit vocabulary, per field |
+| `platform` | 19 | a machine's target, elaborated |
+| `closure` | 21 | what a unit may name and what it must declare |
+| `image` | 25 | the portable-service-image realiser's reading of an entry |
+| `flakelet` | 14 | the flakelet realiser's reading: enablement, identity, the two name refusals |
+| `perf` | 6 | the synthetic fleet is deterministic and realises nothing |
+| `layers` | 8 | the shape of the test tree itself |
+| `coverage` | 7 | every specification heading is a test, an omission or an alias |
+
+That column is a value, not a tally kept by hand:
+
+```bash
+nix eval --json '.#planner.suites' \
+  --apply 'builtins.mapAttrs (_: s: builtins.length (builtins.attrNames s))'
+```
+
+`support.nix` and `worked.nix` sit in the same directory and are not suites:
+they are the helpers and the worked deployment the suites are written against.
+
+## Run the machine layer
+
+Two machines and the network between them are devices a build sandbox does not
+have, so this layer is an app rather than a check:
+
+```bash
+ROOKERY_FLAKE=/path/to/rookery nix run .#planner-e2e                 # both folders, 29 tests
+ROOKERY_FLAKE=/path/to/rookery nix run .#planner-e2e portable-image  # one folder
+```
+
+See [cluster.md](cluster.md) for the host it needs, the two folders, what a run
+observes and how to drive `pytest` by hand against the working tree.
+
+The harness's own pure half - which machine a key names, which address a
+delivery dials, what the copy runs in - has no machine in it and is a check like
+any other: `nix build .#checks.x86_64-linux.planner-delivery -L`, 8 tests over
+`tests/e2e/test_harness.py`. `nix develop .#planner` carries the same `pytest`
+and puts that directory on `PYTHONPATH`, so
+`pytest -q tests/e2e/test_harness.py` runs against the working tree
+and prints `8 passed`.
+
+## Mapping a specification scenario to a test
+
+No committed table of pairs exists. A `#### Scenario:` heading names its own
+test, and `tests/unit/coverage.nix` is the set difference between the headings
+of the specifications this package answers for and the test names that exist.
+
+**A heading becomes a name.** Its words are lowercased, an apostrophe is dropped
+rather than split on, and every other run of non-alphanumerics is one separator,
+so a hyphen, a comma and a space are the same thing. The words then spell the
+name twice, once per layer: `test_<snake>` for a machine test and `test<Camel>`
+for a nix-unit test. *An end-to-end test carries its own fixture* requires
+`test_an_end_to_end_test_carries_its_own_fixture` or
+`testAnEndToEndTestCarriesItsOwnFixture`, and the check resolves whichever layer
+defines it. A name defined in both layers is a behaviour asserted twice, which
+is a failure naming both files rather than a matter of an author's judgement.
+
+**The residue is two lists**, both in `tests/unit/coverage.nix`, and nothing
+else:
+
+| List | Entries | What an entry says |
+| --- | --- | --- |
+| `omitted` | 9 | a heading this project deliberately does not observe, mapped to the sentence saying why. Two classes only: a failure `builtins.tryEval` does not catch, so asserting it would end the evaluation that would report it; and a property of running the suite that the suite cannot observe about itself without reading the flake that runs it. An omission for a heading that has since gained a test fails as stale, and an empty reason fails as no reason. |
+| `aliased` | 18 | a heading two capabilities word differently, mapped to the one test that observes it under the other's words. The named test must exist in one of the layers, and an alias for a heading whose own derived name is already a test fails as redundant. |
+
+A third file's names count as tests that exist without being a third layer:
+`perf/check_test.py`, the budget checker's own `unittest`. It sits beside the
+tool it tests rather than in either layer - a budget checker is not the planner
+- but the `tooling/evaluation-performance` headings it observes are this
+package's, so calling them omissions would be a false sentence.
+
+The same suite classifies every `spec.md` in the repository: `accountable` lists
+the eighteen this package's tests answer for, `excused` maps each of the others
+to the reason they are not this package's - an excluded construct, a
+specification a later change's delta removed, a change nothing here implements
+yet. A new specification is a failure naming the file rather than a silently
+smaller check.
+
+To add a scenario:
+
+1. Add it to a spec under `openspec/changes/`.
+2. `nix eval --json .#planner.failuresBySuite.coverage` now names
+   `testAScenarioGainsNoTest`, and the failure prints the two names the heading
+   requires along with any existing name that shares a long prefix with them -
+   which is what a rewording leaves behind.
+3. Write the test in exactly one layer, under the name the heading derives. Or
+   add the heading to `omitted` with a reason, or to `aliased` with the test
+   that already observes it.
+
+## Regenerate the golden fixture
+
+`fixtures/minimal-typed-edge/plan/backup.json` is the produced plan,
+committed. `testTheGoldenPlanMatches` in `tests/unit/plan.nix` compares it with
+`.#planner.worked.plan` field by field, and reports the attribute paths that
+differ rather than two documents. Every field participates, because the fixture
+carries nothing the planner did not write.
+
+```bash
+nix eval --json .#planner.worked.plan | jq -S . \
+  > fixtures/minimal-typed-edge/plan/backup.json
+```
+
+This is a **separate action from running the suite**, and it is a person's:
+evaluation cannot write to the working tree, so a failing comparison leaves the
+fixture on disk untouched and nothing rewrites it on your behalf. Regenerate
+only after reading why the comparison failed.
+
+## The performance gate
+
+```bash
+nix build .#checks.x86_64-linux.planner-perf -L        # measured counters vs budgets
+nix build .#packages.x86_64-linux.planner-perf-results # the raw measurements
+nix run   .#planner-perf -- --sizes 4,16               # measure and check, ad hoc
+```
+
+The harness evaluates one deployment per fixture and size under
+`NIX_SHOW_STATS`, forces the plan deeply, and writes one JSON result per run.
+Options (`perf/measure.sh`): `--fixtures worked,fleet,mesh`,
+`--sizes 4,16,64,256`, `--repeats 2`.
+
+The two sized fixtures cover the two ways a fleet grows, and the second exists
+because the first cannot see the difference between a scan and a lookup:
+
+| Fixture | Grows | Covers |
+| --- | --- | --- |
+| `fleet` | the number of entries, each entry's own work constant | the pipeline: resolution, placement, one set-valued read landing in one entry |
+| `mesh` | one entry's work, the plan still linear in the fleet | an entry that declares one closure root, one unit and one render fragment per machine, and every list the library then crosses against another |
+
+`tests/unit/perf.nix` asserts that shape (`testTheMeshPlansOneFleetSizedEntry`):
+a fixture that collapsed its per-machine items into one would keep measuring
+and stop covering anything.
+
+**The gate is the sandboxed one.** `checks.planner-perf` measures inside a
+build sandbox with empty evaluation caches, and `budgets.json` is recorded from
+`packages.planner-perf-results`, which runs there too - those two agree run
+after run, and two independent builds produce byte-identical gated counters.
+`nix run .#planner-perf` measures on your machine with your `nix.conf`, so it
+is for iterating on a change and reading the direction a counter moved; its
+absolute figures drift from the budgets by a fraction of a percent and it will
+report failures the gate does not. On the tree this page was written against the
+gate passed with `0 failures` while `nix run .#planner-perf -- --sizes 4,16`
+reported fifteen. Never re-record a budget from it.
+
+What is gated and what is not:
+
+- **Gated**: counters that are equal across repeated runs of one input on one
+  interpreter - `nrThunks`, `nrFunctionCalls`, `nrPrimOpCalls`, `values.number`,
+  `sets.bytes`, `envs.bytes`, `list.elements`, `nrOpUpdateValuesCopied`,
+  `gc.totalBytes`. A counter that is not reproducible fails the check rather
+  than being averaged.
+- **Advisory**: wall clock and CPU time are reported and never gate.
+- Budgets are **cost per plan entry**, in `perf/budgets.json`, each fixture
+  carrying the interpreter version and date it was recorded against.
+
+The ratchet is two-sided. Above budget fails; more than the margin *below*
+budget also fails, with the replacement figure ready to paste:
+
+```
+FAIL: gated counter nrThunks of fixture worked costs 345.875 per plan entry,
+      more than the 15% margin below its budget of 900;
+      lower the budget of worked to "nrThunks": 345.875
+```
+
+A growth bound applies to **every fixture measured at more than one size**, at
+the sizes stated in the budget file: per-entry cost must stay within the bound
+as the fleet grows. Today every counter *falls* from 4 to 256 in both fixtures
+(`fleet` `nrThunks` ratio 0.46, `mesh` 0.52).
+
+**A cost the counters cannot see.** A membership test written as `elem` over a
+fleet-sized list is one primop call that allocates nothing, so a quadratic
+built out of `elem` moves no gated counter at any size - `mesh` at 2048 spent a
+quarter of its evaluation there while every per-entry counter stayed flat. Time
+is the only observable, and time never gates, so measure it deliberately
+instead: build `planner-perf-results` with `--fixtures mesh --sizes
+256,512,1024,2048` before and after the change and compare `cpuTime` per entry
+across sizes. A per-entry figure that rises with size is a super-linear term;
+one that stays flat is not.
+
+**After a deliberate library change that moves counters**: rebuild
+`planner-perf-results`, re-record the per-entry figures in `budgets.json`, and
+re-run the gate. Do not widen a budget to make a regression pass - the point of
+the ratchet is that both directions are a decision.
+
+## The other checks
+
+```bash
+nix build .#checks.x86_64-linux.planner-perf-checker -L  # the checker's own 13 tests
+nix build .#checks.x86_64-linux.treefmt -L               # every formatter and linter, python included
+nix fmt                                                  # the same set, applied to the tree
+```
+
+`treefmt.nix` runs `ruff format`, `ruff check` and `mypy --strict` over the
+Python here beside the Nix formatters, so an edit is told about a lint by
+`nix fmt` rather than by a build. `ruff.toml` holds the rules; mypy runs once
+per directory of top-level modules, because that is what each `import` expects
+to be beside. Note that `nix fmt` also runs prose linters over the
+repository's markdown and currently fails on files this library does not own.
+
+Everything the flake exposes, so a reader can tell what runs where:
+
+| `nix build .#checks.x86_64-linux.<name>` | Needs | Subject |
+| --- | --- | --- |
+| `planner-tests` | nothing | the fifteen nix-unit suites, evaluated |
+| `planner-delivery` | nothing | the end-to-end harness's pure half: addressing, refusal, what a copy runs in |
+| `planner-perf` | nothing | the counter budgets and the growth bound |
+| `planner-perf-checker` | nothing | the budget checker's own tests |
+| `treefmt` | nothing | formatting and linting, repository-wide: nixfmt, deadnix, shellcheck, yamlfmt, vale, `ruff`, `mypy --strict` |
+
+| `nix run .#<name>` | Needs | Subject |
+| --- | --- | --- |
+| `planner-e2e` | `/dev/kvm`, `/dev/net/tun`, `/dev/vhost-vsock`, `$ROOKERY_FLAKE` | real machines, a delivery between them, and the wire the planner resolved - [cluster.md](cluster.md) |
+| `planner-perf` | nothing | the same measurement and check, on your machine rather than in a sandbox |
+
+| `nix build .#packages.x86_64-linux.<name>` | Subject |
+| --- | --- |
+| `planner-e2e-wired-pair` | the flakelet artifacts one folder's machines are handed |
+| `planner-e2e-portable-image` | the images the other folder's machine is handed |
+| `planner-e2e-guest` | the guest image both boot |
+| `planner-perf` | the ad-hoc measurement script |
+| `planner-perf-results` | the raw measurements the budgets are recorded from |

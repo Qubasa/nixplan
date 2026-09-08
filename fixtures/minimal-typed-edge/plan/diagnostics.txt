@@ -1,0 +1,262 @@
+The deployment in ../deployment/ produces two rows and raises five gaps. One of
+the two rows blocks the apply, which is the whole claim of the folder: the
+mistake it catches is one the target ships today as a shorter list.
+
+Row subjects are paths relative to ../modules/ for a module file and relative to
+../ for a deployment file, or else a plan key from ./backup.json or a bead id.
+`some-module/service.nix` is the deliberate placeholder for a counterfactual row
+whose mistake belongs to no module in this folder. An interface name carries its
+declaring file at the first mention in a row, which is §32.6's rule.
+
+../interfaces/default.nix declares two interfaces, `ssh-host-identity` with
+`{publicKey, privateKey}` and `borg-repository` with `{url, quota}`, and
+../interfaces/exports.nix declares the four atoms those four exports bind to.
+Every atom is a PAIR of `type` and `secrecy`. §32.1 makes an export a quadruple
+and this folder writes two fields, which is a proposal to narrow that section
+rather than a folder out of date with it; the argument is at the head of
+../interfaces/exports.nix and the last gap row below is the change that owes it.
+
+  ! vault-repo:server@vault  clients names three entries and
+                             `nightly:client@gamma` has no bytes
+      severity: error, blocks apply. The set is the value a configData file is
+                rendered from, and two thirds of a file is not a file
+      evidence: uses.clients has reach = "all" in
+                ../modules/borg-repo/server.nix, the wire names nightly's
+                `identity`, and nightly has three placements from the
+                `backed-up` tag. nightly:client@gamma declares
+                ssh-host-identity.publicKey and its vars generator has not run,
+                so ./backup.json carries the entry with value null and
+                bytes = "absent"
+      effect:   `clan vars generate` for gamma, replan, apply. One command, and
+                the operator is told which machine before anything is deployed
+      why row:  this is the folder's whole subject stated as one line of output.
+                The same mistake in the target is
+                `clanServices/borgbackup/default.nix:57-72`, a fold of
+                getPublicValue over the client machines with a default of null
+                and the nulls dropped. There the repository comes up, the server
+                is healthy, two clients push, and gamma's backup silently never
+                happens. `clanServices/zerotier/default.nix:229-240` is the same
+                fold for addresses. A set-valued read that names its entries
+                cannot shorten, and that is the one behavioural difference this
+                folder is arguing for
+
+  ! vault-repo:server@vault  the clients set is in this entry's key
+      severity: warning
+      evidence: the entry's key is a function of its resolved reads, and
+                reads.clients resolves to three entries chosen by a tag
+      effect:   adding or removing the `backed-up` tag on any machine re-keys
+                this entry, so the repository's own unit is re-keyed by a change
+                to somebody else's machine. The authorized_keys file is
+                configData and lands on the reload plane, so the process is
+                reloaded rather than restarted, and the key still moves
+      why row:  the two facts are about different things and a reader who
+                conflates them will expect a restart or will expect no diff. What
+                re-keys an entry is what it read; what restarts a process is
+                which plane the value arrived on
+
+Everything below is a DIFFERENT authoring mistake and its row. Five rejections,
+and none of them names a file in this folder. All five are shapes the target
+ships today, which is why they are here: each one is currently the only branch
+available rather than a review miss.
+
+An edge whose far end is a string.
+
+  x some-module/service.nix  a consumer indexes the export map by a key it built
+                             itself
+      cause:      cross-service reads in the target go through one clan-global
+                  attrset keyed by "service:instance:role:machine"
+                  (`clan-core/lib/exports/exports.nix:25`), so the far end of an
+                  edge is chosen inside the consuming module by string
+                  arithmetic. `clan-core/lib/exports/test_integration.nix:91` is
+                  the shape written out:
+                  exports."A:::${machine.name}".networking.host
+      effect:     a typo, a renamed instance and a reshaped producer are all one
+                  failure, `attribute 'X' missing`, with no service named and no
+                  row anywhere
+      resolution: `uses.<slot>` names an interface VALUE and the deployment names
+                  the far end in `wire`. ../deployment/instances.nix writes both
+                  wires and neither is a string a module could get wrong
+      note:       the consumer half already exists in the target and does nothing.
+                  `manifest.exports.inputs` is declared at
+                  `clan-core/lib/inventory/distributed-service/service-module.nix:350-353`
+                  with the description "List of export interface this service
+                  consumes", written by exactly two services
+                  (`clanServices/pki/default.nix:11` and
+                  `clanServices/dm-dns/default.nix:14`) and read by nothing. Only
+                  `exports.out` is checked
+                  (`clan-core/lib/inventory/distributed-service/all-services-wrapper.nix:85-102`).
+                  Nine services adopted the checked producing half and the
+                  unchecked untyped path carries 34 reads across nine services,
+                  which is C3 of the corpus's unaddressed register and the
+                  measurement this folder is built around
+
+An absence that reads as an empty set.
+
+  x some-module/service.nix  a consumer writes `exportValue.endpoints.hosts or [ ]`
+      cause:      with no declared consumption there is nothing to check a read
+                  against, so a producer that was never wired and a producer with
+                  nothing to say arrive at the consumer as the same value
+      effect:     the service configures itself for zero far ends and comes up.
+                  The mistake is discovered by the thing that stops working
+      resolution: an unwired slot is a row naming the slot and its interface's
+                  declaring file, so the defensive default has nothing to defend
+                  against and cannot be written
+      note:       four sites in the target, and they are the tell rather than the
+                  bug: `clanServices/pki/default.nix:41`,
+                  `clanServices/borgbackup/default.nix:72` and `:235`,
+                  `clanServices/sshd/default.nix:44`, `:48` and `:49`. Authors
+                  write `or` when a contract is missing, and they stop when it is
+                  not
+
+A single-valued read of a set.
+
+  x some-module/service.nix  uses.repo has reach = "one" and the wired capability
+                             has two placements
+      cause:      arity is authored on the consumer's slot, and the planner counts
+                  the placements of the far end rather than believing the count
+      effect:     refused at wiring, with the slot and both placements named
+      resolution: `reach = "all"` and index by machine, or place one. Both are
+                  edits somebody makes on purpose
+      note:       in the target this row is unreachable, because the arity of a
+                  read is whatever the consuming module's author assumed about a
+                  machine list in a different file. §31.1 names that silence as
+                  the defect rather than the fan-out
+
+The private half asked for through a slot.
+
+  x some-module/service.nix  uses.clients.reads names privateKey
+      cause:      ssh-host-identity.privateKey (../interfaces/default.nix) has
+                  secrecy = "secret", and a `reads` entry for a secret export is
+                  refused outright
+      resolution: read publicKey. A backup server needs the half that authorizes,
+                  and the half that authenticates belongs to the machine being
+                  backed up
+      note:       the refusal here is NOT the sibling's. In the corpus's
+                  secrets-per-instance sketch the private half is capped
+                  locality = "machine-local" and what the cap
+                  refuses is a read from another machine. This folder has no
+                  locality, so the rule is coarser and stronger: never through a
+                  slot, on any machine. The cost is in the last gap row but one.
+                  What both refuse is the corpus's U5, where
+                  `share = true` is the only cross-machine channel there is and it
+                  put a SAML signing private key on a machine that only verifies
+
+A provider that publishes a different set.
+
+  x some-module/service.nix  provides.repo.exports omits `quota`
+      cause:      a provider's export keyset equals its interface's keyset. An
+                  omission is a row and an extra export is a row, and no superset
+                  satisfies a narrower slot
+      resolution: publish it, or declare a different interface. Two names over two
+                  shapes is how a type refuses a substitution the spelling would
+                  have allowed
+      note:       ../interfaces/default.nix keeps a second export on
+                  borg-repository so that this row has a subject. In the target
+                  the row cannot exist in either direction: a consumer reads what
+                  is in the attrset, an extra key is invisible, and a missing one
+                  is the `or [ ]` above
+
+Five gaps this folder writes out instead of hiding, and the first two are the
+ones its own deployment raises.
+
+  o deployment/machines.nix  a reach = "all" set has no way to be narrowed
+      wanted:     a predicate on a set-valued slot, so a consumer can say which
+                  placements of a capability it means
+      raised how: `vault` deliberately carries no `backed-up` tag, and the comment
+                  in ../deployment/machines.nix says why: tagged, it would publish
+                  a host identity and the repository would authorize its own key.
+                  A tag choice is standing in for a field
+      why not now: §31.7 defers the arity questions by name and
+                  `uses.<slot>.requires.count` is the predicate form the corpus
+                  already sketches, in its binary-caches folder. Both presuppose reach,
+                  which this folder adopts in two of its three values, so the
+                  field can be added later without changing a shape
+      status:     recorded. Nothing here works around it beyond the tag, and the
+                  tag is honest about being a workaround
+
+  o universe-k8m  a machine-scoped read has no expression in this folder, and the
+                  target's own consumer needs one
+      wanted:     a slot whose far end is every service on the reader's machine
+                  rather than a capability the deployment wired
+      the case:   `clanServices/pki/default.nix:33` reads
+                  `selectExports (scope: scope.machineName == machine.name) exports`
+                  — every export on its own machine, from services it does not
+                  name and did not wire. That is a collector, it is §30's subject,
+                  and it is the one real consumer in the target that the surface
+                  in this folder cannot convert. It is also the service that
+                  declares the dead `manifest.exports.inputs`, so the mechanism
+                  clan-core half-built and the mechanism this folder finishes are
+                  not the same mechanism for that one service
+      the two routes: leave pki on the untyped path and convert the wired reads
+                  first, which is what this folder does and what makes it
+                  shippable. Or adopt `collects` for it, which is §30 — DECIDED
+                  and not ADOPTED, with `collects`, `contributes`, `answers`,
+                  `policy.collects` and the `collected` argument existing in no
+                  tree, an authoring bill the corpus's firewall sketch calls the product
+                  of services and questions, and a chain whose failure rows name
+                  no author
+      status:     stated so that nobody reads this folder as covering the whole
+                  consuming surface. It covers the wired reads. The corpus's
+                  firewall and quiesce-group sketches own the unwired ones and neither is
+                  retracted
+
+  o interfaces/exports.nix  a routable secret is unexpressible
+      wanted:     a value that is secret and has to reach a consumer on another
+                  machine. A database password is the case
+      why not:    the secrecy rule this folder runs on is one line — a slot's
+                  `reads` may not name a secret export — and it is what pays for
+                  deleting the locality bound. It refuses the leak and it refuses
+                  the legitimate case with it.
+                  The corpus's secrets-per-instance sketch declares
+                  exactly this shape as `travellingSecret` and its consumer reads
+                  it, so the corpus already has the case worked and this folder
+                  cannot hold it
+      what it needs: `per`, `deploy`, and a per-consumer delivery set. Three
+                  fields and a delivery mechanism, which is the change after this
+                  one and the one that also deletes `share = true`.
+                  The corpus's secrets-per-instance sketch states the ordering
+                  constraint from its own side: `share` cannot go until a
+                  routable secret can be wired and delivered per consumer
+      status:     the boundary of the folder, written where the rule is
+
+  o interfaces/exports.nix  no locality, and the trigger for adding it is named
+                  rather than left to taste
+      wanted:     nothing yet. The field is absent on purpose and this row exists
+                  so the absence is not read as an oversight
+      trigger:    the first export in the target whose value is a unix socket path
+                  or a loopback port. Then `machine-local` is a fact about an
+                  object, co-placement becomes derivable, and §32.5's two
+                  dispositions gain the subject they were written for
+      today:      the target has none. Its six registered export interfaces
+                  (`modules/clan/top-level-interface.nix:421-427`) carry names,
+                  ports, users, hosts, a priority and a module name, and all of
+                  them are readable from anywhere
+      and lifecycle: the same argument with a different trigger, and that one is
+                  already observed. The corpus's C2 records two of
+                  twelve meshes assigning an address only after the daemon
+                  authenticates, so a fleet with either of them needs the field
+                  and is outside this folder by construction
+      status:     ../interfaces/exports.nix states both triggers at the atoms.
+                  This row is the same statement where a planner author would
+                  look for it
+
+  o universe-k8m  this folder is a counter-proposal and no change owns it
+      wanted:     a change that narrows §32.1 from four fields to two, states the
+                  earns-its-place rule the narrowing follows, and points at this
+                  folder as its worked deployment
+      what it touches: §32.1's field list and its omission rule, §32.2's three
+                  lattices and containment relation, §32.4's bound-versus-tag
+                  split and §32.5's two dispositions, all four of which lose
+                  their subject rather than being contradicted, because one
+                  declaration site cannot disagree with itself
+      what survives untouched: §32.6 identity by value, §32.7 atoms taking a type
+                  and never a bound, and §32.8's rule that an external's exports
+                  obey the same declarations as anybody else's
+      and the siblings: the other six folders write quadruples and stay as
+                  written. A narrowing that lands would re-key their atom tables,
+                  and the ordering — narrow first, then the corpus — is the same
+                  ordering §29.8 and §32.10 already use for the posts
+      status:     open. Until it lands, this folder is the only one in the corpus
+                  whose export declaration disagrees with an adopted section, and
+                  that disagreement is stated at the declaration, in the README
+                  and here
