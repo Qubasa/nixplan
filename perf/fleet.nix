@@ -1,14 +1,3 @@
-# A synthetic deployment, as a pure function of the fleet size.
-#
-# It contains a set-valued read whose provider is placed on every machine,
-# because that is the resolution whose cost can grow with the square of the
-# fleet: a hub collects every agent's public key and renders it into one file,
-# and every agent reads the hub's URL back. The worked deployment has four
-# machines and would never show it.
-#
-# No time, no filesystem and no environment: two generations at one size are
-# equal, so a comparison across sizes is a comparison of the library rather
-# than of the fixture.
 { planner, size }:
 let
   inherit (builtins)
@@ -21,7 +10,6 @@ let
 
   k = planner.korora;
 
-  # A literal store path string. A measurement realises nothing.
   agentPkg = "/nix/store/9dm4x2vqk7z1n5bpr3jlfg8ys6cwh0az-fleet-agent-1.0";
 
   machineNames = genList (i: "m${toString i}") size;

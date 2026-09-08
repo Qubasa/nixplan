@@ -1,24 +1,3 @@
-# A synthetic deployment whose reader is fleet-sized on the inside.
-#
-# `fleet.nix` grows the number of entries and keeps every entry's own work
-# constant, so it measures the pipeline. This one grows the work of a single
-# entry with the fleet: the hub declares one closure root, one unit and one
-# render fragment per peer it read. Every one of those is a list the library
-# then has to cross against another fleet-sized list, which is where a
-# membership test written as a scan costs the square of the fleet while the
-# plan it produces stays linear in it.
-#
-# The plan is therefore still O(size): one hub entry carrying O(size) units,
-# roots and fragments, O(size) agent entries carrying a constant each. A
-# library whose per-item work is a lookup keeps the cost per plan entry flat as
-# the fleet grows; a library whose per-item work is a scan does not.
-#
-# Placements are spelled as explicit machine lists rather than as a tag,
-# because that is the other half of placement resolution and it crosses the
-# named machines against the registry.
-#
-# No time, no filesystem and no environment: two generations at one size are
-# equal.
 { planner, size }:
 let
   inherit (builtins)
@@ -34,10 +13,6 @@ let
 
   machineNames = genList (i: "m${toString i}") size;
 
-  # A literal store path string, distinct per machine. The hash is 32
-  # characters over Nix's own base-32 alphabet, which digits and zeroes are in,
-  # so the planner's scan recognises these as store roots without anything
-  # having been built.
   hashOf = i: substring 0 32 "${toString i}00000000000000000000000000000000";
 
   pkgOf = i: "/nix/store/${hashOf i}-mesh-agent-m${toString i}";
@@ -115,8 +90,6 @@ let
         };
     };
 
-  # The hub is placed once, so the plan stays linear, and everything it
-  # declares is one item per peer.
   hubModule =
     { ... }:
     {
@@ -144,10 +117,6 @@ let
         let
           peers = attrValues results.peers;
 
-          # One unit per peer. The name is positional because a plan key is not
-          # a legal unit name, and every one of them orders itself against the
-          # hub, which is what crosses a reference list against the entry's own
-          # unit names.
           peerUnits = genList (i: {
             name = "peer-${toString i}";
             value = {

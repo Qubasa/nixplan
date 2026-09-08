@@ -1,16 +1,4 @@
-# The cross-walk between this project's specifications and the tests that
-# observe them. There is no committed table of pairs: a `#### Scenario:` heading
-# names its test by construction, and this suite is the set difference between
-# the headings and the test names that exist.
-#
-# A heading yields two spellings, one per layer - `test_<snake>` for a pytest
-# test on a machine and `test<Camel>` for a nix-unit test in evaluation - so a
-# name present in both layers is a behaviour asserted twice, which is a failure
 # here rather than a matter of an author's judgement.
-#
-# The residue a derivation cannot produce is the two attrsets below, and nothing
-# else: `omitted` maps a heading to the reason it is unobserved, and `aliased`
-# maps a heading to the test that observes it under another capability's words.
 {
   support,
   changesRoot,
@@ -42,7 +30,6 @@ let
     ;
   inherit (support) filesUnder lines;
 
-  # ---------------------------------------------------------------- naming --
 
   lowerLetters = [
     "a"
@@ -107,10 +94,6 @@ let
     replaceStrings lowerLetters upperLetters (substring 0 1 word)
     + substring 1 (stringLength word) word;
 
-  # A heading's words. An apostrophe is dropped rather than split on, so
-  # `A module's own code` is `modules` and not `module` `s`; every other run of
-  # non-alphanumerics is one separator, so a hyphen, a comma and a space are the
-  # same thing and `end-to-end` is three words.
   words =
     title:
     filter (word: word != "") (
@@ -120,11 +103,7 @@ let
   snakeName = title: "test_" + concatStringsSep "_" (words title);
   camelName = title: "test" + concatStringsSep "" (map capitalise (words title));
 
-  # --------------------------------------------------------- specifications --
 
-  # The `spec.md` files this package's tests are accountable for. Written as
-  # paths under `openspec/changes/` rather than as four roots, so adding one is
-  # one line and a file that vanishes is a named failure below.
   accountable = [
     "implement-minimal-typed-edge/specs/planner/typed-edge/spec.md"
     "implement-minimal-typed-edge/specs/planner/diagnostics/spec.md"
@@ -149,9 +128,6 @@ let
     "clean-up-transplant-residue/specs/tooling/evaluation-performance/spec.md"
   ];
 
-  # Every other `spec.md` in the repository, with the reason this package's
-  # tests are not accountable for it. Listed rather than ignored, so a new
-  # specification is a failure here instead of a silence.
   excused = {
     "add-collect-slot-chain-rules/specs/planner/collect-slots/spec.md" =
       "collect slots are an excluded construct in this implementation: lib/excluded.nix carries the `collect family` row, and tests/unit/exclusions.nix asserts every deployment naming one is refused";
@@ -165,9 +141,6 @@ let
       "an unimplemented change: no task of declare-service-state has been done, so nothing in this package claims to satisfy it yet";
   };
 
-  # Every `spec.md` under `openspec/changes/`, so that a path dropped from
-  # `accountable` reappears here as an unclassified file rather than as a
-  # quietly smaller check.
 
   isSpecFile = path: match ".*/spec\\.md" path != null;
   discovered = filter isSpecFile (filesUnder changesRoot);
@@ -187,19 +160,13 @@ let
   headingsOf =
     path: filter (h: h != null) (map scenarioOf (lines (readFile (changesRoot + "/${path}"))));
 
-  # Every scenario of every accountable specification, with the file it is in:
-  # the same title appears in more than one capability, and a failure that does
-  # not say which file it is in is a failure a reader has to go looking for.
   scenarios = concatLists (
     map (path: map (title: { inherit path title; }) (headingsOf path)) accountable
   );
 
   located = scenario: "${scenario.path} :: ${scenario.title}";
 
-  # --------------------------------------------------------- the two layers --
 
-  # The evaluating layer: one file per suite, whose attribute names are its
-  # test names.
   unitNamed = concatLists (
     map (
       suite:
@@ -210,8 +177,6 @@ let
     ) (attrNames unitSuites)
   );
 
-  # The machine layer, discovered rather than enumerated: `tests/e2e/<name>/`
-  # holds one test file, and the layer root holds the harness and its own tests.
   e2eRoot = ../e2e;
 
   isTestFile = name: match "test_[a-z0-9_]*\\.py" name != null;
@@ -255,11 +220,6 @@ let
     ) e2eTestFiles
   );
 
-  # The perf checker's own unittest. It is beside the tool it tests rather than
-  # in either planner layer - `perf/check.py` is a budget checker, not the
-  # planner - but the scenarios of `tooling/evaluation-performance` that it
-  # observes are this package's, so its names count as tests that exist. Calling
-  # them omissions would be a false sentence in the omissions list.
   besideNamed =
     map
       (d: {
@@ -271,7 +231,6 @@ let
         file = perfSource + "/check_test.py";
       });
 
-  # name -> the files that define it, per layer and across all of them.
   filesByName =
     named:
     listToAttrs (
@@ -296,14 +255,7 @@ let
   e2eFiles = filesByName e2eNamed;
   existing = filesByName (unitNamed ++ e2eNamed ++ besideNamed);
 
-  # ------------------------------------------------------------ the residue --
 
-  # A scenario this project deliberately does not observe, and why. A reason is
-  # a sentence a reviewer reads, not a marker.
-  #
-  # Two classes and nothing else: a failure the interpreter does not let a test
-  # catch, and a property of running the suite that the suite cannot observe
-  # about itself without importing the flake that runs it.
   omitted = {
     "A module's own code raises an uncatchable error" =
       "an abort and a missing attribute are what `builtins.tryEval` does not catch, so a test asserting the propagation would abort this suite rather than fail it; `testAModulesOwnCodeRaisesACatchableError` asserts the half that is containable and `docs/diagnostics.md` names the class.";
@@ -327,9 +279,6 @@ let
       "the same cycle as `The suite is part of the checks`: the checks are attributes of the flake that evaluates this suite. It is observed by `nix flake check` completing on a host with no `/dev/kvm`, which is what the machine layer needs.";
   };
 
-  # A scenario observed by a test named after another heading, because two
-  # capabilities describe one behaviour in different words. The value is the
-  # name of the one test that observes it.
   aliased = {
     "A new check raises" = "testEveryAuthoringMistakeAtOnce";
     "The assertion entry point is used" = "testARaisingHelperIsIntroduced";
@@ -352,14 +301,9 @@ let
     "Nothing else changes with it" = "testAnAddressChanges";
   };
 
-  # ------------------------------------------------------------- the checks --
 
   hasTest = title: existing ? ${snakeName title} || existing ? ${camelName title};
 
-  # When a heading's derived name is absent, the failure has to say what the
-  # heading now requires and what is there instead, or a rewording reads as a
-  # test that was never written. `near` is the existing names that share a long
-  # prefix with the required one, which is what a rename leaves behind.
   commonPrefix =
     a: b:
     let
@@ -394,11 +338,6 @@ let
   omittedTitles = attrNames omitted;
   aliasedTitles = attrNames aliased;
 
-  # An entry of a list the cross-walk carries that names something the
-  # repository no longer has: an excuse for a deleted specification, an
-  # omission or an alias for a reworded heading. Such an entry reads as a
-  # decision this project has taken about something it does not have, so it
-  # fails naming the list, the entry and what the entry referred to.
   strandedIn =
     list: referent: names:
     map (name: "${list}: ${name} names no ${referent}") (sort (a: b: a < b) names);
@@ -410,9 +349,6 @@ let
     ++ strandedIn "omitted" "scenario heading" (filter (t: !(elem t titles)) omittedTitles)
     ++ strandedIn "aliased" "scenario heading" (filter (t: !(elem t titles)) aliasedTitles);
 
-  # A collision is one derived name defined in both layers. It names the two
-  # files, because "asserted twice" is only actionable when the reader is told
-  # where.
   collisionsIn =
     unit: e2e:
     sort (a: b: a < b) (
@@ -421,8 +357,6 @@ let
       )
     );
 
-  # A synthetic pair of layers, so the detector itself is asserted rather than
-  # only its answer over a tree that happens to be clean.
   syntheticUnit = {
     testTheWireIsCut = [ "tests/unit/plan.nix" ];
     testTheStoreIsReachable = [ "tests/unit/closure.nix" ];
@@ -432,8 +366,6 @@ let
   };
 in
 {
-  # A heading is a function of its own words, in both spellings, and the same
-  # heading yields the same pair every time it appears.
   testATestNameIsDerivedFromAHeading =
     let
       heading = "An end-to-end test carries its own fixture";
@@ -461,9 +393,6 @@ in
       };
     };
 
-  # Every scenario is observed, aliased or excused. `excused` is echoed so that
-  # a failure prints the reasons this project has already accepted beside the
-  # headings it has not accounted for.
   testAScenarioGainsNoTest = {
     expr = {
       unaccounted = untested;
@@ -475,8 +404,6 @@ in
     };
   };
 
-  # An omission names a heading that exists, carries a reason, and is not also
-  # observed: an omission for a scenario that gained a test is stale.
   testAScenarioIsDeliberatelyNotTested = {
     expr = {
       unknown = filter (title: !(elem title titles)) omittedTitles;
@@ -490,8 +417,6 @@ in
     };
   };
 
-  # An alias names a heading that exists and a test that exists, and is not
-  # needed for a heading whose own derived name is already a test.
   testAScenarioIsObservedUnderAnotherHeading = {
     expr = {
       unknown = filter (title: !(elem title titles)) aliasedTitles;
@@ -505,10 +430,6 @@ in
     };
   };
 
-  # A reworded heading is a required name nothing answers to. What makes the
-  # failure actionable rather than a mystery is that it shows both the name the
-  # heading now requires and the name that is still there; the tree's own
-  # residue is `testAScenarioGainsNoTest`'s subject, not this one's.
   testAScenarioHeadingIsReworded =
     let
       names = [
@@ -525,8 +446,6 @@ in
         + "test_the_consumer_reaches_the_producer, testTheConsumerReachesTheProducer";
     };
 
-  # One behaviour, one layer. A derived name defined in both is reported with
-  # the heading's name and both files.
   testOneBehaviourIsAssertedInBothLayers = {
     expr = {
       tree = collisionsIn unitFiles e2eFiles;
@@ -540,10 +459,6 @@ in
     };
   };
 
-  # Every `spec.md` in the repository is either one this package's tests answer
-  # for or one with a written reason they do not. A path dropped from the
-  # accountable set reappears as `unclassified`, naming the file, rather than
-  # reducing the check in silence; a path that no longer exists is `vanished`.
   testEverySpecificationIsClassified = {
     expr = {
       inherit unclassified vanished;
@@ -556,11 +471,6 @@ in
     };
   };
 
-  # The cross-walk's second direction. `testEverySpecificationIsClassified`
-  # reads the repository and asks whether every specification is answered for;
-  # this one reads the three lists and asks whether everything they name is
-  # still here, so a list cannot accumulate entries for files and headings that
-  # are gone.
   testAnExcuseOutlivesItsSpecification = {
     expr = stranded;
     expected = [ ];

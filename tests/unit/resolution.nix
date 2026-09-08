@@ -1,10 +1,3 @@
-# Resolution: the publishing half, slots, wires and arity.
-#
-# One test per scenario of specs/planner/typed-edge/ that is about resolving an
-# edge — what a provider publishes, what a slot may read, what a wire may name
-# and what a reach delivers — named after that scenario, plus the scenarios of
-# prove-plan-on-real-machines' planner/plan-artifact delta that are about the
-# machine value an implementation is handed.
 { planner, support }:
 let
   inherit (support)
@@ -21,14 +14,11 @@ let
     subjectsById
     ;
 
-  # One public export, which is what a slot reading everything may read.
   identity = planner.interface {
     name = "identity";
     exports.publicKey = publicString;
   };
 
-  # Two exports, one of them secret: enough to produce both an omission and the
-  # refusal of a `reads` entry naming the private half.
   pair = planner.interface {
     name = "host-identity";
     exports = {
@@ -39,8 +29,6 @@ let
     };
   };
 
-  # The files a row names. Without them a message says so instead of inventing
-  # a file, and these scenarios are about the files.
   sources = {
     deployment = "deployment/instances.nix";
     machines = "deployment/machines.nix";
@@ -56,7 +44,6 @@ let
 
   registry."interfaces/default.nix" = { inherit identity pair; };
 
-  # A provider that publishes exactly the keyset of `identity`.
   provider = _: {
     provides.identity.interface = identity;
     impl = _: {
@@ -65,16 +52,11 @@ let
     };
   };
 
-  # An interface whose export is an endpoint, so a provider has an address to
-  # render and a consumer has one to read.
   endpoint = planner.interface {
     name = "endpoint";
     exports.url = publicUrl;
   };
 
-  # A provider that publishes its own endpoint out of the machine it was
-  # planned for: one declaration site, the machine registry, and no `settings`
-  # entry restating it.
   publisher = _: {
     provides.endpoint.interface = endpoint;
     impl =
@@ -85,7 +67,6 @@ let
       };
   };
 
-  # A machine that declares what it runs and no address at all.
   withoutAnAddress = support.machines // {
     bare = {
       tags = [ "everywhere" ];
@@ -94,9 +75,6 @@ let
     };
   };
 
-  # A consumer that records the NAMES of what it received into a unit's
-  # environment rather than reading a value, so a refused slot is observable
-  # without the test reading the refused slot.
   consumer =
     {
       interface ? identity,
@@ -122,8 +100,6 @@ let
         };
     };
 
-  # A consumer and a provider, wired, with both files recorded and the
-  # interfaces registered so that a row can render a file beside a name.
   edge =
     {
       consumerModule,
@@ -154,7 +130,6 @@ let
       };
     };
 
-  # One instance, for the scenarios about the publishing half alone.
   publishes =
     module:
     planOf {
@@ -175,9 +150,6 @@ let
   server = worked.plan."vault-repo:server@vault";
 in
 {
-  # A capability declaring a two-export interface and publishing one export:
-  # the row names the missing export, the publishing file and the interface's
-  # declaring file.
   testAProviderOmitsAnExport =
     let
       halfProvider = _: {
@@ -214,9 +186,6 @@ in
       };
     };
 
-  # An export the interface does not declare: a row naming it, and the value
-  # reaches no consumer — neither the plan's record of the read nor the names
-  # the consuming module received carry it.
   testAProviderPublishesAnExtraExport =
     let
       extraProvider = _: {
@@ -257,9 +226,6 @@ in
       };
     };
 
-  # A slot no deployment wires: the row names the slot and the interface's
-  # declaring file, and the slot resolves to nothing at all — the consuming
-  # module is handed a `results` that does not carry the slot's name.
   testASlotIsNeverWired =
     let
       result = edge {
@@ -291,8 +257,6 @@ in
       };
     };
 
-  # `reach = "local"`: refused, with the row stating where `local` would come
-  # from and the condition that would introduce that locality.
   testASlotDeclaresReachLocal =
     let
       result = edge {
@@ -320,9 +284,6 @@ in
       };
     };
 
-  # A `reads` entry the interface does not declare: the row names the slot, the
-  # entry and the interface, and it is a row against the file that declared the
-  # slot rather than against a placement.
   testReadsNamesAnExportThatDoesNotExist =
     let
       result = edge {
@@ -352,8 +313,6 @@ in
       };
     };
 
-  # A `reads` entry naming a secret export: refused, and refused the same way
-  # whether the provider shares the consumer's machine or not.
   testAConsumerAsksForThePrivateHalf =
     let
       pairProvider = _: {
@@ -407,9 +366,6 @@ in
       };
     };
 
-  # The worked deployment's client generates a secret key and hands it to its
-  # own unit: accepted with no row against that entry, and in the plan the value
-  # is the path rather than the bytes.
   testAProducerUsesItsOwnSecret =
     let
       privateKey = client.provides.identity.exports.privateKey;
@@ -433,9 +389,6 @@ in
       };
     };
 
-  # A secret export no slot reads: still declared, still recorded, and recorded
-  # with an empty reader list rather than dropped. The public half of the same
-  # capability names its reader, so the empty list is a fact about this export.
   testASecretExportWithNoReader = {
     expr = {
       exports = builtins.attrNames client.provides.identity.exports;
@@ -458,8 +411,6 @@ in
     };
   };
 
-  # A wire naming an instance the deployment does not declare: the row names the
-  # wire and carries the candidate list it holds.
   testAWireNamesAnUnknownInstance =
     let
       result = edge {
@@ -491,10 +442,6 @@ in
       };
     };
 
-  # The worked deployment's two instances wire each other. Both reads resolve,
-  # each entry depends on its machine alone, and nothing reports a cycle: a
-  # capability's exports are a function of module and settings and never of a
-  # wire.
   testTwoInstancesWireEachOther = {
     expr = {
       clientRead = client.reads.repo.delivered;
@@ -516,9 +463,6 @@ in
     };
   };
 
-  # `reach = "one"` against two placements: a row naming the slot and both
-  # placements, and neither placement delivered — the plan's record of the read
-  # carries no entry and no values, and the module received no slot.
   testASingleValuedReadOfASet =
     let
       result = edge {
@@ -558,9 +502,6 @@ in
       };
     };
 
-  # `reach = "all"` against one placement: an attribute set with exactly one
-  # entry keyed by the provider's plan key, both in the plan and in what the
-  # module received. It does not collapse to a bare export set.
   testASetValuedReadOfOnePlacement =
     let
       result = edge {
@@ -592,9 +533,6 @@ in
       };
     };
 
-  # The worked deployment's gamma has not run its generator. The set names three
-  # entries, gamma among them with its absence recorded, and one row names that
-  # entry: the set is not shortened by dropping it.
   testAnEntryOfASetHasNoValue =
     let
       read = server.reads.clients;
@@ -629,8 +567,6 @@ in
       };
     };
 
-  # An omitted `reach` means `one`: the same deployment written both ways plans
-  # to the same thing, keys included, and records the same arity.
   testAnOmittedReachBehavesAsOne =
     let
       written = edge {
@@ -660,9 +596,6 @@ in
       };
     };
 
-  # The worked deployment's server renders the address of the machine it was
-  # planned for into the URL it exports, and the deployment declares that
-  # address once: in the registry, not in the settings the root defaults.
   testAServicePublishesItsOwnEndpoint =
     let
       vault = worked.plan."machine:vault";
@@ -687,15 +620,6 @@ in
       };
     };
 
-  # A machine that declares no address hands its placements a target without
-  # the field, rather than one carrying an empty string.
-  #
-  # The refusal is observed the way a module notices it: an unguarded
-  # `target.address` is a missing attribute, which docs/diagnostics.md
-  # documents as propagating rather than contained, so the module here reads it
-  # through the guard a module can write and raises. That raise is catchable,
-  # and the row it produces carries the entry key, which names both the entry
-  # and the machine it was placed on.
   testAMachineWithNoAddress =
     let
       reader = _: {
@@ -748,8 +672,6 @@ in
       };
     };
 
-  # A consumer on one machine reading an endpoint published on another reads
-  # the producing machine's address, which is the only address in the wire.
   testTheAddressAConsumerReadsIsTheProducersNotItsOwn =
     let
       result = planOf {

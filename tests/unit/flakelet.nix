@@ -1,12 +1,3 @@
-# The flakelet realiser's reading of a plan entry: the files it implies, the
-# enablement it renders, the identity it stamps and the names it refuses.
-#
-# One test per scenario of specs/realiser/flakelet-artifact/spec.md that a pure
-# evaluation can observe, which is every scenario about the artifact itself: the
-# reading is what decides the files, the sections, the digest and the refusals,
-# and a build only writes them down. What a real endpoint does with the artifact
-# once it is on a machine is the machine layer's, in
-# tests/e2e/wired-pair/test_wired_pair.py.
 {
   planner,
   support,
@@ -24,9 +15,6 @@ let
   inherit (support) planOf soleRoot;
   inherit (support.worked) borgbackup;
 
-  # Both readers by store path: the suite runs from a generated entry point
-  # whose sources are two unrelated store paths, so the shared reading is handed
-  # over rather than found beside this one.
   reader = import (flakeletSource + "/read.nix") {
     inherit planner;
     reader = import (imageSource + "/read.nix") { inherit planner; };
@@ -59,9 +47,6 @@ let
     in
     reader.read { inherit (p) plan key; };
 
-  # A refusal raises: this realiser produces bytes, and a name the endpoint
-  # would reject is a deployment's mistake rather than something to normalise.
-  # `deepSeq` because a refusal guards fields a lazy read would leave unforced.
   raises = value: !(tryEval (builtins.deepSeq value value)).success;
 
   simple = _: {
@@ -81,17 +66,11 @@ let
     };
   };
 
-  # The same entry with one unit field changed. The digest the endpoint compares
-  # is a function of what the artifact is made of, so this is the difference a
-  # rebuild would show, without a build.
   changedField = _: {
     closure = [ borgbackup ];
     units.web.command = "${borgbackup}/bin/borg serve --umask 077";
   };
 
-  # An entry shown a host file. This realiser runs no step on the machine, so
-  # each of the two kinds is refused rather than rendered into a unit naming a
-  # path nothing creates.
   shownAConfigurationFile = _: {
     closure = [ borgbackup ];
     units.web.command = "${borgbackup}/bin/borg serve";
@@ -102,8 +81,6 @@ let
     };
   };
 
-  # A generated file reaches a unit as a reference to a path on the machine,
-  # which is the second kind of host path and the second refusal.
   shownAGeneratedFile = planOf {
     instances.svc = {
       module = soleRoot {
@@ -155,8 +132,6 @@ let
     filter (l: builtins.match "\\[[A-Za-z]+]" l != null) lines;
 in
 {
-  # One entry, one artifact: the files it implies are the unit file of every
-  # recorded unit, and the timer of every scheduled one.
   testOneEntryBecomesOneArtifact =
     let
       image = readOf { } simple;
@@ -172,8 +147,6 @@ in
       };
     };
 
-  # A schedule is a trigger: the service file and the timer file are two files
-  # of one unit, and an entry without a schedule implies no timer at all.
   testAScheduledUnitBringsItsTrigger =
     let
       scheduled = readOf { } withSchedule;
@@ -194,9 +167,6 @@ in
       };
     };
 
-  # A long-running unit carries the section that makes the endpoint start it,
-  # and it is the last section of the file: everything above it is what the
-  # entry recorded.
   testALongRunningUnitIsWanted =
     let
       image = readOf { } simple;
@@ -221,8 +191,6 @@ in
       };
     };
 
-  # The timer is enabled and the service is not: an `[Install]` on the service
-  # of a scheduled unit would run the job at deploy time.
   testAScheduledUnitIsNotFiredByDeployingIt =
     let
       image = readOf { } withSchedule;
@@ -253,9 +221,6 @@ in
       };
     };
 
-  # The metadata is the plan's identity in the fields the endpoint reads back:
-  # the key as the reference, the entry's version digest as the hash it
-  # compares. The digest is the reading's, not the key.
   testTheArtifactCarriesThePlansIdentity =
     let
       image = readOf { } simple;
@@ -279,9 +244,6 @@ in
       };
     };
 
-  # A name the endpoint's own rule rejects is a refusal, not a mapping: two
-  # entries normalised onto one name would collide, and a refusal names the
-  # deployment's mistake where it was written.
   testAnUnusableInstanceName = {
     expr = {
       dotted = raises (readOf { instance = "web.one"; } simple);
@@ -315,8 +277,6 @@ in
     };
   };
 
-  # A unit file outside the service's namespace is refused too: the endpoint
-  # reads `units/` and validates every name in it before it links anything.
   testAUnitNameOutsideTheServicesNamespace = {
     expr = {
       twoInstanceMarkers = raises (
@@ -349,8 +309,6 @@ in
     };
   };
 
-  # A well-formed entry is read, not refused: the refusals below are about
-  # names, and a name inside the rule produces an artifact.
   testAWellFormedEntryIsNotRefused = {
     expr = {
       simple = raises (readOf { } simple);
@@ -364,8 +322,6 @@ in
     };
   };
 
-  # Nothing to evaluate on the machine: the artifact is unit files and one JSON
-  # document, so the endpoint links and starts rather than building.
   testNothingIsEvaluatedToActivateIt =
     let
       image = readOf { } withSchedule;
@@ -384,8 +340,6 @@ in
       };
     };
 
-  # The artifact names the entry it came from: the endpoint reads the plan key
-  # back off `meta.json` rather than being told which entry is running.
   testTheRunningArtifactNamesItsEntry =
     let
       meta = reader.meta (readOf { } simple);
@@ -400,8 +354,6 @@ in
       };
     };
 
-  # The digest the endpoint compares is a function of the artifact: one changed
-  # unit field changes it, and the same entry read twice does not.
   testAChangedUnitFieldIsANewGeneration =
     let
       before = readOf { } simple;
@@ -421,8 +373,6 @@ in
       };
     };
 
-  # A configuration file is a host path, and this realiser has no step that
-  # could assemble one, so the entry is refused where it was written.
   testAnEntryShownAConfigurationFile = {
     expr = {
       refused = raises (readOf { } shownAConfigurationFile);
@@ -440,8 +390,6 @@ in
     };
   };
 
-  # A generated file reaches a unit as a path on the machine, which is the same
-  # refusal for the same reason: no step here checks that it is there.
   testAnEntryShownAGeneratedFile = {
     expr = {
       refused = raises (
@@ -464,7 +412,6 @@ in
     };
   };
 
-  # An entry shown no host file is what this realiser is for.
   testAnEntryShownNoHostFileIsBuilt =
     let
       image = readOf { } simple;

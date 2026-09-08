@@ -223,7 +223,6 @@ def detached(attached: Run) -> Run:
     return attached
 
 
-# 1. What attaching is, and what it leaves running.
 
 
 def test_the_image_is_attached_by_the_script_the_artifact_carries(attached: Run) -> None:
@@ -232,10 +231,8 @@ def test_the_image_is_attached_by_the_script_the_artifact_carries(attached: Run)
 
     raw = attached.raw(CONFINED)
     state = attached.vm.ssh_succeed(f"portablectl is-attached {shlex.quote(raw)}").strip()
-    # `running` is `attached` with the units up, which is what the script leaves.
     assert state in {"attached", "attached-runtime", "running", "running-runtime"}, state
 
-    # The image the machine holds is the one the artifact names.
     listed = attached.vm.ssh_succeed("portablectl list --no-legend")
     assert attached.attachment(CONFINED)["name"] in listed, listed
 
@@ -276,8 +273,6 @@ def test_a_command_resolves_inside_the_image(attached: Run) -> None:
     """
     unit = attached.units_of(CONFINED)[0]
     raw = shlex.quote(attached.raw(CONFINED))
-    # The artifact links the image; the service manager records what that link
-    # resolved to, so the comparison is against the same resolution.
     resolved = attached.vm.ssh_succeed(f"readlink -f {raw}").strip()
     root = attached.vm.ssh_succeed(f"systemctl show -P RootImage {unit}").strip()
     assert root == resolved, root
@@ -291,7 +286,6 @@ def test_a_command_resolves_inside_the_image(attached: Run) -> None:
     assert executable.lstrip("/") in listed, executable
 
 
-# 2. What the profile the entry was stated under does on the machine.
 
 
 def test_the_confinement_profile_is_enforced_by_the_machine(attached: Run) -> None:
@@ -313,7 +307,6 @@ def test_the_confinement_profile_is_enforced_by_the_machine(attached: Run) -> No
     logged = attached.vm.ssh_succeed(f"journalctl -u {unit} --no-pager -o cat")
     assert attached.between(logged, "assembled-begin", "assembled-end") == attached.recipe()
 
-    # `DynamicUser=yes`, which every profile but `trusted` carries.
     identity = attached.reported(logged, "identity:")
     assert identity != "uid=0", identity
 
@@ -323,7 +316,6 @@ def test_the_confinement_profile_is_enforced_by_the_machine(attached: Run) -> No
     assert attached.vm.ssh_succeed(f"cat {shlex.quote(shown)}") == SHOWN_TEXT
 
 
-# 3. What a machine does with an image that was not built for it.
 
 
 def test_an_image_built_for_another_architecture_is_refused(attached: Run) -> None:
@@ -345,7 +337,6 @@ def test_an_image_built_for_another_architecture_is_refused(attached: Run) -> No
         assert loaded == "not-found", loaded
 
 
-# 4. What detaching removes, and what it leaves behind.
 
 
 def test_detaching_removes_the_units_and_the_staging_directory(detached: Run) -> None:

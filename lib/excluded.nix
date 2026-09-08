@@ -1,9 +1,3 @@
-# The exclusion table of fixtures/minimal-typed-edge/README.md, as data.
-#
-# Nothing here is argued with and nothing here is silently accepted: a
-# deployment writing one of these keys gets an error row naming the construct
-# and the trigger that brings it back. `row` is the README row the construct
-# belongs to, so a test can assert that every row of that table is refused.
 {
   rows = [
     "locality"

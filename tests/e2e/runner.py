@@ -46,7 +46,6 @@ from pathlib import Path
 
 DEFAULT_ROOKERY_FLAKE = "git+ssh://git@github.com/Qubasa/rookery"
 
-# What the cluster needs from the host, and why, in the words the banner prints.
 DEVICES: tuple[tuple[str, str], ...] = (
     ("/dev/kvm", "rookery refuses to fall back to TCG emulation, so KVM is required"),
     ("/dev/net/tun", "the cluster LAN is real taps in a network namespace"),
@@ -54,7 +53,6 @@ DEVICES: tuple[tuple[str, str], ...] = (
 )
 USERNS_LIMIT = Path("/proc/sys/user/max_user_namespaces")
 
-# The site-packages directory of a python application, and its minor version.
 SITE_PACKAGES = re.compile(r"lib/(python3\.\d+)/site-packages$")
 
 
@@ -297,8 +295,6 @@ def main(argv: list[str]) -> int:
     name = argv[0] if argv and not argv[0].startswith("-") else None
     rest = argv[1:] if name is not None else argv
 
-    # Before the host check: a typo in the name is the caller's, and naming the
-    # tests that exist is useful on a host that could not boot one anyway.
     try:
         selected = select_tests(root, name)
     except RunnerError as exc:
@@ -321,10 +317,6 @@ def main(argv: list[str]) -> int:
 
     env["PYTHONPATH"] = os.pathsep.join([env["PYTHONPATH"], str(root)])
 
-    # Short on purpose: the virtiofs socket rookery opens is
-    # `<state>/rookery/rookery-<pid>-<id>/vm-<i>/virtiofs-<tag>.sock` and
-    # `AF_UNIX` truncates at 108 bytes, so a deep state root makes virtiofsd exit
-    # during startup with nothing but that path to say why.
     state = Path(tempfile.mkdtemp(prefix="pc-"))
     env["PLANNER_E2E_STATE"] = str(state)
     print(f"rookery: {rookery}", file=sys.stderr)

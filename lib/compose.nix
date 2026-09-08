@@ -1,8 +1,3 @@
-# Composition: what a root publishes and which settings a deployment may move.
-#
-# A root keys each member's settings under that member's own name, including
-# when it owns exactly one member, and forwards nothing. Each knob it owns is
-# either a default a deployment may overwrite or a fixed value it may not.
 { util, diag }:
 let
   inherit (builtins) attrNames;
@@ -14,14 +9,6 @@ let
   ];
 in
 rec {
-  # The `service` function a root receives, closed over the resolver that turns
-  # a member's own `defaults` and `fixed` into the settings its instance runs
-  # with. The declaration is read once, against those settings, so the
-  # capability set a root publishes and the exports a placement produces come
-  # from one value. A member carries the name it was declared under, and every
-  # capability it provides carries that member and the name the module declared
-  # it under, so a root re-exporting a capability under a different name still
-  # points at the member's own capability.
   service =
     settingsOf: name: args:
     let
@@ -51,14 +38,8 @@ rec {
       ) (declaration.provides or { });
     };
 
-  # A root is a function of `{ service, ... }`. Nothing else is handed in: a
-  # root that wants a package passes it through its own closure. The settings
-  # resolver reaches a member through `service` rather than the root, which
-  # keeps a root forwarding nothing.
   mkRoot = root: settingsOf: root { service = service settingsOf; };
 
-  # `defaults` overwritten by the deployment, then `fixed` on top, with the
-  # source of every resolved value recorded.
   resolveSettings =
     {
       subject,
@@ -113,8 +94,6 @@ rec {
         ) undeclared;
     };
 
-  # A definition written without the member name. A single-member root keys its
-  # namespace too, so this is a row rather than a forwarding convenience.
   namespaceRows =
     {
       subject,

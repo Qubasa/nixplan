@@ -1,10 +1,3 @@
-# The only glue: close the package strings, import this directory's own
-# interfaces, modules and deployment, and hand `mkPlan` its arguments.
-#
-# `paths` are the machine's own: where the operator's file is, where the entry's
-# assembled copy is shown to its unit, and the path the confined unit tries to
-# write. They are deployment facts rather than module ones, which is why they
-# arrive here and not from a module's defaults.
 {
   planner,
   packages,
@@ -49,8 +42,6 @@ in
       "interfaces/default.nix" = interfaces;
     };
 
-    # Row subjects: a module file relative to modules/, everything else relative
-    # to this directory.
     sources = {
       deployment = "instances.nix";
       machines = "machines.nix";

@@ -1,10 +1,3 @@
-# The measured evaluation. One deployment planned and forced deeply, printing
-# the number of plan entries and nothing else.
-#
-# It is a plain Nix file rather than a flake attribute so that a measurement
-# covers evaluating a deployment into a plan and excludes reading the flake.
-# Nothing here builds or realises anything: the packages a fixture references
-# are literal store path strings.
 {
   korora,
   nixpkgs,

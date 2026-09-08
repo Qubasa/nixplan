@@ -1,14 +1,7 @@
-# The python here is a perf checker and an end-to-end harness, not a package, so
-# there is no pyproject for ruff to read. `src` names the two directories a
-# module is imported from, so `import check` and `import delivery` sort as
-# first-party the way they resolve at run time.
 src = ["perf", "tests/e2e"]
 line-length = 100
-# The cluster harness runs on rookery's interpreter rather than `pkgs.python3`
-# (flake-module.nix), so 3.13 is the floor a rewrite may target.
 target-version = "py313"
 
 [lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "ANN"]
-# any-type: the plan is decoded JSON, so `dict[str, Any]` crosses the harness.
 ignore = ["ANN401"]

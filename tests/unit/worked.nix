@@ -1,15 +1,7 @@
-# The worked deployment of fixtures/minimal-typed-edge/, loaded exactly
 # as committed. Nothing under that folder is edited by this file: the two
-# packages arrive as store path strings, and the one line the folder elides on
-# purpose — `<pkg>.services.default` — is written here, because the README
-# states its shape and says it is elided in three sibling folders too.
 {
   planner,
   folder,
-  # The two packages the folder's modules name. The defaults are literal
-  # strings, because a fixture references a package and the measurement never
-  # realises it. The image check passes the real packages instead and gets the
-  # same deployment over bytes that exist.
   packages ? {
     borgbackup = "/nix/store/3q8xk1p7v2mz9jd4rlnb6ycsfwg0h5aq-borgbackup-1.4.0";
     openssh = "/nix/store/1w9k3zc7yq2mb5xj8vdl4rns6fga0h1p-openssh-9.8p1";
@@ -41,9 +33,6 @@ let
   deployment = import (folder + "/deployment/instances.nix") { inherit borgRepo borgPush; };
   registry = import (folder + "/deployment/machines.nix");
 
-  # Which generated files exist and what the public ones hold. alpha and beta
-  # have run their generator; gamma was added this week and has not, which is
-  # the one absence the folder is built around.
   hostKeyState = machine: pub: {
     hostKey = {
       "ssh_host_ed25519_key" = {
@@ -76,8 +65,6 @@ in
       beta = hostKeyState "beta" "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH2zYlcrdY8a7DJlJ8Az4edUdWjYfHMxcCuOpwUzwdQt";
     };
 
-    # Row subjects follow the folder's own convention: a module file relative
-    # to modules/, everything else relative to the folder root.
     sources = {
       deployment = "deployment/instances.nix";
       machines = "deployment/machines.nix";

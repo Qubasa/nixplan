@@ -1,5 +1,3 @@
-# The reporting root. One member, and the path it keeps its assembled file at
-# re-exported so a sibling instance can wire it.
 {
   report,
   reportFile,

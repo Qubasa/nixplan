@@ -1,16 +1,3 @@
-# The nix-unit suite: the evaluating layer of this package's two. One test per
-# scenario of the specifications this package answers for, named after that
-# scenario by construction, split by subject.
-#
-# The entry point takes store paths rather than reading the working tree, so
-# the suite runs the same way from a check and from a shell:
-#
-#   nix build .#checks.x86_64-linux.planner-tests
-#
-# `libSource` is the library, `folder` is
-# fixtures/minimal-typed-edge/, `repoSource` is the repository itself, which the
-# layer checks read the tree's shape out of, and `changesRoot` is
-# `openspec/changes/`, which the cross-walk reads the scenario headings out of.
 {
   korora,
   systems,
@@ -50,10 +37,6 @@ let
     };
     layers = import ./unit/layers.nix { inherit support repoSource; };
 
-    # The cross-walk takes the names of every suite including its own, because
-    # its own tests observe scenarios of `tooling/test-layers` and
-    # `tooling/nix-unit-suite` like any other. That is not a cycle: the names
-    # are this attrset's keys, which are known without evaluating any value.
     coverage = import ./unit/coverage.nix {
       inherit support changesRoot perfSource;
       unitSuites = unitTestNames;

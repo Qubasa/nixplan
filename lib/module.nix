@@ -1,8 +1,3 @@
-# A leaf module's two halves: the asking half is what it runs on, what it
-# claims, what it generates, what it uses and what it provides; the answering
-# half is the units, the configuration files and the closure roots its `impl`
-# produced. Reading is total: every malformed or excluded declaration becomes a
-# row and the rest is still read.
 {
   util,
   diag,
@@ -40,9 +35,6 @@ let
     "locked"
   ];
 
-  # The shape a resolver's lockfile already holds. `rev` and `narHash` are the
-  # two the priority rests on: a pin that can resolve to different bytes on a
-  # later evaluation is what per-service pinning exists to refuse.
   lockedKeys = [
     "type"
     "owner"
@@ -56,9 +48,6 @@ let
     "narHash"
   ];
 
-  # The portable unit vocabulary, typed. Every field is one the design corpus
-  # already writes into a committed plan fixture, and a binding renders a unit
-  # file from these and from the typed extensions beside them.
   unitVocabulary = {
     command = atoms.string;
     env = atoms.attrsOf atoms.string;
@@ -75,14 +64,11 @@ let
 
   unitKeys = attrNames unitVocabulary ++ [ "extends" ];
 
-  # The two fields whose entries name units, checked against the units the
-  # module declared itself.
   unitReferenceKeys = [
     "after"
     "requires"
   ];
 
-  # An implementation's top level, and one configuration file.
   implKeys = [
     "units"
     "configData"
@@ -137,10 +123,6 @@ rec {
     dispositions
     ;
 
-  # A key a module declared that this subset does not carry, or does not know.
-  # `id` is the identifier the unknown half carries, so that a key under an
-  # implementation is told from a key under a declaration while the excluded
-  # half stays one row about one construct.
   keyRow =
     {
       subject,
@@ -176,9 +158,6 @@ rec {
       resolution = "delete `severity` from ${subject} and argue the severity where the check lives, under lib/";
     };
 
-  # `uses.<slot>`: an interface, an arity and the exports it reads. A slot that
-  # is refused here resolves to no value at all rather than to something a
-  # consumer could default against.
   readSlot =
     {
       reg,
@@ -386,9 +365,6 @@ rec {
       rows = util.concatMapAttrsToList genRows vars;
     };
 
-  # `pin`: the lock key a resolver assigned and the record it resolved to, both
-  # literal strings. The planner records it and resolves nothing, so this is a
-  # guard over hand-written data rather than over the resolver.
   readPin =
     {
       subject,
@@ -471,10 +447,6 @@ rec {
       inherit rows;
     };
 
-  # One unit of one implementation, read against the vocabulary. A field the
-  # unit did not declare is absent from the record rather than recorded as a
-  # null or as a service manager's default, so a binding can tell "not asked
-  # for" from "asked for and empty".
   readUnit =
     {
       reg,
@@ -489,8 +461,6 @@ rec {
       where = "unit ${util.quote name} of ${module}";
       declared = filter (k: unitVocabulary ? ${k}) (attrNames unit);
 
-      # One verification per declared field, recorded: the row that reports a
-      # failure prints this error rather than running the type again.
       errors = listToAttrs (
         map (k: {
           name = k;
@@ -502,10 +472,6 @@ rec {
 
       references = filter (k: elem k typed) unitReferenceKeys;
 
-      # The units this module declared and the strangers are complements of one
-      # partition, and both halves are wanted: one for the record's ordering,
-      # one for the rows. `unitSet` is the entry's own unit names as an index,
-      # so a reference costs a lookup rather than a scan of them.
       partitioned = listToAttrs (
         map (k: {
           name = k;
@@ -533,8 +499,6 @@ rec {
 
       applied = filter (e: e.backend != null) extends;
 
-      # Grouped by backend, so a binding for another service manager meets the
-      # fields it cannot render and refuses knowingly instead of dropping them.
       grouped = builtins.groupBy (e: e.backend) applied;
 
       ordering = listToAttrs (
@@ -609,8 +573,6 @@ rec {
       extensions = applied;
     };
 
-  # One configuration file: a mode, the units the module named for reloading,
-  # and exactly one disposition.
   readConfigFile =
     {
       subject,
@@ -629,10 +591,6 @@ rec {
       );
       strangers = reloadSplit.wrong;
 
-      # An item is one public literal or one reference. Read by key rather than
-      # by value: a recipe rendered over a set with an absent entry raises when
-      # its fragments are forced, and that case is recorded as not computed
-      # instead of being read here.
       render = if file ? render then file.render else [ ];
       renderIsList = isList render;
       malformedItems =
@@ -730,7 +688,6 @@ rec {
       // util.pickAttrs dispositions file;
     };
 
-  # The whole asking half of one leaf module.
   read =
     {
       reg,

@@ -180,25 +180,21 @@ def delivered(run: Run) -> Run:
     return run
 
 
-# 1. No test double is involved.
 
 
 def test_every_participant_is_the_real_one(run: Run) -> None:
     for machine in (SERVER_MACHINE, CLIENT_MACHINE):
         vm = run.vm(machine)
-        # A booted kernel of its own, reached over its own SSH server.
         assert vm.ssh_succeed("uname -r").strip()
         assert vm.ssh_succeed("systemctl is-active sshd.service").strip() == "active"
         assert vm.ssh_succeed("systemctl is-system-running --wait").strip() in {
             "running",
             "degraded",
         }
-        # The endpoint is flakelet's own packaged binary.
         assert (
             vm.ssh_succeed("readlink -f $(command -v flakelet)").strip().startswith("/nix/store/")
         )
         assert "systemd" in vm.ssh_succeed("systemctl --version")
-    # The delivery is the store-copy tool an operator uses, not a file transfer.
     assert delivery.copy_argv("/nix/store/x", "10.0.0.10")[:2] == ["nix", "copy"]
 
 
@@ -213,38 +209,26 @@ def test_the_machines_are_not_told_the_answer(run: Run) -> None:
     for machine, name in ((SERVER_MACHINE, "site"), (CLIENT_MACHINE, "check")):
         vm = run.vm(machine)
         artifact = run.artifact(name)
-        # The artifact and the unit files it links are outputs of this plan, so an
-        # image built without the plan cannot hold them.
         assert vm.ssh(f"nix-store --check-validity {artifact}").returncode != 0
         for unit in sorted((artifact / "units").iterdir()):
             assert vm.ssh(f"nix-store --check-validity {unit.resolve()}").returncode != 0
-        # Every other path the unit names is either the machine's own - both
-        # closures name it, as the guest's nix needs the same curl the consumer
-        # runs - or absent from the store until a delivery puts it there.
         own = set(vm.ssh_succeed("nix-store -qR /run/current-system").split())
         named = sorted({_store_root(path) for path in STORE_PATH.findall(run.unit_text(name))})
         assert named, run.unit_text(name)
         for path in named:
             valid = vm.ssh(f"nix-store --check-validity {path}").returncode == 0
-            # Shared paths are valid because the image already had them, not
-            # because anything was delivered; the rest are simply not here.
             assert valid == (path in own), path
             if path not in own:
                 contributed_anywhere.append(path)
-        # It declares no services of its own.
         config = json.loads(vm.ssh_succeed("cat /etc/flakelet/config.json"))
         assert config.get("services", {}) == {}, config
-    # The plan does contribute payload of its own - the page and the interpreter
-    # that serves it - so the machines could not have run this from their images.
     assert contributed_anywhere
-    # And the deployment that produced the plan names the address once.
     declaring = [
         path for path in sorted(run.deployment.rglob("*.nix")) if address in path.read_text()
     ]
     assert [path.name for path in declaring] == ["machines.nix"], declaring
 
 
-# 2. A delivery moves one entry's closure to the machine the plan placed it on.
 
 
 def test_the_machine_holds_what_the_artifact_names(delivered: Run) -> None:
@@ -256,8 +240,6 @@ def test_the_machine_holds_what_the_artifact_names(delivered: Run) -> None:
         assert named, delivered.unit_text(name)
         for path in named:
             assert vm.ssh_succeed(f"nix-store --check-validity {path} && echo ok").strip() == "ok"
-    # The delivery moved this entry's closure and no other: the consuming machine
-    # was never given the producer's artifact.
     other = delivered.vm(CLIENT_MACHINE)
     assert other.ssh(f"nix-store --check-validity {delivered.artifact('site')}").returncode != 0
 
@@ -275,13 +257,10 @@ def test_an_entry_is_not_delivered_to_a_machine_it_was_not_placed_on(delivered: 
     assert SERVER_ENTRY in message
     assert CLIENT_MACHINE in message
     assert SERVER_MACHINE in message
-    # No bytes were sent: the refusal is decided from the plan, and the machine
-    # asked for still does not hold the artifact.
     other = delivered.vm(CLIENT_MACHINE)
     assert other.ssh(f"nix-store --check-validity {delivered.artifact('site')}").returncode != 0
 
 
-# 3. The receiving machine evaluates nothing and fetches nothing.
 
 
 def test_the_unit_runs_from_the_delivered_directory(delivered: Run) -> None:
@@ -304,13 +283,10 @@ def test_no_evaluation_happens_on_the_machine(delivered: Run) -> None:
 def test_no_store_but_the_machines_own_is_reachable(delivered: Run) -> None:
     for machine in (SERVER_MACHINE, CLIENT_MACHINE):
         vm = delivered.vm(machine)
-        # The cluster is offline: dnsmasq has no upstream, so no name outside it
-        # resolves and no substituter is reachable.
         assert vm.ssh("getent hosts cache.nixos.org").returncode != 0
         assert vm.ssh("timeout 5 nix-store --realise /nix/store/nonexistent").returncode != 0
 
 
-# 4. A wire the planner resolved is traffic between two machines.
 
 
 def test_the_consumer_reaches_the_producer(delivered: Run) -> None:
@@ -324,12 +300,10 @@ def test_the_address_used_is_the_address_the_plan_recorded(delivered: Run) -> No
     address = delivered.plan[f"machine:{SERVER_MACHINE}"]["address"]
     exported = delivered.plan[SERVER_KEY]["provides"]["page"]["exports"]["url"]["value"]
     assert address in exported
-    # The consumer's delivered unit names that address, byte for byte.
     unit = delivered.vm(CLIENT_MACHINE).ssh_succeed(
         f"systemctl cat {CLIENT_UNIT} | grep ^ExecStart="
     )
     assert exported in unit, unit
-    # And it is the address the producing machine actually holds.
     held = delivered.vm(SERVER_MACHINE).ssh_succeed("ip -4 -o addr show scope global")
     assert address in held, held
 
@@ -342,9 +316,6 @@ def test_neither_end_was_told_the_address_by_the_harness(delivered: Run) -> None
         if path.is_file() and address in path.read_text()
     ]
     assert [str(path) for path in declaring] == ["machines.nix"], declaring
-    # The harness passes no address into the plan: what it passes is the built
-    # artifacts and the image, and the producer rendered its endpoint from the
-    # target the planner handed it.
     assert delivered.plan[SERVER_KEY]["target"]["address"] == address
 
 
@@ -366,12 +337,10 @@ def test_cutting_the_wires_far_end_is_visible(delivered: Run) -> None:
     journal = client.ssh_succeed(f"journalctl -u {CLIENT_UNIT} --no-pager -n 20")
     assert address in journal, journal
 
-    # Put the wire back, so the phases after this one observe a live cluster.
     server.ssh_succeed(f"systemctl start {SERVER_UNIT}")
     client.wait_until_succeeds(f"systemctl restart {CLIENT_UNIT}", timeout=120)
 
 
-# 5. A redelivery decides by identity, and a machine can go back.
 
 
 def test_an_unchanged_entry_is_a_no_op(delivered: Run) -> None:
@@ -411,7 +380,6 @@ def test_a_changed_entry_is_a_new_generation(delivered: Run) -> None:
     assert "generation 2" in report, report
     assert delivery.status(server, service)["generation"] == 2
 
-    # Observable in the service's own behaviour: the same request, a new answer.
     client.wait_until_succeeds(f"systemctl restart {CLIENT_UNIT}", timeout=120)
     assert client.ssh_succeed(f"cat {RECORD_PATH}") == delivered.page_text("site-changed")
 
@@ -443,7 +411,6 @@ def test_the_endpoint_reports_what_the_rollback_came_from(delivered: Run) -> Non
     assert status["changed"]["by"] == {"kind": "rollback", "from": 2}, status
 
 
-# 5a. A scheduled entry is deployed without being run.
 
 
 def test_a_scheduled_unit_is_not_fired_by_deploying_it(delivered: Run) -> None:
@@ -454,9 +421,7 @@ def test_a_scheduled_unit_is_not_fired_by_deploying_it(delivered: Run) -> None:
     assert delivery.status(server, service)["generation"] >= 1
     started = server.ssh_succeed(f"systemctl show -p ExecMainStartTimestamp {SWEEP_UNIT}")
     assert started.strip() == "ExecMainStartTimestamp=", started
-    # `is-active` exits 3 for an inactive unit, which is the answer, not a fault.
     assert server.ssh(f"systemctl is-active {SWEEP_UNIT}").stdout.strip() == "inactive"
-    # The job's own evidence: the file it would touch is not there.
     assert server.ssh(f"test -e {SWEEP_MARKER}").returncode != 0
 
 
@@ -473,13 +438,10 @@ def test_the_timer_the_schedule_declares_is_enabled(delivered: Run) -> None:
     assert left not in {"", "0", "n/a"}, listed
 
 
-# 6. What the machine keeps across a reboot and a reconcile.
 
 
 def test_a_reboot_brings_the_entries_back(delivered: Run) -> None:
     for machine in (SERVER_MACHINE, CLIENT_MACHINE):
-        # In-guest rather than a QMP reset: a claim about a service manager is
-        # honest only if the service manager brought the machine down.
         delivered.vm(machine).ssh("systemctl reboot", timeout=30)
 
     for machine in (SERVER_MACHINE, CLIENT_MACHINE):
@@ -490,7 +452,6 @@ def test_a_reboot_brings_the_entries_back(delivered: Run) -> None:
     delivered.vm(SERVER_MACHINE).wait_for_unit(SERVER_UNIT, timeout=180)
     delivered.vm(CLIENT_MACHINE).wait_for_unit(CLIENT_UNIT, timeout=180)
 
-    # The wire is traffic again, with no second delivery in between.
     client = delivered.vm(CLIENT_MACHINE)
     assert client.ssh_succeed(f"cat {RECORD_PATH}") == delivered.page_text("site")
 
@@ -502,7 +463,6 @@ def test_a_reconcile_leaves_a_hand_activated_entry_alone(delivered: Run) -> None
     ):
         vm = delivered.vm(machine)
         service = delivery.service_name(delivered.artifact(name))
-        # The machine's host configuration declares no services at all.
         assert json.loads(vm.ssh_succeed("cat /etc/flakelet/config.json")).get("services") == {}
         vm.ssh_succeed("systemctl restart flakelet-reconcile.service", timeout=120)
         assert delivery.status(vm, service)["generation"] >= 1

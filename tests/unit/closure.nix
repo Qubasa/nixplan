@@ -1,8 +1,3 @@
-# The declared closure, the pin its roots were built from, the store directory
-# they are read against, and the grammar by which a string is a store path.
-#
-# One test per scenario of specs/planner/closure-declaration/spec.md, named
-# after that scenario.
 { planner, support }:
 let
   inherit (builtins)
@@ -27,8 +22,6 @@ let
 
   inherit (planner.util) storePathsIn;
 
-  # A relocated store, so recognition is a function of the argument rather than
-  # of a literal written in the library.
   elsewhere = "/data/nix/store";
 
   relocated = "${elsewhere}/1w9k3zc7yq2mb5xj8vdl4rns6fga0h1p-openssh-9.8p1";
@@ -85,9 +78,6 @@ let
     };
 in
 {
-  # Task 8.2. The grammar is Nix's own: the store directory, a 32-character
-  # hash over a base-32 alphabet without `e`, `o`, `t` or `u`, a hyphen and a
-  # name.
   testAStorePathIsRecognisedByItsGrammar =
     let
       recognise = storePathsIn "/nix/store";
@@ -114,8 +104,6 @@ in
       };
     };
 
-  # Task 8.1. A plan evaluated against a relocated store recognises paths under
-  # the directory it was given and not under the default one.
   testADeploymentPlannedAgainstARelocatedStore =
     let
       result = placed { storeDir = elsewhere; } (_: {
@@ -140,8 +128,6 @@ in
       };
     };
 
-  # The default is the evaluating Nix's own configured store directory rather
-  # than a literal written in the library's source.
   testTheDefaultStoreDirectory =
     let
       result = placed { } (_: {
@@ -162,8 +148,6 @@ in
       };
     };
 
-  # An absolute path that is not under the store directory is not a store path
-  # and produces no row.
   testAnAbsolutePathOutsideTheStoreDirectory =
     let
       result = placed { } (_: {
@@ -184,8 +168,6 @@ in
       };
     };
 
-  # Task 8.3. The plan records exactly the roots the module declared, as
-  # literal strings.
   testAModuleDeclaresTwoRoots =
     let
       result = placed { } (_: {
@@ -213,8 +195,6 @@ in
       };
     };
 
-  # A root declared by way of a file inside it is recorded as the root that
-  # contains it, and the path inside is not a second entry.
   testTheClosureNamesRootsAndNotPathsInsideThem =
     let
       result = placed { } (_: {
@@ -233,9 +213,6 @@ in
       };
     };
 
-  # Task 8.4. A store path in a command that the module did not declare is an
-  # error naming the entry, the path and the unit field that mentioned it, and
-  # the entry is still in the plan.
   testAPackageInACommandIsNotDeclared =
     let
       result = placed { } (_: {
@@ -262,8 +239,6 @@ in
       };
     };
 
-  # A package named only by a configuration file is the case the old scan could
-  # not see at all.
   testAPackageNamedOnlyByAConfigurationFileIsNotDeclared =
     let
       result = placed { } (_: {
@@ -291,8 +266,6 @@ in
       };
     };
 
-  # A package named only by an export value is the second case, and the row
-  # names the export.
   testAPackageNamedOnlyByAnExportValueIsNotDeclared =
     let
       result = planOf {
@@ -326,8 +299,6 @@ in
       };
     };
 
-  # A declared root nothing mentions is a warning and stays in the closure: it
-  # is either dead weight or a path assembled at runtime worth writing down.
   testADeclaredRootNothingMentions =
     let
       result = placed { } (_: {
@@ -358,7 +329,6 @@ in
       };
     };
 
-  # Every mention declared and every declaration mentioned: no row.
   testAConsistentEntry =
     let
       result = placed { } (_: {
@@ -377,8 +347,6 @@ in
       expected = [ ];
     };
 
-  # Two distinct paths in one string are both recognised, and each undeclared
-  # one produces its own row.
   testTwoStorePathsInOneString =
     let
       result = placed { } (_: {
@@ -403,8 +371,6 @@ in
       };
     };
 
-  # A 32-character run that is not a hash produces no row, which is what the
-  # alphabet buys: a package name is not mistaken for a store path.
   testA32CharacterRunOutsideTheAlphabetIsNotAHash =
     let
       result = placed { } (_: {
@@ -416,8 +382,6 @@ in
       expected = [ ];
     };
 
-  # Task 8.6. A fully specified pin is recorded on the placed entry and
-  # produces no row.
   testAModuleDeclaresAFullySpecifiedPin =
     let
       result = withPin pinned;
@@ -434,8 +398,6 @@ in
       };
     };
 
-  # A locked record with no revision is an error naming the module and the
-  # missing field, and the entry is still in the plan.
   testAPinNamesNoRevision =
     let
       result = withPin {
@@ -461,9 +423,6 @@ in
       };
     };
 
-  # A locked record with no content hash is the same refusal: a pin that can
-  # resolve to different bytes on a later evaluation is what this declaration
-  # exists to refuse.
   testAPinNamesNoContentHash =
     let
       result = withPin {
@@ -484,8 +443,6 @@ in
       };
     };
 
-  # Every member resolved to one source records one equal key, and sharing
-  # produces no row because it was decided before the plan.
   testEveryServiceResolvedToOneSource =
     let
       shared =
@@ -537,8 +494,6 @@ in
       };
     };
 
-  # Two members on different keys do not re-key each other, so a re-pin moves
-  # exactly the entries whose bytes moved.
   testServicesResolvedToDifferentSources =
     let
       deployment =
@@ -600,8 +555,6 @@ in
       };
     };
 
-  # A re-pin is a source change: the entry records the new revision and the
-  # roots that revision built, and its key is a function of both.
   testAPinChangesAndTheStorePathsMove =
     let
       withPinned =
@@ -662,9 +615,6 @@ in
       };
     };
 
-  # The planner records a pin and does not verify it: an entry whose store
-  # paths that pin did not produce is not a row, because the planner reads no
-  # lockfile and instantiates nothing.
   testThePlannerDoesNotVerifyAPin =
     let
       result = planOf {
@@ -695,8 +645,6 @@ in
       };
     };
 
-  # A pin with no lock key at all is a malformed pin rather than an
-  # underspecified one, and the difference is which half a reader has to fix.
   testAPinWithNoLockKey =
     let
       result = withPin { locked = pinned.locked; };

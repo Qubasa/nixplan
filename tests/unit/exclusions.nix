@@ -1,23 +1,3 @@
-# The exclusion table of fixtures/minimal-typed-edge/README.md, checked
-# construct by construct.
-#
-# The folder states what is deliberately out and what brings each one back, and
-# the library carries that table as data in lib/excluded.nix. This suite is the
-# guard against the third possibility, which is neither refusing a construct nor
-# carrying it: accepting it silently. One test per key of
-# `planner.excluded.constructs` writes the smallest deployment that declares
-# that construct and asserts the row it produces, the subject the row names and
-# that the row's evidence carries the trigger the README's table records — the
-# trigger is asserted as a literal from the README's own text rather than from
-# `excluded.nix`, so a row wired to the wrong construct's trigger fails here.
-#
-# `testEveryExclusionTableRowIsCovered` closes the set: it reads the table out
-# of the folder at evaluation, counts its rows, and compares that count against
-# the README rows the constructs below cover. Adding a row to the table, or a
-# key to `excluded.constructs`, without a test fails that test.
-#
-# Every key in the table is reachable through `mkPlan`. Nothing is recorded as
-# unreachable.
 { planner, support }:
 let
   inherit (builtins)
@@ -52,8 +32,6 @@ let
 
   ids = result: uniqueStrings (rowIds result);
 
-  # A leaf module that is complete: an excluded key is the only thing wrong
-  # with any deployment below, so a test's expected row set is one row.
   unit = _: {
     units.only.command = "/bin/true";
   };
@@ -67,8 +45,6 @@ let
     placement.every.only.machines = [ machine ];
   };
 
-  # One instance, one member, one leaf file, so that a row about the module
-  # names a file rather than reporting that the deployment recorded none.
   oneInstance =
     instance:
     planOf {
@@ -76,7 +52,6 @@ let
       sources.leaves.svc.only = "modules/svc.nix";
     };
 
-  # A construct written at the top of a leaf module's declaration.
   declaringModule =
     key:
     oneInstance (
@@ -88,8 +63,6 @@ let
       })
     );
 
-  # A construct written on a generated file, which is where a secret that has
-  # to reach a consumer would say how it travels.
   declaringVarsFile =
     key: value:
     oneInstance (
@@ -104,7 +77,6 @@ let
       })
     );
 
-  # A construct written on the placement surface of an instance.
   declaringPlacement =
     key:
     oneInstance {
@@ -115,7 +87,6 @@ let
       };
     };
 
-  # An interface whose atom declares one field beyond `type` and `secrecy`.
   declaringAtom =
     key: value:
     planOf {
@@ -128,9 +99,6 @@ let
       };
     };
 
-  # The row every excluded key produces, whichever declaration wrote it.
-  # `also` carries the facts one scenario has beyond the shared ones, each a
-  # predicate the row has to satisfy.
   excludedKeyFacts =
     {
       result,
@@ -160,8 +128,6 @@ let
       // builtins.mapAttrs (_: _: true) also;
     };
 
-  # A module declaring a construct at its top level: the row names the leaf
-  # file, because that is the file an author has to edit.
   moduleKeyFacts =
     key: trigger:
     excludedKeyFacts {
@@ -175,11 +141,6 @@ let
     exports.publicKey = publicString;
   };
 
-  # The README's exclusion table, read out of the folder at evaluation. The
-  # header pins which of the README's two tables is counted, a row is a line
-  # inside the run that follows it, and the dashes under the header are not a
-  # row. A blank line closes the run, so the tables further down are not
-  # counted either.
   exclusionHeader = "| Out | Why not now | Trigger to add it |";
 
   readmeLines = filter isString (split "\n" (builtins.readFile "${support.folder}/README.md"));
@@ -207,10 +168,6 @@ let
     rows = 0;
   } readmeLines;
 
-  # The constructs the tests in this file write, and the README rows they
-  # therefore cover. Written out rather than derived from `excluded.nix`: a
-  # construct is covered because a test above declares it, and this list is
-  # what the closing test holds that claim to.
   covered = [
     "answers"
     "collects"
@@ -234,8 +191,6 @@ let
   coveredRows = uniqueStrings (map (c: excluded.constructs.${c}.row) covered);
 in
 {
-  # `locality` on an export atom: the field §32.1 adopted and this subset
-  # dropped, refused where an interface would declare it.
   testLocalityIsRefused =
     let
       result = declaringAtom "locality" "machine-local";
@@ -263,8 +218,6 @@ in
       };
     };
 
-  # `lifecycle`, and with it probes, facts and the register: the same
-  # declaration site, its own trigger.
   testLifecycleIsRefused =
     let
       result = declaringAtom "lifecycle" "at-most-probed";
@@ -290,8 +243,6 @@ in
       };
     };
 
-  # `per` on a generated secret: this folder can refuse a leak and cannot
-  # route a secret, so the field that would say who receives it is refused.
   testPerIsRefused = excludedKeyFacts {
     result = declaringVarsFile "per" "consumer";
     key = "per";
@@ -299,7 +250,6 @@ in
     trigger = "the first value that is secret and has to reach";
   };
 
-  # `deploy` on the same generated secret: the delivery half of the same row.
   testDeployIsRefused = excludedKeyFacts {
     result = declaringVarsFile "deploy" { to = "consumer"; };
     key = "deploy";
@@ -307,8 +257,6 @@ in
     trigger = "a database password being the case";
   };
 
-  # `placement.pick`: the construct that would make an otherwise pure planner
-  # stateful, refused on the placement surface that would carry it.
   testPickIsRefused = excludedKeyFacts {
     result = declaringPlacement "pick";
     key = "pick";
@@ -316,7 +264,6 @@ in
     trigger = "the first service whose machine the operator is willing to let the planner choose";
   };
 
-  # `strategy`: how a delegated choice would be made, beside the delegation.
   testStrategyIsRefused = excludedKeyFacts {
     result = declaringPlacement "strategy";
     key = "strategy";
@@ -324,9 +271,6 @@ in
     trigger = "the first service whose machine the operator is willing to let the planner choose";
   };
 
-  # Stable allocation rows are the third construct of that row, and a port
-  # claim without a `fixed` value is the only way to ask for one: this subset
-  # allocates nothing, so the claim is a row naming the allocation table.
   testDynamicPortIsRefused =
     let
       result = oneInstance (
@@ -357,8 +301,6 @@ in
       };
     };
 
-  # `members.<name>.enable`: a member cut written where a root declares its
-  # members, refused with the member and the instance named.
   testEnableIsRefused =
     let
       result = oneInstance (
@@ -375,16 +317,11 @@ in
       key = "enable";
       subject = "svc:only";
       trigger = "a module publishing a composition whose coherent cuts an operator wants";
-      # The row names the member and the instance as well as the key, which is
-      # what makes it actionable in a root with more than one member.
       also.namesMember = hasInfix "member `only` of instance `svc`" (
         messageById "declaration-excluded-key" result
       );
     };
 
-  # `wire.<member>.<use>`: the other half of the member-cut row. A wire whose
-  # entries are keyed by member rather than naming an instance is the cut, and
-  # it is refused rather than read as a wire to an instance called `only`.
   testMemberWireIsRefused =
     let
       result = oneInstance {
@@ -415,8 +352,6 @@ in
         namesTrigger = hasInfix "a module publishing a composition whose coherent cuts an operator wants" (
           evidenceById "declaration-excluded-key" result
         );
-        # A refused wire delivers nothing: the slot resolves to no value at all
-        # rather than to something the consumer could default against.
         delivered = result.plan."svc:only@one".reads.far.delivered;
         applicable = result.applicable;
       };
@@ -431,38 +366,22 @@ in
       };
     };
 
-  # `externals`: a non-fleet resource a deployment has to name.
   testExternalsIsRefused = moduleKeyFacts "externals" "U3 and U4";
 
-  # `collects`: the far end of a slot is every service on the reader's machine.
   testCollectsIsRefused = moduleKeyFacts "collects" "clanServices/pki";
 
-  # `contributes`: the answering half of the collect family.
   testContributesIsRefused = moduleKeyFacts "contributes" "and nothing smaller";
 
-  # `answers`: the third of the family, refused with the same trigger, because
-  # the family arrives together or not at all.
   testAnswersIsRefused = moduleKeyFacts "answers" "clanServices/pki";
 
-  # `probes`: the runtime plane's reading half, which presupposes the fact
-  # register and the watch contract.
   testProbesIsRefused = moduleKeyFacts "probes" "not this change";
 
-  # `register`: the fact register itself.
   testRegisterIsRefused = moduleKeyFacts "register" "not this change";
 
-  # `frontier`: the runtime plane's ordering half.
   testFrontierIsRefused = moduleKeyFacts "frontier" "not this change";
 
-  # `orchestrator`: the last of the runtime plane. The target deploys by
-  # building a toplevel and running switch-to-configuration, so there is no
-  # plane for this to name.
   testOrchestratorIsRefused = moduleKeyFacts "orchestrator" "not this change";
 
-  # The closing test, and the reason the others are a set rather than a
-  # selection: the README's table is counted where it lives, and the count is
-  # compared against the rows the constructs above cover. A ninth row in the
-  # table, or a key added to `excluded.constructs`, fails this.
   testEveryExclusionTableRowIsCovered = {
     expr = {
       headerFound = table.open;

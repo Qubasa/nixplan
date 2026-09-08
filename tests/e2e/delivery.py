@@ -27,8 +27,6 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Protocol
 
-# The plan's key shape for a machine record, and the prefix flakelet reports a
-# planned entry's identity under (`flakelet/read.nix`).
 MACHINE_PREFIX = "machine:"
 LOCKED_URL_PREFIX = "plan:"
 

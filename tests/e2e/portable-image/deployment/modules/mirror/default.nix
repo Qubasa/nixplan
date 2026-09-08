@@ -1,4 +1,3 @@
-# The mirroring root. One member, reading the path its sibling publishes.
 {
   coreutils,
   reportFile,

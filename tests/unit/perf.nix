@@ -1,10 +1,3 @@
-# The two properties of the measurement harness that are properties of a value
-# rather than of a run: the synthetic fleet is a pure function of its size, and
-# nothing the harness evaluates asks to be built.
-#
-# Everything else in specs/tooling/evaluation-performance/ is about an
-# interpreter run and is asserted by the checker's own suite,
-# perf/check_test.py, which tests/unit/coverage.nix names test by test.
 { planner, support }:
 let
   inherit (builtins)
@@ -31,9 +24,6 @@ let
 
   meshText = readFile (perfSource + "/mesh.nix");
 
-  # Every string in a value that is shaped like a store path. A measurement
-  # realises nothing, so each one has to be a string the fixture wrote rather
-  # than a derivation Nix would build.
   storePathStrings =
     node:
     if isAttrs node then
@@ -45,9 +35,6 @@ let
     else
       [ ];
 
-  # A derivation or a path in the plan would be a value the harness asked Nix
-  # to produce. `builtins.toJSON` over the plan already refuses a function; this
-  # looks for the two things it would happily serialise.
   derivationsIn =
     node:
     if isAttrs node then
@@ -71,14 +58,6 @@ let
   ];
 in
 {
-  # Scenario: The synthetic fleet is deterministic. Two generations at one size
-  # produce the same plan, so a comparison across sizes compares the library
-  # and not the fixture.
-  #
-  # The comparison is over the plan rather than over the deployment: a
-  # deployment carries module functions, two of which are never equal in Nix
-  # however identically they were written, while a plan is free of expressions
-  # by construction and is exactly what a measurement forces.
   testTheSyntheticFleetIsDeterministic =
     let
       planAt = size: (planner.mkPlan (fleetOf size)).plan;
@@ -86,11 +65,7 @@ in
     {
       expr = {
         four = planAt 4 == planAt 4;
-        # Sixty-four rather than the largest budgeted size, because this suite
-        # plans it twice and the growth bound already measures 256.
         sixtyFour = planAt 64 == planAt 64;
-        # Two sizes are not equal to each other, or the property above would
-        # hold of a generator that ignored its argument.
         differentSizesDiffer = planAt 4 != planAt 16;
         machinesAtFour = length (attrNames (fleetOf 4).machines);
         machinesAtSixteen = length (attrNames (fleetOf 16).machines);
@@ -104,15 +79,11 @@ in
       };
     };
 
-  # The generator reads no ambient value, which is what makes the equality above
-  # a property of the file rather than of the moment it ran.
   testTheFleetReadsNoAmbientValue = {
     expr = filter (name: hasInfix name fleetText) ambient;
     expected = [ ];
   };
 
-  # The mesh fixture is the other shape a measurement needs, and it is a pure
-  # function of its size for the same reason.
   testTheSyntheticMeshIsDeterministic =
     let
       planAt = size: (planner.mkPlan (meshOf size)).plan;
@@ -135,11 +106,6 @@ in
     expected = [ ];
   };
 
-  # What the mesh fixture exists to measure: one entry whose units, closure
-  # roots and render fragments each number one per machine, in a plan that is
-  # still linear in the fleet. A fixture that collapsed any of those into a
-  # single item would keep measuring and stop covering the shape, which is how
-  # this coverage is lost without a test.
   testTheMeshPlansOneFleetSizedEntry =
     let
       result = planner.mkPlan (meshOf 16);
@@ -164,9 +130,6 @@ in
       };
     };
 
-  # Scenario: The harness is asked to build. Every package the fleet names is a
-  # literal store path string, so the plan carries no derivation and the
-  # measurement has nothing to realise.
   testTheHarnessIsAskedToBuild =
     let
       plan = (planner.mkPlan (fleetOf 16)).plan;

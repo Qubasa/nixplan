@@ -1,9 +1,3 @@
-# Plan emission: entries, keys, planes and the rows an entry produces.
-#
-# A plan is flat, keyed and free of expressions. A placed service's key is its
-# instance, its service and its machine; a service with no units carries an
-# entry with no machine. Nothing in here is a derivation and every store path is
-# a literal string.
 {
   util,
   diag,
@@ -22,17 +16,11 @@ let
     mapAttrs
     ;
 
-  # An empty attribute set or list is an absence rather than a fact, and a plan
-  # a person reads is better without it.
   pruned = entry: util.filterAttrs (_: v: !((isAttrs v && v == { }) || (isList v && v == [ ]))) entry;
 in
 rec {
   machineKey = record: util.shortHash (builtins.toJSON record);
 
-  # Every reader of every export, as a flat index so that a capability's
-  # exports can record who reads them without walking the deployment again.
-  # An absent export also records the row each reader's absence produced, so a
-  # null value in the plan names the refusal instead of standing alone.
   readerIndex =
     resolved:
     let
@@ -68,16 +56,11 @@ rec {
         ) inst.members
       ) resolved.instances;
     in
-    # Grouped rather than folded with `//`: an update per row copies the whole
-    # index each time, which is the square of the fleet on a set-valued read.
     mapAttrs (_: group: {
       readBy = util.uniqueStrings (concatLists (map (r: r.consumers) group));
       rows = concatLists (map (r: r.rows) group);
     }) (builtins.groupBy (r: r.key) rows);
 
-  # A key is structural: it is decided by placement alone. It cannot depend on
-  # whether a member produced units, because two instances that wire each other
-  # would then each need the other's units to know its own key.
   entryKeysOf =
     iname: mname: member:
     if member.placements == [ ] then
@@ -85,10 +68,6 @@ rec {
     else
       map (machine: "${iname}:${mname}@${machine}") member.placements;
 
-  # Each unit of an entry runs with its own environment, and the entry records
-  # the variables every unit agrees on. Two units of one service needing
-  # different values for one variable is the ordinary case for a portable
-  # service, so it is two records and no row.
   agreedEnv =
     units:
     let
@@ -99,10 +78,6 @@ rec {
     else
       util.filterAttrs (k: v: all (e: (e.${k} or null) == v) envs) (head envs);
 
-  # A generated file the entry expects, by the path the resolver already fixed
-  # it at. The path is recorded rather than left to be reconstructed from the
-  # generator and file names, because a consumer showing the file to a service
-  # needs the path the plan means and not a convention it reinvents.
   varsRecord =
     placement:
     mapAttrs (_: files: {
@@ -116,9 +91,6 @@ rec {
       ) files;
     }) placement.vars;
 
-  # What a capability publishes, with a secret recorded as a path reference, a
-  # declared export delivered to nobody recorded with an empty reader list, and
-  # an absent export naming the rows its absence produced.
   providesRecord =
     {
       readers,
@@ -154,9 +126,6 @@ rec {
       ) record.exports;
     }) placement.capabilities;
 
-  # A read as the plan records it: the wire, the arity, the entries it names and
-  # the value of each. An absent entry is named with a null value and a marker
-  # rather than dropped from the set.
   readsRecord =
     { subject, member }:
     mapAttrs (
@@ -174,9 +143,6 @@ rec {
           { }
         else if edge.reach == "all" then
           {
-            # Nothing absent is the ordinary case, and the set the resolver
-            # already built is then the record: rebuilding it per placement
-            # copies one attribute per member of the fleet for nothing.
             entries =
               if edge.absentEntries == [ ] then
                 edge.value
@@ -209,8 +175,6 @@ rec {
   readsComplete =
     member: all (edge: !edge.delivered || edge.absentEntries == [ ]) (attrValues member.edges);
 
-  # Rows an entry produces: an absent entry of a set, and the warning that the
-  # membership of that set is in this entry's key.
   entryRows =
     { subject, member }:
     util.concatMapAttrsToList (
@@ -243,14 +207,6 @@ rec {
         )
     ) member.edges;
 
-  # A configuration file names its bytes and never carries them: the mode, the
-  # units the module named for reloading, and one disposition. A digest is
-  # recorded only over material the plan itself holds, so a recipe carrying a
-  # reference gets a hash over its fragments and reference paths and no digest
-  # over assembled bytes.
-  #
-  # A file rendered over a set with an absent entry is recorded as not computed
-  # rather than hashed over the entries that do have values.
   fileIdentity =
     file:
     if file.disposition == "source" then
@@ -280,8 +236,6 @@ rec {
     let
       complete = readsComplete member;
 
-      # The guard covers the identity too, because a hash is where a fragment
-      # is forced and a module's own expression is what raises.
       guarded = diag.guard {
         inherit subject;
         what = "the configuration data of ${subject}";
@@ -303,9 +257,6 @@ rec {
       }
     else
       {
-        # The recipe is not read at all: a file rendered over a set with an
-        # absent entry has no bytes to hash, and hashing the entries that do
-        # have values is the fold this folder exists to refuse.
         record = mapAttrs (_: file: {
           inherit (file) mode reload;
           computed = false;
@@ -324,9 +275,6 @@ rec {
       source = member.settings.sources.${k};
     }) member.settings.values;
 
-  # Every string of one entry, with where in the entry it was written. The
-  # closure is declared, and this is what stops the declaration from drifting
-  # away from what the entry actually mentions.
   mentionSites =
     {
       units,
@@ -371,10 +319,6 @@ rec {
       }) record.exports
     ) placement.capabilities;
 
-  # The declared roots against what the entry mentions. An undeclared mention
-  # is an error, because the closure is the list a consumer populates a
-  # filesystem from; a root nothing mentions is a warning, because it is either
-  # dead weight or a path assembled at runtime worth having written down.
   closureRows =
     {
       subject,
@@ -394,10 +338,6 @@ rec {
         ) sites
       );
 
-      # Both directions are a lookup rather than a scan. An entry that renders
-      # one path per member of a set-valued read mentions as many paths as it
-      # declares roots, and crossing those two lists with `elem` is the square
-      # of the fleet for a plan that stayed linear in it.
       declaredSet = util.stringSet declared;
       mentionedSet = util.stringSet (map (m: m.path) mentioned);
       undeclared = filter (m: !util.inStringSet declaredSet m.path) mentioned;
@@ -424,10 +364,6 @@ rec {
       }
     ) unmentioned;
 
-  # One placement of one member. The key is a hash of the instance, the
-  # service, the machine, the target it was planned for, the pin its roots were
-  # built from, its units, the store paths it declares, the values it was
-  # handed and the keys it depends on.
   placedEntry =
     {
       readers,
@@ -512,8 +448,6 @@ rec {
         // (if pin == null then { } else { inherit pin; });
     };
 
-  # A member no placement selected. It runs nowhere, so its entry carries no
-  # machine, no closure and nothing it depends on.
   unplacedEntry =
     {
       readers,
@@ -551,15 +485,11 @@ rec {
       };
     };
 
-  # The whole plan: one entry per placement, one entry per machine that carries
-  # a placement, and a dependency written as a key that appears in the plan
-  # beside the depended-on entry's own key hash.
   entries =
     resolved:
     let
       readers = readerIndex resolved;
 
-      # One hash per machine record rather than one per entry placed on it.
       machineKeys = mapAttrs (_: machineKey) resolved.machines;
 
       serviceEntries = concatLists (

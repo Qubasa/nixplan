@@ -1,13 +1,3 @@
-# Resolution: settings, placement, allocation, wires and exports.
-#
-# The rounds this subset runs are 1, 2, 3, 6 and 7 of the adopted eight. Round 4
-# needs a fact register, round 5 needs a locality, and round 8's plane
-# derivation collapses to one rule because no atom carries a lifecycle.
-#
-# Wires resolve per member rather than per placement: a slot's value is a
-# function of the wired capability's placements and of nothing about the
-# reader's machine, so resolving it once per reader is what keeps a set-valued
-# read linear in the fleet rather than square in it.
 {
   util,
   diag,
@@ -51,7 +41,6 @@ let
     "microarchitecture"
   ];
 
-  # The two a placement on a machine needs to have a derivable target at all.
   machineTargetKeys = [
     "system"
     "serviceManager"
@@ -82,8 +71,6 @@ in
 
       leafFileOf = iname: mname: sources.leaves.${iname}.${mname} or null;
 
-      # Machines by tag, indexed once for the whole deployment: a selector then
-      # asks for a tag rather than scanning the registry per member per tag.
       machinesByTag = builtins.groupBy (p: p.tag) (
         concatLists (
           util.mapAttrsToList (
@@ -95,10 +82,6 @@ in
 
       tagged = tag: map (p: p.machine) (machinesByTag.${tag} or [ ]);
 
-      # One elaboration per distinct system and microarchitecture rather than
-      # one per machine, so the cost scales with the architectures in the fleet.
-      # The elaboration is a module of nixpkgs and a system string it cannot
-      # parse raises, so it is forced inside a guard like a module's own value.
       targeted = util.filterAttrs (_: decl: decl ? system && builtins.isString decl.system) machines;
 
       microOf = decl: if decl ? microarchitecture then toString decl.microarchitecture else "";
@@ -129,12 +112,6 @@ in
         ) platformGuards
       );
 
-      # Which machines a placement selected, which is what makes an incomplete
-      # registry entry a row rather than a warning about a machine nobody uses.
-      #
-      # One walk of the deployment, indexed by machine, because the two
-      # questions asked of it - which machines carry a placement, and which
-      # entries one machine carries - are the same walk twice otherwise.
       placementsByMachine = builtins.groupBy (p: p.machine) (
         concatLists (
           util.mapAttrsToList (
@@ -181,8 +158,6 @@ in
         ) incompleteMachines
         ++ platformRows;
 
-      # The two keys a target needs are read once per selected machine, rather
-      # than once to decide the row and again to write it.
       incompleteMachines = filter (m: m.missing != [ ]) (
         map (name: {
           inherit name;
@@ -203,16 +178,6 @@ in
         // (if decl ? microarchitecture then { inherit (decl) microarchitecture; } else { })
       ) machines;
 
-      # The target a placement on this machine was planned for: the reduced
-      # platform record, the service manager that runs its units and the
-      # address it is reached at. A machine that declares neither a system nor
-      # a service manager has none, and a module that dereferences it hits a
-      # missing attribute, which is the trade a refused read already makes.
-      #
-      # The address is here rather than beside `target` because a unit may be
-      # rendered from it, and a target is what an entry's key hashes: a field a
-      # module can render from and the key does not cover is a key that does
-      # not describe the entry.
       targetOf =
         machine:
         let
@@ -226,17 +191,11 @@ in
           // (if decl ? serviceManager then { inherit (decl) serviceManager; } else { })
           // (if decl ? address then { inherit (decl) address; } else { });
 
-      # One target record per machine rather than one per placement: a target
-      # is a function of the machine, and an entry's key hashes it.
       targets = mapAttrs (name: _: targetOf name) machines;
 
-      # One instance: its root, its members, where each member is placed and
-      # which of its capabilities are addressable from outside.
       mkInstance =
         iname: idecl:
         let
-          # The resolver `service` is closed over: the only place that knows the
-          # deployment file and the subject a settings row names.
           root = compose.mkRoot idecl.module (
             {
               name,
@@ -334,8 +293,6 @@ in
           members = mapAttrs (_mname: member: mkMember iname idecl member) members;
         };
 
-      # One member: its declaration read with resolved settings, its placements
-      # and its allocation.
       mkMember =
         iname: idecl: member:
         let
@@ -358,11 +315,6 @@ in
             declaration = member.declaration;
           };
 
-          # What a capability's interface says about itself: a function of the
-          # member, so the registry is searched once per capability rather than
-          # once per capability per placement. `label` stays a thunk, because a
-          # capability that declares no interface has a row of its own and this
-          # is only ever forced by row text.
           capabilityFacts = mapAttrs (
             _: declared:
             let
@@ -443,9 +395,6 @@ in
               }
             ) mismatchedPlacements;
 
-          # An empty `platforms` is every system, so a module that never had to
-          # care is not made to. A machine with no declared system is the
-          # registry's row rather than this one.
           mismatchedPlacements =
             if declaration.platforms == [ ] then
               [ ]
@@ -510,9 +459,6 @@ in
             subject
             unplaced
             ;
-          # An unplaced member is the entry the plan carries when nothing
-          # matched, so its rows are the table's too: a keyset the module got
-          # wrong is a row whether or not the service reached a machine.
           rows = memberRows ++ (if placements == [ ] then unplaced.rows else [ ]);
           placed = builtins.listToAttrs (
             map (machine: {
@@ -528,8 +474,6 @@ in
           );
         };
 
-      # One placement: the vars the machine holds, the capabilities it
-      # publishes, and what its impl produced.
       mkPlacement =
         {
           iname,
@@ -541,9 +485,6 @@ in
           entryKey = if machine == null then "${iname}:${mname}" else "${iname}:${mname}@${machine}";
           state = if machine == null then { } else varsState.${machine} or { };
 
-          # A module reads `vars.<generator>.<file>`. The declaration writes
-          # `vars.<generator>.files.<file>`, because a generator has more to
-          # declare than its files; a reader only ever wants the files.
           vars = mapAttrs (
             gen: g:
             mapAttrs (
@@ -575,13 +516,6 @@ in
 
           impl = if member.declaration.impl == null then null else member.declaration.impl implArgs;
 
-          # The implementation half is read the way the declaration half is: an
-          # unrecognised key is a row rather than a value quietly discarded, and
-          # reading stays total, so one malformed unit does not stop the rest.
-          #
-          # Only the shape is forced here. A configuration file's fragments are
-          # forced where its identity is computed, because a recipe rendered
-          # over a set with an absent entry has no bytes to force at all.
           implShape = safe {
             subject = entryKey;
             what = "the implementation of ${entryKey}";
@@ -652,9 +586,6 @@ in
               attrNames (util.filterAttrs (_: f: !builtins.isAttrs f) (implValue.configData or { }))
             );
 
-          # An extension whose backend is not the machine's service manager is
-          # refused here and still recorded under its own backend, so a binding
-          # for that backend refuses knowingly rather than dropping fields.
           backendRows = concatLists (
             util.mapAttrsToList (
               uname: u:
@@ -744,8 +675,6 @@ in
             ++ util.concatMapAttrsToList (_: c: c.rows) capabilities;
         };
 
-      # One capability at one placement: keyset equality against its interface,
-      # a type check per export, and absence recorded rather than dropped.
       mkCapability =
         {
           iname,
@@ -841,8 +770,6 @@ in
             ++ util.concatMapAttrsToList (_: e: e.rows) exports;
         };
 
-      # One slot: the wire, the far end, the interface identity, the arity and
-      # the values the consumer receives.
       mkEdge =
         {
           iname,

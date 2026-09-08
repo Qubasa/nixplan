@@ -1,8 +1,3 @@
-# The names of the tests whose actual value differs from their expected one.
-#
-# nix-unit is the runner the check uses; this is the same comparison as a plain
-# value, so that `nix eval .#planner.failures` answers "what is red" without a
-# build.
 suites:
 let
   isTest = v: builtins.isAttrs v && v ? expr && v ? expected;

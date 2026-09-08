@@ -23,8 +23,6 @@ SERVER_ENTRY = "site:server"
 SERVER_KEY = "site:server@alpha"
 CLIENT_KEY = "check:client@beta"
 
-# A plan is a document. These are the four records the functions below read,
-# written out rather than built, so this file names no artifact.
 PLAN = {
     "machine:alpha": {"address": "10.0.0.10", "tags": ["cluster"]},
     "machine:beta": {"address": "10.0.0.11", "tags": ["cluster"]},

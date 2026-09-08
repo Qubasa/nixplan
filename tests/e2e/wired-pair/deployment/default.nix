@@ -1,9 +1,3 @@
-# The only glue: close the package strings, import this directory's own
-# interfaces, modules and deployment, and hand `mkPlan` its arguments.
-#
-# Nothing under this directory is edited from here. `packages.page` is the
-# directory the served file lives in, which is what a caller varies to produce a
-# second, observably different, deployment of the same source.
 {
   planner,
   packages,
@@ -53,8 +47,6 @@ in
       "interfaces/default.nix" = interfaces;
     };
 
-    # Row subjects: a module file relative to modules/, everything else relative
-    # to this directory.
     sources = {
       deployment = "instances.nix";
       machines = "machines.nix";

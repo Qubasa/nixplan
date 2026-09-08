@@ -1,8 +1,3 @@
-# What a machine declares about itself and the form the plan records it in.
-#
-# One test per scenario of specs/planner/machine-platform/spec.md, named after
-# that scenario, plus the two guards that keep the projection from being
-# replaced by upstream's own filter.
 {
   planner,
   support,
@@ -50,8 +45,6 @@ let
       };
     };
 
-  # Every path in a value at which a function sits, so "no function at any
-  # depth" is asserted rather than "no function at the top level".
   functionsIn =
     prefix: value:
     if isFunction value then
@@ -76,8 +69,6 @@ let
   };
 in
 {
-  # A machine declares an address, a tag, a system and a service manager, and
-  # its plan entry records all four.
   testAFullyDeclaredMachine =
     let
       result = on (machinesWith {
@@ -104,9 +95,6 @@ in
       };
     };
 
-  # A machine a placement selects and which declares no system has no derivable
-  # target: the row names it and the registry file, and the plan still carries
-  # the machine's entry and the entry placed on it.
   testAMachineOmitsItsSystem =
     let
       result = on (machinesWith { serviceManager = "systemd"; }) { machines = [ "host" ]; };
@@ -136,7 +124,6 @@ in
       };
     };
 
-  # The same for a machine that declares no service manager.
   testAMachineOmitsItsServiceManager =
     let
       result = on (machinesWith { system = "x86_64-linux"; }) { machines = [ "host" ]; };
@@ -162,9 +149,6 @@ in
       };
     };
 
-  # A machine that changes architecture re-keys itself and every entry placed
-  # on it, because adding a key to the registry widens the machine record and
-  # the machine record is what a dependency names.
   testAMachineChangesArchitecture =
     let
       deployment =
@@ -191,8 +175,6 @@ in
       };
     };
 
-  # A platform record serialises without loss and carries no function at any
-  # depth, including inside a nested attribute set or a list.
   testAPlatformRecordIsSerialisable =
     let
       result = on (machinesWith {
@@ -215,9 +197,6 @@ in
       };
     };
 
-  # The elaboration this record is projected from carries a function nested
-  # below its top level: the projection excludes it and the plan still
-  # serialises.
   testTheUpstreamElaborationCarriesANestedFunction =
     let
       elaborated = systems.elaborate "aarch64-linux";
@@ -245,15 +224,6 @@ in
       };
     };
 
-  # Task 7.3, the guard. Upstream's own filter is a deny-list of four top-level
-  # names, so it is not function-free and cannot be a plan value. If this test
-  # starts failing, upstream fixed it and the first measurement of D7 needs
-  # rewriting rather than this guard deleting.
-  #
-  # The evidence is the surviving functions rather than a failed `toJSON`:
-  # `builtins.toJSON` of a function is not an error `tryEval` catches, so
-  # asking whether it serialises would abort the suite instead of failing a
-  # test.
   testUpstreamsOwnFilterIsNotAPlanValue =
     let
       elaborated = systems.elaborate "aarch64-linux";
@@ -280,11 +250,6 @@ in
       };
     };
 
-  # Task 7.3, the second guard. The projection's own field set names nothing
-  # upstream keeps in sync with the record's function attributes, and the
-  # codegen list this library writes out names every `gcc` field the pinned
-  # nixpkgs sets on any platform it exposes, so a codegen field upstream adds
-  # fails here rather than being dropped from every record.
   testTheProjectionsFieldSetNamesNoFunction =
     let
       elaborated = systems.elaborate "x86_64-linux";
@@ -305,9 +270,6 @@ in
       };
     };
 
-  # An aarch64 machine's record names the facts a cross build spends: the
-  # triple it is configured with, the libc, the kernel's own architecture name
-  # and the parsed cpu and kernel.
   testAnAarch64MachinesPlatformRecord =
     let
       result = on (machinesWith {
@@ -367,10 +329,6 @@ in
       };
     };
 
-  # A field the projection does not name is absent even though the elaboration
-  # carries it, so an upstream addition is a decision rather than a silent
-  # re-key. The `is*` predicates are the largest such family and every one of
-  # them is a function of `parsed`, so the record carries none of them.
   testAFieldOutsideTheAllowListIsAbsent =
     let
       result = on (machinesWith {
@@ -418,8 +376,6 @@ in
       };
     };
 
-  # Two machines declaring one system and no microarchitecture produce equal
-  # records, which is what makes the elaboration memoisable per system string.
   testTwoMachinesOfOneSystem =
     let
       result = planOf {
@@ -456,8 +412,6 @@ in
       };
     };
 
-  # A machine that declares a microarchitecture has it in the record, and
-  # nothing the planner describes is specialised for it.
   testAMachineDeclaresAMicroarchitecture =
     let
       result = on (machinesWith {
@@ -491,12 +445,6 @@ in
       };
     };
 
-  # A platform whose own defaults name codegen fields records them for a
-  # machine that declared no microarchitecture, and a declared
-  # microarchitecture replaces that group rather than merging into it —
-  # `elaborate` applies its arguments over `platforms.select`, so armv7l's
-  # `fpu` default is gone the moment an arch is declared, exactly as it would
-  # be for the same `crossSystem`.
   testAPlatformCarriesItsOwnCodegenDefaults =
     let
       arm = on (machinesWith {
@@ -538,7 +486,6 @@ in
       };
     };
 
-  # A module declaring a platform it is placed on produces no row.
   testAModuleIsPlacedOnASystemItSupports =
     let
       result = planOf {
@@ -560,8 +507,6 @@ in
       expected = [ ];
     };
 
-  # A module placed on a system it does not declare is a refusal and not a
-  # filter: the row names both sides and the entry is still in the plan.
   testAModuleIsPlacedOnASystemItDoesNotSupport =
     let
       result = planOf {
@@ -600,8 +545,6 @@ in
       };
     };
 
-  # A module that never had to care about platforms is not made to: an empty
-  # `platforms` is every system.
   testAModuleDeclaresNoPlatforms =
     let
       result = on (machinesWith {
@@ -614,9 +557,6 @@ in
       expected = [ ];
     };
 
-  # Task 7.4. One tag selects two machines of different systems and the module
-  # declares one of them: exactly one row, naming the machine whose system the
-  # module does not declare.
   testOneTagSelectsTwoSystems =
     let
       result = planOf {
@@ -666,8 +606,6 @@ in
       };
     };
 
-  # Task 7.5. One service on two systems: two entries, each recording its own
-  # machine's platform record, and two different keys.
   testOneServicePlacedOnTwoSystems =
     let
       result = planOf {
@@ -718,8 +656,6 @@ in
       };
     };
 
-  # An unplaced member records neither a platform record nor a service manager
-  # nor a machine.
   testAnUnplacedMemberRecordsNoTarget =
     let
       result = planOf {

@@ -1,15 +1,3 @@
-# Evaluation as total: a plan and a table of rows come out together, no check
-# aborts the pass, and every refusal is a record a user interface can draw.
-#
-# One test per scenario of specs/planner/diagnostics/spec.md that is observable
-# from outside the library, named after that scenario. `A raising helper is
-# introduced` is a property of the library's own source rather than of any one
-# evaluation - one convenient call is all it takes to delete totality - so it is
-# a text scan over every library file, here, next to the `tryEval (deepSeq …)`
-# property it defends. `A module's own code raises an uncatchable error` is
-# recorded as a deliberate omission in the cross-walk, because an abort and a
-# missing attribute are exactly what `builtins.tryEval` does not catch, so a
-# test asserting the propagation would abort the suite instead of failing it.
 {
   planner,
   support,
@@ -41,23 +29,13 @@ let
 
   inherit (planner.util) sortStrings uniqueStrings;
 
-  # `uniqueStrings` returns its input sorted, which is the order a table is
-  # already in: by identifier first.
   ids = result: uniqueStrings (rowIds result);
 
-  # The subject column of a rendered table: the `  ! <subject>  <message>` line
-  # of every row and nothing else. A row's message, evidence and resolution name
-  # the file an author has to edit, so those lines carry whatever the deployment
-  # handed the planner in `sources`; the subject is the one field the library
-  # disciplines, and it is what a rendered table is compared across checkouts by.
   subjectLines =
     rendered: filter (l: substring 0 4 l == "  ! ") (filter isString (split "\n" rendered));
 
   renderedBlocks = rendered: filter isString (split "\n\n" rendered);
 
-  # Interfaces. Two same-shaped-and-different values for the mismatch, a pair
-  # for the keyset violation, and one carrying a secret half for the read a slot
-  # may not name.
   identity = planner.interface {
     name = "identity";
     exports = {
@@ -86,9 +64,6 @@ let
     exports.publicKey = publicString;
   };
 
-  # Leaf modules. Each one asks for exactly the mistake its instance is about
-  # and is otherwise complete, so that a scenario's expected row set is the row
-  # set the deployment produces.
   quiet = _: {
     impl = _: {
       units.only.command = "/bin/true";
@@ -114,7 +89,6 @@ let
     };
   };
 
-  # Publishes `a` and not `b`: a provider's keyset equals its interface's.
   keysetProvider = _: {
     provides.thing.interface = pair;
     impl = _: {
@@ -151,11 +125,6 @@ let
     exposes = [ "thing" ];
   };
 
-  # One deployment carrying five different authoring mistakes at once: an
-  # unwired slot, a secret read, a keyset violation, an arity violation and an
-  # interface mismatch. `shared` serves the last two ends at once — it is placed
-  # twice, which is the arity violation for a slot declaring reach `one`, and it
-  # declares `pub` where the mismatching reader declares `theirs`.
   everyMistakeArgs = {
     inherit (support) machines;
 
@@ -214,8 +183,6 @@ let
       });
     };
 
-    # Leaf files, so that the rows about a module name a file rather than
-    # reporting that the deployment never recorded one.
     sources.leaves = {
       identityProvider.only = "modules/identity-provider.nix";
       shared.only = "modules/pub-provider.nix";
@@ -229,7 +196,6 @@ let
 
   everyMistake = planner.mkPlan everyMistakeArgs;
 
-  # Two instances, one of which forgot its `impl`.
   oneBad = planOf {
     instances = {
       good = placedOn "one" (soleRoot {
@@ -242,8 +208,6 @@ let
     sources.leaves.bad.only = "modules/bad.nix";
   };
 
-  # korora's `check` raises, and so do `throw`, `abort` and `assert`. None of
-  # them may appear in library code; a comment naming one is prose.
   raising = [
     "throw"
     "abort"
@@ -270,8 +234,6 @@ let
   );
 in
 {
-  # More than one instance and one mistake: the plan holds the entries of the
-  # instance that is correct and the table holds the row of the one that is not.
   testADeploymentWithOneBadInstance = {
     expr = {
       planKeys = attrNames oneBad.plan;
@@ -294,8 +256,6 @@ in
     };
   };
 
-  # No mistakes: the table is present and empty rather than absent, so a caller
-  # never has to distinguish "no rows" from "no table".
   testADeploymentWithNoMistakes =
     let
       result = planOf {
@@ -324,9 +284,6 @@ in
       };
     };
 
-  # The total-evaluation property. Five different mistakes in one deployment:
-  # deeply forcing the whole result succeeds inside the catch, and the table
-  # carries one row per mistake rather than the first one found.
   testEveryAuthoringMistakeAtOnce =
     let
       forced = builtins.tryEval (builtins.deepSeq everyMistake everyMistake);
@@ -354,8 +311,6 @@ in
       };
     };
 
-  # A module raising inside its receiving half: an error row naming that
-  # module's entry, and every other entry of the plan still produced.
   testAModulesOwnCodeRaisesACatchableError =
     let
       raising = _: {
@@ -400,8 +355,6 @@ in
       };
     };
 
-  # Two evaluations of one input: the tables are equal including order, and the
-  # order is the one the library commits to, identifier then subject.
   testTwoRunsOverOneInput =
     let
       first = planner.mkPlan everyMistakeArgs;
@@ -422,8 +375,6 @@ in
       };
     };
 
-  # Every row of a table carrying several rows: a resolution that is not the
-  # message restated, naming the file to edit or the construct to write.
   testARowCarriesItsResolution =
     let
       rows = everyMistake.diagnostics;
@@ -444,8 +395,6 @@ in
       };
     };
 
-  # An error blocks the apply and removes nothing: the plan is readable in full
-  # beside the refusal.
   testAnErrorBlocksTheApply = {
     expr = {
       applicable = oneBad.applicable;
@@ -461,8 +410,6 @@ in
     };
   };
 
-  # A warning does not block the apply. The one row this deployment produces is
-  # the set-valued read's re-keying warning, and the plan is applicable with it.
   testAWarningDoesNotBlockTheApply =
     let
       result = planOf {
@@ -494,8 +441,6 @@ in
       };
     };
 
-  # A module declaring a severity: a warning row naming the module, and the row
-  # the declaration would have retagged keeps the severity the planner gave it.
   testAModuleAuthorCannotSetASeverity =
     let
       result = planOf {
@@ -529,10 +474,6 @@ in
       };
     };
 
-  # Rendering the worked deployment's own table: one rendered block per row,
-  # each carrying that row's subject, message and severity. Asserted against the
-  # records rather than against a hand-copied string, so the test states the
-  # relation the format has to the table and not the format's bytes.
   testRenderingTheFoldersOwnRows =
     let
       table = support.workedResult.diagnostics;
@@ -559,8 +500,6 @@ in
       };
     };
 
-  # An instance that produces no rows leaves the rendered table byte for byte
-  # what it was, while the plan grows the entry that instance describes.
   testRenderingIsStableUnderUnrelatedChange =
     let
       extended = planner.mkPlan (
@@ -591,12 +530,6 @@ in
       };
     };
 
-  # Task 5.3. A row whose subject is a path the deployment wrote absolutely: the
-  # subject is reduced to its last component, a second row names the identifier
-  # that carried it, and no rendered subject line differs between checkouts.
-  # The message and the resolution of the offending row do name the absolute
-  # path, because they name the file its author has to edit; the subject is the
-  # field the library disciplines and the one a rendered table is compared by.
   testARowWhoseSubjectIsAnAbsolutePath =
     let
       absolute = "/home/someone/checkout/deployment/machines.nix";
@@ -641,9 +574,6 @@ in
       };
     };
 
-  # Totality is a promise about every path, so it is asserted over the library's
-  # own text rather than over one evaluation: a `throw` added to any file of
-  # `lib/` is a failure naming the file and the call.
   testARaisingHelperIsIntroduced = {
     expr = {
       calls = raises;

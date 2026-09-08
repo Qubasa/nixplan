@@ -1,22 +1,3 @@
-# The guest every end-to-end machine boots, and every invariant it has to hold
-# restated as an assertion.
-#
-# rookery is resolved at run time rather than as a flake input (design.md D2),
-# so `${inputs.rookery}/nix/base-image-configuration.nix` is not available at
-# evaluation and this configuration is ours. Each invariant below is carried
-# with the assertion rookery carries for it, copied from
-# `rookery/nix/base-image-configuration.nix:25-59`, so a future trim of this
-# file fails `nix build` rather than producing a guest that boots and is never
-# reachable. `docs/cluster.md` names the file to diff against when rookery moves.
-#
-# One image serves both end-to-end folders (design.md D2), so the invariants the
-# second one needs are here too, in the same form: a portable-service manager
-# and its client, with the assertion that says which test would otherwise be
-# asserting against a stand-in.
-#
-# What this image does NOT carry: any artifact of the plan, any credential, and
-# any declared flakelet service. The endpoint is installed and enabled with an
-# empty service set; everything it runs arrives by delivery.
 {
   lib,
   pkgs,
@@ -25,8 +6,6 @@
   flakeletModule,
 }:
 let
-  # x86_64's q35 exposes a 16550 (`ttyS`); rookery wires the primary console to
-  # port 0 and captures it to the run's serial.log.
   console = "ttyS0";
 
   guestModule =
@@ -90,9 +69,6 @@ let
         }
       ];
 
-      # virtiofs, and the reserved `rookery` tag the run exports its generated
-      # key through (`rookery/qemu/spec.py:238-241`). `nofail` is load-bearing:
-      # a boot with no share behind the tag must still come up.
       boot.initrd.availableKernelModules = [ "virtiofs" ];
       boot.kernelModules = [ "vmw_vsock_virtio_transport" ];
       fileSystems."/rookery" = {
@@ -102,12 +78,6 @@ let
         neededForBoot = false;
       };
 
-      # `nofail` hides an absent or failed mount behind a happily-booted guest,
-      # so the host cannot tell "mounted" from "never mounted" over SSH.
-      # `Vm.wait_for_share` reads this enumeration off the serial log, framed by
-      # the sentinels it parses (`rookery/qemu/command.py:51-52`,
-      # `api.py:154-171`), which is why the unit is here and not only in
-      # rookery's own image: the host-side helper is unusable without it.
       systemd.services.rookery-virtiofs-report = {
         description = "Report active virtiofs mounts to the serial console";
         wantedBy = [ "multi-user.target" ];
@@ -131,9 +101,6 @@ let
         fsType = "ext4";
       };
 
-      # `nofail` for the same reason: local-fs.target failing is irreversible and
-      # takes sockets.target with it, so the vsock sshd never binds and the host
-      # sees a bare readiness timeout. Nothing here updates its own bootloader.
       fileSystems."/boot" = {
         device = "/dev/disk/by-label/ESP";
         fsType = "vfat";
@@ -161,9 +128,6 @@ let
       };
       services.resolved.enable = true;
 
-      # The TCP sshd is the delivery channel; the vsock sshd systemd-ssh-generator
-      # derives from it is the control channel. One credential serves both, and
-      # the image ships neither a password nor a key.
       services.openssh = {
         enable = true;
         settings = {
@@ -172,11 +136,6 @@ let
         };
       };
 
-      # The run's key, installed from the virtiofs share at boot rather than read
-      # out of it by sshd: `authorizedKeysFiles` pointing into the share would put
-      # sshd's StrictModes in play over a directory the host owns. The condition
-      # is what makes a share-less boot of this same image come up cleanly - the
-      # unit is skipped, not failed, and then nobody can log in at all.
       systemd.services.cluster-authorized-key = {
         description = "Install the run's public key into root's authorized_keys";
         wantedBy = [ "multi-user.target" ];
@@ -213,14 +172,9 @@ let
     partitionTableType = "efi";
     label = "nixos";
     diskSize = "auto";
-    # Room for what the run delivers: two artifacts and their closures.
     additionalSpace = "2048M";
   };
 in
-# `make-disk-image` builds inside `vmTools.runInLinuxVM`, whose result carries no
-# `overrideAttrs`, so the guest travels beside the image rather than in a
-# passthru. `toplevel` is the closure a reader inspects: the qcow2 itself
-# references nothing, while the system inside it references everything.
 image
 // {
   inherit guest;

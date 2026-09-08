@@ -1,7 +1,3 @@
-# Interfaces, export atoms and the type layer.
-#
-# One test per scenario of specs/planner/typed-edge/ that is about the
-# declaring half, named after that scenario.
 { planner, support }:
 let
   inherit (support)
@@ -23,7 +19,6 @@ let
     exports.publicKey = publicString;
   };
 
-  # A leaf module that provides `identity` and publishes it correctly.
   provider = _: {
     provides.identity.interface = identity;
     impl = _: {
@@ -32,8 +27,6 @@ let
     };
   };
 
-  # A deployment of one instance whose interface set is registered under a
-  # declaring file, so that a row can render the file beside the name.
   scenario =
     {
       interfaceValues,
@@ -45,7 +38,6 @@ let
     };
 in
 {
-  # An atom omits secrecy: the export is public and no row is emitted.
   testAnAtomOmitsSecrecy =
     let
       iface = planner.interface {
@@ -79,8 +71,6 @@ in
     expected = 0;
   };
 
-  # An atom declares a locality: an error row naming the atom and the key,
-  # stating the condition that would introduce the field.
   testAnAtomDeclaresALocality =
     let
       withLocality = planner.interface {
@@ -115,7 +105,6 @@ in
       };
     };
 
-  # The second excluded key on an atom, with its own trigger.
   testAnAtomDeclaresALifecycle =
     let
       withLifecycle = planner.interface {
@@ -144,8 +133,6 @@ in
       };
     };
 
-  # An interface nobody upstreamed is accepted and appears in no list the
-  # planner owns: the same deployment plans with an empty interface registry.
   testAnInterfaceNobodyUpstreamed =
     let
       instances.i = {
@@ -175,8 +162,6 @@ in
       };
     };
 
-  # A value does not match its declared type: the row names the provider and
-  # not any consumer that reads the export.
   testAValueDoesNotMatchItsDeclaredType =
     let
       badProvider = _: {
@@ -213,8 +198,6 @@ in
       };
     };
 
-  # The two atom types this library owns, on which the folder's own
-  # interfaces/exports.nix depends.
   testUrlAtomVerifies = {
     expr = {
       good = k.url.verify "ssh://x";
@@ -249,8 +232,6 @@ in
     };
   };
 
-  # The folder's own interface files, evaluated unmodified: two interfaces and
-  # four exports between them, and no edit to either file was needed.
   testTheFoldersInterfacesEvaluateUnmodified =
     let
       interfaces = support.worked.interfaces;
@@ -292,8 +273,6 @@ in
       };
     };
 
-  # An interface is a value: the constructor returns the name and the exports
-  # and nothing that points at a registry.
   testAnInterfaceIsAValue = {
     expr = builtins.attrNames (
       planner.interface {
@@ -307,8 +286,6 @@ in
     ];
   };
 
-  # Two interfaces sharing a name are two interfaces, and the row that refuses
-  # the wire renders the declaring file of each.
   testTwoInterfacesShareAName =
     let
       mine = planner.interface {
@@ -380,13 +357,6 @@ in
       };
     };
 
-  # A capability re-exported under a name its member does not provide is a
-  # missing attribute in the root file itself. The scenario is recorded as a
-  # deliberate omission in mapping.nix: `builtins.tryEval` does not catch a
-  # missing attribute, so a test asserting the failure would abort the suite.
-  # The positive half is here instead: a correctly spelled re-export is what
-  # makes a capability addressable, and the value it points at is the member's
-  # own capability.
   testACapabilityIsReExportedByValue =
     let
       evaluated =

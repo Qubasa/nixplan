@@ -1,9 +1,3 @@
-# Shared scaffolding for the suites: atoms, a leaf module, a root, a machine
-# registry and the row helpers every scenario test needs.
-#
-# A scenario test builds the smallest deployment that produces the row it is
-# about, plans it, and asserts on the table. Nothing here reads the filesystem
-# except the worked deployment, which arrives as a store path.
 {
   planner,
   folder,
@@ -33,8 +27,6 @@ rec {
   inherit planner folder perfSource;
   korora = k;
 
-  # Atoms. Two fields each, because an export in this subset declares a type
-  # and a secrecy and nothing else.
   publicString = {
     type = k.string;
   };
@@ -52,8 +44,6 @@ rec {
 
   inherit (planner) interface;
 
-  # A root over members. `provides` re-exports a member's capability, which is
-  # what makes it addressable from outside the instance at all.
   root =
     {
       members,
@@ -68,8 +58,6 @@ rec {
       provides = mapAttrs (_: ref: services.${ref.member}.provides.${ref.capability}) provides;
     };
 
-  # A root with one member called `only`, which is the shape most scenarios
-  # need. A single-member root keys its settings namespace too.
   soleRoot =
     {
       module,
@@ -92,8 +80,6 @@ rec {
       );
     };
 
-  # A machine declares what it is: the system it runs and the service manager
-  # that runs its units, so a placement on it has a derivable target.
   machines = {
     one = {
       address = "one.example:22";
@@ -109,8 +95,6 @@ rec {
     };
   };
 
-  # A second service manager, for the scenarios about a target a module has to
-  # ask about before applying a backend's own fields.
   laptop = {
     address = "laptop.example:22";
     tags = [ "everywhere" ];
@@ -118,8 +102,6 @@ rec {
     serviceManager = "launchd";
   };
 
-  # A systemd extension, declared here so two suites can import one value and
-  # the identity rule is exercised rather than described.
   systemdService = planner.unitExtension {
     backend = "systemd";
     name = "systemd-service";
@@ -138,7 +120,6 @@ rec {
     };
   };
 
-  # Plan a scenario. Every argument the library takes may be overridden.
   planOf =
     args:
     planner.mkPlan (
@@ -148,7 +129,6 @@ rec {
       // args
     );
 
-  # Row helpers.
   rowIds = result: map (r: r.id) result.diagnostics;
   rowsById = id: result: filter (r: r.id == id) result.diagnostics;
   countById = id: result: length (rowsById id result);
@@ -173,8 +153,6 @@ rec {
     in
     if rows == [ ] then null else (head rows).evidence;
 
-  # Substring rather than regex, so a test can look for `reach = "all"` or a
-  # path without escaping anything.
   hasInfix =
     needle: hay:
     let
@@ -183,9 +161,6 @@ rec {
     in
     h >= n && any (i: substring i n hay == needle) (genList (i: i) (h - n + 1));
 
-  # Every file under a directory, as a path relative to it. `readDir` is the
-  # only way a pure evaluation sees a tree, and both the cross-walk and the
-  # layer checks walk one.
   filesUnder =
     dir:
     let
@@ -203,9 +178,6 @@ rec {
 
   lines = text: filter isString (split "\n" text);
 
-  # A line with its comment removed. Every text scan over source in these
-  # suites is about what a file does, and a sentence in a comment saying the
-  # word is not the file doing it.
   codeOf =
     line:
     let
@@ -213,7 +185,6 @@ rec {
     in
     if m == null then line else head m;
 
-  # The worked deployment of fixtures/minimal-typed-edge/.
   worked = import ./worked.nix { inherit planner folder; };
   workedResult = planner.mkPlan worked.args;
 }

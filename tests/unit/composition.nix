@@ -1,10 +1,3 @@
-# Composition: what a root publishes, which settings a deployment may move,
-# where a member is placed and what a port claim allocates.
-#
-# One test per scenario of specs/planner/typed-edge/ that is about the
-# composing half, named after that scenario, plus the implementation
-# obligations of tasks.md 3.3, 3.4, 3.5 and 4.4 that carry no scenario of
-# their own and are named after the obligation instead.
 { planner, support }:
 let
   inherit (support)
@@ -28,9 +21,6 @@ let
     mapAttrs
     ;
 
-  # The rows this suite is about. The worked deployment must produce none of
-  # them, which is what "the folder's two roots evaluate unmodified" means as
-  # an assertion rather than as a claim.
   compositionIds = [
     "settings-fixed-path"
     "settings-undeclared-knob"
@@ -45,9 +35,6 @@ let
     "wire-unknown-instance"
   ];
 
-  # A leaf that renders the settings it was handed into the command of its one
-  # unit, so a test reads back the value the module received and not only the
-  # value the plan recorded beside it.
   settingsLeaf = _: {
     impl =
       { settings, ... }:
@@ -58,7 +45,6 @@ let
       };
   };
 
-  # A leaf claiming one port. `fixed = null` is the claim this subset refuses.
   portLeaf = fixed: _: {
     claims.ports.ssh = {
       proto = "tcp";
@@ -72,8 +58,6 @@ let
       };
   };
 
-  # A provider of two capabilities, so a deployment can expose one of them and
-  # a wire to the other has a non-empty exposure list to render.
   twoCapProvider = _: {
     provides.identity.interface = identity;
     provides.repo.interface = repository;
@@ -109,10 +93,6 @@ let
     exports.dsn = publicString;
   };
 
-  # A leaf whose capability set is the `databases` setting it was handed: one
-  # capability per name, so a test reads back which capabilities the resolved
-  # setting produced. The fallback is the member's own value, which is what a
-  # deployment writing a knob nobody declared leaves in place.
   perDatabaseLeaf =
     { settings, ... }:
     let
@@ -138,8 +118,6 @@ let
       };
     };
 
-  # A reader of one database: what makes a capability the deployment added
-  # observable as a delivered read rather than only as a published name.
   databaseReader = _: {
     uses.db = {
       interface = database;
@@ -155,9 +133,6 @@ let
       };
   };
 
-  # A root that forwards its member's whole capability set instead of naming
-  # each capability, which is the only shape that survives a set a deployment
-  # decides.
   forwardingRoot =
     spec:
     { service, ... }:
@@ -169,8 +144,6 @@ let
       provides = main.provides;
     };
 
-  # A fleet where one tag is carried by three machines and one machine carries
-  # a different tag, so a tag selector has something to not select.
   taggedMachines = {
     a = {
       address = "a.example:22";
@@ -201,11 +174,8 @@ let
     };
   };
 
-  # The plan keys of the services, without the machine entries a placement
-  # brings with it.
   serviceKeys = result: filter (n: !hasInfix "machine:" n) (attrNames result.plan);
 
-  # Both files a settings row names, recorded so the row can render them.
   bothFiles = {
     deployment = "deployment/instances.nix";
     machines = "deployment/machines.nix";
@@ -213,9 +183,6 @@ let
   };
 in
 {
-  # A deployment sets a knob the root declared as a default: the deployment's
-  # value is what the module receives and what the plan records, and the plan
-  # records the deployment as its source.
   testADeploymentOverwritesADefault =
     let
       result = planOf {
@@ -247,9 +214,6 @@ in
       };
     };
 
-  # A deployment sets a knob the root declared as fixed: one error row naming
-  # both the deployment file and the module file, and the module's fixed value
-  # is the resolved one, so neither value silently wins.
   testADeploymentWritesToAFixedPath =
     let
       result = planOf {
@@ -293,9 +257,6 @@ in
       };
     };
 
-  # A root owning one member named `server` keys that member's namespace too:
-  # `settings.server.quota` resolves and `settings.quota` is a row whose
-  # evidence names the member the definition should have been written under.
   testASingleMemberRootStillKeysItsNamespace =
     let
       root = support.root {
@@ -325,7 +286,6 @@ in
         unkeyedRows = rowIds unkeyed;
         unkeyedSeverity = severityById "settings-not-member-keyed" unkeyed;
         namesMember = hasInfix "`server`" (evidenceById "settings-not-member-keyed" unkeyed);
-        # The definition did not leak into the member's namespace either.
         unkeyedValue = unkeyed.plan."i:server@one".settings.server.quota.value;
       };
       expected = {
@@ -339,9 +299,6 @@ in
       };
     };
 
-  # A wire names a capability the target instance provides and does not expose:
-  # an error row that lists what the instance does expose, so the deployment is
-  # told which name is addressable rather than only that this one is not.
   testAWireNamesACapabilityThatIsNotExposed =
     let
       result = planOf {
@@ -376,7 +333,6 @@ in
         severity = row.severity;
         namesCapability = hasInfix "`writer.identity`" row.message;
         listsExposed = hasInfix "`repo`" row.evidence;
-        # Not addressable means not delivered: the slot resolves to no value.
         delivered = result.plan."reader:only@one".reads.far.delivered;
         hasValues = result.plan."reader:only@one".reads.far ? values;
         applicable = result.applicable;
@@ -393,9 +349,6 @@ in
       };
     };
 
-  # tasks.md 3.3: both roots of fixtures/minimal-typed-edge/ evaluate
-  # unmodified. The two rows the folder documents are about a set entry with no
-  # bytes, not about composition, so the composing half is silent here.
   testTheFoldersRootsEvaluateUnmodified =
     let
       result = support.workedResult;
@@ -421,9 +374,6 @@ in
       };
     };
 
-  # tasks.md 3.4: a knob the root declared neither as a default nor as fixed.
-  # The row names the knob and lists what the member does declare, and the
-  # definition reaches neither the module nor the plan.
   testADeploymentWritesAnUndeclaredKnob =
     let
       result = planOf {
@@ -458,9 +408,6 @@ in
       };
     };
 
-  # tasks.md 3.5: `exposes` naming a capability the root does not provide. The
-  # row lists what the root does provide, which is the candidate list the
-  # deployment needs to correct the name.
   testExposesNamesACapabilityTheRootDoesNotProvide =
     let
       result = planOf {
@@ -497,10 +444,6 @@ in
       };
     };
 
-  # tasks.md 4.4: placement from a tag. Three machines carry the tag and a
-  # fourth does not, so the member is placed three times and the keys differ
-  # only in the machine. The specification scenario about a service placed
-  # twice is covered in plan.nix; this test is about the tag selector itself.
   testATagPlacesEveryMachineThatCarriesIt =
     let
       result = planOf {
@@ -542,9 +485,6 @@ in
       };
     };
 
-  # tasks.md 4.4: placement from a named machine list. The list is recorded on
-  # the entry as the deployment wrote it, and the placements are the machines
-  # the registry holds.
   testANamedMachineListPlaces =
     let
       result = planOf {
@@ -587,8 +527,6 @@ in
       };
     };
 
-  # tasks.md 4.4: a named machine the registry does not hold. The row lists the
-  # registered machines, and the machine that is registered is still placed.
   testANamedMachineIsAbsentFromTheRegistry =
     let
       result = planOf {
@@ -634,9 +572,6 @@ in
       };
     };
 
-  # tasks.md 4.4: a member no placement selected. One row, and a plan entry
-  # keyed without a machine: it carries settings and nothing that presupposes a
-  # host, and no machine entry appears beside it.
   testAMemberNoPlacementSelected =
     let
       result = planOf {
@@ -680,9 +615,6 @@ in
       };
     };
 
-  # tasks.md 4.4: a port claim carrying `fixed`. The port is allocated into
-  # `alloc.ports` and handed to the impl, which is the only allocation this
-  # subset performs.
   testAFixedPortClaimAllocatesThatPort =
     let
       result = planOf {
@@ -706,9 +638,6 @@ in
       };
     };
 
-  # tasks.md 4.4: a claim without `fixed` is refused rather than allocated, and
-  # the evidence names the persisted allocation table that would bring dynamic
-  # allocation back. Nothing lands in `alloc.ports`.
   testAPortClaimWithoutFixed =
     let
       result = planOf {
@@ -741,11 +670,6 @@ in
       };
     };
 
-  # A member derives its capability set from a setting and the deployment
-  # overwrote that setting with a longer list: every resolved name is
-  # exposable, the plan publishes exactly those capabilities with their
-  # exports, and the instance layer sees the set the plan does rather than the
-  # member's default.
   testADeploymentDecidesTheCapabilitySet =
     let
       result = planOf {
@@ -789,9 +713,6 @@ in
       };
     };
 
-  # A wire naming a capability the deployment added: the read is delivered, the
-  # consuming module receives the value and the producer's export records the
-  # consumer, with no row about a capability the root does not provide.
   testAWireNamesACapabilityTheDeploymentAdded =
     let
       result = planOf {
@@ -840,9 +761,6 @@ in
       };
     };
 
-  # A capability set derived from a knob nobody declared: the undeclared-knob
-  # row names the member and the knob, and the set stays the member's own
-  # value, so a deployment typo cannot move it.
   testACapabilitySetDerivedFromAKnobNobodyDeclared =
     let
       result = planOf {

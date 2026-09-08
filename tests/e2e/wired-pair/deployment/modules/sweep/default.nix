@@ -1,5 +1,3 @@
-# The scheduled root. One member, offering nothing and reading nothing: this
-# instance is here for what a deployment does to a schedule.
 { coreutils }:
 
 { service, ... }:

@@ -1,11 +1,4 @@
-# Interfaces, export atoms and the typed extensions a backend adds to the unit
-# vocabulary.
-#
 # An interface is the value an author imported. It is identified by that value
-# and never by a name resolved at composition time, it is validated against no
-# registry, and its `name` is a label that appears in diagnostic output and
-# nowhere else. Two interfaces in two files may carry one name. A unit
-# extension is the same construction and follows the same rule.
 {
   util,
   diag,
@@ -42,8 +35,6 @@ in
 rec {
   inherit secrecies;
 
-  # The whole constructor. No registration, no side table, no list the planner
-  # owns: an interface nobody upstreamed is an interface.
   interface =
     {
       name,
@@ -60,10 +51,6 @@ rec {
   secretExports =
     iface: builtins.filter (e: secrecyOf iface.exports.${e} == "secret") (exportNames iface);
 
-  # An interface's declaring file, found by value in the registry the caller
-  # passed to mkPlan. A miss is not an error: the registry exists so that a row
-  # can render a file beside a name, not so that an interface can be rejected
-  # for being absent from it.
   registry =
     interfaces:
     util.concatMapAttrsToList (
@@ -80,8 +67,6 @@ rec {
     in
     if hits == [ ] then null else (builtins.head hits).file;
 
-  # `name` plus the declaring file at first mention, which is what makes two
-  # same-named interfaces distinguishable in output.
   label =
     reg: iface:
     let
@@ -99,9 +84,6 @@ rec {
     in
     if file == null then "interface:${iface.name}" else file;
 
-  # Rows for one typed field. An interface's export atom and a unit extension's
-  # field are one construction over two key sets, so the dispatch that refuses
-  # an excluded key before an unknown one lives here once.
   typedFieldRows =
     {
       subject,
@@ -142,9 +124,6 @@ rec {
       }
     );
 
-  # Rows for one interface's atoms. An atom declares `type` and may declare
-  # `secrecy`. Any other key is refused with the condition that would introduce
-  # it, rather than accepted and discarded.
   atomRows =
     reg: iface:
     let
@@ -180,16 +159,9 @@ rec {
 
   isInterface = v: isAttrs v && v ? name && v ? exports && isAttrs v.exports;
 
-  # Rows for the registry a caller passed to mkPlan. It indexes two kinds of
-  # value by the file that declared it: an interface, whose atoms are checked
-  # here, and a unit extension, whose fields are checked where a unit applies
-  # it, because that is where the subject a row would name exists.
   registryRows =
     reg: builtins.concatLists (map (r: if isInterface r.value then atomRows reg r.value else [ ]) reg);
 
-  # The extension constructor. `backend` names the service manager whose fields
-  # it adds and is the only field a check reads; `name` is a label, so two
-  # extensions in two files may carry one name and stay distinct values.
   unitExtension =
     {
       backend,
@@ -203,10 +175,6 @@ rec {
   isUnitExtension =
     v: isAttrs v && v ? backend && isString v.backend && v ? name && v ? fields && isAttrs v.fields;
 
-  # One `extends` entry: the extension a module imported and the subset of its
-  # fields the unit assigns. `values` is a subset rather than an equal keyset,
-  # because a hardening extension exists to set two of thirty knobs, which is
-  # the opposite of a capability's exports.
   readExtension =
     {
       reg,

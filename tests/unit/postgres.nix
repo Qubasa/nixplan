@@ -1,15 +1,3 @@
-# One provider instance and two consumers, planned in evaluation.
-#
-# These ten claims were asserted through a serialised corpus: Nix wrote a plan
-# to JSON, a Python loader re-typed it, and pytest asserted on the copy. Every
-# one of them is an attribute of the value `mkPlan` returns, so they are
-# asserted on that value here and the serialisation boundary is gone
-# (design.md D7).
-#
-# Two deployments over one configuration, differing in one line: the first wires
-# each application to its own database, the second wires both to `billing`. The
-# interface, the two modules and the machine registry are the ones the corpus
-# carried, taken here because these claims need them.
 { planner, support }:
 let
   inherit (builtins) attrNames;
@@ -17,7 +5,6 @@ let
 
   k = planner.korora;
 
-  # Three exports and no bound on either half: what resolves in this subset.
   postgresqlDatabase = k.interface {
     name = "postgresql-database";
     exports = {
@@ -36,12 +23,8 @@ let
     };
   };
 
-  # A literal string. A fixture references a package and realises nothing.
   postgresql = "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-postgresql-16.4";
 
-  # One cluster process, one data directory, one capability per database. Which
-  # databases exist is the `databases` setting, so the capability set is the
-  # deployment's decision and no database name appears in the module.
   cluster =
     { settings, ... }:
     let
@@ -84,7 +67,6 @@ let
         };
     };
 
-  # An application that puts the database it was handed into its environment.
   appServer = _: {
     uses.db = {
       interface = postgresqlDatabase;
@@ -130,7 +112,6 @@ let
     };
 
   machines = {
-    # The cluster lives here, and one of the two applications with it.
     one = {
       address = "one.example:22";
       tags = [ "everywhere" ];
@@ -138,8 +119,6 @@ let
       serviceManager = "systemd";
     };
 
-    # The other application. It reads a provider on `one`: what `reach = "one"`
-    # requires is a single placement of the capability, not a shared machine.
     two = {
       address = "two.example:22";
       tags = [ "everywhere" ];
@@ -163,8 +142,6 @@ let
     };
   };
 
-  # `analytics` is what differs between the two deployments: the database
-  # `app-analytics` names.
   deploymentReading =
     analytics:
     planner.mkPlan {
@@ -204,15 +181,11 @@ let
       };
     };
 
-  # Each application owns its own database.
   perApplication = deploymentReading "analytics";
 
-  # Both applications name `billing`. This subset puts no cardinality on a
-  # capability, so two readers of one schema resolve.
   sharedDatabase = deploymentReading "billing";
 in
 {
-  # No row and an applicable plan: the whole fleet resolves.
   testTheFleetResolves = {
     expr = {
       rows = rowIds perApplication;
@@ -224,7 +197,6 @@ in
     };
   };
 
-  # The value each application reads is the one its own wire named.
   testEachApplicationIsHandedItsOwnDatabase = {
     expr = {
       billingUrl = perApplication.plan."app-billing:server@one".env.DATABASE_URL;
@@ -240,8 +212,6 @@ in
     };
   };
 
-  # The capability set is derived from a setting the deployment wrote, so it is
-  # the deployment's decision and not the module's.
   testTheDeploymentDecidesWhichDatabasesExist =
     let
       cluster' = perApplication.plan."pg:main@one";
@@ -266,7 +236,6 @@ in
       };
     };
 
-  # One reader each, and neither export records the other's reader.
   testTheTwoReaderListsAreDisjoint =
     let
       exports = capability: perApplication.plan."pg:main@one".provides.${capability}.exports;
@@ -282,7 +251,6 @@ in
       };
     };
 
-  # One cluster entry, not one per consumer.
   testOneClusterEntryServesBothApplications = {
     expr = {
       keys = attrNames perApplication.plan;
@@ -300,8 +268,6 @@ in
     };
   };
 
-  # `reach = "one"` asks for a single placement of the capability, not a shared
-  # machine: the provider is on `one` and this consumer is on `two`.
   testAReachOneReadCrossesAMachineBoundary =
     let
       read = perApplication.plan."app-analytics:server@two".reads.db;
@@ -323,14 +289,11 @@ in
       };
     };
 
-  # A wire is a read, not an ordering: the only edge the consumer carries is the
-  # machine it is placed on.
   testAWireAddsNoDependencyEdge = {
     expr = perApplication.plan."app-analytics:server@two".dependsOn;
     expected = [ "machine:two@${perApplication.plan."machine:two".key}" ];
   };
 
-  # Two instances naming one database resolve, and both are handed one value.
   testTwoInstancesReadingOneDatabaseResolve = {
     expr = {
       rows = rowIds sharedDatabase;
@@ -346,7 +309,6 @@ in
     };
   };
 
-  # The export both named records both readers.
   testBothReadersAreRecordedOnTheOneExport = {
     expr = sharedDatabase.plan."pg:main@one".provides.billing.exports.dsn.readBy;
     expected = [
@@ -355,7 +317,6 @@ in
     ];
   };
 
-  # The database nobody named is still published, with nobody recorded on it.
   testAnExportNobodyNamedKeepsAnEmptyReaderList =
     let
       unnamed = sharedDatabase.plan."pg:main@one".provides.analytics;

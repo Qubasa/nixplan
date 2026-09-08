@@ -1,13 +1,3 @@
-# The plan artifact: entries, keys, planes, absence and the two files a value
-# can land in, plus the committed plan the worked folder carries.
-#
-# One test per scenario of specs/planner/plan-artifact/spec.md that is about the
-# shape of the artifact, named after that scenario. The golden comparison is
-# here rather than in a Python suite because the fixture no longer carries prose
-# the plan does not: every field participates, `==` is the comparison, and the
-# difference function below reports the attribute paths that differ rather than
-# two documents (design.md D6). The prose those `note` keys held is beside the
-# fixture, in fixtures/minimal-typed-edge/plan/README.md.
 {
   planner,
   support,
@@ -54,15 +44,11 @@ let
   worked = support.workedResult;
   workedPlan = worked.plan;
 
-  # ------------------------------------------------------ the golden fixture --
 
   fixture = fromJSON (readFile (folder + "/plan/backup.json"));
 
   join = path: name: if path == "" then name else "${path}.${name}";
 
-  # One dotted path per difference. A missing field, an extra field and a
-  # changed value are three sentences about the same path, so a drifted field
-  # names itself and no other entry is printed.
   differencesAt =
     path: want: have:
     if isAttrs want && isAttrs have then
@@ -94,8 +80,6 @@ let
 
   differences = differencesAt "" fixture;
 
-  # A fixture is worth committing only if it is the real thing: an ellipsis or a
-  # hash that is not sixteen hex digits is a value somebody typed.
   shortHash =
     value:
     let
@@ -117,9 +101,6 @@ let
 
   placeholders = placeholdersAt "";
 
-  # Every entry key the fixture names anywhere inside itself: in a dependency
-  # list, a reader list, a row subject or the entries of a set-valued read. A
-  # fixture that elided an entry would still name it in one of those places.
   referencedIn =
     node:
     if isAttrs node then
@@ -140,8 +121,6 @@ let
     else
       [ ];
 
-  # One entry drifted, so the difference function is asserted on a difference
-  # rather than only on their being none.
   drifted =
     key: field: value:
     fixture
@@ -151,7 +130,6 @@ let
       };
     };
 
-  # ------------------------------------------- the committed rendered table --
 
   collapse =
     s:
@@ -169,9 +147,6 @@ let
 
   committedLines = support.lines (readFile (folder + "/plan/diagnostics.txt"));
 
-  # A header is `  ! <subject>  <message>`; the message continues on any line
-  # indented past the detail columns, and the severity is the first word of the
-  # `severity:` detail below it.
   committedRowAt =
     index:
     let
@@ -217,13 +192,8 @@ let
     inherit (row) subject message severity;
   }) worked.diagnostics;
 
-  # A literal store path, so an entry has a closure without anything being
-  # realised. The worked deployment's own two packages are the same strings.
   inherit (support.worked) openssh;
 
-  # `"<planKey>@<keyHash>"` split at the LAST `@`, because a plan key carries
-  # one of its own: `machine:alpha@sha256-…` and `i:only@one@sha256-…` are both
-  # read the same way.
   atLast =
     s:
     let
@@ -259,8 +229,6 @@ let
     placement.every.only = { inherit machines; };
   };
 
-  # The same, with the knobs the deployment moves. A single-member root keys its
-  # settings namespace under the member's own name, including when it owns one.
   placedWith =
     machines: knobs: module:
     (placedOn machines module) // { settings.only = knobs; };
@@ -268,8 +236,6 @@ let
   keysOf = result: mapAttrs (_: entry: entry.key) result.plan;
 in
 {
-  # The plan is data: it round-trips through JSON, which is what makes it the
-  # only thing the two halves of the architecture have to agree on.
   testThePlanSerialises = {
     expr = {
       roundTrips = fromJSON (toJSON workedPlan) == workedPlan;
@@ -281,9 +247,6 @@ in
     };
   };
 
-  # One service on two machines: two entries whose keys differ only in the
-  # machine, carrying the same units and the same placement record and a
-  # different hash and a different machine dependency.
   testAServicePlacedTwice =
     let
       result = planOf {
@@ -328,8 +291,6 @@ in
       };
     };
 
-  # Every dependency of the worked plan is a key that appears in that same plan,
-  # written beside that entry's own key hash.
   testAnEntryNamesADependency =
     let
       deps = builtins.concatLists (
@@ -357,8 +318,6 @@ in
       };
     };
 
-  # A setting changed on one service, read by nothing else: the other service's
-  # key is what it was and the changed service's key is not.
   testAnUnrelatedEditChangesNothing =
     let
       deployment =
@@ -399,9 +358,6 @@ in
       };
     };
 
-  # A provider's exported value changes and the consumer reads it into a unit's
-  # environment: the consumer is re-keyed, and its closure is not touched
-  # because the value arrived on the environment plane.
   testAReadValueChangesTheReadersKey =
     let
       deployment =
@@ -480,9 +436,6 @@ in
       };
     };
 
-  # A machine gains the tag that decides the membership of a set-valued read:
-  # the set names one more entry, the reading entry is re-keyed, and the warning
-  # that says so is in the table. Task 6.7.
   testASetValuedReadIsInTheReadersKey =
     let
       deployment =
@@ -574,9 +527,6 @@ in
       };
     };
 
-  # gamma's generator has not run. The reading entry names that placement with a
-  # null value, an explicit absence marker and the row the absence produced,
-  # rather than dropping it from the set.
   testAGeneratorHasNotRun = {
     expr = {
       absentEntry = workedPlan."vault-repo:server@vault".reads.clients.entries."nightly:client@gamma";
@@ -614,10 +564,6 @@ in
     };
   };
 
-  # The authorized-keys file is rendered from that same set: it is recorded as
-  # not computed, with neither a hash nor a recipe assembled from the two
-  # entries that do have values, and it still names the unit the module wrote
-  # for reloading.
   testARenderedFileOverAnIncompleteSet = {
     expr = workedPlan."vault-repo:server@vault".configData."/srv/borg/.ssh/authorized_keys";
     expected = {
@@ -631,9 +577,6 @@ in
     };
   };
 
-  # A service generating a keypair and using the private half in its own unit:
-  # the plan carries the path and the bytes appear nowhere in it, not in the
-  # export, not in the unit's environment and not in the vars record. Task 6.5.
   testAPrivateKeyInThePlan =
     let
       bytes = "PRIVATE-KEY-BYTES-b7f3c1d9";
@@ -684,9 +627,6 @@ in
         env = entry.units.only.env;
         varsRecord = entry.vars.hostKey.files."ssh_host_ed25519_key";
         bytesAnywhereInThePlan = hasInfix bytes (toJSON result.plan);
-        # The same search over the public half, which the plan does carry: the
-        # negative above is a fact about the private bytes and not about the
-        # search.
         publicBytesInThePlan = hasInfix "ssh-ed25519 PUBLICHALF" (toJSON result.plan);
         publicHalf = entry.provides.identity.exports.publicKey.value;
         rows = result.diagnostics;
@@ -711,9 +651,6 @@ in
       };
     };
 
-  # The worked deployment's private half is read by no slot, because no slot may
-  # name it: it is recorded with an empty reader list beside the public half's
-  # one reader.
   testASecretWithNoReader = {
     expr = {
       privateHalf = workedPlan."nightly:client@alpha".provides.identity.exports.privateKey;
@@ -730,9 +667,6 @@ in
     };
   };
 
-  # The content of a rendered configuration file changes: the entry records the
-  # new hash and the units to reload, and its closure is what it was, because a
-  # file on the reload plane is not part of it.
   testAFileChangesAndAUnitReloads =
     let
       deployment =
@@ -789,9 +723,6 @@ in
       };
     };
 
-  # A value a unit reads from its environment changes: the key changes and the
-  # closure does not, because the environment is hashed and the store paths the
-  # entry names have not moved.
   testAnEnvironmentValueChanges =
     let
       deployment =
@@ -836,8 +767,6 @@ in
       };
     };
 
-  # Task 6.2. Two evaluations of one input produce equal keys, entry for entry,
-  # which is what makes a plan comparable across runs at all.
   testTwoEvaluationsOfOneInputProduceEqualKeys =
     let
       first = planner.mkPlan support.worked.args;
@@ -858,9 +787,6 @@ in
       };
     };
 
-  # Task 6.1. A service no placement selected runs nowhere: its entry carries no
-  # machine in its key, no closure and nothing it depends on, and no machine
-  # entry is invented for it.
   testAServiceWithNoUnitsCarriesAnEntryWithNoMachine =
     let
       result = planOf {
@@ -893,15 +819,6 @@ in
       };
     };
 
-  # A machine's address is a key input, because a module may render a unit out
-  # of it: the entries on that machine are re-keyed and the entries on every
-  # other machine are not. Nothing else about the plan moves with it — the
-  # placements, the allocations and the wires are the same plan.
-  #
-  # The wire here carries a constant rather than the producer's address, so
-  # "every other entry's key is unchanged" is about the address alone. A
-  # consumer that read the address would be re-keyed by the value it read,
-  # which is the rule of testAReadValueChangesTheReadersKey.
   testAnAddressChanges =
     let
       deployment =
@@ -994,8 +911,6 @@ in
       };
     };
 
-  # The committed plan is the produced plan. Every field participates, because
-  # the fixture carries nothing the planner did not write.
   testTheGoldenPlanMatches = {
     expr = {
       difference = differences workedPlan;
@@ -1009,8 +924,6 @@ in
     };
   };
 
-  # A drifted field names its own attribute path and nothing else: a reader is
-  # told which entry and which field, not handed two documents.
   testAGoldenFixtureDrifts = {
     expr = differencesAt "" (drifted "vault-repo:server@vault" "key"
       "sha256-0000000000000000"
@@ -1018,8 +931,6 @@ in
     expected = [ "vault-repo:server@vault.key: differs" ];
   };
 
-  # An ellipsis or a hand-invented hash is a value somebody typed, and a fixture
-  # that carries one has stopped being evidence.
   testAPlaceholderSurvivesIntoTheFixture = {
     expr = {
       elidedClosure = placeholders (
@@ -1035,7 +946,6 @@ in
     };
   };
 
-  # Every entry the fixture names anywhere is an entry the fixture carries.
   testTheFixtureElidesNothing = {
     expr = {
       named = filter (name: !(fixture ? ${name})) (planner.util.uniqueStrings (referencedIn fixture));
@@ -1056,8 +966,6 @@ in
     };
   };
 
-  # The rows the folder's own prose attributes to this deployment are the rows
-  # the planner produces, and each one's message is in the rendered table.
   testTheFoldersRowsAreProduced =
     let
       rendered = planner.render worked.diagnostics;

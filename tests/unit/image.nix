@@ -1,12 +1,3 @@
-# The image builder's reading of a plan entry: what it derives, what it
-# renders and what it refuses.
-#
-# One test per scenario of specs/realiser/portable-service-image/spec.md that a
-# pure evaluation can observe. The scenarios about the bytes of a built image,
-# and about what attaching one does on a machine, are asserted by
-# tests/e2e/portable-image/test_portable_image.py against the artifact
-# `.#planner-e2e-portable-image` builds, because a squashfs and a shell script
-# are not values.
 {
   planner,
   support,
@@ -35,8 +26,6 @@ let
     laptop = support.laptop;
   };
 
-  # One member, placed on one machine, whose implementation is the attribute
-  # set the caller wrote. The reading is over the entry that produces.
   planned =
     {
       machines ? support.machines,
@@ -77,13 +66,6 @@ let
       inherit profile;
     };
 
-  # A refusal raises: the builder produces bytes, and a fact nobody wrote is
-  # worse than no image. `deepSeq` because a refusal guards fields a lazy read
-  # would leave unforced.
-  #
-  # `tryEval` hands back no message, so what the sentence names is asserted by
-  # the image check, which runs a refused build and reads its stderr. Here the
-  # condition that produces the refusal is what each case asserts.
   raises = value: !(tryEval (builtins.deepSeq value value)).success;
 
   simple = _: {
@@ -91,9 +73,6 @@ let
     units.only.command = "${borgbackup}/bin/borg serve";
   };
 
-  # An image is a function of its entry. The three claims below share one
-  # deployment: a rebuild of the same entry, an edit to a configuration file's
-  # recipe, and an edit to a unit's own field.
   rebuilt =
     let
       deployment =
@@ -152,8 +131,6 @@ let
     };
 in
 {
-  # A placed entry read as an image: the name and version come from the entry,
-  # the units from its units, and nothing else is consulted.
   testAPlanEntryBecomesAnImage =
     let
       image = readOf { } simple;
@@ -189,9 +166,6 @@ in
       };
     };
 
-  # The plan a realiser reads is data. Nothing in it is a function and nothing
-  # is a derivation, so reading one builds nothing: an image is a derivation
-  # over the plan's values and never a step of evaluating the plan.
   testThePlannerStaysDerivationFree =
     let
       p = planned { } simple;
@@ -218,9 +192,6 @@ in
       };
     };
 
-  # Two placements of one service on machines whose platform records differ are
-  # two images: the platform is part of what the version is a digest of, so the
-  # names differ without anything else being said.
   testOneServiceOnTwoArchitectures =
     let
       machines = support.machines // {
@@ -267,9 +238,6 @@ in
       };
     };
 
-  # A machine running another service manager is refused at build time: this
-  # builder emits systemd units, and an image of them is nothing the machine
-  # the plan names could attach.
   testAnImageMeetsADifferentServiceManager = {
     expr = raises (
       readOf {
@@ -280,8 +248,6 @@ in
     expected = true;
   };
 
-  # A fact the entry does not record is a refusal, not a default: an unplaced
-  # member's entry records no target, no closure and no units.
   testAFactThePlanDoesNotCarry =
     let
       result = planOf {
@@ -321,9 +287,6 @@ in
       };
     };
 
-  # A store path a unit names and the declared roots do not contain fails the
-  # read, because the roots are the population list and a missing one is a
-  # command that cannot run inside the image.
   testAStorePathNamedButNotDeclared = {
     expr = {
       undeclaredRaises = raises (
@@ -351,8 +314,6 @@ in
     };
   };
 
-  # A plan naming another store directory is read against that directory: a
-  # root under it is a root, and a root under the builder's own is not.
   testAMachineWhoseStoreDirectoryIsRelocated =
     let
       elsewhere = "/mnt/nix/store";
@@ -409,9 +370,6 @@ in
       };
     };
 
-  # Two entries of one instance on one machine, each with a unit of one name:
-  # the prefix is the entry's instance and service, so the two unit files
-  # cannot collide.
   testTwoServicesOfOneInstanceOnOneMachine =
     let
       result = planOf {
@@ -485,8 +443,6 @@ in
       };
     };
 
-  # An apply-and-exit unit renders the three fields it recorded and no restart
-  # policy, because the vocabulary has none and the builder invents nothing.
   testAnApplyAndExitUnit =
     let
       image = readOf { } (_: {
@@ -517,8 +473,6 @@ in
       };
     };
 
-  # Two units of one entry with different values for one variable: each unit
-  # file carries its own value and neither carries the other's.
   testTwoUnitsWithDifferentEnvironments =
     let
       image = readOf { } (_: {
@@ -550,8 +504,6 @@ in
       };
     };
 
-  # An ordering renders as an ordering: `After=` without `Requires=`, so
-  # starting the ordered unit does not pull in the one it is ordered against.
   testAnOrderingIsNotARequirement =
     let
       image = readOf { } (_: {
@@ -584,8 +536,6 @@ in
       };
     };
 
-  # A scheduled unit is a service and a timer, both prefixed, and the timer
-  # names the service it triggers.
   testAScheduledUnit =
     let
       image = readOf { } (_: {
@@ -619,8 +569,6 @@ in
       };
     };
 
-  # A systemd extension's recorded fields are rendered as the directives they
-  # name, in the same unit file as the portable fields.
   testASystemdExtensionIsRendered =
     let
       image = readOf { } (_: {
@@ -656,9 +604,6 @@ in
       };
     };
 
-  # An extension recorded for a backend this builder does not render fails the
-  # read rather than being dropped. The plan carries the fields under their own
-  # backend, which is what makes the refusal possible at all.
   testAnExtensionForAnotherBackend =
     let
       launchdService = planner.unitExtension {
@@ -692,8 +637,6 @@ in
       expected = true;
     };
 
-  # A field the builder has no directive for fails the read: an extension
-  # exists to add a field, so a unit that merely lacks one is worse than none.
   testAnUnknownExtensionField =
     let
       exotic = planner.unitExtension {
@@ -742,9 +685,6 @@ in
       };
     };
 
-  # A secret reaches the units from the host: the image carries no bytes of it,
-  # the attachment shows it at the path the plan records, and a module
-  # declaring that path as a closure root is refused.
   testASecretIsReferencedNotCarried =
     let
       withSecret =
@@ -807,9 +747,6 @@ in
       };
     };
 
-  # A recipe carrying a reference is assembled on the host: the attachment
-  # names the file at its recorded path and its staged source, and no fragment
-  # is a value the image carries.
   testARenderRecipeIsAssembledOnTheHost =
     let
       result = planOf {
@@ -874,8 +811,6 @@ in
       };
     };
 
-  # The description is data derived from the entry: the units, the profile, the
-  # target and every host path shown, and nothing the entry does not imply.
   testTheDescriptionIsReviewable =
     let
       image = readOf { } (_: {
@@ -926,10 +861,6 @@ in
       };
     };
 
-  # The profile is stated, and an entry needing what it denies fails the build.
-  # `default`, `nonetwork` and `strict` all carry `DynamicUser=yes`, so a unit
-  # naming a host user is refused under each of them and accepted under
-  # `trusted`.
   testAProfileDeniesWhatAUnitNeeds =
     let
       withUser =
@@ -966,9 +897,6 @@ in
       };
     };
 
-  # A secret shown to a unit needs a profile that does not remap its uid:
-  # `PrivateUsers=yes` is in the three restricted profiles and not in
-  # `trusted`, so an entry reading a root-only file is refused under them.
   testAProfileDeniesAHostFileOnlyRootMayRead =
     let
       withSecret =
@@ -1038,9 +966,6 @@ in
       };
     };
 
-  # The recipe's content never enters the image, so the version - which names
-  # the image, and so its bytes - does not move when the recipe does. The key
-  # does move, because the entry is what changed.
   testAConfigurationChangeLeavesTheImageByteIdentical =
     let
       first = rebuilt.imageOf rebuilt.base rebuilt.key;
@@ -1061,8 +986,6 @@ in
       };
     };
 
-  # A unit's own field is part of the image, so editing one moves that entry's
-  # key and its version, and nothing about the entry beside it.
   testAUnitFieldChanges =
     let
       edited = rebuilt.base // {
@@ -1090,8 +1013,6 @@ in
       };
     };
 
-  # A setting one service reads and another does not: the second service's
-  # image is a function of its own entry, so nothing about it moves.
   testAnUnrelatedEdit =
     let
       deployment =
@@ -1156,8 +1077,6 @@ in
       };
     };
 
-  # An entry with no unit is nothing to attach, and the read says so rather
-  # than producing an image of an identity file alone.
   testAnEntryWithNoUnit = {
     expr = raises (
       readOf { } (_: {

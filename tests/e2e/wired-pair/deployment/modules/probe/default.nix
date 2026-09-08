@@ -1,5 +1,3 @@
-# The fetching root. One member, and it offers nothing: this instance only
-# reads.
 {
   curl,
   httpEndpoint,

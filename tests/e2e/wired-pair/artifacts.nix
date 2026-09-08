@@ -1,9 +1,3 @@
-# The three entries of the cluster deployment, built by the flakelet realiser.
-#
-# Two plans rather than one: the same source with a different served file, which
-# is a different unit, a different key and therefore a different identity to the
-# endpoint. That is what the redelivery requirement is asserted against, and it
-# is produced here rather than by editing anything at run time.
 {
   pkgs,
   planner,

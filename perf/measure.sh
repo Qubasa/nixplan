@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
-# Measure what it costs to evaluate the planner over each performance fixture.
-# The measurement evaluates and deeply forces a plan; it builds nothing, it
-# realises nothing and it needs no network.
 set -euo pipefail
 
-# The $names in both filters are jq variables bound with --arg, not shell ones.
 # shellcheck disable=SC2016
 readonly RUN_FILTER='{
 	cpuTime: .cpuTime,
@@ -128,15 +124,11 @@ elapsed() {
 		'(($to | tonumber) - ($from | tonumber)) * 1000 | round / 1000'
 }
 
-# Runs one measured evaluation, writes its run record under $tmpdir and prints
-# the plan entry count the evaluation reported.
 measure_run() {
 	local fixture="$1" size="$2" label="$3" index="$4"
 	local prefix="$tmpdir/$label.$index"
 	local started ended wall printed entries apply
 
-	# `nix eval --file` does not auto-call a function from --argstr, so the
-	# arguments are applied explicitly.
 	apply="$(printf 'f: f { korora = "%s"; nixpkgs = "%s"; fixture = "%s"; size = "%s"; lib = "%s"; folder = "%s"; worked = "%s"; }' \
 		"$korora" "$nixpkgs" "$fixture" "$size" "$lib" "$folder" "$worked")"
 

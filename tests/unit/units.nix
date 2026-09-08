@@ -1,9 +1,3 @@
-# The typed unit vocabulary, the typed extensions a backend adds to it, the
-# target a module learns its service manager from, and the record a
-# configuration file gets.
-#
-# One test per scenario of specs/planner/unit-vocabulary/spec.md, named after
-# that scenario.
 { planner, support }:
 let
   inherit (builtins)
@@ -30,8 +24,6 @@ let
     laptop = support.laptop;
   };
 
-  # A second extension declared in a second place with the same `name`, which
-  # is what makes the identity rule assertable rather than described.
   otherSystemdService = planner.unitExtension {
     backend = "systemd";
     name = "systemd-service";
@@ -52,8 +44,6 @@ let
     };
   };
 
-  # One member, placed on the machines given, whose implementation is the
-  # attribute set the caller wrote.
   placed =
     machines: implementation:
     planOf {
@@ -69,13 +59,9 @@ let
 
   entryOf = result: machine: result.plan."svc:only@${machine}";
 
-  # The vocabulary's atom types, checked through korora's non-raising entry
-  # point rather than through a plan.
   verifies = type: value: type.verify value == null;
 in
 {
-  # Task 2.1. Four atom types the vocabulary needs and korora has no name for:
-  # each accepts a well-formed value and rejects a malformed one.
   testTheVocabularyAtomTypesVerify = {
     expr = {
       unitRef = [
@@ -131,9 +117,6 @@ in
     };
   };
 
-  # A unit declaring a command and an environment records exactly those two
-  # fields: a field it did not declare is absent rather than recorded as a null
-  # or as a service manager's default.
   testALongRunningUnit =
     let
       result = placed [ "one" ] (_: {
@@ -161,8 +144,6 @@ in
       };
     };
 
-  # An apply-and-exit unit: three fields a renderer can tell from a
-  # long-running unit without reading its command.
   testAUnitThatAppliesAndExits =
     let
       result = placed [ "one" ] (_: {
@@ -198,8 +179,6 @@ in
       };
     };
 
-  # A value failing its field's type is a row naming the module, the unit, the
-  # field and the type, and the failing value is not recorded.
   testAMistypedFieldValue =
     let
       result = placed [ "one" ] (_: {
@@ -215,8 +194,6 @@ in
       expr = {
         rows = rowIds result;
         namesTheUnit = hasInfix "`web`" (messageById "unit-field-type-mismatch" result);
-        # Two rows, one per field: the evidence read here is the table's, so
-        # the type named is `timeout`'s and not the first row's.
         namesAType = hasInfix "duration" (toJSON result.diagnostics);
         recordedFields = attrNames unit;
       };
@@ -231,9 +208,6 @@ in
       };
     };
 
-  # Task 3.2. A reference is producible only by the module that declared the
-  # unit it names, so a reference to a stranger's unit is a row and the
-  # ordering is absent from the plan.
   testAUnitReferenceToAUnitTheModuleDoesNotOwn =
     let
       result = placed [ "one" ] (_: {
@@ -261,8 +235,6 @@ in
       };
     };
 
-  # `requires` is a requirement and `after` is an ordering, so they are two
-  # recorded fields and not one relation.
   testAnOrderingAndARequirementAreDistinct =
     let
       result = placed [ "one" ] (_: {
@@ -301,8 +273,6 @@ in
       };
     };
 
-  # Task 3.3. A unit field is a key input: changing one unit's timeout moves
-  # that entry's key and no other entry's.
   testAUnitFieldIsInTheEntryKey =
     let
       deployment =
@@ -350,8 +320,6 @@ in
       };
     };
 
-  # Task 3.4 and the probe of task 1.1. Two units of one entry declaring
-  # different values for one variable is two records and no row.
   testTwoUnitsDisagreeAboutAVariable =
     let
       result = placed [ "one" ] (_: {
@@ -381,9 +349,6 @@ in
       };
     };
 
-  # A variable both units agree on is recorded on both units and in the entry's
-  # agreed environment, so one environment per service and one per unit are
-  # both served by one plan.
   testTwoUnitsAgreeAboutAVariable =
     let
       result = placed [ "one" ] (_: {
@@ -423,8 +388,6 @@ in
       };
     };
 
-  # One unit's environment changes and nothing else does: the entry is re-keyed
-  # and its closure is untouched.
   testOneUnitsEnvironmentChanges =
     let
       deployment =
@@ -459,8 +422,6 @@ in
       };
     };
 
-  # Task 2.3 and 4.1. A systemd extension applied on a systemd target records
-  # its fields under that backend and produces no row.
   testASystemdExtensionOnASystemdTarget =
     let
       result = placed [ "one" ] (
@@ -491,8 +452,6 @@ in
       };
     };
 
-  # A partial application is the ordinary case: an extension exists to set two
-  # of thirty knobs, so the fields left unset are absent rather than defaulted.
   testAPartialExtensionApplication =
     let
       result = placed [ "one" ] (_: {
@@ -521,8 +480,6 @@ in
       };
     };
 
-  # A key the extension does not declare is a row naming the module, the unit,
-  # the extension and the key, and it is not recorded.
   testAnUnknownKeyInsideAnExtensionApplication =
     let
       result = placed [ "one" ] (_: {
@@ -555,7 +512,6 @@ in
       };
     };
 
-  # A value failing its field's type is a row naming the field and the type.
   testAMistypedExtensionValue =
     let
       result = placed [ "one" ] (_: {
@@ -586,9 +542,6 @@ in
       };
     };
 
-  # Task 2.2. Two extensions declared in two files with one `name` are two
-  # values: each unit's fields are checked against the extension its module
-  # imported and neither against the other's.
   testTwoExtensionsSharingAName =
     let
       result = planOf {
@@ -653,8 +606,6 @@ in
       };
     };
 
-  # Task 2.2. An extension whose field declares a key outside `{ type }` is a
-  # row, and the excluded half of the dispatch keeps its own identifier.
   testAnExtensionFieldDeclaresAnUnknownKey =
     let
       malformed = planner.unitExtension {
@@ -688,8 +639,6 @@ in
       };
     };
 
-  # Task 4.1. One module on two service managers: the portable fields agree and
-  # the extension is recorded on the systemd entry only.
   testOneModulePlacedOnTwoServiceManagers =
     let
       result = planOf {
@@ -752,13 +701,6 @@ in
       };
     };
 
-  # A member no placement selected has no target, consistently with its entry
-  # carrying no machine and no closure.
-  #
-  # The absence is observed the way a module would notice it: the module raises
-  # when the argument is there, so the unplaced member's own rows say whether
-  # it was handed one. An unplaced entry records no units and no configuration
-  # data, so there is nowhere else to read the answer from.
   testAnUnplacedMember =
     let
       deployment =
@@ -796,9 +738,6 @@ in
       };
     };
 
-  # Task 4.2. The module forgets the conditional: the row fires naming both
-  # backends and the fields are still recorded under the extension's own
-  # backend, so a renderer refuses knowingly rather than dropping them.
   testTheSameExtensionOnALaunchdTarget =
     let
       result = planOf {
@@ -845,8 +784,6 @@ in
       };
     };
 
-  # A launchd extension on a launchd target is not a row, which is what makes
-  # the row above about the backend rather than about systemd.
   testALaunchdExtensionOnALaunchdTarget =
     let
       result = planOf {
@@ -882,8 +819,6 @@ in
       };
     };
 
-  # Task 5.1. A service manager's own stanza written directly on a unit is a
-  # row naming the module, the unit, the key and the vocabulary.
   testARawServiceManagerStanzaWrittenOnAUnit =
     let
       result = placed [ "one" ] (_: {
@@ -911,8 +846,6 @@ in
       };
     };
 
-  # A misspelling is a row rather than a silence, which is the failure mode the
-  # declaration half already refuses.
   testAMisspelledVocabularyField =
     let
       result = placed [ "one" ] (_: {
@@ -933,7 +866,6 @@ in
       };
     };
 
-  # An unrecognised key at the implementation's top level is the same row.
   testAnUnknownImplementationKey =
     let
       result = placed [ "one" ] (_: {
@@ -952,9 +884,6 @@ in
       };
     };
 
-  # Task 5.2. Reading stays total: one unrecognised key produces exactly one
-  # row, the second unit is recorded in full, and the entry is still in the
-  # plan.
   testOneMalformedUnitBesideOneWellFormedUnit =
     let
       result = placed [ "one" ] (_: {
@@ -989,9 +918,6 @@ in
       };
     };
 
-  # Task 5.3. A key colliding with a construct this subset excludes produces
-  # that construct's exclusion row with its trigger, in preference to the
-  # unknown-key row.
   testAKeyNamingAnExcludedConstruct =
     let
       result = placed [ "one" ] (_: {
@@ -1016,8 +942,6 @@ in
       };
     };
 
-  # Task 6.1. A file copied out of the store records its path, its mode and its
-  # reload set, and no digest over bytes the plan does not hold.
   testAFileCopiedFromAStorePath =
     let
       result = placed [ "one" ] (_: {
@@ -1049,8 +973,6 @@ in
       };
     };
 
-  # A recipe of public literals only: the plan records the list in order and a
-  # content hash over the literals it holds.
   testAFileAssembledFromPublicLiterals =
     let
       deployment =
@@ -1093,8 +1015,6 @@ in
       };
     };
 
-  # Task 6.2. A recipe naming a generated secret's path records the fragments,
-  # the reference and a hash over them, and no digest over assembled bytes.
   testARecipeThatReferencesASecretPath =
     let
       bytes = "PRIVATE-KEY-BYTES-b7f3c1d9";
@@ -1153,8 +1073,6 @@ in
       };
     };
 
-  # Task 6.1. `reload` is what the module named and not every unit of the
-  # entry, and a file naming no unit reloads none.
   testAFileReloadingOneOfTwoUnits =
     let
       result = placed [ "one" ] (_: {
@@ -1186,8 +1104,6 @@ in
       };
     };
 
-  # Both dispositions at once is a row naming the module and the file, and the
-  # entry is still in the plan.
   testBothDispositionsOnOneFile =
     let
       result = placed [ "one" ] (_: {
@@ -1220,8 +1136,6 @@ in
       };
     };
 
-  # Neither disposition is the same row: a file that names no bytes at all is
-  # not a file the plan can hand to a consumer.
   testNeitherDispositionOnOneFile =
     let
       result = placed [ "one" ] (_: {
