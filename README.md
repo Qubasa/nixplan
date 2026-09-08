@@ -1,9 +1,21 @@
 # nixplan
 
-A Nix library that turns a declarative fleet deployment into a plan: one entry per placed service,
-with every cross-service read resolved, every store path declared and every refusal stated as a
-diagnostic row rather than a thrown error. Two realisers read that plan and neither adds a field to
-it, so what a machine is handed follows from the deployment and nothing else.
+**WIP**: This is in heavy LLM assisted prototyping phase, not for general use.
+
+A Nix library to define multi machine service deployment that
+outputs a JSON deployment plan akin to [disnix](https://github.com/svanderburg/disnix).
+
+It's goal is to be a successor of the [clan inventory](https://clan.lol/docs/unstable/guides/inventory/intro-to-inventory),
+while being more composable and fit more broad use-cases.
+Main design goals:
+
+- An API first approach, so no nix eval failures, instead warnings and errors are collected and exposed over an attribute.
+- No hard-coded flake dependency, dependency system can be freely chosen, build with [mana](https://github.com/hsjobeki/mana) in mind.
+- No global fix point, thus no hidden dependencies between services, instead statically typed interfaces are required to share values.
+- Pluggable generation backend, a plan can generate a systemd [portablectl container](https://systemd.io/PORTABLE_SERVICES/) or a [flakelet](https://github.com/Mic92/flakelet) 
+
+
+
 
 ## The tree
 
@@ -44,9 +56,3 @@ nix build .#planner-e2e-portable-image  # the image realiser over the other one
 nix develop .#planner          # the library, its suites and the perf harness
 nix develop .#planner-cluster  # the above plus what a real two-machine run needs
 ```
-
-## Reading it
-
-`docs/README.md` is the reading order for the library itself: what it is, the smallest working
-example, and one document each for authoring, diagnostics, the plan artifact, the tooling, the
-flakelet realiser and a real cluster.
