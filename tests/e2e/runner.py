@@ -28,9 +28,10 @@ being copied flat, so a test imports the shared harness as ``import delivery``
 and reads its own fixture from beside its own file.
 
 ``--print-env`` assembles the same environment and prints it as shell ``export``
-lines instead of handing over to pytest. That is what ``devShells.planner-cluster``
-evals at entry, so a manual ``pytest`` runs against the rookery this runner would
-have used rather than a second, hand-written assembly of it.
+lines instead of handing over to pytest. That is the tail of what
+``planner-e2e-env`` prints for ``eval``, so a manual ``pytest`` runs against the
+rookery this runner would have used rather than a second, hand-written assembly
+of it.
 """
 
 from __future__ import annotations
@@ -144,11 +145,23 @@ def select_tests(root: Path, name: str | None) -> list[Path]:
 def resolve_rookery(flake: str) -> Path:
     """Build ``flake#rookery`` with the caller's credentials and return its path.
 
+    ``--refresh`` because a branch reference resolves through nix's tarball TTL:
+    without it a run silently uses whatever rookery was last fetched, and a
+    rookery from before a nixpkgs bump is a different python minor version, which
+    the interpreter check then reports as a mismatch that does not exist.
+
     Raises:
         RunnerError: If the build fails, with the flake reference named.
     """
     built = subprocess.run(
-        ["nix", "build", "--no-link", "--print-out-paths", f"{flake}#rookery"],
+        [
+            "nix",
+            "build",
+            "--refresh",
+            "--no-link",
+            "--print-out-paths",
+            f"{flake}#rookery",
+        ],
         capture_output=True,
         text=True,
         check=False,

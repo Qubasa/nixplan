@@ -52,9 +52,12 @@ nix build .#planner-e2e-wired-pair      # the flakelet realiser over the end-to-
 nix build .#planner-e2e-portable-image  # the image realiser over the other one
 ```
 
-## Two shells
+## The shell
 
 ```bash
-nix develop .#planner          # the library, its suites and the perf harness
-nix develop .#planner-cluster  # the above plus what a real two-machine run needs
+nix develop  # the library, its suites, the perf harness and the formatters
 ```
+
+The machine layer needs four more variables, each naming a built artifact, and the
+rookery it runs under. `eval "$(planner-e2e-env)"` exports them, and builds the guest
+image the first time it is called, so entering the shell does not.

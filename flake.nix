@@ -40,17 +40,8 @@
         ./devshells.nix
       ];
 
-      perSystem =
-        { config, pkgs, ... }:
-        {
-          treefmt = import ./treefmt.nix;
-
-          devShells.default = pkgs.mkShell {
-            inputsFrom = [
-              config.treefmt.build.devShell
-              config.devShells.planner
-            ];
-          };
-        };
+      perSystem = {
+        treefmt = import ./treefmt.nix;
+      };
     };
 }

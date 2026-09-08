@@ -68,8 +68,8 @@ output here unevaluable for anyone without that access. It is built at run time 
 reference named. rookery reaches pytest through `PYTHONPATH`, which only holds within one python
 minor version, so the runner also compares the two interpreters and refuses with both named.
 Neither side names a version: `../pytest-env.nix` takes this nixpkgs' default `python3` and
-rookery takes its own, which are 3.14 on both today. The two dev shells that carry that
-environment live in `../devshells.nix`.
+rookery takes its own. The one dev shell that carries that environment lives in
+`../devshells.nix`.
 
 ## The two folders
 
@@ -204,7 +204,7 @@ nix build .#packages.x86_64-linux.planner-e2e-guest --no-link --print-out-paths
 # /nix/store/jmhlh2kvn6i0vjnyf0fx5zmb08ma4s75-planner-e2e-guest-image
 ```
 
-Its `nixos.qcow2` is the disk every machine boots, and is what the app and the shell export as
+Its `nixos.qcow2` is the disk every machine boots, and is what the app and `planner-e2e-env` export as
 `$PLANNER_E2E_GUEST_IMAGE`. The guest's own `toplevel` travels beside the image rather than in a
 `passthru`, because `make-disk-image` builds inside a VM whose result carries none: the qcow2
 references nothing, while the system inside it references everything.
@@ -242,41 +242,52 @@ what keeps the guest snapshottable.
 
 ## Running pytest by hand
 
-`devShells.planner-cluster` is the app's environment without its `exec`, assembled by the runner's
-own `--print-env` so the shell and `nix run .#planner-e2e` cannot drift apart:
+`nix develop` is one shell, and the machine layer's environment is not in it at entry: every
+variable in the table below names a built artifact, and a store reference in the hook would make
+entering the checkout build the guest image. `planner-e2e-env` prints those exports when it is
+called, followed by the runner's own `--print-env`, so a manual `pytest` runs against the same
+artifacts and the same rookery `nix run .#planner-e2e` would have used:
 
 ```bash
-nix develop .#planner-cluster --command python3 --version
-# Python 3.14.7 - rookery's minor version, which this repository's now matches
-nix develop .#planner-cluster --command pytest tests/e2e/portable-image/test_portable_image.py -k confinement
-# 1 passed, 7 deselected in 3.33s - the machine was resumed, not booted
+nix develop --command bash -c 'eval "$(planner-e2e-env)"; python3 --version'
+# Python 3.14.7 - this repository's; the runner refuses if rookery's minor differs
+nix develop --command bash -c 'eval "$(planner-e2e-env)"; pytest tests/e2e/portable-image/test_portable_image.py -k confinement'
+# 1 passed, 7 deselected in 14.82s - the machine was resumed, not booted
 ```
 
-It is a shell of its own because of that interpreter: `PYTHONPATH` only carries rookery within one
+`nix develop` consumes `-k` as its own `--keep-going`, which is why the selection sits inside
+`--command bash -c '…'`. The first call builds every artifact it names, the guest image included;
+after that it is a store lookup.
+
+The interpreter is the one thing neither side pins: `PYTHONPATH` carries rookery only within one
 minor version, so the runner compares the two and refuses with both named when they diverge - a
-rookery nixpkgs bump is what moves them. Every variable it exports names a built store
-path, except the two an edit has to be able to change: the deployment and the harness itself come
-from the working tree, because that is the point of running by hand.
+rookery nixpkgs bump is what moves them. `planner-e2e-env` prints that refusal, exports the
+artifacts anyway, and the suites then skip themselves naming rookery.
+
+Every variable it exports names a built store path, except the two an edit has to be able to
+change: the deployment and the harness itself come from the working tree, because that is the point
+of running by hand.
 
 | Variable | What it names | Set by |
 | --- | --- | --- |
-| `PLANNER_WIRED_PAIR` | the realised wired-pair artifacts | app and shell |
-| `PLANNER_WIRED_PAIR_DEPLOYMENT` | that folder's deployment - the store path in the app, the working tree in the shell | app and shell |
-| `PLANNER_PORTABLE_IMAGE` | the two built images | app and shell |
-| `PLANNER_E2E_GUEST_IMAGE` | the qcow2 every machine boots | app and shell |
+| `PLANNER_WIRED_PAIR` | the realised wired-pair artifacts | app and `planner-e2e-env` |
+| `PLANNER_WIRED_PAIR_DEPLOYMENT` | that folder's deployment - the store path in the app, the working tree in the shell | app and `planner-e2e-env` |
+| `PLANNER_PORTABLE_IMAGE` | the two built images | app and `planner-e2e-env` |
+| `PLANNER_E2E_GUEST_IMAGE` | the qcow2 every machine boots | app and `planner-e2e-env` |
 | `PLANNER_E2E` | the layer's root, on `PYTHONPATH` so a test can `import delivery` | app; the shell puts the working tree there instead |
 | `PLANNER_E2E_STATE` | the run's state root | `runner.py` |
-| `PLANNER_E2E_SSH_KEY` | the store file holding the key the image authorizes | app and shell |
+| `PLANNER_E2E_SSH_KEY` | the store file holding the key the image authorizes | app and `planner-e2e-env` |
 
 The driver and the deployment being the working tree is the point of running by hand: an edit to
-either is what runs. A shell opened where `$ROOKERY_FLAKE` cannot be fetched still opens, saying so,
-and the suites then skip themselves naming what is unset. A missing device prints the banner at
-entry rather than refusing: the environment is still correct, and the boot is what would fail.
+either is what runs. A checkout where `$ROOKERY_FLAKE` cannot be fetched still opens its shell, and
+`planner-e2e-env` says so rather than failing. A missing device prints the banner there too: the
+environment is still correct, and the boot is what would fail.
 
 ## When a run fails
 
 The runner keeps its state directory and prints `cluster state kept for inspection: <path>`; a run
-that passes removes it. While a cluster is live, rookery's own CLI is on `PATH` in that shell -
+that passes removes it. While a cluster is live, rookery's own CLI is on `PATH` in a shell that has
+evaluated `planner-e2e-env` -
 `rookery status` for the table of clusters, `rookery ssh <id> alpha -- systemctl status ...`,
 `rookery console <id> beta` for the serial log, `rookery display <id> alpha` for SPICE and
 `rookery down <id>` to end it - and needs either the run's `$XDG_RUNTIME_DIR` or

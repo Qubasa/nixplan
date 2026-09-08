@@ -122,6 +122,41 @@ in
         flakeletModule = inputs.flakelet.nixosModules.flakelet;
       };
 
+      # One row per variable a machine-layer run reads off a built artifact. The app
+      # exports these paths directly and `planner-e2e-env` prints the same rows out of
+      # `e2eEnvPaths`, so neither can name an artifact the other does not.
+      e2eArtifactPaths = {
+        PLANNER_WIRED_PAIR = "${wiredPairArtifacts}";
+        PLANNER_PORTABLE_IMAGE = "${portableImageArtifacts}";
+        PLANNER_E2E_GUEST_IMAGE = "${e2eGuest}/nixos.qcow2";
+        PLANNER_E2E_SSH_KEY = "${e2eGuest.sshPrivateKey}";
+      };
+
+      e2eExports = pkgs.lib.concatStrings (
+        pkgs.lib.mapAttrsToList (name: path: "export ${name}=${path}\n") e2eArtifactPaths
+      );
+
+      e2eEnvPaths = pkgs.writeText "planner-e2e-env-paths" e2eExports;
+
+      # The attribute is named as a string and built when the script runs. An
+      # interpolation here would put the guest image in the closure of every shell
+      # this script is in, and entering the checkout would build it.
+      e2eEnvScript = pkgs.writeShellApplication {
+        name = "planner-e2e-env";
+        runtimeInputs = [
+          pkgs.git
+          pkgs.nix
+        ];
+        text = ''
+          root="$(git rev-parse --show-toplevel)"
+          cat "$(nix build --no-link --print-out-paths "$root#planner-e2e-env-paths")"
+          printf 'export PLANNER_WIRED_PAIR_DEPLOYMENT=%q\n' "$root/tests/e2e/wired-pair/deployment"
+          if ! ${pytestEnv}/bin/python3 ${./tests/e2e/runner.py} --print-env; then
+            echo "planner-e2e-env: no rookery, so the end-to-end tests will skip themselves" >&2
+          fi
+        '';
+      };
+
       e2eRunner = pkgs.writeShellApplication {
         name = "planner-e2e";
         runtimeInputs = [
@@ -129,14 +164,10 @@ in
           pkgs.openssh
         ];
         text = ''
-          export PLANNER_WIRED_PAIR=${wiredPairArtifacts}
+          ${e2eExports}
           export PLANNER_WIRED_PAIR_DEPLOYMENT=${./tests/e2e/wired-pair/deployment}
-          export PLANNER_PORTABLE_IMAGE=${portableImageArtifacts}
-          export PLANNER_E2E_GUEST_IMAGE=${e2eGuest}/nixos.qcow2
-          export PLANNER_E2E_SSH_KEY=${e2eGuest.sshPrivateKey}
           export PLANNER_E2E=${./tests/e2e}
           exec ${pytestEnv}/bin/python3 ${./tests/e2e/runner.py} "$@"
-
         '';
       };
 
@@ -189,6 +220,8 @@ in
       packages.planner-e2e-wired-pair = wiredPairArtifacts;
       packages.planner-e2e-guest = e2eGuest;
       packages.planner-e2e-portable-image = portableImageArtifacts;
+      packages.planner-e2e-env = e2eEnvScript;
+      packages.planner-e2e-env-paths = e2eEnvPaths;
 
       # An app rather than a check: a build sandbox has no tun device and no vhost-vsock,
       # and cannot ask the daemon whether a path is valid, which is what a delivery does

@@ -109,7 +109,7 @@ observes and how to drive `pytest` by hand against the working tree.
 The harness's own pure half - which machine a key names, which address a
 delivery dials, what the copy runs in - has no machine in it and is a check like
 any other: `nix build .#checks.x86_64-linux.planner-delivery -L`, 8 tests over
-`tests/e2e/test_harness.py`. `nix develop .#planner` carries the same `pytest`
+`tests/e2e/test_harness.py`. `nix develop` carries the same `pytest`
 and puts that directory on `PYTHONPATH`, so
 `pytest -q tests/e2e/test_harness.py` runs against the working tree
 and prints `8 passed`.
@@ -291,5 +291,7 @@ Everything the flake exposes, so a reader can tell what runs where:
 | `planner-e2e-wired-pair` | the flakelet artifacts one folder's machines are handed |
 | `planner-e2e-portable-image` | the images the other folder's machine is handed |
 | `planner-e2e-guest` | the guest image both boot |
+| `planner-e2e-env` | the script `nix develop` carries: the exports a manual `pytest` run needs |
+| `planner-e2e-env-paths` | those exports as a file, built when the script is called |
 | `planner-perf` | the ad-hoc measurement script |
 | `planner-perf-results` | the raw measurements the budgets are recorded from |

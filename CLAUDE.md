@@ -107,7 +107,7 @@ silently unobserved.
 - A new excluded construct goes in `lib/excluded.nix`, gets a test in `tests/unit/exclusions.nix`,
   and moves the row count that suite compares against the fixture README's table.
 - `README.md` must keep naming `docs/`, `docs/README.md`, `lib/`, `image/`, `flakelet/`,
-  `fixtures/`, `perf/`, `openspec/`, `tests/unit/`, `tests/e2e/` and the five documented commands.
+  `fixtures/`, `perf/`, `openspec/`, `tests/unit/`, `tests/e2e/` and the four documented commands.
   `tests/unit/layers.nix` asserts each literal.
 - A `#### Scenario:` heading names its test by construction: `test_<snake_case>` under pytest,
   `test<CamelCase>` under nix-unit. A name present in both layers is a failure, not a bonus.
@@ -157,12 +157,26 @@ silently unobserved.
   be beside. `e2e-folders` is a label rather than a path, and its run happens from `tests/e2e` so
   that `import delivery` resolves the way it does under pytest.
 - `ruff.toml` carries the rules because this repository owns no python package. `src` names the
-  two import roots. Both devshells share the one interpreter `pytest-env.nix` builds, and
+  two import roots. The one devshell carries the interpreter `pytest-env.nix` builds, and
   `tests/e2e/runner.py` refuses a run where it and rookery's own disagree. `target-version` is a
   floor below that interpreter, not a record of it: it bounds what `UP` may rewrite to.
+- `devshells.nix` is one shell and it names no built artifact. A store reference in its hook
+  would make entering the checkout build the 3.7 GiB guest image, so the machine layer's
+  variables arrive from `eval "$(planner-e2e-env)"` instead, which resolves
+  `packages.planner-e2e-env-paths` by name when it is called. That file and the `planner-e2e`
+  app are rendered from one attrset, `e2eArtifactPaths` in `flake-module.nix`: a variable added
+  to one is added to both.
 - `pytest.ini` keeps `-rs`: an artifact-backed suite skips itself when its `PLANNER_*` variable
   names no built path, and the skip reason is the only thing that tells that apart from a run with
   nothing to say.
+- `workdirs/` is gitignored and holds git worktrees of this same tree, so it is invisible to the
+  flake and to treefmt but not to pytest: `pytest.ini` names it in `norecursedirs`, or `pytest .`
+  collects two files called `test_harness.py` and refuses the second as an import mismatch.
+- `resolve_rookery` builds with `--refresh`. A branch reference resolves through nix's tarball
+  TTL, so without it a run uses whatever rookery was fetched last, and one from before a nixpkgs
+  bump is a different python minor version. That is reported as `PYTHON VERSION MISMATCH`, which
+  reads like a real pin disagreement and is not one: check the resolved revision before changing
+  `pytest-env.nix`.
 - vulture and harper are deliberately not run. Vulture's only finding is `cmd` in the `Namespace`
   protocol of `tests/e2e/delivery.py`, which is an interface parameter name. Harper flags
   `realiser`, `flakelet` and `keyset`.
