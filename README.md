@@ -13,7 +13,9 @@ Main design goals:
 - No hard-coded flake dependency, dependency system can be freely chosen, build with [mana](https://github.com/hsjobeki/mana) in mind.
 - No global fix point, thus no hidden dependencies between services, instead statically typed interfaces are required to share values.
 - Pluggable generation backend, a plan can generate a systemd [portablectl container](https://systemd.io/PORTABLE_SERVICES/) or a [flakelet](https://github.com/Mic92/flakelet) 
-
+- Instantiating a service multiple times should be possible.
+- Multiple instances having their own postgresql should be possible.
+- Multiple instance sharing a postgresql should be possible.
 
 
 
