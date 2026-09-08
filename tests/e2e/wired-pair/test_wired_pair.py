@@ -45,7 +45,8 @@ import pytest
 import delivery
 
 snapshot = pytest.importorskip(
-    "rookery.snapshot", reason="rookery is not importable; run this through .#planner-e2e"
+    "rookery.snapshot",
+    reason='rookery is not importable: run .#planner-e2e, or eval "$(planner-e2e-env)"',
 )
 snapshot_cache = pytest.importorskip("rookery.snapshot.cache")
 snapshot_lineage = pytest.importorskip("rookery.snapshot.lineage")
