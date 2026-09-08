@@ -1,5 +1,5 @@
 """Delivering one planned entry to the machine the plan placed it on, and
-booting the machines a delivery needs.
+obtaining the machines a delivery needs.
 
 The plan is the only thing this module reads to decide where a delivery goes: an
 entry's key names its machine, and the machine's record carries the address. A
@@ -10,20 +10,20 @@ the wrong host.
 Nothing here imports rookery. The two handles it needs - a namespace that can run
 a command where the cluster's addresses exist, and a control channel into one
 guest - are declared as protocols, so the pure half type-checks and runs in a
-build sandbox that has no VM. `booted` takes rookery's ``qemu`` module as an
-argument for the same reason: every end-to-end folder boots the same guest the
-same way, and stating that once here keeps the import at the caller.
+build sandbox that has no VM. `cluster_stage` takes rookery's ``snapshot`` module
+as an argument for the same reason: every end-to-end folder obtains the same
+guests the same way, and stating that once here keeps the import at the caller.
 """
 
 from __future__ import annotations
 
-import contextlib
+import functools
 import json
 import os
 import shlex
-import subprocess
+import shutil
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -298,39 +298,38 @@ def status(control: Control, name: str, *, timeout: float = 60.0) -> dict[str, A
     return first
 
 
-def keypair(root: Path) -> Path:
-    """Generate the run's own key pair under ``root`` and return the private key.
+def ssh_key(root: Path, source: Path) -> Path:
+    """Copy the image's private key under ``root`` at mode 0600 and return it.
 
-    The guest image carries no credential, so every run makes its own and hands
-    the public half to the machines over the reserved ``rookery`` share.
+    The credential belongs to the image, not to the run: a resumed snapshot
+    authorizes whatever its cut froze, so the key both ends use has to be static
+    (`design.md D3`). It arrives as a store file, and a store file is mode 0444 -
+    which ssh refuses to read a private key from - so the copy is what a run
+    actually connects with.
 
     Args:
-        root: A directory this run owns; ``root/share`` becomes the share.
+        root: A directory this run owns.
+        source: The store path of the key the guest image authorizes.
 
     Returns:
-        The private key path.
+        The private key path, readable by this user alone.
     """
     key = root / "id_ed25519"
-    subprocess.run(
-        ["ssh-keygen", "-t", "ed25519", "-N", "", "-C", "planner-e2e", "-f", str(key)],
-        check=True,
-        capture_output=True,
-    )
-    share = root / "share"
-    share.mkdir(exist_ok=True)
-    (share / "authorized_keys").write_text((root / "id_ed25519.pub").read_text())
+    shutil.copyfile(source, key)
+    key.chmod(0o600)
     return key
 
 
+@functools.cache
 def state_root() -> Path:
     """Return the run's state directory: the runner's, or a short one of our own.
 
-    A virtiofs socket path has 107 usable bytes and the one rookery opens is
-    ``<state>/rookery/rookery-<pid>-<id>/vm-<i>/virtiofs-<tag>.sock``: a state
-    root under pytest's own ``tmp_path_factory`` is already one byte over, and
-    virtiofsd then exits during startup with nothing but the socket path to say
+    A run-dir socket path has 107 usable bytes and the ones rookery opens are
+    under ``<state>/rookery/rookery-<pid>-<id>/vm-<i>/``: a state root under
+    pytest's own ``tmp_path_factory`` is already over the limit, and the daemon
+    that fails then exits during startup with nothing but the socket path to say
     why. The runner hands one in; the fallback keeps a direct ``pytest`` run
-    working.
+    working, and is memoized so one process has one such directory.
     """
     named = os.environ.get("PLANNER_E2E_STATE")
     if named:
@@ -338,43 +337,101 @@ def state_root() -> Path:
     return Path(tempfile.mkdtemp(prefix="pe-"))
 
 
-@contextlib.contextmanager
-def booted(
-    qemu: Any,
+Preparation = Callable[[Any], Iterator[Any]]
+
+
+def cluster_stage(
+    snapshot: Any,
     *,
     image: Path,
     names: tuple[str, ...],
-    keydir: Path,
+    key: Path,
     memory_mib: int = 2048,
     cpus: int = 2,
-) -> Iterator[Any]:
-    """Boot one guest per name, wait for each to be usable, and yield the cluster.
+) -> Callable[[Preparation], Any]:
+    """Return the decorator that declares a folder's machines as a snapshot stage.
+
+    Every end-to-end folder obtains its machines this way, so the posture is
+    stated once. ``@cluster_snapshot_fixture`` rather than ``@snapshot_fixture``
+    because a single-VM cut can only ever resume as slot 0, and a wired pair
+    needs two machines with a route between them; the whole-cluster decorator
+    boots every slot in one namespace and cuts them together.
+
+    ``uefi`` is on because the guest boots systemd-boot from a GPT ESP and the
+    decorator's own default is BIOS; Secure Boot is off because the image is
+    unsigned; the TPM is off because nothing in the guest measures anything. All
+    three are part of the cut's key, so a later change of posture is a miss.
+
+    No ``extra_env``, ``extra_files`` or ``extra_tools`` are declared, because the
+    preparation reads no variable and runs no program of its own: it waits for
+    readiness over rookery's channels and yields. That is also why an artifact's
+    path never enters the key, so editing a folder's deployment does not
+    invalidate the boot.
 
     Args:
-        qemu: rookery's ``qemu`` module, imported by the caller.
+        snapshot: rookery's ``snapshot`` module, imported by the caller.
         image: The guest image every machine boots.
-        names: The machine names, as the plan names them.
-        keydir: The directory ``keypair`` was called with.
-        memory_mib: Memory per machine.
-        cpus: Virtual CPUs per machine.
+        names: The machine names, in slot order, as the plan names them.
+        key: The private key the image authorizes.
+        memory_mib: Memory per machine; part of the key.
+        cpus: Virtual CPUs per machine; part of the key.
 
-    Yields:
-        rookery's live ``Cluster``, ready and networked.
+    Returns:
+        The decorator to apply to the folder's preparation generator.
     """
-    share = qemu.VirtioFsShare(tag="rookery", host_path=keydir / "share", read_only=True)
-    specs = [
-        qemu.VmSpec(
-            image=image,
-            name=name,
-            ssh_key=keydir / "id_ed25519",
-            secure_boot=False,
-            shares=(share,),
-        )
-        for name in names
-    ]
-    with qemu.cluster(specs, memory_mib=memory_mib, cpus=cpus, state_root=state_root()) as live:
-        for name in names:
-            live.vm(name).wait_for_share("rookery", timeout=180)
-        live.wait_ready()
-        live.wait_for_network()
-        yield live
+    decorator: Callable[[Preparation], Any] = snapshot.cluster_snapshot_fixture(
+        image=image,
+        vms=names,
+        ssh_key=key,
+        memory_mib=memory_mib,
+        cpus=cpus,
+        uefi=True,
+        secure_boot=False,
+        tpm=False,
+        scope="session",
+    )
+    return decorator
+
+
+def await_ready(cluster: Any, *, timeout: float = 180.0) -> None:
+    """Wait until every machine of ``cluster`` is usable, not merely reachable.
+
+    ``wait_for_ssh`` attests the socket-activated vsock sshd, which answers
+    before the system reaches ``multi-user.target`` and populates the login
+    ``PATH``. A cut taken there would freeze a half-booted guest, and the first
+    test to resume it would run its commands before coreutils resolved, so each
+    machine is waited to its default target before the cut is taken.
+
+    Args:
+        cluster: rookery's live ``Cluster``.
+        timeout: Seconds to allow each wait.
+    """
+    for vm in cluster.vms:
+        vm.wait_for_ssh(timeout=timeout)
+        vm.wait_for_unit("multi-user.target", timeout=timeout)
+    cluster.wait_ready()
+    cluster.wait_for_network()
+
+
+def cut_is_cached(stage: Any, *, lineage: Any, cache: Any, slots: int) -> bool:
+    """Whether the cut ``stage`` publishes is in the cache under its own key.
+
+    The stage's lineage node is the handle rookery itself reads off a fixture to
+    chain a child onto a parent (``_rookery_cluster_snapshot_node``,
+    ``rookery/snapshot/cluster_lineage.py:160-166``), and the key is derived from
+    it the same way the resume path derives it. A caller uses this to say which of
+    the two things happened: the machines were resumed, or they were prepared and
+    the cut is now there for the next run.
+
+    Args:
+        stage: The fixture a ``cluster_stage`` decorator produced.
+        lineage: rookery's ``snapshot.lineage`` module.
+        cache: rookery's ``snapshot.cache`` module.
+        slots: The number of machines in the cut.
+
+    Returns:
+        Whether a usable group entry exists for the stage's key.
+    """
+    node = stage._rookery_cluster_snapshot_node
+    keys = lineage.compute_cluster_keys(lineage.chain_to_root(node))
+    return cache.lookup_group(keys[node.name], slots) is not None

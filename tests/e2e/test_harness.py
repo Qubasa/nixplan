@@ -59,6 +59,20 @@ def test_the_delivery_environment_carries_the_key_and_no_host_file() -> None:
     assert "GlobalKnownHostsFile=/dev/null" in env["NIX_SSHOPTS"]
 
 
+def test_the_key_a_run_connects_with_is_a_private_copy_of_the_images(tmp_path: Path) -> None:
+    """ssh refuses a key file others can read, and a store file is readable by all."""
+    source = tmp_path / "store-key"
+    source.write_text("PRIVATE KEY BYTES\n")
+    source.chmod(0o444)
+    run_root = tmp_path / "state"
+    run_root.mkdir()
+
+    key = delivery.ssh_key(run_root, source)
+
+    assert key.read_text() == source.read_text()
+    assert key.stat().st_mode & 0o777 == 0o600
+
+
 def test_the_service_name_comes_from_the_artifact(tmp_path: Path) -> None:
     """The name the endpoint registers is the one `meta.json` declares."""
     for directory, name in (("site", "site-server"), ("check", "check-client")):

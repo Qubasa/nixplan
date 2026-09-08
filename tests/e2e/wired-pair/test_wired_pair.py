@@ -21,16 +21,20 @@ assuming it:
 
 rookery is imported at run time rather than statically: it is resolved from
 ``$ROOKERY_FLAKE`` by the runner and is deliberately not an input of this flake
-(design.md D2), so a static import would make this file unloadable - and
-`mypy --strict` type-checks it without rookery present (treefmt.nix).
+(design.md D2), so the module skips itself when it is absent - and
+`mypy --strict` type-checks it without rookery present (treefmt.nix). The two
+machines are a ``@cluster_snapshot_fixture`` stage: the first run boots and cuts
+them, every later run resumes the cut, and the delivery phases below still run
+against the machines every time.
 """
 
 from __future__ import annotations
 
-import importlib
 import json
 import os
 import re
+import shlex
+import subprocess
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -39,6 +43,12 @@ from typing import Any
 import pytest
 
 import delivery
+
+snapshot = pytest.importorskip(
+    "rookery.snapshot", reason="rookery is not importable; run this through .#planner-e2e"
+)
+snapshot_cache = pytest.importorskip("rookery.snapshot.cache")
+snapshot_lineage = pytest.importorskip("rookery.snapshot.lineage")
 
 SERVER_ENTRY = "site:server"
 SERVER_KEY = "site:server@alpha"
@@ -53,14 +63,21 @@ SWEEP_TIMER = "sweep-job-rotate.timer"
 SWEEP_MARKER = "/run/cluster-sweep.ran"
 RECORD_PATH = "/run/cluster-probe.body"
 STORE_PATH = re.compile(r"/nix/store/[0-9a-z]{32}-[^\s\"']+")
+MACHINES = (SERVER_MACHINE, CLIENT_MACHINE)
 
 
-def _rookery() -> Any:
-    """Import rookery, or skip: this suite has nothing to say without machines."""
-    try:
-        return importlib.import_module("rookery.qemu")
-    except ImportError as exc:  # pragma: no cover - the runner assembles the path
-        pytest.skip(f"rookery is not importable ({exc}); run this through .#planner-e2e")
+def _env_path(variable: str) -> Path:
+    """The path a variable names, or skip the module: it needs the built layer."""
+    value = os.environ.get(variable)
+    if value is None:
+        pytest.skip(f"{variable} is unset; run this through .#planner-e2e", allow_module_level=True)
+    return Path(value)
+
+
+ARTIFACTS = _env_path("PLANNER_WIRED_PAIR")
+DEPLOYMENT = _env_path("PLANNER_WIRED_PAIR_DEPLOYMENT")
+GUEST_IMAGE = _env_path("PLANNER_E2E_GUEST_IMAGE")
+KEY = delivery.ssh_key(delivery.state_root(), _env_path("PLANNER_E2E_SSH_KEY"))
 
 
 @dataclass
@@ -68,6 +85,7 @@ class Run:
     """The cluster, the plans, and what each phase observed."""
 
     cluster: Any
+    resumed: dict[str, bool]
     artifacts: Path
     deployment: Path
     key: Path
@@ -93,51 +111,30 @@ class Run:
         return (Path(served.group(1)) / "index.html").read_text()
 
 
-def _env_path(variable: str) -> Path:
-    value = os.environ.get(variable)
-    if value is None:
-        pytest.skip(f"{variable} is unset; run this through .#planner-e2e")
-    return Path(value)
+@delivery.cluster_stage(snapshot, image=GUEST_IMAGE, names=MACHINES, key=KEY)
+def booted(cluster: Any) -> Iterator[Any]:
+    """The stage every run starts from: two machines, up and usable.
 
-
-@pytest.fixture(scope="session")
-def artifacts() -> Path:
-    """The built artifacts of this folder's deployment."""
-    return _env_path("PLANNER_WIRED_PAIR")
-
-
-@pytest.fixture(scope="session")
-def keydir(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """The run's own key pair, and the share the guests install it from.
-
-    Generated per run: the image carries no credential, and none is borrowed
-    from rookery (design.md D6).
+    On a cache hit this body does not run at all - the machines are resumed from
+    the cut it took the first time - so nothing here may be a fact a test reads.
+    It waits, and yields.
     """
-    root = tmp_path_factory.mktemp("wired-pair-key")
-    delivery.keypair(root)
-    return root
+    delivery.await_ready(cluster.cluster)
+    yield cluster
 
 
 @pytest.fixture(scope="session")
-def run(artifacts: Path, keydir: Path) -> Iterator[Run]:
-    """Two machines named as the plan names them, booted once for the whole run."""
-    qemu = _rookery()
-    deployment = _env_path("PLANNER_WIRED_PAIR_DEPLOYMENT")
-
-    with delivery.booted(
-        qemu,
-        image=_env_path("PLANNER_E2E_GUEST_IMAGE"),
-        names=(SERVER_MACHINE, CLIENT_MACHINE),
-        keydir=keydir,
-    ) as live:
-        yield Run(
-            cluster=live,
-            artifacts=artifacts,
-            deployment=deployment,
-            key=keydir / "id_ed25519",
-            plan=json.loads((artifacts / "plan.json").read_text()),
-            plan_changed=json.loads((artifacts / "plan-changed.json").read_text()),
-        )
+def run(booted: Any) -> Run:
+    """Two machines named as the plan names them, obtained once for the whole run."""
+    return Run(
+        cluster=booted.cluster,
+        resumed=dict(booted.resumed),
+        artifacts=ARTIFACTS,
+        deployment=DEPLOYMENT,
+        key=KEY,
+        plan=json.loads((ARTIFACTS / "plan.json").read_text()),
+        plan_changed=json.loads((ARTIFACTS / "plan-changed.json").read_text()),
+    )
 
 
 @pytest.fixture(scope="session")
@@ -178,8 +175,6 @@ def delivered(run: Run) -> Run:
     run.vm(CLIENT_MACHINE).wait_for_unit(CLIENT_UNIT, timeout=120)
     run.observed.update({"delivered": True, "reports": reports, "dialled": dialled})
     return run
-
-
 
 
 def test_every_participant_is_the_real_one(run: Run) -> None:
@@ -229,6 +224,85 @@ def test_the_machines_are_not_told_the_answer(run: Run) -> None:
     assert [path.name for path in declaring] == ["machines.nix"], declaring
 
 
+def test_a_prepared_cluster_is_cached_for_the_next_run(run: Run) -> None:
+    """The machines were resumed, or the cut they were prepared into is now cached.
+
+    A whole-cluster cut is all-or-nothing, so the two machines report one state
+    between them, and whichever state it is, the cut exists afterwards: that is
+    what makes the next run a resume.
+    """
+    assert sorted(run.resumed) == sorted(MACHINES), run.resumed
+    assert len(set(run.resumed.values())) == 1, run.resumed
+    assert delivery.cut_is_cached(
+        booted,
+        lineage=snapshot_lineage,
+        cache=snapshot_cache,
+        slots=len(MACHINES),
+    ), "the stage's cut was neither resumed from nor published to the cache"
+
+
+def test_a_resumed_machine_is_usable_at_once(run: Run) -> None:
+    """A cut taken at "sshd answers" would resume a guest with no login PATH yet."""
+    for machine in MACHINES:
+        vm = run.vm(machine)
+        assert vm.ssh_succeed("systemctl is-active multi-user.target").strip() == "active"
+        assert vm.ssh_succeed("command -v cat").strip().startswith("/")
+        assert vm.ssh_succeed("id -un").strip() == "root"
+
+
+def test_a_resumed_machine_holds_the_address_its_slot_was_cut_with(run: Run) -> None:
+    """A machine's address is frozen into its slot's RAM, so it must still be the plan's."""
+    for machine in MACHINES:
+        vm = run.vm(machine)
+        address = run.plan[f"machine:{machine}"]["address"]
+        assert vm.name == machine
+        assert vm.ip == address
+        held = vm.ssh_succeed("ip -4 -o addr show scope global")
+        assert f"{address}/" in held, held
+
+
+def test_the_machines_are_reached_with_the_key_the_image_carries(run: Run) -> None:
+    """Both channels are authorized by the image's key, and no password is accepted.
+
+    Every ``ssh_succeed`` in this file rides the control channel, which is
+    authenticated with this key; the copy the delivery makes rides the machine's
+    own sshd on the cluster LAN, which is dialled here with the same key.
+    """
+    public = subprocess.run(
+        ["ssh-keygen", "-y", "-f", str(run.key)],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.split()[:2]
+
+    for machine in MACHINES:
+        vm = run.vm(machine)
+        authorized = vm.ssh_succeed("cat /etc/ssh/authorized_keys.d/root").split()
+        assert authorized[:2] == public, authorized
+        refused = vm.ssh_succeed("grep -i '^PasswordAuthentication' /etc/ssh/sshd_config")
+        assert refused.split()[-1].lower() == "no", refused
+
+    address = run.plan[f"machine:{SERVER_MACHINE}"]["address"]
+    run.cluster.run(
+        ["ssh", *shlex.split(delivery.ssh_opts(run.key)), f"root@{address}", "true"],
+        env=delivery.delivery_env(dict(os.environ), run.key),
+    )
+
+
+def test_no_host_directory_is_mounted_in_a_machine(run: Run) -> None:
+    """A share cannot survive a cut, so a snapshotted guest mounts none."""
+    for machine in MACHINES:
+        mounted = run.vm(machine).ssh_succeed("cat /proc/mounts")
+        assert "virtiofs" not in mounted, mounted
+
+
+def test_a_cut_carries_no_delivery(run: Run) -> None:
+    """Freshly obtained machines hold no entry, however they were obtained."""
+    for machine in MACHINES:
+        vm = run.vm(machine)
+        assert json.loads(vm.ssh_succeed("flakelet status --json")) == []
+        for name in ("site", "check", "sweep"):
+            assert vm.ssh(f"nix-store --check-validity {run.artifact(name)}").returncode != 0
 
 
 def test_the_machine_holds_what_the_artifact_names(delivered: Run) -> None:
@@ -261,8 +335,6 @@ def test_an_entry_is_not_delivered_to_a_machine_it_was_not_placed_on(delivered: 
     assert other.ssh(f"nix-store --check-validity {delivered.artifact('site')}").returncode != 0
 
 
-
-
 def test_the_unit_runs_from_the_delivered_directory(delivered: Run) -> None:
     server = delivered.vm(SERVER_MACHINE)
     assert server.ssh_succeed(f"systemctl is-active {SERVER_UNIT}").strip() == "active"
@@ -285,8 +357,6 @@ def test_no_store_but_the_machines_own_is_reachable(delivered: Run) -> None:
         vm = delivered.vm(machine)
         assert vm.ssh("getent hosts cache.nixos.org").returncode != 0
         assert vm.ssh("timeout 5 nix-store --realise /nix/store/nonexistent").returncode != 0
-
-
 
 
 def test_the_consumer_reaches_the_producer(delivered: Run) -> None:
@@ -339,8 +409,6 @@ def test_cutting_the_wires_far_end_is_visible(delivered: Run) -> None:
 
     server.ssh_succeed(f"systemctl start {SERVER_UNIT}")
     client.wait_until_succeeds(f"systemctl restart {CLIENT_UNIT}", timeout=120)
-
-
 
 
 def test_an_unchanged_entry_is_a_no_op(delivered: Run) -> None:
@@ -411,8 +479,6 @@ def test_the_endpoint_reports_what_the_rollback_came_from(delivered: Run) -> Non
     assert status["changed"]["by"] == {"kind": "rollback", "from": 2}, status
 
 
-
-
 def test_a_scheduled_unit_is_not_fired_by_deploying_it(delivered: Run) -> None:
     """Delivering and activating a scheduled entry installs a trigger, not a run."""
     server = delivered.vm(SERVER_MACHINE)
@@ -436,8 +502,6 @@ def test_the_timer_the_schedule_declares_is_enabled(delivered: Run) -> None:
     assert SWEEP_TIMER in listed, listed
     left = server.ssh_succeed(f"systemctl show -P NextElapseUSecRealtime {SWEEP_TIMER}").strip()
     assert left not in {"", "0", "n/a"}, listed
-
-
 
 
 def test_a_reboot_brings_the_entries_back(delivered: Run) -> None:

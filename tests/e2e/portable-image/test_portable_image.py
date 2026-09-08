@@ -16,13 +16,15 @@ that is about what a real machine does with a built image, named after it.
 
 rookery is imported at run time rather than statically: it is resolved from
 ``$ROOKERY_FLAKE`` by the runner and is deliberately not an input of this flake
-(design.md D2), so a static import would make this file unloadable - and
-`mypy --strict` type-checks it without rookery present (treefmt.nix).
+(design.md D2), so the module skips itself when it is absent - and
+`mypy --strict` type-checks it without rookery present (treefmt.nix). The machine
+is a ``@cluster_snapshot_fixture`` stage: the first run boots and cuts it, every
+later run resumes the cut, and the delivery and attachment below still run
+against the machine every time.
 """
 
 from __future__ import annotations
 
-import importlib
 import json
 import os
 import shlex
@@ -35,6 +37,10 @@ import pytest
 
 import delivery
 
+snapshot = pytest.importorskip(
+    "rookery.snapshot", reason="rookery is not importable; run this through .#planner-e2e"
+)
+
 MACHINE = "alpha"
 CONFINED = "confined"
 FOREIGN = "foreign"
@@ -45,19 +51,17 @@ HOST_SYSTEM = "x86_64-linux"
 FOREIGN_SYSTEM = "aarch64-linux"
 
 
-def _rookery() -> Any:
-    """Import rookery, or skip: this suite has nothing to say without a machine."""
-    try:
-        return importlib.import_module("rookery.qemu")
-    except ImportError as exc:  # pragma: no cover - the runner assembles the path
-        pytest.skip(f"rookery is not importable ({exc}); run this through .#planner-e2e")
-
-
 def _env_path(variable: str) -> Path:
+    """The path a variable names, or skip the module: it needs the built layer."""
     value = os.environ.get(variable)
     if value is None:
-        pytest.skip(f"{variable} is unset; run this through .#planner-e2e")
+        pytest.skip(f"{variable} is unset; run this through .#planner-e2e", allow_module_level=True)
     return Path(value)
+
+
+IMAGES = _env_path("PLANNER_PORTABLE_IMAGE")
+GUEST_IMAGE = _env_path("PLANNER_E2E_GUEST_IMAGE")
+KEY = delivery.ssh_key(delivery.state_root(), _env_path("PLANNER_E2E_SSH_KEY"))
 
 
 @dataclass
@@ -130,36 +134,27 @@ class Run:
         return found[0][len(prefix) :].strip()
 
 
-@pytest.fixture(scope="session")
-def images() -> Path:
-    """The built images of this folder's deployment."""
-    return _env_path("PLANNER_PORTABLE_IMAGE")
+@delivery.cluster_stage(snapshot, image=GUEST_IMAGE, names=(MACHINE,), key=KEY)
+def booted(cluster: Any) -> Iterator[Any]:
+    """The stage every run starts from: one machine, up and usable.
+
+    On a cache hit this body does not run at all - the machine is resumed from
+    the cut it took the first time - so nothing here may be a fact a test reads.
+    It waits, and yields.
+    """
+    delivery.await_ready(cluster.cluster)
+    yield cluster
 
 
 @pytest.fixture(scope="session")
-def keydir(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """The run's own key pair, and the share the guest installs it from."""
-    root = tmp_path_factory.mktemp("portable-image-key")
-    delivery.keypair(root)
-    return root
-
-
-@pytest.fixture(scope="session")
-def run(images: Path, keydir: Path) -> Iterator[Run]:
-    """One machine, named as the plan names it, booted once for the whole run."""
-    qemu = _rookery()
-    with delivery.booted(
-        qemu,
-        image=_env_path("PLANNER_E2E_GUEST_IMAGE"),
-        names=(MACHINE,),
-        keydir=keydir,
-    ) as live:
-        yield Run(
-            cluster=live,
-            images=images,
-            key=keydir / "id_ed25519",
-            plan=json.loads((images / "plan.json").read_text()),
-        )
+def run(booted: Any) -> Run:
+    """One machine, named as the plan names it, obtained once for the whole run."""
+    return Run(
+        cluster=booted.cluster,
+        images=IMAGES,
+        key=KEY,
+        plan=json.loads((IMAGES / "plan.json").read_text()),
+    )
 
 
 @pytest.fixture(scope="session")
@@ -223,8 +218,6 @@ def detached(attached: Run) -> Run:
     return attached
 
 
-
-
 def test_the_image_is_attached_by_the_script_the_artifact_carries(attached: Run) -> None:
     """Nothing but the artifact's own script ran, and the machine holds its image."""
     assert attached.observed["attached"] == f"{attached.image(CONFINED)}/bin/attach"
@@ -286,8 +279,6 @@ def test_a_command_resolves_inside_the_image(attached: Run) -> None:
     assert executable.lstrip("/") in listed, executable
 
 
-
-
 def test_the_confinement_profile_is_enforced_by_the_machine(attached: Run) -> None:
     """The stated profile is the one attached, and the unit lives inside it.
 
@@ -316,8 +307,6 @@ def test_the_confinement_profile_is_enforced_by_the_machine(attached: Run) -> No
     assert attached.vm.ssh_succeed(f"cat {shlex.quote(shown)}") == SHOWN_TEXT
 
 
-
-
 def test_an_image_built_for_another_architecture_is_refused(attached: Run) -> None:
     """The artifact's own script refuses, naming both systems, and starts nothing."""
     assert attached.attachment(FOREIGN)["target"]["system"] == FOREIGN_SYSTEM
@@ -335,8 +324,6 @@ def test_an_image_built_for_another_architecture_is_refused(attached: Run) -> No
     for unit in attached.units_of(FOREIGN):
         loaded = attached.vm.ssh_succeed(f"systemctl show -P LoadState {unit}").strip()
         assert loaded == "not-found", loaded
-
-
 
 
 def test_detaching_removes_the_units_and_the_staging_directory(detached: Run) -> None:

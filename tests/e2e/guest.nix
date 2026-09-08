@@ -8,6 +8,8 @@
 let
   console = "ttyS0";
 
+  sshKeys = import "${nixpkgs}/nixos/tests/ssh-keys.nix" pkgs;
+
   guestModule =
     { config, modulesPath, ... }:
     {
@@ -18,8 +20,8 @@ let
 
       assertions = [
         {
-          assertion = builtins.elem "virtiofs" config.boot.initrd.availableKernelModules;
-          message = "rookery virtiofs shares require the 'virtiofs' kernel module in the guest image";
+          assertion = lib.all (fs: fs.fsType != "virtiofs") (builtins.attrValues config.fileSystems);
+          message = "a virtiofs device does not survive the migration save and restore a snapshot cut is made of, so this guest mounts no host share: rookery/snapshot/cluster_lineage.py builds each slot's VmSpec without one, and the run's credential therefore comes from the image instead";
         }
         {
           assertion = builtins.elem "vmw_vsock_virtio_transport" config.boot.kernelModules;
@@ -52,12 +54,13 @@ let
           message = "the endpoint is enabled with no declared service: every entry this image runs arrives by delivery, so a declared service here would be an artifact the image already had";
         }
         {
-          assertion = !config.services.openssh.settings.PasswordAuthentication;
-          message = "the image carries no credential (design.md D6): the only way in is the key the run seeds over virtiofs";
-        }
-        {
-          assertion = config.systemd.services ? rookery-virtiofs-report;
-          message = "the host reads share readiness off the serial log, so the guest must enumerate its virtiofs mounts there (rookery/qemu/api.py:154-171); without the unit Vm.wait_for_share can only time out";
+          assertion =
+            !config.services.openssh.settings.PasswordAuthentication
+            &&
+              config.users.users.root.openssh.authorizedKeys.keys == [
+                sshKeys.snakeOilEd25519PublicKey
+              ];
+          message = "the only way in is the one key this image carries. A resumed snapshot authorizes whatever its cut froze, so a per-run credential would have to be a key input and would then re-key every cut; the key is nixpkgs' published snakeoil pair from nixos/tests/ssh-keys.nix, which authorizes nothing but an offline throwaway guest";
         }
         {
           assertion = config.systemd.package.withPortabled;
@@ -69,32 +72,7 @@ let
         }
       ];
 
-      boot.initrd.availableKernelModules = [ "virtiofs" ];
       boot.kernelModules = [ "vmw_vsock_virtio_transport" ];
-      fileSystems."/rookery" = {
-        device = "rookery";
-        fsType = "virtiofs";
-        options = [ "nofail" ];
-        neededForBoot = false;
-      };
-
-      systemd.services.rookery-virtiofs-report = {
-        description = "Report active virtiofs mounts to the serial console";
-        wantedBy = [ "multi-user.target" ];
-        after = [ "local-fs.target" ];
-        path = [ pkgs.util-linux ];
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-        };
-        script = ''
-          {
-            echo "=== rookery virtiofs mounts begin ==="
-            findmnt -t virtiofs -o TARGET,SOURCE || true
-            echo "=== rookery virtiofs mounts end ==="
-          } > /dev/${console}
-        '';
-      };
 
       fileSystems."/" = {
         device = "/dev/disk/by-label/nixos";
@@ -136,21 +114,7 @@ let
         };
       };
 
-      systemd.services.cluster-authorized-key = {
-        description = "Install the run's public key into root's authorized_keys";
-        wantedBy = [ "multi-user.target" ];
-        before = [ "sshd.service" ];
-        after = [ "local-fs.target" ];
-        unitConfig.ConditionPathExists = "/rookery/authorized_keys";
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-        };
-        script = ''
-          install -d -m 700 -o root -g root /root/.ssh
-          install -m 600 -o root -g root /rookery/authorized_keys /root/.ssh/authorized_keys
-        '';
-      };
+      users.users.root.openssh.authorizedKeys.keys = [ sshKeys.snakeOilEd25519PublicKey ];
 
       services.flakelets.enable = true;
 
@@ -179,4 +143,5 @@ image
 // {
   inherit guest;
   toplevel = guest.config.system.build.toplevel;
+  sshPrivateKey = sshKeys.snakeOilEd25519PrivateKey;
 }
