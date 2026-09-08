@@ -29,7 +29,7 @@ fixtures/     the worked deployment the suites evaluate as committed, and its go
 tests/unit/   the evaluating layer, run by nix-unit
 tests/e2e/    the machine layer, run by pytest against booted guests
 perf/         the measurement harness, its recorded budgets and the budget checker
-docs/         how to use the library
+docs/         how to use the library, starting at docs/README.md
 openspec/     the specification records each change is written against
 styles/       the prose rules the formatter holds documentation to
 ```

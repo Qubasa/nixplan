@@ -66,9 +66,10 @@ rookery itself is private, so it is not an input of this flake: making it one wo
 output here unevaluable for anyone without that access. It is built at run time from
 `$ROOKERY_FLAKE` with your own credentials, and an unresolvable reference is refused with the
 reference named. rookery reaches pytest through `PYTHONPATH`, which only holds within one python
-minor version, so the runner also compares the two interpreters and refuses with both named: this
-repository's `python3` is 3.14 while rookery is built for 3.13, which is why the app's pytest
-environment is `pkgs.python313` (`../flake-module.nix`, `clusterPytestEnv`).
+minor version, so the runner also compares the two interpreters and refuses with both named.
+Neither side names a version: `../pytest-env.nix` takes this nixpkgs' default `python3` and
+rookery takes its own, which are 3.14 on both today. The two dev shells that carry that
+environment live in `../devshells.nix`.
 
 ## The two folders
 
@@ -82,7 +83,7 @@ the guest both boot, and `../tests/e2e/test_harness.py` asserts the driver's pur
 machine a key names, which address a delivery dials, which end-to-end tests exist - without a
 machine, as the `planner-delivery` check.
 
-### `wired-pair` - 21 tests, two machines, 61s
+### `wired-pair` - 27 tests, two machines
 
 Two machines, one plan, and the wire between them. The phases are ordered and the file order is the
 order, so each test asserts the state it depends on rather than assuming it: the participants are
@@ -95,9 +96,11 @@ machines reboot with the entries coming back without a second delivery.
 
 One test per scenario of
 [`delivery/real-cluster/spec.md`](../openspec/changes/prove-plan-on-real-machines/specs/delivery/real-cluster/spec.md),
-named after it.
+named after it, plus one per scenario of
+[`tooling/machine-snapshots/spec.md`](../openspec/changes/resume-e2e-machines-from-snapshots/specs/tooling/machine-snapshots/spec.md),
+which is about how the machines were obtained rather than what the plan claims.
 
-### `portable-image` - 8 tests, one machine, 18s
+### `portable-image` - 8 tests, one machine
 
 One machine and two built images, one planned for it and one planned for a machine of another
 architecture. What the machine does with them is the subject: the image is attached by the
@@ -114,6 +117,64 @@ was shown.
 One test per scenario of
 [`realiser/portable-service-image/spec.md`](../openspec/changes/emit-systemd-portable-service-images/specs/realiser/portable-service-image/spec.md)
 that is about what a real machine does with a built image.
+
+## Where the machines come from
+
+Each folder's machines are a `@cluster_snapshot_fixture` stage, declared through
+`delivery.cluster_stage` so both folders state the same posture once: UEFI, no Secure Boot, no TPM,
+2048 MiB and two CPUs per machine, session-scoped. The stage's body only waits - each machine to
+its vsock sshd and then to `multi-user.target`, then the cluster to its DHCP leases - and yields.
+The first run boots the machines and rookery cuts them there; every later run resumes that cut,
+which is RAM, device state and the disk overlay of every slot, taken as one consistent
+whole-cluster cut so the frozen leases and the route between the two machines still hold.
+
+```
+                          total   wired-pair setup   portable-image setup
+before this stage existed 76.4s              13.50s                14.90s
+cold (boot and cut)       80.9s              11.74s                11.29s
+warm (resume)             60.9s               1.41s                 2.74s
+```
+
+The setup rows are the whole cost of obtaining the machines, so that is where the change lands: a
+warm run of the layer pays four seconds for three machines instead of twenty-six. The totals move
+a few seconds run to run (a second pair of samples read 83.3s and 65.1s), so the setup rows are
+the claim. Selecting one test feels it most - `nix run .#planner-e2e portable-image -k confinement`
+is 4.0s warm.
+
+What is *not* in the cut is everything the tests are about. The delivery, the activation, the
+redelivery, the rollback and the attachment run against the machines on every run, warm or cold,
+because the evidence those tests read is the report the machines and those acts produce - and a
+preparation body does not run on a cache hit, so anything it produced would be a replay.
+`test_a_cut_carries_no_delivery` holds that line from the other side: freshly obtained machines
+report no registered entry and hold no artifact.
+
+The cut's key is content-addressed over the guest image, the preparation's source and its
+project-local closure, the cluster's shape, the host CPU, the QEMU build and the python environment
+rookery itself runs in. Anything moving there is a miss and a cold prepare, never a stale pass: a
+rookery nixpkgs bump that moved its interpreter from 3.13 to 3.14 re-keyed both cuts, and the next
+run boots. Nothing about the artifacts is in the key, because the preparation never reads them, so
+editing a folder's deployment leaves the boot cached.
+
+```bash
+rookery snapshot list        # the cached cuts and their sizes, about 2 GiB per machine
+rookery snapshot explain KEY # which key input differs, when a hit was expected
+rookery snapshot gc --all    # drop them; the next run is cold and republishes
+```
+
+The cache lives under `$XDG_CACHE_HOME/rookery/snapshots` and is reclaimable by construction:
+losing it costs one cold run. It accretes, though. A key input that moves does not replace the old
+entry, it orphans it, and an orphan is about 2 GiB per machine, so an afternoon of editing the
+preparation body left seven entries and 21.8 GB here. `gc --all` is the hygiene; there is no
+automatic eviction.
+
+The two folders keep two cuts rather than sharing one, because a cut's shape is
+`vms=2;0:alpha:root;1:beta:root` against `vms=1;0:alpha:root`. That is not cosmetic: a resume seeds
+one overlay and one RAM file per slot, and each slot's address is frozen inside its own saved RAM,
+so there is nothing coherent for a one-machine cluster to do with beta's. Sharing would also mean
+one preparation function for both folders, and a session-scoped fixture instantiates once - both
+folders would then share one live cluster, which is exactly what `test_a_cut_carries_no_delivery`
+and the attach tests deny. Two cuts cost 11s once and 2 GiB each; sharing would save neither the
+setup time (a two-slot resume is not dearer than a one-slot one) nor the isolation.
 
 ## What a delivery is
 
@@ -148,10 +209,16 @@ Its `nixos.qcow2` is the disk every machine boots, and is what the app and the s
 `passthru`, because `make-disk-image` builds inside a VM whose result carries none: the qcow2
 references nothing, while the system inside it references everything.
 
-One image serves both folders, and it carries no artifact of any plan, no credential and no
-declared flakelet service: the endpoint is enabled with an empty service set, so everything a
-machine runs arrived by delivery, and the run generates its own key pair and the guests install the
-public half from a read-only virtiofs share at boot (`cluster-authorized-key.service`).
+One image serves both folders, and it carries no artifact of any plan and no declared flakelet
+service: the endpoint is enabled with an empty service set, so everything a machine runs arrived by
+delivery. It does carry the run's credential, and that is deliberate. A snapshot cut is RAM plus
+device state, so a resumable cluster can mount no virtiofs share to be handed a key over, and a
+key generated per run would have to be a key input of the cut and would then re-key it on every
+run. Root therefore authorizes nixpkgs' published snakeoil key
+(`nixos/tests/ssh-keys.nix`, `snakeOilEd25519PublicKey`, commented there as "NOT a security
+issue"), the guest package exports the private half beside the image as `sshPrivateKey`, and the
+run copies that store file to mode 0600 because ssh refuses to read a private key a store's 0444
+leaves readable by everyone. Password authentication stays refused.
 
 Because rookery is resolved at run time, `base-image-configuration.nix` is not available at
 evaluation and this configuration is ours, and every invariant a rookery guest has to hold is an
@@ -164,12 +231,14 @@ portable-service manager the second folder needs is one of them, in the same for
 > systemd-portabled: a systemd built without portabled would leave that test asserting against a
 > stand-in, which is the one thing this layer exists to avoid.
 
-The others are the `virtiofs` module, the vsock transport, `nofail` on every non-root mount,
-networkd rather than dhcpcd, systemd-boot on a blank OVMF varstore, the primary UART as the kernel
-console, no guest firewall, the empty service set, no password authentication, the virtiofs report
-unit the host reads share readiness from, and systemd's own package in the system profile. They are
-rookery's, copied from its `nix/base-image-configuration.nix:25-59`; when a rookery bump breaks a
-boot, diff `../tests/e2e/guest.nix` against `$ROOKERY_FLAKE/nix/base-image-configuration.nix`.
+The others are the vsock transport, `nofail` on every non-root mount, networkd rather than dhcpcd,
+systemd-boot on a blank OVMF varstore, the primary UART as the kernel console, no guest firewall,
+the empty service set, that the only way in is the one key the image carries with no password
+accepted, that no filesystem is a virtiofs share, and systemd's own package in the system profile.
+Most are rookery's, copied from its `nix/base-image-configuration.nix:25-59`; when a rookery bump
+breaks a boot, diff `../tests/e2e/guest.nix` against
+`$ROOKERY_FLAKE/nix/base-image-configuration.nix`. The last two are this layer's own, and they are
+what keeps the guest snapshottable.
 
 ## Running pytest by hand
 
@@ -178,13 +247,14 @@ own `--print-env` so the shell and `nix run .#planner-e2e` cannot drift apart:
 
 ```bash
 nix develop .#planner-cluster --command python3 --version
-# Python 3.13.13 - rookery's minor version, not this repository's 3.14
+# Python 3.14.7 - rookery's minor version, which this repository's now matches
 nix develop .#planner-cluster --command pytest tests/e2e/portable-image/test_portable_image.py -k confinement
-# 1 passed, 7 deselected in 16.06s
+# 1 passed, 7 deselected in 3.33s - the machine was resumed, not booted
 ```
 
-It is a shell of its own because of that interpreter: a 3.14 pytest imports no 3.13 rookery, and one
-shell carrying both would leave `python3` ambiguous. Every variable it exports names a built store
+It is a shell of its own because of that interpreter: `PYTHONPATH` only carries rookery within one
+minor version, so the runner compares the two and refuses with both named when they diverge - a
+rookery nixpkgs bump is what moves them. Every variable it exports names a built store
 path, except the two an edit has to be able to change: the deployment and the harness itself come
 from the working tree, because that is the point of running by hand.
 
@@ -196,6 +266,7 @@ from the working tree, because that is the point of running by hand.
 | `PLANNER_E2E_GUEST_IMAGE` | the qcow2 every machine boots | app and shell |
 | `PLANNER_E2E` | the layer's root, on `PYTHONPATH` so a test can `import delivery` | app; the shell puts the working tree there instead |
 | `PLANNER_E2E_STATE` | the run's state root | `runner.py` |
+| `PLANNER_E2E_SSH_KEY` | the store file holding the key the image authorizes | app and shell |
 
 The driver and the deployment being the working tree is the point of running by hand: an edit to
 either is what runs. A shell opened where `$ROOKERY_FLAKE` cannot be fetched still opens, saying so,
@@ -211,7 +282,9 @@ that passes removes it. While a cluster is live, rookery's own CLI is on `PATH` 
 `rookery down <id>` to end it - and needs either the run's `$XDG_RUNTIME_DIR` or
 `--run-dir <state>/rookery/rookery-<pid>-<id>`.
 
-That state root is a short `mkdtemp` on purpose: the virtiofs socket is
-`<state>/rookery/rookery-<pid>-<id>/vm-<i>/virtiofs-<tag>.sock` and `AF_UNIX` truncates at 108
-bytes, so a deeper root - pytest's own `tmp_path_factory` is already one byte over - makes
-`virtiofsd` exit during startup with nothing but the socket path to say why.
+That state root is a short `mkdtemp` on purpose, and the `state_root` fixture in
+`../tests/e2e/conftest.py` is how rookery is told to use it: the sockets underneath it are
+`<state>/rookery/rookery-<pid>-<id>/vm-<i>/<name>.sock` and `AF_UNIX` truncates at 108 bytes, so a
+deeper root - pytest's own `tmp_path_factory` is already over - makes the daemon behind one exit
+during startup with nothing but the socket path to say why. The run's private copy of the image's
+key lands there too, so it is removed with the rest when a run passes.
