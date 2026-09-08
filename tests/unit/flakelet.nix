@@ -47,6 +47,7 @@ let
     in
     reader.read { inherit (p) plan key; };
 
+  # deepSeq, because a refusal guards fields a lazy read would never force.
   raises = value: !(tryEval (builtins.deepSeq value value)).success;
 
   simple = _: {
@@ -191,6 +192,8 @@ in
       };
     };
 
+  # The timer carries the install section and the service does not. Otherwise the job
+  # runs once at deploy time and again on its schedule.
   testAScheduledUnitIsNotFiredByDeployingIt =
     let
       image = readOf { } withSchedule;

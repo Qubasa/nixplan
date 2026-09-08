@@ -1,3 +1,5 @@
+# alpha is the booted guest. elsewhere is aarch64 and never booted, so that an
+# image can be built for a machine this host is not.
 {
   machines = {
     alpha = {

@@ -14,6 +14,8 @@ let
   support = import ./unit/support.nix { inherit planner folder perfSource; };
 in
 let
+  # Adding a suite file means adding it here. This attrset is the only place a suite
+  # is registered, and coverage.nix cross-walks its names against the specifications.
   suites = {
     interfaces = import ./unit/interfaces.nix { inherit planner support; };
     composition = import ./unit/composition.nix { inherit planner support; };
@@ -37,6 +39,8 @@ let
     };
     layers = import ./unit/layers.nix { inherit support repoSource; };
 
+    # coverage is handed the names of every suite including its own. Not a cycle:
+    # attribute names are known without forcing the values.
     coverage = import ./unit/coverage.nix {
       inherit support changesRoot perfSource;
       unitSuites = unitTestNames;

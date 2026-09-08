@@ -40,6 +40,8 @@ let
     confined = imageBuilder.build {
       plan = worked.plan;
       key = confinedKey;
+      # Stated strict because the enforcement is the claim under test. The image that is
+      # never attached uses default.
       profile = "strict";
     };
     foreign = imageBuilder.build {

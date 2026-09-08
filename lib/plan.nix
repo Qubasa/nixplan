@@ -1,3 +1,6 @@
+# Plan emission: entries, keys and the rows an entry produces. A plan is flat,
+# keyed and free of expressions. Nothing here is a derivation and every store path
+# is a literal string.
 {
   util,
   diag,
@@ -21,6 +24,8 @@ in
 rec {
   machineKey = record: util.shortHash (builtins.toJSON record);
 
+  # Every reader of every export, as a flat index, so a capability can record who
+  # reads it without walking the deployment again.
   readerIndex =
     resolved:
     let
@@ -61,6 +66,9 @@ rec {
       rows = concatLists (map (r: r.rows) group);
     }) (builtins.groupBy (r: r.key) rows);
 
+  # A key is structural: placement alone decides it. It cannot depend on whether a
+  # member produced units, because two instances that wire each other would then
+  # each need the other's units to know its own key.
   entryKeysOf =
     iname: mname: member:
     if member.placements == [ ] then
@@ -126,6 +134,8 @@ rec {
       ) record.exports;
     }) placement.capabilities;
 
+  # An absent entry of a set-valued read is named with a null value and a marker
+  # rather than dropped, so a consumer cannot mistake absence for a value.
   readsRecord =
     { subject, member }:
     mapAttrs (
@@ -207,6 +217,9 @@ rec {
         )
     ) member.edges;
 
+  # A configuration file names its bytes and never carries them. A digest covers
+  # only material the plan itself holds, and a file rendered over a set with an
+  # absent entry is recorded as not computed rather than hashed over the rest.
   fileIdentity =
     file:
     if file.disposition == "source" then
@@ -319,6 +332,9 @@ rec {
       }) record.exports
     ) placement.capabilities;
 
+  # An undeclared mention is an error, because the closure is the list a consumer
+  # populates a filesystem from. A declared root nothing mentions is a warning: it
+  # is either dead weight or a path assembled at run time worth writing down.
   closureRows =
     {
       subject,
@@ -364,6 +380,9 @@ rec {
       }
     ) unmentioned;
 
+  # The key hashes the instance, the service, the machine, the target, the pin, the
+  # units, the store paths the entry declares, the values it was handed and the
+  # keys it depends on.
   placedEntry =
     {
       readers,

@@ -208,6 +208,9 @@ let
     sources.leaves.bad.only = "modules/bad.nix";
   };
 
+  # Calls that raise. None may appear in library code. Comment lines are dropped
+  # before the scan, so prose may name one, but a trailing comment on a line of code
+  # counts as code.
   raising = [
     "throw"
     "abort"

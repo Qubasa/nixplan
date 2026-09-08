@@ -129,6 +129,8 @@ measure_run() {
 	local prefix="$tmpdir/$label.$index"
 	local started ended wall printed entries apply
 
+	# nix eval --file will not auto-call a function from --argstr, so the arguments are
+	# applied explicitly.
 	apply="$(printf 'f: f { korora = "%s"; nixpkgs = "%s"; fixture = "%s"; size = "%s"; lib = "%s"; folder = "%s"; worked = "%s"; }' \
 		"$korora" "$nixpkgs" "$fixture" "$size" "$lib" "$folder" "$worked")"
 

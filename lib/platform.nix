@@ -1,3 +1,9 @@
+# The platform record a plan carries: one elaborated system reduced to the facts a
+# cross build spends, and JSON-safe at every depth.
+#
+# The is* predicates are absent on purpose. Each one is a function of parsed, so
+# recording them would put seventy-five derived booleans into every entry and into
+# every entry's key while telling a consumer nothing parsed does not.
 {
   util,
   systems,
@@ -17,8 +23,12 @@ let
     "abi"
   ];
 
+  # parsed.abi carries assertions, whose entries hold a function each. The name is
+  # excluded here rather than the value filtered by shape.
   abiExcluded = [ "assertions" ];
 
+  # Written out rather than matched with a pattern, so a codegen field upstream adds
+  # is a decision here instead of a silent re-key of every entry in the fleet.
   gccNames = [
     "abi"
     "arch"
@@ -49,6 +59,14 @@ in
 
   inherit (systems) elaborate functionNames;
 
+  # One system string and the microarchitecture a machine declared. A caller
+  # memoises this per distinct pair, so the cost is one elaboration per
+  # architecture in the fleet rather than one per machine.
+  #
+  # The gcc group is read off the elaboration, so the record replays: elaborating a
+  # record reproduces it. A declared microarchitecture replaces the whole group
+  # rather than merging into it, because elaborate applies its arguments over the
+  # platform defaults. That is what a cross build would be handed.
   record =
     {
       system,

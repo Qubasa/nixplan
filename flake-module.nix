@@ -1,5 +1,7 @@
 { inputs, ... }:
 let
+  # korora is pinned as a source, so types.nix is the entry point. Importing the
+  # flake's default.nix warns instead.
   korora = import "${inputs.korora}/types.nix";
   systems = inputs.nixpkgs.lib.systems;
   folder = ./fixtures/minimal-typed-edge;
@@ -48,6 +50,8 @@ in
         }
       '';
 
+      # Named separately rather than sliced out of one copy of the tree, so editing a
+      # document does not invalidate a recorded measurement.
       perfRoot = ./perf;
       libRoot = ./lib;
       workedLoader = ./tests/unit/worked.nix;
@@ -132,6 +136,7 @@ in
           export PLANNER_E2E_SSH_KEY=${e2eGuest.sshPrivateKey}
           export PLANNER_E2E=${./tests/e2e}
           exec ${pytestEnv}/bin/python3 ${./tests/e2e/runner.py} "$@"
+
         '';
       };
 
@@ -185,6 +190,9 @@ in
       packages.planner-e2e-guest = e2eGuest;
       packages.planner-e2e-portable-image = portableImageArtifacts;
 
+      # An app rather than a check: a build sandbox has no tun device and no vhost-vsock,
+      # and cannot ask the daemon whether a path is valid, which is what a delivery does
+      # first.
       apps.planner-e2e = {
         type = "app";
         program = "${e2eRunner}/bin/planner-e2e";

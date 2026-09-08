@@ -47,6 +47,8 @@ let
 
   topLevelNames = attrNames (entriesOf repoRoot);
 
+  # One row per top-level entry of the repository. A file or directory with no row
+  # here fails testATopLevelEntryBelongsToNoStatedClass.
   classOf = {
     "lib" = "the library";
     "image" = "a realiser";
@@ -110,6 +112,8 @@ let
     in
     if m == null then null else head m;
 
+  # A repository-rooted path counts only when its first segment is a real top-level
+  # entry. That is what keeps foreign paths and URLs out of the scan.
   repoTokens = text: filter (token: elem (firstSegment token) topLevelNames) (tokensIn text);
 
   numberedLines =
@@ -239,6 +243,8 @@ let
     )
   );
 
+  # openspec is absent on purpose. A record describes the repository as it was, so a
+  # path it names is history rather than a claim about today.
   scannedDirectories = [
     "lib"
     "image"
@@ -255,6 +261,8 @@ let
     )
     ++ filter (name: match ".*\\.nix" name != null) (filesIn repoRoot);
 
+  # The scan reads raw file text, comments included, because a stale path reference
+  # usually survives in a comment rather than in code.
   repoNamedPaths = namedPathsOf repoRoot scannedFiles ++ rootedPathsOf repoRoot scannedFiles;
 
   unresolvedReferences = sorted (
@@ -304,6 +312,8 @@ let
 
   writesAnExecutable = line: hasInfix "#!/bin/sh" line || hasInfix "#!/usr/bin/env" line;
 
+  # A stand-in is an executable a test writes whose line also names a program a
+  # realiser calls on a machine. Reading a real program's output writes no such file.
   standInsIn =
     rel:
     concatLists (

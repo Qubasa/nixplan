@@ -317,6 +317,9 @@ def main(argv: list[str]) -> int:
 
     env["PYTHONPATH"] = os.pathsep.join([env["PYTHONPATH"], str(root)])
 
+    # Keep this prefix short. The virtiofs socket path built underneath it hits the
+    # 108 byte AF_UNIX limit, and virtiofsd then dies during startup with no clear
+    # error.
     state = Path(tempfile.mkdtemp(prefix="pc-"))
     env["PLANNER_E2E_STATE"] = str(state)
     print(f"rookery: {rookery}", file=sys.stderr)

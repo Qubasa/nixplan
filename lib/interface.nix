@@ -1,4 +1,11 @@
-# An interface is the value an author imported. It is identified by that value
+# Interfaces, export atoms and the typed extensions a backend adds to the unit
+# vocabulary.
+#
+# An interface is the value an author imported. It is identified by that value and
+# never by a name resolved at composition time, it is validated against no
+# registry, and its name is a label that appears in diagnostic output and nowhere
+# else. Two interfaces in two files may carry one name, and a unit extension is
+# the same construction under the same rule.
 {
   util,
   diag,
@@ -35,6 +42,8 @@ in
 rec {
   inherit secrecies;
 
+  # The whole constructor. No registration and no side table: an interface nobody
+  # upstreamed is an interface.
   interface =
     {
       name,
@@ -51,6 +60,9 @@ rec {
   secretExports =
     iface: builtins.filter (e: secrecyOf iface.exports.${e} == "secret") (exportNames iface);
 
+  # An interface's declaring file, found by value in the registry the caller passed
+  # to mkPlan. A miss is not an error: the registry exists so a row can print a
+  # file beside a name, not so an interface can be rejected for being absent.
   registry =
     interfaces:
     util.concatMapAttrsToList (
@@ -175,6 +187,8 @@ rec {
   isUnitExtension =
     v: isAttrs v && v ? backend && isString v.backend && v ? name && v ? fields && isAttrs v.fields;
 
+  # One extends entry. values is a subset of the extension's fields rather than an
+  # equal keyset, because a hardening extension exists to set two of thirty knobs.
   readExtension =
     {
       reg,

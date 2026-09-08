@@ -1,5 +1,6 @@
 .direnv
 .envrc.local
+workdirs/**
 .omp
 result*
 **/result

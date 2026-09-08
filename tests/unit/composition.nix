@@ -257,6 +257,8 @@ in
       };
     };
 
+  # A root owning one member keys that member's namespace too: settings.server.quota
+  # resolves and a bare settings.quota is a row.
   testASingleMemberRootStillKeysItsNamespace =
     let
       root = support.root {

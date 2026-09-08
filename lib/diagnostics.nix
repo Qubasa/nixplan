@@ -1,3 +1,6 @@
+# The diagnostics table. A row is a value a caller returns beside its result.
+# There is no accumulator and no ambient list, because either would be a second
+# way for a row to exist.
 { util }:
 let
   inherit (builtins)
@@ -14,6 +17,9 @@ let
     "warning"
   ];
 
+  # A subject is a plan key, a path relative to the deployment root, or an issue
+  # identifier. An absolute path is refused, because a rendered table would then
+  # differ between two checkouts.
   isPlanKey = s: match "[0-9A-Za-z_.-]+:[0-9A-Za-z_.-]+(@[0-9A-Za-z_.-]+)?" s != null;
   isIssueId = s: match "universe-[0-9a-z]+" s != null;
   isPathSubject = s: match "[0-9A-Za-z_./-]+\\.nix" s != null && util.isRelativePath s;
@@ -23,6 +29,7 @@ rec {
 
   isValidSubject = s: isString s && (isPlanKey s || isIssueId s || isPathSubject s);
 
+  # Every field is required. A row with no resolution is a row nobody can act on.
   row =
     {
       id,
@@ -42,6 +49,9 @@ rec {
   error = args: row (args // { severity = "error"; });
   warning = args: row (args // { severity = "warning"; });
 
+  # Forcing a module's own expression. tryEval catches a raise and a failed
+  # assertion. It catches neither an abort nor a missing attribute, which is why
+  # those two are documented as propagating.
   guard =
     {
       subject,
@@ -81,6 +91,8 @@ rec {
       resolution = "give the row a plan key, a path relative to the deployment root, or an issue identifier where it is produced under lib/";
     };
 
+  # The same fact produced twice is one row: two modules reading one interface
+  # cannot turn one bad atom into two problems. listToAttrs keeps the first.
   dedup =
     rows:
     builtins.attrValues (
@@ -96,6 +108,8 @@ rec {
       )
     );
 
+  # Ordered by identifier, then subject, then message, so two evaluations of one
+  # input render the same bytes however the rows arose.
   mkTable =
     rows:
     let

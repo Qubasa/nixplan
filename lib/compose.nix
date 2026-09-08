@@ -1,3 +1,8 @@
+# Composition: what a root publishes and which settings a deployment may move.
+#
+# A root keys each member's settings under that member's own name, including when
+# it owns exactly one member, and forwards nothing. Each knob it owns is either a
+# default a deployment may overwrite or a fixed value it may not.
 { util, diag }:
 let
   inherit (builtins) attrNames;
@@ -9,6 +14,9 @@ let
   ];
 in
 rec {
+  # The service function a root receives, closed over the settings resolver. The
+  # declaration is read once against those settings, so the capabilities a root
+  # publishes and the exports a placement produces come from one value.
   service =
     settingsOf: name: args:
     let
@@ -38,8 +46,12 @@ rec {
       ) (declaration.provides or { });
     };
 
+  # A root is a function of { service, ... } and nothing else. A root that wants a
+  # package passes it through its own closure.
   mkRoot = root: settingsOf: root { service = service settingsOf; };
 
+  # defaults overwritten by the deployment, then fixed on top, with the source of
+  # every resolved value recorded.
   resolveSettings =
     {
       subject,

@@ -299,6 +299,7 @@ def test_the_confinement_profile_is_enforced_by_the_machine(attached: Run) -> No
     assert attached.between(logged, "assembled-begin", "assembled-end") == attached.recipe()
 
     identity = attached.reported(logged, "identity:")
+    # Every profile but trusted carries DynamicUser=yes, so the service cannot be root.
     assert identity != "uid=0", identity
 
     denied = attached.reported(logged, "original-read:")

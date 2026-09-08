@@ -701,6 +701,8 @@ in
       };
     };
 
+  # An unplaced entry records no units, so a missing target is observed through the
+  # module raising when the argument is there.
   testAnUnplacedMember =
     let
       deployment =
@@ -918,6 +920,8 @@ in
       };
     };
 
+  # A key colliding with an excluded construct gets that construct's row and its
+  # trigger, in preference to the unknown-key row.
   testAKeyNamingAnExcludedConstruct =
     let
       result = placed [ "one" ] (_: {

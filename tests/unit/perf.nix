@@ -60,11 +60,15 @@ in
 {
   testTheSyntheticFleetIsDeterministic =
     let
+      # Compared over the plan, not the deployment: a deployment carries module
+      # functions, and two functions are never equal in Nix.
       planAt = size: (planner.mkPlan (fleetOf size)).plan;
     in
     {
       expr = {
         four = planAt 4 == planAt 4;
+        # Size 64 rather than the largest budgeted size: this suite plans it twice and
+        # the growth bound already measures 256.
         sixtyFour = planAt 64 == planAt 64;
         differentSizesDiffer = planAt 4 != planAt 16;
         machinesAtFour = length (attrNames (fleetOf 4).machines);
@@ -120,6 +124,8 @@ in
         fragments = length hub.configData."/etc/mesh/peers".render;
         readEntries = length (attrNames hub.reads.peers.entries);
       };
+      # One per machine. A fixture that collapses any of these keeps measuring and
+      # stops covering the shape the mesh exists for.
       expected = {
         errors = [ ];
         entries = 33;

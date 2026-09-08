@@ -1,3 +1,5 @@
+# A plain Nix file rather than a flake attribute, so a measurement never includes
+# flake evaluation. Turning it into an attribute invalidates every recorded budget.
 {
   korora,
   nixpkgs,

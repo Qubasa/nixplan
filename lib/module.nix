@@ -1,3 +1,7 @@
+# A leaf module's two halves: the asking half is what it runs on, what it claims,
+# what it generates, what it uses and what it provides. The answering half is the
+# units, the configuration files and the closure roots its impl produced. Reading
+# is total, so a malformed declaration becomes a row and the rest is still read.
 {
   util,
   diag,
@@ -35,6 +39,9 @@ let
     "locked"
   ];
 
+  # The shape a resolver's lockfile already holds. rev and narHash are the two the
+  # priority rests on: a pin that can resolve to different bytes on a later
+  # evaluation is what per-service pinning exists to refuse.
   lockedKeys = [
     "type"
     "owner"
@@ -64,6 +71,8 @@ let
 
   unitKeys = attrNames unitVocabulary ++ [ "extends" ];
 
+  # The two fields whose entries name units, checked against the units the module
+  # declared itself.
   unitReferenceKeys = [
     "after"
     "requires"
@@ -365,6 +374,8 @@ rec {
       rows = util.concatMapAttrsToList genRows vars;
     };
 
+  # The planner records a pin and resolves nothing, so this guards hand-written
+  # data rather than the resolver.
   readPin =
     {
       subject,
@@ -447,6 +458,9 @@ rec {
       inherit rows;
     };
 
+  # One unit, read against the vocabulary. A field the unit did not declare is
+  # absent from the record rather than stored as a null or a service manager's
+  # default, so a binding can tell "not asked for" from "asked for and empty".
   readUnit =
     {
       reg,

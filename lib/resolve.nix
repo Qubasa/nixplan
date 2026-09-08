@@ -1,3 +1,9 @@
+# Resolution: settings, placement, allocation, wires and exports.
+#
+# A wire resolves per member rather than per placement. A slot's value is a
+# function of the wired capability's placements and of nothing about the reader's
+# machine, so resolving it once per reader keeps a set-valued read linear in the
+# fleet instead of square in it.
 {
   util,
   diag,
@@ -71,6 +77,8 @@ in
 
       leafFileOf = iname: mname: sources.leaves.${iname}.${mname} or null;
 
+      # Machines by tag, indexed once for the whole deployment, so a selector asks
+      # for a tag instead of scanning the registry per member per tag.
       machinesByTag = builtins.groupBy (p: p.tag) (
         concatLists (
           util.mapAttrsToList (
@@ -82,6 +90,9 @@ in
 
       tagged = tag: map (p: p.machine) (machinesByTag.${tag} or [ ]);
 
+      # One elaboration per distinct system and microarchitecture rather than one
+      # per machine. The elaboration is nixpkgs' own and raises on a system string
+      # it cannot parse, so it is forced inside a guard like a module's own value.
       targeted = util.filterAttrs (_: decl: decl ? system && builtins.isString decl.system) machines;
 
       microOf = decl: if decl ? microarchitecture then toString decl.microarchitecture else "";
@@ -112,6 +123,9 @@ in
         ) platformGuards
       );
 
+      # One walk of the deployment, indexed by machine, because which machines
+      # carry a placement and which entries one machine carries would otherwise be
+      # the same walk twice.
       placementsByMachine = builtins.groupBy (p: p.machine) (
         concatLists (
           util.mapAttrsToList (
@@ -178,6 +192,10 @@ in
         // (if decl ? microarchitecture then { inherit (decl) microarchitecture; } else { })
       ) machines;
 
+      # The target a placement was planned for. The address sits inside it because
+      # a unit may be rendered from the address, and an entry's key hashes the
+      # target: a field a module can render from and the key does not cover would
+      # be a key that does not describe the entry.
       targetOf =
         machine:
         let
@@ -395,6 +413,9 @@ in
               }
             ) mismatchedPlacements;
 
+          # An empty platforms list means every system, so a module that never had
+          # to care is not made to. A machine with no declared system is the
+          # registry's row rather than this one.
           mismatchedPlacements =
             if declaration.platforms == [ ] then
               [ ]
@@ -485,6 +506,9 @@ in
           entryKey = if machine == null then "${iname}:${mname}" else "${iname}:${mname}@${machine}";
           state = if machine == null then { } else varsState.${machine} or { };
 
+          # A module reads vars.<generator>.<file>. The declaration writes
+          # vars.<generator>.files.<file>, because a generator has more to declare
+          # than its files and a reader only ever wants the files.
           vars = mapAttrs (
             gen: g:
             mapAttrs (
@@ -516,6 +540,11 @@ in
 
           impl = if member.declaration.impl == null then null else member.declaration.impl implArgs;
 
+          # The implementation half is read like the declaration half: an
+          # unrecognised key becomes a row rather than a value quietly dropped, and
+          # one malformed unit does not stop the rest. Only the shape is forced
+          # here, because a recipe rendered over an incomplete set has no bytes to
+          # force at all.
           implShape = safe {
             subject = entryKey;
             what = "the implementation of ${entryKey}";
@@ -586,6 +615,9 @@ in
               attrNames (util.filterAttrs (_: f: !builtins.isAttrs f) (implValue.configData or { }))
             );
 
+          # An extension for another service manager is refused here and still
+          # recorded under its own backend, so a binding for that backend refuses
+          # knowingly instead of dropping fields.
           backendRows = concatLists (
             util.mapAttrsToList (
               uname: u:

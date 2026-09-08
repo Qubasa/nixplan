@@ -1,7 +1,8 @@
-# as committed. Nothing under that folder is edited by this file: the two
 {
   planner,
   folder,
+  # Literal store paths: the fixture names packages and realises nothing. The image
+  # check hands the same deployment real ones.
   packages ? {
     borgbackup = "/nix/store/3q8xk1p7v2mz9jd4rlnb6ycsfwg0h5aq-borgbackup-1.4.0";
     openssh = "/nix/store/1w9k3zc7yq2mb5xj8vdl4rns6fga0h1p-openssh-9.8p1";
@@ -60,11 +61,14 @@ in
       "interfaces/default.nix" = interfaces;
     };
 
+    # alpha and beta have run their generator, gamma deliberately has not. That one
+    # absence is what the whole folder exercises.
     varsState = {
       alpha = hostKeyState "alpha" "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICCyXFCyCrjDXgk161ICmYQX0iXoZgMe5sDtDnhA13q+";
       beta = hostKeyState "beta" "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH2zYlcrdY8a7DJlJ8Az4edUdWjYfHMxcCuOpwUzwdQt";
     };
 
+    # Module rows are relative to modules/, everything else to the folder root.
     sources = {
       deployment = "deployment/instances.nix";
       machines = "deployment/machines.nix";

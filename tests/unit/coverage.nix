@@ -1,4 +1,6 @@
-# here rather than a matter of an author's judgement.
+# The specification-to-test cross-walk. A scenario heading names its test by
+# construction: test_<snake_case> under pytest, test<CamelCase> under nix-unit.
+# A name present in both layers is a failure, not extra coverage.
 {
   support,
   changesRoot,
@@ -102,6 +104,7 @@ let
   snakeName = title: "test_" + concatStringsSep "_" (words title);
   camelName = title: "test" + concatStringsSep "" (map capitalise (words title));
 
+  # The specification files this change answers for. Adding one is one line here.
   accountable = [
     "implement-minimal-typed-edge/specs/planner/typed-edge/spec.md"
     "implement-minimal-typed-edge/specs/planner/diagnostics/spec.md"
@@ -128,6 +131,8 @@ let
     "clean-up-transplant-residue/specs/tooling/evaluation-performance/spec.md"
   ];
 
+  # Every other spec.md in the repository, with the reason it has no test. Listed
+  # rather than ignored, so a new specification fails here instead of passing unseen.
   excused = {
     "add-collect-slot-chain-rules/specs/planner/collect-slots/spec.md" =
       "collect slots are an excluded construct in this implementation: lib/excluded.nix carries the `collect family` row, and tests/unit/exclusions.nix asserts every deployment naming one is refused";
@@ -253,6 +258,7 @@ let
   e2eFiles = filesByName e2eNamed;
   existing = filesByName (unitNamed ++ e2eNamed ++ besideNamed);
 
+  # omitted and aliased are the only two escape hatches. Do not add a third.
   omitted = {
     "A module's own code raises an uncatchable error" =
       "an abort and a missing attribute are what `builtins.tryEval` does not catch, so a test asserting the propagation would abort this suite rather than fail it; `testAModulesOwnCodeRaisesACatchableError` asserts the half that is containable and `docs/diagnostics.md` names the class.";

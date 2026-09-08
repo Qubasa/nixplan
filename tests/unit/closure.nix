@@ -78,6 +78,9 @@ let
     };
 in
 {
+  # The grammar is Nix's own: the store directory, 32 base-32 characters without e,
+  # o, t and u, a hyphen and a name. That is what stops a package name reading as a
+  # store path.
   testAStorePathIsRecognisedByItsGrammar =
     let
       recognise = storePathsIn "/nix/store";
@@ -382,6 +385,8 @@ in
       expected = [ ];
     };
 
+  # The planner records a pin and verifies nothing: it reads no lockfile and builds
+  # nothing, so a path the pin did not produce is not a row.
   testAModuleDeclaresAFullySpecifiedPin =
     let
       result = withPin pinned;

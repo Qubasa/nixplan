@@ -75,6 +75,8 @@ let
     };
   };
 
+  # The consumer records the names of what it received, so a refused slot is
+  # observable without the test touching it and aborting the suite.
   consumer =
     {
       interface ? identity,
@@ -442,6 +444,8 @@ in
       };
     };
 
+  # Two instances wiring each other is not a cycle: a capability's exports are a
+  # function of module and settings, never of a wire.
   testTwoInstancesWireEachOther = {
     expr = {
       clientRead = client.reads.repo.delivered;

@@ -1,4 +1,4 @@
-# An interface is the value an author imports through lexical closure and never
+# An interface is identified by the value an author imports, never by its name.
 { korora }:
 let
   e = import ./exports.nix { inherit korora; };
@@ -12,6 +12,7 @@ in
     };
   };
 
+  # Two exports, so that provider keyset equality has something to be equal about.
   borgRepository = korora.interface {
     name = "borg-repository";
     exports = {

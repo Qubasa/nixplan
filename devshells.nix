@@ -4,6 +4,8 @@
     let
       pytestEnv = import ./pytest-env.nix pkgs;
 
+      # A shell hook runs again on every nested entry, so a plain prepend would grow
+      # PYTHONPATH without bound.
       onPythonPath = dir: ''
         case ":''${PYTHONPATH-}:" in
           *":${dir}:"*) ;;

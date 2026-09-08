@@ -1,3 +1,5 @@
+# The golden plan is compared with ==, so every field takes part and the fixture
+# carries nothing the planner did not write.
 {
   planner,
   support,
@@ -79,6 +81,8 @@ let
 
   differences = differencesAt "" fixture;
 
+  # An ellipsis, or a hash that is not sixteen hex digits, is a value somebody typed.
+  # A fixture carrying one has stopped being evidence.
   shortHash =
     value:
     let
@@ -145,6 +149,8 @@ let
 
   committedLines = support.lines (readFile (folder + "/plan/diagnostics.txt"));
 
+  # Parsed off the renderer's exact layout. Change one without the other and this
+  # quietly finds no rows.
   committedRowAt =
     index:
     let
@@ -192,6 +198,7 @@ let
 
   inherit (support.worked) openssh;
 
+  # Split at the last @: a plan key carries one of its own.
   atLast =
     s:
     let

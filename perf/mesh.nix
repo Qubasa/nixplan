@@ -13,6 +13,8 @@ let
 
   machineNames = genList (i: "m${toString i}") size;
 
+  # 32 characters of Nix's own base 32, without e, o, t and u. Anything else stops
+  # the closure scan recognising these as store paths, and it then checks nothing.
   hashOf = i: substring 0 32 "${toString i}00000000000000000000000000000000";
 
   pkgOf = i: "/nix/store/${hashOf i}-mesh-agent-m${toString i}";
@@ -117,6 +119,8 @@ let
         let
           peers = attrValues results.peers;
 
+          # One unit per peer, each ordered after the hub. That reference list crossed against
+          # the entry's own unit names is the shape this fixture measures.
           peerUnits = genList (i: {
             name = "peer-${toString i}";
             value = {
@@ -192,6 +196,8 @@ in
     inherit identity registry;
   };
 
+  # Explicit machine lists here and tags in perf/fleet.nix, so both halves of
+  # placement resolution are covered.
   instances = {
     mesh = {
       module = agentRoot;

@@ -1,6 +1,8 @@
 {
   machines = {
-    # authorizes, and this folder has no field to narrow a `reach = "all"` set.
+    # vault carries no backed-up tag on purpose. A self-tagged server would put its own
+    # key into the set it authorizes, and this folder has no field to narrow a
+    # reach = "all" set.
     vault = {
       address = "vault.example";
       tags = [ "always-on" ];

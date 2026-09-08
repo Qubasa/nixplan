@@ -35,6 +35,8 @@
       };
 
       units.serve = {
+        # Binds every address because the unit starts before the DHCP lease exists. The
+        # plan is held to the exported URL, which does use the planned address.
         command = "${python3}/bin/python3 -m http.server ${toString alloc.ports.http} --bind 0.0.0.0 --directory ${page}";
       };
     };

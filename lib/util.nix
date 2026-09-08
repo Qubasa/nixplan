@@ -1,3 +1,5 @@
+# Builtins only. This library depends on korora and on nothing else, so the few
+# list and attrset helpers nixpkgs lib would have supplied live here instead.
 let
   inherit (builtins)
     attrNames
@@ -37,6 +39,7 @@ let
     "|"
   ];
 
+  # Nix's store hash alphabet: base 32 without e, o, t and u.
   storeHashAlphabet = "0123456789abcdfghijklmnpqrsvwxyz";
 in
 rec {
@@ -59,6 +62,8 @@ rec {
 
   subtractList = xs: ys: filter (x: !elem x ys) xs;
 
+  # A membership index. Crossing two fleet-sized lists with elem is a scan per
+  # element, against this it is a lookup.
   stringSet =
     xs:
     listToAttrs (
@@ -70,6 +75,10 @@ rec {
 
   inStringSet = set: x: set ? ${builtins.unsafeDiscardStringContext x};
 
+  # Deduplication through an attribute set rather than a fold, which would cost the
+  # square of the fleet. The value keeps the string that was handed in, so a
+  # closure root evaluated beside the plan keeps its context and a consumer can
+  # still copy the bytes.
   uniqueStrings =
     xs:
     let
@@ -101,6 +110,9 @@ rec {
 
   escapeRegex = replaceStrings regexMeta (map (c: "\\${c}") regexMeta);
 
+  # Every store root a string mentions, without the path inside it. The hash is 32
+  # characters of the alphabet above, so 32 characters of a package name are not
+  # mistaken for one.
   storePathsIn =
     storeDir:
     let
@@ -127,6 +139,9 @@ rec {
 
   isVarsFile = value: isAttrs value && (value.__varsFile or false);
 
+  # A short content hash, truncated because people read plans. The context is
+  # discarded because hashString refuses a string that carries one, and a plan of a
+  # real deployment has to stay keyable. Hashing realises nothing.
   shortHash =
     value: "sha256-${substring 0 16 (hashString "sha256" (builtins.unsafeDiscardStringContext value))}";
 

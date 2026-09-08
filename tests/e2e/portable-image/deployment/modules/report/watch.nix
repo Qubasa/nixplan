@@ -12,6 +12,7 @@ _: {
   };
 
   impl = _: {
+    # Only the script is a closure root. Everything it runs is a reference of it.
     closure = [ report ];
 
     configData.${paths.assembled} = {

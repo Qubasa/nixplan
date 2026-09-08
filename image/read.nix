@@ -1,3 +1,11 @@
+# Reading one placed plan entry as an image. Everything here is a pure function of
+# the plan, and a fact the entry does not record is a refusal naming the entry and
+# the field, never a default.
+#
+# These refusals raise, unlike the planner's rows. The planner must produce a plan
+# for a deployment that has mistakes in it, while an image built from a fact nobody
+# wrote is worse than no image. Every refusal here is a condition mkPlan reports
+# too, so a caller that wants the row already has it.
 { planner }:
 let
   inherit (builtins)
@@ -26,6 +34,9 @@ let
     uniqueStrings
     ;
 
+  # systemd's portable profiles, by what each one denies an entry, read out of
+  # systemd's own profile drop-ins. default, nonetwork and strict all carry
+  # DynamicUser and PrivateUsers, trusted carries neither.
   profiles = {
     default.denies = [
       "a static host user"
@@ -44,6 +55,9 @@ let
 
   profileNames = attrNames profiles;
 
+  # The systemd directive each extension field renders as. A field absent from this
+  # table fails the build: an extension exists to add a field, so dropping one
+  # silently would make the extension a comment.
   systemdDirectives = {
     protectSystem = "ProtectSystem";
     protectHome = "ProtectHome";
@@ -67,6 +81,7 @@ let
 
   fail = message: throw "planner image: ${message}";
 
+  # <instance>:<service>@<machine>, split the way a plan key is read everywhere else.
   parseKey =
     key:
     let
@@ -81,8 +96,14 @@ let
         machine = builtins.elemAt m 2;
       };
 
+  # The image's name, and so every unit file's prefix. Two entries of one instance
+  # on one machine differ in their service, which makes the prefix collision-free
+  # by construction rather than by convention.
   nameOf = parts: "${parts.instance}-${parts.service}";
 
+  # A digest of what the image contains, deliberately not the entry key. A key moves
+  # when a configuration file's content hash moves, and that content never enters
+  # the image, so keying on it would rename and rebuild equal bytes.
   versionOf =
     record:
     let
@@ -116,6 +137,8 @@ let
   unitFileName = name: unit: "${name}-${unit}.service";
   timerFileName = name: unit: "${name}-${unit}.timer";
 
+  # Where the host holds what it shows one image. One directory per image, so
+  # detaching removes what attaching created and nothing else.
   stagingOf = name: "/run/portable-planner/${name}";
 
   stagedPath = name: path: "${stagingOf name}/files${path}";
@@ -372,6 +395,8 @@ rec {
     )
     + "\n";
 
+  # A scheduled unit becomes a timer beside the service, both carrying the image's
+  # prefix, because a schedule is a trigger and not a property of the service.
   renderTimer =
     image: unitName:
     let

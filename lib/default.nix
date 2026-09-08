@@ -1,3 +1,13 @@
+# The deployment planner. mkPlan evaluates a deployment into a plan and a
+# diagnostics table and realises nothing: no derivation, no filesystem read, no
+# network, and no store path that is not a literal string.
+#
+# Evaluation is total. Every check returns a row instead of raising, and no
+# raising call appears anywhere under this directory. An abort and a missing
+# attribute are the two things a caller cannot catch, so both propagate on
+# purpose: a missing attribute in library source is a bug that should fail loudly.
+#
+# systems is lib.systems of the pinned nixpkgs, the one dependency beside korora.
 { korora, systems }:
 let
   util = import ./util.nix;
@@ -61,6 +71,14 @@ in
   inherit (compose) service mkRoot;
   inherit (diag) render mkTable;
 
+  # interfaces maps a declaring file to the interfaces declared in it. It is
+  # attribution and never validation: an interface absent from it is still an
+  # interface, and a row about one simply cannot print its file.
+  #
+  # sources is the file each row names. varsState is which generated files exist
+  # and what the public ones hold. storeDir is the store an entry's paths are read
+  # against and the one a consumer populates, so a machine whose store lives
+  # elsewhere is planned under its own.
   mkPlan =
     {
       interfaces ? { },

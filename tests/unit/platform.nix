@@ -224,6 +224,9 @@ in
       };
     };
 
+  # If this goes red, upstream fixed _withoutFunctions. Rewrite the measurement in
+  # design.md D7 rather than deleting the guard. The evidence is the surviving
+  # function paths: serialising a function aborts the whole suite instead of failing.
   testUpstreamsOwnFilterIsNotAPlanValue =
     let
       elaborated = systems.elaborate "aarch64-linux";
@@ -250,6 +253,8 @@ in
       };
     };
 
+  # gccNames must name every gcc field the pinned nixpkgs sets on any exposed
+  # platform, so a new upstream field fails here instead of vanishing from records.
   testTheProjectionsFieldSetNamesNoFunction =
     let
       elaborated = systems.elaborate "x86_64-linux";
@@ -445,6 +450,8 @@ in
       };
     };
 
+  # A declared microarchitecture replaces the whole gcc group and does not merge
+  # into it, because elaborate applies its arguments over the platform defaults.
   testAPlatformCarriesItsOwnCodegenDefaults =
     let
       arm = on (machinesWith {

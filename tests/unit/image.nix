@@ -66,6 +66,8 @@ let
       inherit profile;
     };
 
+  # deepSeq, because a refusal guards fields a lazy read would never force. Without
+  # it every refusal test passes without testing anything.
   raises = value: !(tryEval (builtins.deepSeq value value)).success;
 
   simple = _: {
@@ -861,6 +863,7 @@ in
       };
     };
 
+  # Every profile but trusted carries DynamicUser=yes and PrivateUsers=yes.
   testAProfileDeniesWhatAUnitNeeds =
     let
       withUser =
@@ -966,6 +969,8 @@ in
       };
     };
 
+  # A configuration file's content never enters the image, so the version stays put
+  # while the entry key moves.
   testAConfigurationChangeLeavesTheImageByteIdentical =
     let
       first = rebuilt.imageOf rebuilt.base rebuilt.key;

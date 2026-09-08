@@ -1,3 +1,13 @@
+# The flakelet service artifact of one placed plan entry.
+#
+# The second realiser over one unchanged plan. Where the image realiser wraps the
+# same unit files in a squashfs, this one hands the endpoint the directory layout
+# it already consumes: a units directory and a meta.json, and nothing else.
+# Activating it needs no evaluator, no source and no network on the machine.
+#
+# Deliberately absent: state.json, which needs a plan field this subset does not
+# have, and exports.json, which would resolve wires on the machine while this
+# architecture resolves them at evaluation time. Both are optional to the endpoint.
 {
   pkgs,
   planner,
@@ -9,6 +19,9 @@ in
 {
   inherit reader;
 
+  # plan is the whole plan and key the placed entry to build. There is no third
+  # argument: a profile, a compression and a delivery target belong to the image
+  # realiser, and this artifact has none of them.
   artifact =
     { plan, key }:
     let

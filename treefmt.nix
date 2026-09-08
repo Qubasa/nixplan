@@ -31,6 +31,8 @@ let
     write-good.TooWordy = suggestion
   '';
 
+  # vale exits non-zero only for error-level rules, so without this wrapper treefmt
+  # would throw away every warning vale printed.
   valeLint = pkgs.writeShellApplication {
     name = "vale-lint";
     runtimeInputs = [ pkgs.vale ];
@@ -56,6 +58,8 @@ in
   programs.ruff-format.enable = true;
   programs.mypy.enable = true;
 
+  # One run per directory of top-level modules, because that is what each import
+  # expects beside it: check_test.py imports check, test_harness.py imports delivery.
   programs.mypy.directories = {
     "perf".options = [ "--strict" ];
 
@@ -64,6 +68,9 @@ in
       extraPythonPackages = [ pkgs.python3Packages.pytest ];
     };
 
+    # mypy descends into a subdirectory only when it is a package, and these two are
+    # not. Naming them as roots is what gets them checked at all. The name is a label
+    # rather than a path.
     "e2e-folders" = {
       directory = "tests/e2e";
       modules = [
@@ -76,7 +83,10 @@ in
   };
 
   settings.global.excludes = [
+    # The suites evaluate this folder as committed and compare a golden plan field
+    # by field, so a formatter here would edit a test's subject.
     "fixtures/**"
+    # Written change records, and command documents the openspec CLI installs.
     "openspec/**"
     ".omp/**"
     "**/__pycache__/*"
@@ -90,4 +100,6 @@ in
     includes = [ "*.md" ];
   };
 
+  # No vulture and no harper. Vulture's only finding is an interface parameter name in
+  # tests/e2e/delivery.py, and harper flags realiser, flakelet and keyset.
 }

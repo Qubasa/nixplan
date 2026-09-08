@@ -352,6 +352,8 @@ def test_no_evaluation_happens_on_the_machine(delivered: Run) -> None:
     assert "building" not in report, report
 
 
+# The cluster's dnsmasq has no upstream, so no external name and no substituter
+# resolves. Being offline is a property of the network, not luck.
 def test_no_store_but_the_machines_own_is_reachable(delivered: Run) -> None:
     for machine in (SERVER_MACHINE, CLIENT_MACHINE):
         vm = delivered.vm(machine)
@@ -407,6 +409,8 @@ def test_cutting_the_wires_far_end_is_visible(delivered: Run) -> None:
     journal = client.ssh_succeed(f"journalctl -u {CLIENT_UNIT} --no-pager -n 20")
     assert address in journal, journal
 
+    # Restores the wire for the phases after this one. These tests share one session
+    # and run in order.
     server.ssh_succeed(f"systemctl start {SERVER_UNIT}")
     client.wait_until_succeeds(f"systemctl restart {CLIENT_UNIT}", timeout=120)
 
@@ -487,6 +491,8 @@ def test_a_scheduled_unit_is_not_fired_by_deploying_it(delivered: Run) -> None:
     assert delivery.status(server, service)["generation"] >= 1
     started = server.ssh_succeed(f"systemctl show -p ExecMainStartTimestamp {SWEEP_UNIT}")
     assert started.strip() == "ExecMainStartTimestamp=", started
+    # An inactive unit reports itself with exit status 3, so this asks over plain ssh
+    # rather than through the succeed helper.
     assert server.ssh(f"systemctl is-active {SWEEP_UNIT}").stdout.strip() == "inactive"
     assert server.ssh(f"test -e {SWEEP_MARKER}").returncode != 0
 
@@ -505,6 +511,8 @@ def test_the_timer_the_schedule_declares_is_enabled(delivered: Run) -> None:
 
 
 def test_a_reboot_brings_the_entries_back(delivered: Run) -> None:
+    # Rebooted from inside the guest: a claim about the service manager needs it to
+    # bring the machine down itself.
     for machine in (SERVER_MACHINE, CLIENT_MACHINE):
         delivered.vm(machine).ssh("systemctl reboot", timeout=30)
 

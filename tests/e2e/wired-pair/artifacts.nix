@@ -1,3 +1,5 @@
+# Two plans from one source that differ in the served file. This is what gives the
+# redelivery and rollback tests an entry whose identity changed.
 {
   pkgs,
   planner,

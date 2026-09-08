@@ -1,3 +1,10 @@
+# The guest every end-to-end machine boots. The invariants below are copied from
+# rookery's base-image-configuration.nix, which the run resolves at run time rather
+# than pinning, so nothing checks the copy. Diff it when rookery moves.
+#
+# The image carries no plan artifact and no flakelet service: every entry arrives by
+# delivery, or a test passes without proving anything. Its one credential is the
+# snakeoil key below, because a resumed cut authorizes whatever it froze.
 {
   lib,
   pkgs,
@@ -106,6 +113,8 @@ let
       };
       services.resolved.enable = true;
 
+      # The TCP listener is the delivery channel, and systemd's ssh generator derives the
+      # vsock control channel from it. One credential serves both.
       services.openssh = {
         enable = true;
         settings = {
@@ -136,9 +145,12 @@ let
     partitionTableType = "efi";
     label = "nixos";
     diskSize = "auto";
+    # Room for the two delivered artifacts and their closures.
     additionalSpace = "2048M";
   };
 in
+# make-disk-image runs inside a VM builder whose result has no overrideAttrs, so
+# the configuration rides beside the image instead of being read back out of it.
 image
 // {
   inherit guest;

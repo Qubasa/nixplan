@@ -153,6 +153,7 @@ rec {
     in
     if rows == [ ] then null else (head rows).evidence;
 
+  # Substring, not regex, so a needle may contain regex characters unescaped.
   hasInfix =
     needle: hay:
     let
@@ -178,6 +179,8 @@ rec {
 
   lines = text: filter isString (split "\n" text);
 
+  # Source scans compare lines with comments removed: a sentence naming a raising
+  # call is not a file that makes one.
   codeOf =
     line:
     let

@@ -1,3 +1,11 @@
+# The systemd portable service image of one placed plan entry. read.nix is the
+# whole reading, and everything here is derivations over what that read returned.
+#
+# The image carries an operating-system identity file, one unit file per recorded
+# unit and the entry's declared closure roots. It never carries a configuration
+# file's bytes or a generated file's bytes: those reach the units from the host at
+# attach time, which is what keeps an image byte-identical across a configuration
+# edit.
 {
   lib,
   pkgs,
@@ -11,6 +19,9 @@ in
 {
   inherit reader;
 
+  # plan is the whole plan, key the placed entry to build, profile the confinement
+  # profile the attachment is stated to run under. compression is a build input
+  # like the profile and never a plan fact.
   build =
     {
       plan,
@@ -39,6 +50,10 @@ in
         }
       ) (filter (unitName: image.units.${unitName}.timer != null) unitNames);
 
+      # A plan naming another store directory names the same hashes under another
+      # prefix, which is what a relocated store is. Rewriting the prefix keeps the
+      # string's context, so the bytes are still this evaluation's while the image
+      # places them where the plan means.
       relocated = image.storeDir != builtins.storeDir;
 
       localOf = root: builtins.replaceStrings [ image.storeDir ] [ builtins.storeDir ] root;
@@ -48,6 +63,13 @@ in
         symlink = "${lib.removePrefix "/" image.storeDir}/${baseNameOf root}";
       }) (if relocated then image.closure else [ ]);
 
+      # The image's own root: systemd's layout, the unit files, and an empty file at
+      # every host path the entry is shown.
+      #
+      # Those empty files are load-bearing rather than tidy. A unit's bind mount needs
+      # its destination to exist inside the image, and the image root is a read-only
+      # squashfs on the machine, so a missing one is not a missing file at run time but
+      # a unit that cannot start at all.
       osRelease = pkgs.writeText "${image.name}-os-release" ''
         PORTABLE_ID=${image.name}
         PORTABLE_PRETTY_NAME=${image.instance}:${image.service} on ${image.machine}
@@ -109,6 +131,13 @@ in
 
       description = pkgs.writeText "${image.name}-attachment.json" (builtins.toJSON attachment);
 
+      # Assembling a configuration file on the host: a source file is copied out of the
+      # store, a render list is concatenated from its literals and reference paths.
+      # Neither needs an evaluator or the daemon, which is why it happens here.
+      #
+      # $root is PORTABLE_PLANNER_ROOT, empty on a machine attaching its own images and
+      # a directory when the assembly is staged elsewhere. It prefixes host state and
+      # never a store path.
       assemble =
         file:
         ''
@@ -143,6 +172,8 @@ in
           chmod ${lib.escapeShellArg file.mode} "$root"${lib.escapeShellArg file.staged}
         '';
 
+      # A file rendered over a set with an absent entry has no recipe to assemble, so
+      # attaching refuses rather than writing an empty file over what the service reads.
       incomplete = filter (f: !f.computed) image.configFiles;
 
       preamble = ''
@@ -170,6 +201,9 @@ in
           "built for service manager ${attachment.target.serviceManager} and this machine runs $actualManager"
       '';
 
+      # Every host path the assembly reads, checked before it writes anything, so a
+      # machine that has not generated its secret yet gets a refusal naming the path
+      # rather than a directory of half-assembled files.
       references = concatStringsSep "" (
         map (path: ''
           [ -e "$root"${lib.escapeShellArg path} ] || fail "the host file ${path} this entry is assembled from is not on this machine yet"
@@ -195,6 +229,8 @@ in
         ''
       );
 
+      # Detaching removes the units and the directory attaching created and touches
+      # nothing it was shown: a generated file and a source store path are the host's.
       detach = pkgs.writeShellScript "${image.name}-detach" (
         preamble
         + ''

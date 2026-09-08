@@ -28,6 +28,8 @@ from pathlib import Path
 from typing import Any, Protocol
 
 MACHINE_PREFIX = "machine:"
+# The prefix flakelet reports a planned entry's identity under. Must stay equal to
+# the one written in flakelet/read.nix.
 LOCKED_URL_PREFIX = "plan:"
 
 

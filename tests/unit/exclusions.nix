@@ -1,3 +1,5 @@
+# One test per excluded construct. Each trigger is quoted from the fixture README
+# rather than from lib/excluded.nix, so a row wired to the wrong trigger fails.
 { planner, support }:
 let
   inherit (builtins)
@@ -382,6 +384,8 @@ in
 
   testOrchestratorIsRefused = moduleKeyFacts "orchestrator" "not this change";
 
+  # The number is the README table's row count. Another table row, or a new key in
+  # excluded.constructs, has to be given a test above.
   testEveryExclusionTableRowIsCovered = {
     expr = {
       headerFound = table.open;

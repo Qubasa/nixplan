@@ -1,3 +1,5 @@
+# rookery hands out static dnsmasq leases keyed by MAC address, 10.0.0.10 upwards
+# in boot order. These are not free-choice test addresses.
 {
   machines = {
     alpha = {

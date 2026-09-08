@@ -268,6 +268,8 @@ in
     };
   };
 
+  # reach = "one" asks for a single placement of the capability, not for a shared
+  # machine.
   testAReachOneReadCrossesAMachineBoundary =
     let
       read = perApplication.plan."app-analytics:server@two".reads.db;
