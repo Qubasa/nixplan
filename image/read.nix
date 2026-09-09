@@ -20,6 +20,7 @@ let
     isList
     isString
     match
+    replaceStrings
     sort
     ;
   inherit (planner.util)
@@ -314,6 +315,24 @@ rec {
             }) (attrNames units)
           ) (if elem "a host file only root may read" profileRecord.denies then needsRootOnlyFile else [ ])
         );
+
+      # A unit file is line-oriented, so a newline in a value is a fact the file
+      # cannot carry. Spaces and quotes can be: they are escaped at render.
+      unprintable = concatLists (
+        map (
+          u:
+          map
+            (k: {
+              unit = u;
+              name = k;
+            })
+            (
+              filter (k: match ".*[\n\r].*" (units.${u}.env.${k} or "") != null) (
+                attrNames (units.${u}.env or { })
+              )
+            )
+        ) (attrNames units)
+      );
     in
     if !(isAttrs units) || units == { } then
       fail "entry ${quote key} records no unit, so there is nothing to attach"
@@ -328,6 +347,11 @@ rec {
         first = builtins.head denied;
       in
       fail "entry ${quote key} unit ${quote first.unit} needs ${first.access}, and the stated confinement profile ${quote profile} denies it; the profile is not widened on the entry's behalf"
+    else if unprintable != [ ] then
+      let
+        first = builtins.head unprintable;
+      in
+      fail "entry ${quote key} unit ${quote first.unit} sets ${quote first.name} to a value containing a newline, which a unit file has no line to put"
     else
       {
         inherit
@@ -359,9 +383,11 @@ rec {
 
       optional = cond: lines: if cond then lines else [ ];
 
-      environment = map (k: "Environment=${k}=${unit.env.${k}}") (
-        sortStrings (attrNames (unit.env or { }))
-      );
+      # systemd splits an unquoted Environment= on whitespace, so a value with a
+      # space in it becomes two assignments and the second is garbage.
+      environment = map (
+        k: "Environment=\"${k}=${replaceStrings [ "\\" "\"" ] [ "\\\\" "\\\"" ] unit.env.${k}}\""
+      ) (sortStrings (attrNames (unit.env or { })));
 
       binds = map (p: "BindReadOnlyPaths=${p.from}:${p.path}") (
         sort (a: b: a.path < b.path) image.hostPaths
