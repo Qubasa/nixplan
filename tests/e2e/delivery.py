@@ -17,6 +17,7 @@ guests the same way, and stating that once here keeps the import at the caller.
 
 from __future__ import annotations
 
+import base64
 import functools
 import json
 import os
@@ -24,7 +25,7 @@ import shlex
 import shutil
 import tempfile
 from collections.abc import Callable, Iterator
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
 
 MACHINE_PREFIX = "machine:"
@@ -62,7 +63,7 @@ def machine_of(key: str) -> str | None:
     Returns:
         The machine name, or ``None`` when the key carries no machine.
     """
-    machine = key.partition("@")[2]
+    machine = key.rpartition("@")[2]
     if not machine:
         return None
     return machine
@@ -107,6 +108,30 @@ def placed_key(plan: dict[str, Any], entry: str, machine: str) -> str:
     )
 
 
+def machine_address(plan: dict[str, Any], machine: str, *, of: str) -> str:
+    """Return the address the registry declared for one machine.
+
+    Args:
+        plan: The plan artifact, as read from its JSON.
+        machine: The machine name.
+        of: What is being delivered, for the refusal to name.
+
+    Returns:
+        The machine's address.
+
+    Raises:
+        DeliveryError: If the plan has no record for that machine, or the record
+            declares no address.
+    """
+    record = plan.get(f"{MACHINE_PREFIX}{machine}")
+    if record is None:
+        raise DeliveryError(f"the plan carries no {MACHINE_PREFIX}{machine} record for {of}")
+    address = record.get("address")
+    if not isinstance(address, str) or not address:
+        raise DeliveryError(f"machine {machine} declares no address, so {of} cannot be delivered")
+    return address
+
+
 def address_of(plan: dict[str, Any], key: str) -> str:
     """Return the address of the machine ``key`` is placed on.
 
@@ -127,13 +152,7 @@ def address_of(plan: dict[str, Any], key: str) -> str:
     machine = machine_of(key)
     if machine is None:
         raise DeliveryError(f"{key} is placed on no machine, so it has no address")
-    record = plan.get(f"{MACHINE_PREFIX}{machine}")
-    if record is None:
-        raise DeliveryError(f"the plan carries no {MACHINE_PREFIX}{machine} record for {key}")
-    address = record.get("address")
-    if not isinstance(address, str) or not address:
-        raise DeliveryError(f"machine {machine} declares no address, so {key} cannot be delivered")
-    return address
+    return machine_address(plan, machine, of=key)
 
 
 def locked_url(key: str) -> str:
@@ -298,6 +317,121 @@ def status(control: Control, name: str, *, timeout: float = 60.0) -> dict[str, A
     if not isinstance(first, dict):
         raise DeliveryError(f"the endpoint reported {first!r} for {name}, which is not an entry")
     return first
+
+
+VARS_MARKER = ":vars/"
+
+
+def vars_entries(plan: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Return the plan's generated-value entries, keyed as the plan keys them.
+
+    A value's entry is `<instance>:vars/<generator>` when one value exists for
+    the instance and `<instance>:vars/<generator>@<machine>` when one exists per
+    placement, so a caller can tell the two apart without asking the plan.
+
+    Args:
+        plan: The plan artifact, as read from its JSON.
+
+    Returns:
+        The vars entries of the plan, by key.
+    """
+    return {key: entry for key, entry in plan.items() if VARS_MARKER in key}
+
+
+def install_argv(
+    address: str,
+    path: str,
+    content: str,
+    *,
+    ssh_key: str | Path,
+    user: str = "root",
+) -> list[str]:
+    """Return the write of one generated file onto one machine, as argv.
+
+    Not `nix copy`: a store object is readable by every process on the machine,
+    and the whole point of a delivered secret is that its bytes are not in the
+    store. The bytes travel base64-encoded because the namespace runs an argv
+    rather than a shell, and land at mode 0400 under a directory the delivery
+    creates.
+
+    Args:
+        address: The address of the receiving machine.
+        path: The absolute path the plan records for the file.
+        content: The bytes to write.
+        ssh_key: The private key the receiving machine authorises.
+        user: The login user on the receiving machine.
+
+    Returns:
+        The `ssh` argv that writes the file.
+    """
+    encoded = base64.b64encode(content.encode()).decode()
+    remote = (
+        f"set -eu; umask 077; mkdir -p {shlex.quote(str(PurePosixPath(path).parent))}; "
+        f"printf %s {shlex.quote(encoded)} | base64 -d > {shlex.quote(path)}; "
+        f"chmod 0400 {shlex.quote(path)}"
+    )
+    return ["ssh", *shlex.split(ssh_opts(ssh_key)), f"{user}@{address}", remote]
+
+
+def deliver_value(
+    namespace: Namespace,
+    *,
+    plan: dict[str, Any],
+    key: str,
+    files: dict[str, str],
+    ssh_key: str | Path,
+    base_env: dict[str, str],
+    user: str = "root",
+) -> list[str]:
+    """Deliver one generated value to the machines its entry names, and no others.
+
+    The entry's `delivery` list is the only thing consulted: a value nobody
+    receives is delivered nowhere, and a machine the list does not name is not
+    dialled even when it runs a service of the same instance.
+
+    Args:
+        namespace: A handle that runs a command where the cluster's addresses
+            resolve (rookery's ``Cluster``).
+        plan: The plan artifact, as read from its JSON.
+        key: The vars entry key of the value.
+        files: The bytes of each declared file, by file name.
+        ssh_key: The private key the receiving machines authorise.
+        base_env: The environment to run under, before ``NIX_SSHOPTS``.
+        user: The login user on the receiving machines.
+
+    Returns:
+        The addresses that were dialled, in delivery-set order.
+
+    Raises:
+        DeliveryError: If the plan has no such entry, if the entry declares a file
+            the caller gave no bytes for, or if a machine in the set has no
+            address.
+    """
+    entry = plan.get(key)
+    if entry is None:
+        raise DeliveryError(f"the plan carries no entry {key}")
+    declared = entry.get("files", {})
+    missing = sorted(set(declared) - set(files))
+    if missing:
+        raise DeliveryError(f"{key} declares {', '.join(missing)} and no bytes were given for them")
+
+    env = delivery_env(base_env, ssh_key)
+    dialled: list[str] = []
+    for machine in entry.get("delivery", []):
+        address = machine_address(plan, machine, of=key)
+        for name, record in sorted(declared.items()):
+            namespace.run(
+                install_argv(
+                    address,
+                    record["path"],
+                    files[name],
+                    ssh_key=ssh_key,
+                    user=user,
+                ),
+                env=env,
+            )
+        dialled.append(address)
+    return dialled
 
 
 def ssh_key(root: Path, source: Path) -> Path:

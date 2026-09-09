@@ -23,12 +23,102 @@ SERVER_ENTRY = "site:server"
 SERVER_KEY = "site:server@alpha"
 CLIENT_KEY = "check:client@beta"
 
+SESSION_VALUE = "issuer:vars/session"
+CA_VALUE = "issuer:vars/ca"
+
 PLAN = {
     "machine:alpha": {"address": "10.0.0.10", "tags": ["cluster"]},
     "machine:beta": {"address": "10.0.0.11", "tags": ["cluster"]},
     SERVER_KEY: {"key": "sha256-1111111111111111"},
     CLIENT_KEY: {"key": "sha256-2222222222222222"},
+    SESSION_VALUE: {
+        "per": "instance",
+        "delivery": ["alpha", "beta"],
+        "files": {"token": {"path": "/run/vars/issuer/session/token", "secrecy": "secret"}},
+    },
+    CA_VALUE: {
+        "per": "instance",
+        "deploy": False,
+        "delivery": [],
+        "files": {"ca.pub": {"path": "/run/vars/issuer/ca/ca.pub", "secrecy": "public"}},
+    },
 }
+
+
+class Recorder:
+    """A namespace that records the argv it was handed instead of running it."""
+
+    def __init__(self) -> None:
+        self.commands: list[list[str]] = []
+
+    def run(self, cmd: list[str], *, env: dict[str, str] | None = None) -> object:
+        self.commands.append(cmd)
+        return env
+
+
+def test_a_generated_value_is_delivered_to_the_set_alone() -> None:
+    """The entry's own delivery list decides, and an empty one dials nobody."""
+    recorder = Recorder()
+    dialled = delivery.deliver_value(
+        recorder,
+        plan=PLAN,
+        key=SESSION_VALUE,
+        files={"token": "s3cret"},
+        ssh_key="/tmp/id_ed25519",
+        base_env={"PATH": "/usr/bin"},
+    )
+    assert dialled == ["10.0.0.10", "10.0.0.11"]
+    assert [cmd[-2] for cmd in recorder.commands] == ["root@10.0.0.10", "root@10.0.0.11"]
+
+    quiet = Recorder()
+    assert (
+        delivery.deliver_value(
+            quiet,
+            plan=PLAN,
+            key=CA_VALUE,
+            files={"ca.pub": "PUBLIC"},
+            ssh_key="/tmp/id_ed25519",
+            base_env={},
+        )
+        == []
+    )
+    assert quiet.commands == []
+
+
+def test_a_file_the_entry_declares_needs_bytes() -> None:
+    """A file the plan names and the caller has no bytes for is refused, not skipped."""
+    with pytest.raises(delivery.DeliveryError) as raised:
+        delivery.deliver_value(
+            Recorder(),
+            plan=PLAN,
+            key=SESSION_VALUE,
+            files={},
+            ssh_key="/tmp/id_ed25519",
+            base_env={},
+        )
+    assert "token" in str(raised.value)
+
+
+def test_generated_bytes_are_written_outside_the_store() -> None:
+    """A store object is world-readable, so the value does not travel as one."""
+    argv = delivery.install_argv(
+        "10.0.0.10",
+        "/run/vars/issuer/session/token",
+        "s3cret",
+        ssh_key="/tmp/id_ed25519",
+    )
+    assert argv[0] == "ssh"
+    assert "nix" not in argv
+    remote = argv[-1]
+    assert "s3cret" not in remote
+    assert "czNjcmV0" in remote
+    assert "mkdir -p /run/vars/issuer/session" in remote
+    assert "chmod 0400 /run/vars/issuer/session/token" in remote
+
+
+def test_the_values_of_a_plan_are_its_vars_entries() -> None:
+    """A value's entry is told from a service's by the `vars/` in its key."""
+    assert sorted(delivery.vars_entries(PLAN)) == [CA_VALUE, SESSION_VALUE]
 
 
 def test_an_entry_the_plan_placed_resolves_to_its_key() -> None:
