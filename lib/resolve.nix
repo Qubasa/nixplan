@@ -273,6 +273,30 @@ in
             }
           ) (util.subtractList exposes (attrNames rootProvides));
 
+          resolvedMembers = mapAttrs (_mname: member: mkMember iname idecl member) members;
+
+          generatorOwners = util.concatMapAttrsToList (
+            mname: m: map (gen: { inherit gen mname; }) (attrNames m.declaration.vars.generators)
+          ) resolvedMembers;
+
+          claimedTwice = filter (gen: length (filter (o: o.gen == gen) generatorOwners) > 1) (
+            util.uniqueStrings (map (o: o.gen) generatorOwners)
+          );
+
+          collisionRows = map (
+            gen:
+            let
+              owners = util.sortStrings (map (o: o.mname) (filter (o: o.gen == gen) generatorOwners));
+            in
+            diag.error {
+              inherit subject;
+              id = "vars-generator-claimed-twice";
+              message = "instance ${util.quote iname} declares generator ${util.quote gen} in ${util.quoteList owners}";
+              evidence = "a generator is addressed by instance and name, so two declarations of ${util.quote gen} are one address for two values";
+              resolution = "rename one of them in ${moduleFile}, or declare ${util.quote gen} in one member and let the other read it";
+            }
+          ) (util.sortStrings claimedTwice);
+
           instanceRows =
             map (
               key:
@@ -294,7 +318,8 @@ in
               settings = idecl.settings or { };
             }
             ++ placementRows
-            ++ exposeRows;
+            ++ exposeRows
+            ++ collisionRows;
         in
         {
           inherit
@@ -308,7 +333,7 @@ in
           exposedNames = filter (n: rootProvides ? ${n}) exposes;
           wire = idecl.wire or { };
           rows = instanceRows;
-          members = mapAttrs (_mname: member: mkMember iname idecl member) members;
+          members = resolvedMembers;
         };
 
       mkMember =
@@ -504,28 +529,49 @@ in
         let
           member = resolved.instances.${iname}.members.${mname};
           entryKey = if machine == null then "${iname}:${mname}" else "${iname}:${mname}@${machine}";
-          state = if machine == null then { } else varsState.${machine} or { };
+
+          generators = member.declaration.vars.generators;
+
+          # The identity of a generated value, and the key its state is read under:
+          # one value for the instance, or one per machine it is placed on.
+          varsEntryKeyOf =
+            gen:
+            if machine == null || generators.${gen}.per == "instance" then
+              "${iname}:vars/${gen}"
+            else
+              "${iname}:vars/${gen}@${machine}";
 
           # A module reads vars.<generator>.<file>. The declaration writes
           # vars.<generator>.files.<file>, because a generator has more to declare
           # than its files and a reader only ever wants the files.
+          #
+          # The path names the instance: a machine may hold values it does not own,
+          # and two instances of one module would otherwise name one file.
           vars = mapAttrs (
             gen: g:
+            let
+              valueKey = varsEntryKeyOf gen;
+              state = varsState.${valueKey} or { };
+            in
             mapAttrs (
               fname: fdecl:
               let
-                fileState = state.${gen}.${fname} or { };
+                fileState = state.${fname} or { };
                 present = fileState.present or false;
                 secrecy = interface.secrecyOf fdecl;
               in
               {
                 __varsFile = true;
                 inherit present secrecy;
-                path = "/run/vars/${gen}/${fname}";
+                generator = gen;
+                file = fname;
+                entry = valueKey;
+                inherit (g) deploy;
+                path = "/run/vars/${iname}/${gen}/${fname}";
                 content = if present && secrecy != "secret" then fileState.content or null else null;
               }
             ) g.files
-          ) member.declaration.vars.generators;
+          ) generators;
 
           target = if machine == null then null else targets.${machine};
 
@@ -656,6 +702,7 @@ in
             capabilities
             target
             ;
+          varsEntries = mapAttrs (gen: _: varsEntryKeyOf gen) generators;
           units = mapAttrs (_: u: u.record) units;
           configData = mapAttrs (_: f: f.record) configFiles;
           closure = if closureIsList then util.uniqueStrings closureRaw.value else [ ];
@@ -739,7 +786,8 @@ in
               atom = iface.exports.${ename};
               secrecy = interface.secrecyOf atom;
               value = raw.${ename};
-              absent = value == null || (util.isVarsFile value && !value.present);
+              fromVars = util.isVarsFile value;
+              absent = value == null || (fromVars && !value.present);
               typeError = if absent then null else atom.type.verify value;
             in
             {
@@ -748,17 +796,48 @@ in
                 secrecy
                 absent
                 ;
-              value = if util.isVarsFile value then value.path else value;
+              value = if fromVars then value.path else value;
               plane = if secrecy == "secret" then "reference" else "env";
-              rows = util.optional (typeError != null) (
-                diag.error {
-                  subject = entryKey;
-                  id = "export-type-mismatch";
-                  message = "${entryKey} publishes ${util.quote "${cap}.${ename}"} with a value that fails its atom's type";
-                  evidence = "${facts.label} declares ${ename} as ${util.quote atom.type.name}, and korora reports: ${toString typeError}";
-                  resolution = "publish a value of that type in ${publishingFile}, or change the atom on the interface";
-                }
-              );
+
+              # What a consumer of this export is handed. A secret is the reference
+              # record its atom's type describes, so a module writes
+              # `results.<slot>.<export>.path` and interpolating the export itself
+              # raises rather than yielding a path under the name of a value.
+              read = if fromVars && secrecy == "secret" then { inherit (value) path secrecy; } else value;
+
+              # The generated value behind this export, so an edge can name it and a
+              # delivery set can be derived from who read it.
+              varsFile =
+                if fromVars then
+                  {
+                    inherit (value)
+                      generator
+                      file
+                      entry
+                      deploy
+                      ;
+                  }
+                else
+                  null;
+              rows =
+                util.optional (typeError != null) (
+                  diag.error {
+                    subject = entryKey;
+                    id = "export-type-mismatch";
+                    message = "${entryKey} publishes ${util.quote "${cap}.${ename}"} with a value that fails its atom's type";
+                    evidence = "${facts.label} declares ${ename} as ${util.quote atom.type.name}, and korora reports: ${toString typeError}";
+                    resolution = "publish a value of that type in ${publishingFile}, or change the atom on the interface";
+                  }
+                )
+                ++ util.optional (secrecy == "secret" && !absent && !fromVars) (
+                  diag.error {
+                    subject = entryKey;
+                    id = "export-secret-not-a-reference";
+                    message = "${entryKey} publishes ${util.quote "${cap}.${ename}"}, which ${facts.label} declares secret, as a value rather than as a generated file";
+                    evidence = "a secret is delivered to the machines that read it, and what is delivered is bytes a generator produced; a value published here would instead be carried by the plan, which every reader of the plan can read";
+                    resolution = "publish `vars.<generator>.<file>` in ${publishingFile}, or declare ${util.quote ename} public on the interface";
+                  }
+                );
             };
 
           exports = builtins.listToAttrs (
@@ -844,20 +923,34 @@ in
               picked = builtins.listToAttrs (
                 map (r: {
                   name = r;
-                  value = if record.exports ? ${r} then record.exports.${r}.value else null;
+                  value = if record.exports ? ${r} then record.exports.${r}.read else null;
                 }) slot.reads
               );
               absentReads = filter (r: !(record.exports ? ${r}) || record.exports.${r}.absent) slot.reads;
+              undeployed = filter (
+                r:
+                record.exports ? ${r}
+                && record.exports.${r}.varsFile != null
+                && !record.exports.${r}.varsFile.deploy
+              ) slot.reads;
             in
             {
-              inherit absentReads;
+              inherit absentReads undeployed;
               key = "${capability.member}@${machine}";
               entryKey = "${target}:${capability.member}@${machine}";
               values = picked;
+              # Which generated value each read names, for the delivery set.
+              varsFiles = builtins.listToAttrs (
+                map (r: {
+                  name = r;
+                  value = record.exports.${r}.varsFile;
+                }) (filter (r: record.exports ? ${r} && record.exports.${r}.varsFile != null) slot.reads)
+              );
             };
 
           collected = map readsAt placements;
           absentEntries = filter (c: c.absentReads != [ ]) collected;
+          undeployedEntries = filter (c: c.undeployed != [ ]) collected;
 
           arityOk =
             interfaceMatches && (if slot.reach == "all" then placements != [ ] else length placements == 1);
@@ -953,6 +1046,23 @@ in
                 evidence = "a set-valued read names its entries, and there are no placements to name";
                 resolution = "place the far end in ${deploymentFile}";
               }
+            )
+            ++ concatLists (
+              map (
+                c:
+                map (
+                  r:
+                  diag.error {
+                    inherit subject;
+                    id = "slot-reads-undeployed-value";
+                    message = "slot ${util.quote slotName} of ${util.quote subject} reads ${util.quote r} of ${util.quote "${target}.${capName}"}, whose value no machine receives";
+                    evidence = "${util.quote c.entryKey} publishes it from generator ${
+                      util.quote c.varsFiles.${r}.generator
+                    }, which declares `deploy = false`, so the path it names resolves to nothing at run time";
+                    resolution = "declare that generator deployed in the module that owns it, or stop reading ${util.quote r} in ${consumerFile}";
+                  }
+                ) c.undeployed
+              ) undeployedEntries
             );
         in
         {
@@ -972,6 +1082,15 @@ in
             map (c: {
               name = c.entryKey;
               value = c.absentReads;
+            }) collected
+          );
+
+          # Which generated value each read of each provider entry names, so the
+          # delivery set can be derived from the reads and from nothing else.
+          entryVarsFiles = builtins.listToAttrs (
+            map (c: {
+              name = c.entryKey;
+              value = c.varsFiles;
             }) collected
           );
           value = if delivered then value else null;

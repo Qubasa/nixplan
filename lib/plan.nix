@@ -99,6 +99,56 @@ rec {
       ) files;
     }) placement.vars;
 
+  # Every read of a generated value, as a flat index from the value's entry key to
+  # the entries that named it and what they named. The delivery set comes from
+  # this and from the owner's placements: a routable secret is bounded by nobody,
+  # so who declared a read is the only thing that can narrow it.
+  valueReaderIndex =
+    resolved:
+    let
+      rows = util.concatMapAttrsToList (
+        iname: inst:
+        util.concatMapAttrsToList (
+          mname: member:
+          let
+            consumers = entryKeysOf iname mname member;
+          in
+          util.concatMapAttrsToList (
+            slotName: edge:
+            if !edge.delivered then
+              [ ]
+            else
+              concatLists (
+                map (
+                  providerKey:
+                  concatLists (
+                    util.mapAttrsToList (
+                      ename: varsFile:
+                      map (consumer: {
+                        key = varsFile.entry;
+                        reason = "${consumer} named ${ename} in uses.${slotName}.reads";
+                        machine = machineOf consumer;
+                      }) consumers
+                    ) (edge.entryVarsFiles.${providerKey} or { })
+                  )
+                ) edge.entryKeys
+              )
+          ) member.edges
+        ) inst.members
+      ) resolved.instances;
+    in
+    mapAttrs (_: group: {
+      machines = util.uniqueStrings (filter (m: m != null) (map (r: r.machine) group));
+      reasons = util.sortStrings (util.uniqueStrings (map (r: r.reason) group));
+    }) (builtins.groupBy (r: r.key) rows);
+
+  machineOf =
+    key:
+    let
+      parts = builtins.split "@" key;
+    in
+    if builtins.length parts == 1 then null else builtins.elemAt parts (builtins.length parts - 1);
+
   providesRecord =
     {
       readers,
@@ -288,6 +338,9 @@ rec {
       source = member.settings.sources.${k};
     }) member.settings.values;
 
+  # Every place an entry names a string, for the two checks that scan them: the
+  # closure check, which scans all of them, and the undeployed-value check, which
+  # scans only the sites that open a path rather than declare one.
   mentionSites =
     {
       units,
@@ -295,6 +348,7 @@ rec {
       placement,
     }:
     util.mapAttrsToList (name: unit: {
+      kind = "unit";
       where = "unit ${util.quote name}";
       value = removeAttrs unit [
         "env"
@@ -302,14 +356,17 @@ rec {
       ];
     }) units
     ++ util.mapAttrsToList (name: unit: {
+      kind = "unit";
       where = "the environment of unit ${util.quote name}";
       value = unit.env or { };
     }) units
     ++ util.mapAttrsToList (name: unit: {
+      kind = "unit";
       where = "an extension of unit ${util.quote name}";
       value = unit.extends or { };
     }) units
     ++ util.mapAttrsToList (path: file: {
+      kind = "file";
       where = "configuration file ${util.quote path}";
       value = removeAttrs file [
         "mode"
@@ -320,6 +377,7 @@ rec {
     ++ util.concatMapAttrsToList (
       gen: files:
       util.mapAttrsToList (fname: file: {
+        kind = "declaration";
         where = "generated file ${util.quote "${gen}/${fname}"}";
         value = file.path;
       }) files
@@ -327,10 +385,57 @@ rec {
     ++ util.concatMapAttrsToList (
       cap: record:
       util.mapAttrsToList (ename: e: {
+        kind = "declaration";
         where = "export ${util.quote "${cap}.${ename}"}";
         value = e.value;
       }) record.exports
     ) placement.capabilities;
+
+  # A `deploy = false` generator's file exists as a value and never as bytes on a
+  # machine, so a site that opens its path is a path that resolves to nothing at
+  # run time. The walk is the one the closure check already does.
+  undeployedRows =
+    {
+      subject,
+      module,
+      placement,
+      sites,
+    }:
+    let
+      undeployed = concatLists (
+        util.mapAttrsToList (
+          gen: files:
+          util.mapAttrsToList (fname: file: {
+            inherit gen fname;
+            inherit (file) path;
+          }) (util.filterAttrs (_: file: !file.deploy) files)
+        ) placement.vars
+      );
+      paths = map (f: f.path) undeployed;
+      opened = concatLists (
+        map (
+          site:
+          map (path: {
+            inherit path;
+            inherit (site) where;
+          }) (util.mentionsDeep paths site.value)
+        ) sites
+      );
+      fileOf = path: head (filter (f: f.path == path) undeployed);
+    in
+    map (
+      m:
+      let
+        file = fileOf m.path;
+      in
+      diag.error {
+        inherit subject;
+        id = "vars-not-deployed-opened";
+        message = "${subject} names ${util.quote m.path} in ${m.where}, and no machine receives that value";
+        evidence = "generator ${util.quote file.gen} of ${module} declares `deploy = false`, so one value exists and the path it is read at holds nothing";
+        resolution = "declare that generator deployed in ${module}, or stop naming ${util.quote "${file.gen}/${file.fname}"} in ${m.where}";
+      }
+    ) opened;
 
   # An undeclared mention is an error, because the closure is the list a consumer
   # populates a filesystem from. A declared root nothing mentions is a warning: it
@@ -428,15 +533,24 @@ rec {
     {
       name = subject;
       rows =
-        configData.rows
-        ++ closureRows {
-          inherit subject;
-          storeDir = resolved.storeDir;
-          declared = closure;
+        let
           sites = mentionSites {
             inherit units placement;
             configData = configData.record;
           };
+        in
+        configData.rows
+        ++ closureRows {
+          inherit subject sites;
+          storeDir = resolved.storeDir;
+          declared = closure;
+        }
+        ++ undeployedRows {
+          inherit subject placement;
+          module = member.moduleLabel;
+          # The module's own vars and exports are declarations rather than sites
+          # that open a path, so only the units and the files are scanned.
+          sites = filter (site: site.kind != "declaration") sites;
         }
         ++ entryRows {
           inherit subject member;
@@ -504,12 +618,119 @@ rec {
       };
     };
 
+  # One entry per generated value. A value delivered to a machine that runs none
+  # of the services reading it has no unit entry to live in, and a value that
+  # exists once for an instance has no single placement to live in either, so it
+  # is an entry of its own.
+  #
+  # The delivery set is not in the key: a machine joining it because a new
+  # consumer declared a read does not change the value, and re-keying it would
+  # ask for a regeneration of bytes that are still correct.
+  varsEntriesOf =
+    {
+      valueReaders,
+      machineKeys,
+      iname,
+      mname,
+      member,
+    }:
+    let
+      generators = member.declaration.vars.generators;
+
+      # A shared value is recorded once, against the first machine its owner is
+      # placed on. Nothing of that machine enters the entry.
+      canonical =
+        gen: machine: if generators.${gen}.per == "instance" then head member.placements else machine;
+
+      # Terminates because a generator that transitively reads itself is refused
+      # by `readVars`, which drops the reads it recorded.
+      recordOf =
+        gen: machine:
+        let
+          g = generators.${gen};
+          owner = canonical gen machine;
+          placement = member.placed.${owner};
+          subject = placement.varsEntries.${gen};
+          read =
+            valueReaders.${subject} or {
+              machines = [ ];
+              reasons = [ ];
+            };
+          owners = if g.per == "instance" then member.placements else [ owner ];
+          siblings = map (s: recordOf s owner) g.reads;
+          files = (varsRecord placement).${gen}.files;
+          dependsOn =
+            map (r: "${r.name}#${r.value.key}") siblings
+            ++ (if g.per == "instance" then [ ] else [ "machine:${owner}@${machineKeys.${owner}}" ]);
+          keyInput = {
+            instance = iname;
+            generator = gen;
+            inherit (g) per deploy;
+            inherit files dependsOn;
+            machine = if g.per == "instance" then null else owner;
+          };
+        in
+        {
+          name = subject;
+          value =
+            pruned {
+              key = util.shortHash (builtins.toJSON keyInput);
+              inherit (g) per deploy;
+              inherit files dependsOn;
+              reads = map (r: r.name) siblings;
+            }
+            # Always present, empty or not: the delivery set and the reason each
+            # machine is in it are the two fields a reader must not be able to
+            # mistake for an absence.
+            // {
+              delivery =
+                if !g.deploy then [ ] else util.sortStrings (util.uniqueStrings (owners ++ read.machines));
+              deliveryDerivedFrom =
+                if !g.deploy then
+                  [ ]
+                else
+                  util.sortStrings (
+                    util.uniqueStrings (map (m: "${iname}:${mname}@${m} owns it") owners ++ read.reasons)
+                  );
+            };
+        };
+
+      ownersOf =
+        gen:
+        if generators.${gen}.per == "instance" then [ (head member.placements) ] else member.placements;
+    in
+    if member.placements == [ ] then
+      [ ]
+    else
+      concatLists (util.mapAttrsToList (gen: _: map (recordOf gen) (ownersOf gen)) generators);
+
   entries =
     resolved:
     let
       readers = readerIndex resolved;
+      valueReaders = valueReaderIndex resolved;
 
       machineKeys = mapAttrs (_: machineKey) resolved.machines;
+
+      varsEntries = concatLists (
+        util.mapAttrsToList (
+          iname: inst:
+          concatLists (
+            util.mapAttrsToList (
+              mname: member:
+              varsEntriesOf {
+                inherit
+                  valueReaders
+                  machineKeys
+                  iname
+                  mname
+                  member
+                  ;
+              }
+            ) inst.members
+          )
+        ) resolved.instances
+      );
 
       serviceEntries = concatLists (
         util.mapAttrsToList (
@@ -568,7 +789,7 @@ rec {
       );
     in
     {
-      plan = machineEntries // listToAttrs serviceEntries;
+      plan = machineEntries // listToAttrs varsEntries // listToAttrs serviceEntries;
       rows = concatLists (map (e: e.rows) serviceEntries);
     };
 }

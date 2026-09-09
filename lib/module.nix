@@ -115,6 +115,31 @@ let
     "fixed"
   ];
 
+  generatorKeys = [
+    "files"
+    "per"
+    "deploy"
+    "reads"
+  ];
+
+  # How many of a generated value exist. The default is `placement`, because the
+  # failure modes are asymmetric: a value wrongly per-machine is a second key
+  # nobody shares, and a value wrongly shared is one secret on every machine.
+  cardinalities = [
+    "instance"
+    "placement"
+  ];
+
+  # A reader may read a sibling of its own cardinality or a coarser one. The
+  # reverse has no single answer: the placements hold one value each.
+  coarserThan = {
+    instance = [ "instance" ];
+    placement = [
+      "instance"
+      "placement"
+    ];
+  };
+
   reaches = [
     "one"
     "all"
@@ -182,9 +207,6 @@ rec {
       declared = if hasInterface then interface.exportNames slot.interface else [ ];
       reads = if slot ? reads then slot.reads else declared;
       unknownReads = if hasInterface then util.subtractList reads declared else [ ];
-      secretReads = builtins.filter (
-        r: elem r declared && interface.secrecyOf slot.interface.exports.${r} == "secret"
-      ) reads;
 
       rows =
         map (
@@ -234,22 +256,12 @@ rec {
             evidence = "the interface declares ${util.quoteList declared}";
             resolution = "read a declared export in ${subject}, or declare ${util.quote r} on the interface";
           }
-        ) unknownReads
-        ++ map (
-          r:
-          diag.error {
-            inherit subject;
-            id = "slot-reads-secret-export";
-            message = "${where} reads ${util.quote r}, which ${interface.label reg slot.interface} declares secret";
-            evidence = "a reads entry naming a secret export is refused outright, on every machine and regardless of placement";
-            resolution = "read the public half in ${subject}; a secret is readable only by the units of the service that generated it";
-          }
-        ) secretReads;
+        ) unknownReads;
     in
     {
       inherit rows reach reads;
       interface = if hasInterface then slot.interface else null;
-      resolvable = hasInterface && elem reach reaches && unknownReads == [ ] && secretReads == [ ];
+      resolvable = hasInterface && elem reach reaches && unknownReads == [ ];
     };
 
   readCapability =
@@ -357,20 +369,115 @@ rec {
           }
         );
 
+      declared = attrNames vars;
+
+      perOf = g: if g ? per then toString g.per else "placement";
+      deployOf = g: if g ? deploy then g.deploy else true;
+      readsOf = g: if g ? reads && isList g.reads then filter isString g.reads else [ ];
+      declaredReadsOf = g: filter (name: vars ? ${name}) (readsOf g);
+
+      # Generators reachable from one, so a value that transitively reads itself is
+      # a row rather than an infinite recursion when the plan hashes what it reads.
+      reachableFrom =
+        gen:
+        let
+          step =
+            acc: util.uniqueStrings (acc ++ builtins.concatLists (map (n: declaredReadsOf vars.${n}) acc));
+          go =
+            budget: acc:
+            let
+              next = step acc;
+            in
+            if budget == 0 || next == acc then acc else go (budget - 1) next;
+        in
+        go (builtins.length declared) (declaredReadsOf vars.${gen});
+
+      inCycle = gen: elem gen (reachableFrom gen);
+
       genRows =
         gen: g:
+        let
+          where = "generator ${util.quote gen} of ${module}";
+          per = perOf g;
+          unknownReads = filter (name: !(vars ? ${name})) (readsOf g);
+          coarser = coarserThan.${per} or cardinalities;
+          tooNarrow = filter (name: vars ? ${name} && !elem (perOf vars.${name}) coarser) (readsOf g);
+        in
         map (
           key:
           keyRow {
             inherit subject key;
-            where = "generator ${util.quote gen} of ${module}";
-            allowed = [ "files" ];
+            inherit where;
+            allowed = generatorKeys;
           }
-        ) (util.extraKeys [ "files" ] g)
+        ) (util.extraKeys generatorKeys g)
+        ++ util.optional (!elem per cardinalities) (
+          diag.error {
+            inherit subject;
+            id = "vars-per-domain";
+            message = "${where} declares per ${util.quote per}, and a cardinality takes ${util.quoteList cardinalities}";
+            evidence = "an omitted per means ${util.quote "placement"}: one value per machine the member is placed on, where ${util.quote "instance"} is one value for the instance";
+            resolution = "write one of ${util.quoteList cardinalities} in ${subject}, or omit the key";
+          }
+        )
+        ++ util.optional (g ? deploy && !builtins.isBool g.deploy) (
+          diag.error {
+            inherit subject;
+            id = "vars-deploy-malformed";
+            message = "${where} declares a deploy that is not a boolean";
+            evidence = "`per` says how many values exist and `deploy` says whether any machine receives bytes, so it is one or the other";
+            resolution = "write `deploy = false;` in ${subject}, or omit the key";
+          }
+        )
+        ++ util.optional (g ? reads && !(isList g.reads && all isString g.reads)) (
+          diag.error {
+            inherit subject;
+            id = "vars-reads-malformed";
+            message = "${where} declares a reads that is not a list of generator names";
+            evidence = "a generator reads its siblings by name, and this module declares ${util.quoteList declared}";
+            resolution = "write `reads = [ <generator> … ];` in ${subject}";
+          }
+        )
+        ++ map (
+          name:
+          diag.error {
+            inherit subject;
+            id = "vars-reads-unknown-generator";
+            message = "${where} reads ${util.quote name}, which ${module} does not declare";
+            evidence = "the module declares ${util.quoteList declared}";
+            resolution = "read one of ${util.quoteList declared} in ${subject}, or declare ${util.quote name} beside it";
+          }
+        ) unknownReads
+        ++ map (
+          name:
+          diag.error {
+            inherit subject;
+            id = "vars-reads-arity";
+            message = "${where} has per ${util.quote per} and reads ${util.quote name}, which has per ${
+              util.quote (perOf vars.${name})
+            }";
+            evidence = "the placements hold one value each and the reader is one value, so the read has no single answer";
+            resolution = "reverse it: a per ${util.quote "placement"} generator reads the one per ${util.quote "instance"} value, which is the direction that works";
+          }
+        ) tooNarrow
+        ++ util.optional (inCycle gen) (
+          diag.error {
+            inherit subject;
+            id = "vars-reads-cycle";
+            message = "${where} reads itself through ${util.quoteList (util.sortStrings (reachableFrom gen))}";
+            evidence = "a value is generated from the values it reads, so a cycle names no value that can be generated first, and the plan hashes what an entry reads";
+            resolution = "break the cycle in ${subject}; the reads of a generator in a cycle are dropped, so the plan records none of them";
+          }
+        )
         ++ util.concatMapAttrsToList (fileRows gen) (g.files or { });
     in
     {
-      generators = builtins.mapAttrs (_: g: { files = g.files or { }; }) vars;
+      generators = builtins.mapAttrs (gen: g: {
+        files = g.files or { };
+        per = if elem (perOf g) cardinalities then perOf g else "placement";
+        deploy = if builtins.isBool (deployOf g) then deployOf g else true;
+        reads = if inCycle gen then [ ] else util.sortStrings (declaredReadsOf g);
+      }) vars;
       rows = util.concatMapAttrsToList genRows vars;
     };
 

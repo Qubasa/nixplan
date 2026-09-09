@@ -6,7 +6,6 @@
   rows = [
     "locality"
     "lifecycle"
-    "per/deploy/delivery"
     "placement.pick/strategy/allocation"
     "member cuts"
     "externals"
@@ -22,14 +21,6 @@
     lifecycle = {
       row = "lifecycle";
       trigger = "the first value that is not knowable at evaluation; two of the twelve mesh sketches of the corpus this folder came out of assign an address only after the daemon authenticates";
-    };
-    per = {
-      row = "per/deploy/delivery";
-      trigger = "the first value that is secret and has to reach a consumer on another machine, a database password being the case";
-    };
-    deploy = {
-      row = "per/deploy/delivery";
-      trigger = "the first value that is secret and has to reach a consumer on another machine, a database password being the case";
     };
     pick = {
       row = "placement.pick/strategy/allocation";

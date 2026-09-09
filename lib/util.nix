@@ -137,6 +137,25 @@ rec {
     in
     deep;
 
+  # Which of `needles` a value mentions anywhere inside it. The same traversal as
+  # storePathsDeep, for paths that are not store paths and have no grammar of
+  # their own: a generated file's path is whatever the planner fixed it to.
+  mentionsDeep =
+    needles:
+    let
+      deep =
+        value:
+        if isString value then
+          filter (needle: match ".*${escapeRegex needle}.*" value != null) needles
+        else if isList value then
+          concatLists (map deep value)
+        else if isAttrs value then
+          concatLists (mapAttrsToList (_: deep) value)
+        else
+          [ ];
+    in
+    deep;
+
   isVarsFile = value: isAttrs value && (value.__varsFile or false);
 
   # A short content hash, truncated because people read plans. The context is
