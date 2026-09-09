@@ -8,7 +8,7 @@ two marks rather than as one error message.
 
 ```nix
 {
-  id = "slot-reads-secret-export";        # stable identifier for the kind
+  id = "slot-reads-undeployed-value";     # stable identifier for the kind
   subject = "nightly:client@alpha";       # a plan key, a deployment-relative path, or an issue id
   severity = "error";                     # "error" or "warning", and nothing else
   message = "…";                          # one line
@@ -72,8 +72,13 @@ discipline and deduplication applied).
 | `slot-reach-domain` | `reach` is outside `one` / `all` |
 | `slot-reach-local` | `reach = "local"`, which derives from a locality this subset does not declare |
 | `slot-reads-unknown-export` | a `reads` entry the interface does not declare; the evidence lists what it does |
-| `slot-reads-secret-export` | a `reads` entry naming a `secret` export — refused on every machine, placement irrelevant |
 | `vars-file-secrecy-domain` | a generated file's `secrecy` is outside the two values |
+| `vars-per-domain` | a generator's `per` is neither `instance` nor `placement` |
+| `vars-deploy-malformed` | `deploy` is not a boolean |
+| `vars-reads-malformed` | `reads` is not a list of strings |
+| `vars-reads-unknown-generator` | `reads` names a generator the module does not declare; the evidence lists what it does |
+| `vars-reads-arity` | a `per = "instance"` generator reads a `per = "placement"` sibling, so the read has no single answer |
+| `vars-reads-cycle` | a generator transitively reads itself; the recorded reads of every generator in the cycle are dropped |
 | `port-claim-not-fixed` | a port claim with no `fixed`; this subset allocates nothing |
 
 ### Machines and targets
@@ -136,6 +141,8 @@ discipline and deduplication applied).
 | `reach-all-no-placement` | `reach = "all"` against a capability placed nowhere |
 | `provider-export-missing` / `provider-export-extra` | the published keyset is not the interface's keyset |
 | `export-type-mismatch` | a published value fails its atom's type |
+| `export-secret-not-a-reference` | an export declared `secret` publishes something other than a generated file, so its bytes would be in the plan rather than its path |
+| `slot-reads-undeployed-value` | a `reads` entry names a secret export backed by a `deploy = false` generator, so the path it names resolves to nothing at run time |
 | `module-raised` | a module's own code raised a catchable error; its value is recorded as not computed and the rest of the plan is still produced |
 
 ### The plan itself
@@ -144,18 +151,19 @@ discipline and deduplication applied).
 | --- | --- |
 | `set-entry-absent` | a read names an entry whose value has not been generated; the entry stays in the set with a null value and an absent marker |
 | `set-read-in-key` (warning) | a set-valued read's membership is part of the reading entry's key, so that entry is re-keyed when a machine joins or leaves the set |
+| `vars-not-deployed-opened` | a unit or configuration file of the owning module names the path of a `deploy = false` generator's file |
+| `vars-generator-claimed-twice` | two members of one instance declare the same generator name, which is one address for two values |
 | `diagnostic-subject-invalid` | a row carried a subject that is not a plan key, a deployment-relative path or an issue identifier |
 
 ## Refusals by subtraction
 
-Eight constructs are deliberately absent. Writing one is **not** an unknown-key
+Seven constructs are deliberately absent. Writing one is **not** an unknown-key
 misspelling row: it is `declaration-excluded-key` or `export-atom-excluded-key`
 whose evidence is *the condition that would bring the construct back*.
 
 ```
 locality        the first export whose value is a unix socket path or a loopback port
 lifecycle       the first value that is not knowable at evaluation
-per, deploy     the first secret that has to reach a consumer on another machine
 pick, strategy  the first service whose machine the operator lets the planner choose
 enable, member wiring   a module publishing a composition whose cuts an operator wants
 externals       a non-fleet resource this deployment has to name

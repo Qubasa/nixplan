@@ -44,6 +44,14 @@ without reading the code first.
   other would otherwise each need the other's units to know its own key.
 - A plan key is `<instance>:<service>@<machine>`, and a keyed form appends `@<hash>`. Split at the
   last `@`.
+- A generated value is an entry of its own: `<instance>:vars/<generator>` for `per = "instance"`,
+  `<instance>:vars/<generator>@<machine>` for `per = "placement"`. A value delivered to a machine
+  that runs none of the services reading it has no unit entry to live in.
+- The delivery set is deliberately not in a value's key. A machine joining because a new consumer
+  declared a read does not change the value, and re-keying it would ask for a regeneration of
+  bytes that are still correct.
+- `varsState` is keyed by the value's entry, not by machine: one value has one answer about
+  whether it exists however many machines receive it.
 - An image's version digest is deliberately not the entry key. A configuration file's content
   moves the key and never enters the image, so keying the image on it would rebuild equal bytes.
 
@@ -59,6 +67,18 @@ without reading the code first.
 - A refused read leaves the slot absent from `results` - not `null`, not `{}`. `or [ ]` cannot be
   written, so it cannot silently succeed.
 - A unit reference (`after`, `requires`) is checked against the units the module declared itself.
+- The delivery set of a generated value comes from the owner's placements plus the machine of
+  every entry that declared a read of an export backed by one of its files. Nothing else enters
+  it: not the value; not the interface; not what `impl` interpolates. A routable secret is bounded
+  by nobody, so a declared read is the only thing that widens the set. An omitted read is the only
+  thing that narrows it.
+- Every value entry carries `delivery` and `deliveryDerivedFrom` whether or not either holds
+  anything. A reader must not be able to mistake either field for an absence.
+- A `deploy = false` generator's value still exists and its public files still travel in the plan.
+  What is refused is opening one of its files on a machine. A unit or configuration file of the
+  owner is `vars-not-deployed-opened`; a consumer's declared read is `slot-reads-undeployed-value`.
+- A secret export must publish a generated file, never a bare value: `export-secret-not-a-reference`.
+  A path in the plan is deliverable; bytes in the plan are a leak.
 
 ## Platform record
 
@@ -88,8 +108,9 @@ without reading the code first.
   `multi-user.target`; a scheduled unit's timer is wanted by `timers.target` and its service is
   wanted by nothing. An `[Install]` on that service runs the job once at deploy time and again on
   its schedule.
-- The flakelet realiser refuses an entry shown a host path: it has no assemble step, so nothing
-  would create the path the unit binds.
+- The flakelet realiser refuses an entry shown a host path it would have to assemble - a
+  configuration file - because it has no assemble step. A delivered generated file is its own
+  source (`from == path`) and arrives before activation, so it is not refused.
 - `flakelet/read.nix` restates two rules from flakelet's own `manager.rs`: `validate_name` and
   `validate_units`. `LOCKED_URL_PREFIX` in `tests/e2e/delivery.py` must match the prefix written
   there.
@@ -259,8 +280,9 @@ silently unobserved.
 - The comment strip cut five comments in half, leaving a mid-sentence fragment above the argument
   list of `lib/interface.nix`, `tests/unit/coverage.nix`, `tests/unit/worked.nix` and two fixture
   files. Removed. A blanket comment removal wants a check for a surviving `#` line.
-- `mypy --strict ''` inside the `tests/e2e` treefmt root answered `INTERNAL ERROR` once under
-  mypy 2.1.0 and has not repeated. Rerun before believing a mypy failure.
+- `mypy --strict` inside the `tests/e2e` treefmt root answers `INTERNAL ERROR` intermittently
+  under mypy 2.1.0, in the build sandbox and with no file named. Rerun before believing a mypy
+  failure; the same arguments in the devshell pass.
 - `tests/unit/layers.nix` scans raw file text, comments included, and its
   `testAFileNamesAPathThatIsNotThere` catches stale path references that live in comments. A path
   written in a comment therefore has to resolve, and a foreign repository's file is named without

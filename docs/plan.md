@@ -13,6 +13,8 @@ it back yields an equal value.
 | Key shape | Is |
 | --- | --- |
 | `<instance>:<service>@<machine>` | a placed service |
+| `<instance>:vars/<generator>` | a generated value that exists once for the instance |
+| `<instance>:vars/<generator>@<machine>` | a generated value that exists once per placement |
 | `<instance>:<service>` | a service no placement selected: it runs nowhere, so it carries no machine, no target, no closure and nothing it depends on |
 | `machine:<name>` | a machine that carries a placement |
 
@@ -36,10 +38,10 @@ written. `nightly:client@alpha` has no `alloc` because it claims no ports.
   "units": {
     "borgPush": {
       "command": "…/bin/borg create --stats ssh://borg@vault.example:22/srv/borg::{now} /home",
-      "env": { "BORG_QUOTA_GIB": "500", "BORG_RSH": "…/bin/ssh -i /run/vars/hostKey/ssh_host_ed25519_key" }
+      "env": { "BORG_QUOTA_GIB": "500", "BORG_RSH": "…/bin/ssh -i /run/vars/nightly/hostKey/ssh_host_ed25519_key" }
     }
   },
-  "env": { "BORG_QUOTA_GIB": "500", "BORG_RSH": "…/bin/ssh -i /run/vars/hostKey/ssh_host_ed25519_key" },
+  "env": { "BORG_QUOTA_GIB": "500", "BORG_RSH": "…/bin/ssh -i /run/vars/nightly/hostKey/ssh_host_ed25519_key" },
   "settings": { "client": { "path": { "source": "deployment", "value": "/home" } } },
   "vars": { "hostKey": { "files": { "ssh_host_ed25519_key": { "secrecy": "secret", "inPlan": "reference" } } } },
   "provides": { … },
@@ -65,7 +67,7 @@ field, and the table below says why.
 | `env` | the variables **every unit of the entry agrees on**, and nothing else. A unit's environment lives on the unit, so two units disagreeing about a variable is two records and no row |
 | `configData."<path>"` | `{ mode, reload, computed }` plus the file's identity, below |
 | `settings.<member>.<knob>` | `{ value, source }` where source is `defaults`, `deployment` or `fixed` — every resolved value records where it came from |
-| `vars.<gen>.files.<file>` | `{ secrecy, inPlan }`, plus `bytes: "absent"` when the generator has not run |
+| `vars.<gen>.files.<file>` | `{ path, secrecy, inPlan }`, plus `bytes: "absent"` when the generator has not run. The path is the same on every machine that receives the value |
 | `alloc.ports.<claim>` | the fixed port |
 
 ## A machine entry
@@ -86,6 +88,44 @@ whole registry record, and it is the hash a placed entry's `dependsOn` carries,
 so editing a machine's `serviceManager` re-keys every entry on it. The system
 string stays a string here — the elaborated platform record lives on each
 entry's `target.system`, once per placement rather than once per machine.
+
+## A generated value entry
+
+```json
+"nightly:vars/hostKey@alpha": {
+  "key": "sha256-b219c0b316cb1464",
+  "per": "placement",
+  "deploy": true,
+  "delivery": ["alpha", "vault"],
+  "deliveryDerivedFrom": ["nightly:client@alpha owns it", "vault-repo:server@vault named publicKey in uses.clients.reads"],
+  "dependsOn": ["machine:alpha@sha256-5840440439b3bbf1"],
+  "files": {
+    "ssh_host_ed25519_key": { "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key", "secrecy": "secret", "inPlan": "reference" }
+  }
+}
+```
+
+A generated value is an entry rather than a record inside the entries that read
+it, because a machine may receive a value while running none of the services
+that read it, and a `per = "instance"` value has no single placement to live in.
+
+| Field | Contract |
+| --- | --- |
+| `key` | a hash over instance, generator, cardinality, `deploy`, the file records and `dependsOn`. The machine reaches a `per = "placement"` value's key only through `dependsOn`, as for a service entry. The delivery set is deliberately **not** in it: a machine joining because a new consumer declared a read does not change the value, and re-keying it would ask for a regeneration of bytes that are still correct |
+| `per` | `"instance"` — one value for the instance — or `"placement"`, one per machine the owner is placed on |
+| `deploy` | whether any machine receives the bytes. Independent of `per`: one value may exist and no machine receive it |
+| `delivery` | the machines that receive the bytes, sorted. Always present, empty or not: a delivery set is a field a reader must not be able to mistake for an absence |
+| `deliveryDerivedFrom` | why each machine is in the set, sorted: the owning entry, and for a reader the entry, the slot and the export it declared. Always present, for the same reason |
+| `reads` | the sibling values' entry keys, absent when it reads none |
+| `dependsOn` | the sibling entries it reads, plus its own machine entry when `per = "placement"` |
+| `files.<file>` | `{ path, secrecy, inPlan }` plus `bytes: "absent"` when the generator has not run |
+
+The set is derived from the owner's placements plus the machine of every entry
+that **declared** a read of an export backed by one of these files — not from
+the value, not from the interface, and not from what `impl` interpolates. A
+consumer that omits an export from `uses.<slot>.reads` does not receive it, and
+the export is absent from its `results` rather than null, so the omission cannot
+be defaulted around.
 
 ## The platform record
 
@@ -142,7 +182,7 @@ elaborate the `system` string for the whole family.
         "readBy": ["vault-repo:server@vault"]
       },
       "privateKey": {
-        "value": "/run/vars/hostKey/ssh_host_ed25519_key",
+        "value": "/run/vars/nightly/hostKey/ssh_host_ed25519_key",
         "secrecy": "secret",
         "plane": "reference",
         "readBy": []
@@ -222,7 +262,9 @@ own rather than a `plane` string.
 
 A generated file records the same distinction from the other side, as
 `vars.<gen>.files.<file>.inPlan`: `"value"` for a public file whose bytes the
-plan carries, `"reference"` for a secret one it names by path.
+plan carries, `"reference"` for a secret one it names by path. The bytes
+themselves are carried by no entry: what moves them is delivery, and the
+`delivery` list on the value's own entry is the whole statement of where to.
 
 A configuration file names its bytes and never carries them. Beside `mode` and
 the `reload` list the module wrote, a computed file carries exactly one
@@ -273,7 +315,7 @@ appearing in the other's `dependsOn`. The worked example does exactly this, and
 ## The committed fixture
 
 `fixtures/minimal-typed-edge/plan/backup.json` is the golden copy: all
-eight entries, real hashes, real store path strings, no ellipsis and no invented
+eleven entries, real hashes, real store path strings, no ellipsis and no invented
 hash. `tests/unit/plan.nix` compares it to the evaluated plan field by field and
 reports the differing attribute paths rather than printing both documents. The
 fixture carries no prose keys of its own - every field participates in the

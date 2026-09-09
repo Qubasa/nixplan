@@ -7,7 +7,7 @@ resolves rookery at run time and boots virtual machines.
 ## Look at the worked deployment
 
 ```bash
-nix eval --json .#planner.worked.plan | jq keys      # the eight entries
+nix eval --json .#planner.worked.plan | jq keys      # the eleven entries
 nix eval --json .#planner.worked.diagnostics | jq    # the rows, as records
 nix eval --raw  .#planner.rendered                   # the rows, rendered
 nix eval --json .#planner.worked.applicable          # false: one row is an error
@@ -47,7 +47,7 @@ behaviour asserted in both layers is a failure too, reported with both files, by
 nix build .#checks.x86_64-linux.planner-tests -L      # 237 tests through nix-unit
 ```
 
-The last line is the count: `🎉 237/237 successful`. Take the number from there
+The last line is the count: `🎉 263/263 successful`. Take the number from there
 rather than from this page.
 
 Faster, while iterating - the same suites evaluated directly, with no derivation
@@ -73,15 +73,16 @@ The suites, and how many tests each holds:
 | `diagnostics` | 13 | totality, ordering, severity, rendering, and the scan that finds no raising call under `lib/` |
 | `plan` | 20 | keys, planes, absences, dependencies, serialisation, the golden fixture |
 | `postgres` | 10 | one provider instance and two consumers, planned |
-| `exclusions` | 18 | one deployment per excluded construct, each refused |
+| `exclusions` | 16 | one deployment per excluded construct, each refused |
+| `secrets` | 21 | a generated value's cardinality, its delivery set and its entry |
 | `units` | 31 | the portable unit vocabulary, per field |
 | `platform` | 19 | a machine's target, elaborated |
 | `closure` | 21 | what a unit may name and what it must declare |
-| `image` | 25 | the portable-service-image realiser's reading of an entry |
+| `image` | 27 | the portable-service-image realiser's reading of an entry |
 | `flakelet` | 14 | the flakelet realiser's reading: enablement, identity, the two name refusals |
 | `perf` | 6 | the synthetic fleet is deterministic and realises nothing |
-| `layers` | 8 | the shape of the test tree itself |
-| `coverage` | 7 | every specification heading is a test, an omission or an alias |
+| `layers` | 12 | the shape of the test tree itself |
+| `coverage` | 8 | every specification heading is a test, an omission or an alias |
 
 That column is a value, not a tally kept by hand:
 
@@ -99,7 +100,7 @@ Two machines and the network between them are devices a build sandbox does not
 have, so this layer is an app rather than a check:
 
 ```bash
-ROOKERY_FLAKE=/path/to/rookery nix run .#planner-e2e                 # both folders, 29 tests
+ROOKERY_FLAKE=/path/to/rookery nix run .#planner-e2e                 # three folders, 42 tests
 ROOKERY_FLAKE=/path/to/rookery nix run .#planner-e2e portable-image  # one folder
 ```
 
@@ -135,7 +136,7 @@ else:
 
 | List | Entries | What an entry says |
 | --- | --- | --- |
-| `omitted` | 9 | a heading this project deliberately does not observe, mapped to the sentence saying why. Two classes only: a failure `builtins.tryEval` does not catch, so asserting it would end the evaluation that would report it; and a property of running the suite that the suite cannot observe about itself without reading the flake that runs it. An omission for a heading that has since gained a test fails as stale, and an empty reason fails as no reason. |
+| `omitted` | 10 | a heading this project deliberately does not observe, mapped to the sentence saying why. Two classes only: a failure `builtins.tryEval` does not catch, so asserting it would end the evaluation that would report it; and a property of running the suite that the suite cannot observe about itself without reading the flake that runs it. An omission for a heading that has since gained a test fails as stale, and an empty reason fails as no reason. |
 | `aliased` | 18 | a heading two capabilities word differently, mapped to the one test that observes it under the other's words. The named test must exist in one of the layers, and an alias for a heading whose own derived name is already a test fails as redundant. |
 
 A third file's names count as tests that exist without being a third layer:
@@ -145,7 +146,7 @@ tool it tests rather than in either layer - a budget checker is not the planner
 package's, so calling them omissions would be a false sentence.
 
 The same suite classifies every `spec.md` in the repository: `accountable` lists
-the eighteen this package's tests answer for, `excused` maps each of the others
+the thirty this package's tests answer for, `excused` maps each of the others
 to the reason they are not this package's - an excluded construct, a
 specification a later change's delta removed, a change nothing here implements
 yet. A new specification is a failure naming the file rather than a silently
@@ -239,7 +240,7 @@ FAIL: gated counter nrThunks of fixture worked costs 345.875 per plan entry,
 A growth bound applies to **every fixture measured at more than one size**, at
 the sizes stated in the budget file: per-entry cost must stay within the bound
 as the fleet grows. Today every counter *falls* from 4 to 256 in both fixtures
-(`fleet` `nrThunks` ratio 0.46, `mesh` 0.52).
+(`fleet` `nrThunks` ratio 0.48, `mesh` 0.54).
 
 **A cost the counters cannot see.** A membership test written as `elem` over a
 fleet-sized list is one primop call that allocates nothing, so a quadratic

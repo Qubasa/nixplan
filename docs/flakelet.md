@@ -105,19 +105,26 @@ generation 1 and the running process alone, and `::test_a_changed_entry_is_a_new
 Every refusal is a raise while the artifact is being evaluated, before any file exists: the suite
 forces the read with `deepSeq` under `tryEval` and asserts that it did not succeed
 (`tests/unit/flakelet.nix`'s `raises`, used by `testAnUnusableInstanceName`,
-`testAUnitNameOutsideTheServicesNamespace`, `testAnEntryShownAConfigurationFile` and
-`testAnEntryShownAGeneratedFile`), so no derivation is instantiated either.
+`testAUnitNameOutsideTheServicesNamespace` and `testAnEntryShownAConfigurationFile`), so no
+derivation is instantiated either.
 
 | Refusal | Rule |
 | --- | --- |
 | a derived service name the endpoint would reject | `validate_name` (`manager.rs:1301-1312`): at most 128 characters, first an ASCII alphanumeric, then alphanumerics, `-` and `_`; no dots |
 | a unit file name outside the service's namespace | `validate_units` (`manager.rs:1314-1326`): the base is the service name or begins with `<name>-`, with at most one `@` |
-| an entry shown a host file | this realiser runs no step on the machine; a configuration file's bytes are assembled by the image realiser's attach script (`image/default.nix:101-133`) and a referenced generated file is checked by it, and flakelet does neither |
+| an entry shown a host file it would have to assemble | this realiser runs no step on the machine, and a configuration file's bytes are assembled by the image realiser's attach script (`image/default.nix:101-133`); flakelet has no such step |
 
 The name refusals are the endpoint's own rules, restated where the deployment can be told about
-them. The host-file refusal is this realiser's own limit: the worked deployment's four entries are
-all shown a host file, so they are refused here and built by the image realiser instead
-(design.md D7).
+them. The host-file refusal is this realiser's own limit, and it is narrower than a ban on host
+paths: a **delivered** generated file is its own source, so `from` equals `path` and the bytes are
+already at that path before the entry is activated. Only a path this realiser would have to
+create - a configuration file assembled from the plan - is refused. The worked deployment's four
+entries all render one, so they are built by the image realiser instead (design.md D7);
+`tests/e2e/secret-delivery/` is the case that is not, and it is a flakelet artifact.
+
+A delivered value's bytes are also why the artifact holds none of them. `image/read.nix` refuses
+an environment value carrying a newline and quotes every other one, so what the unit records is a
+path and never the content behind it.
 
 Everything else a plan can be wrong about is already refused by the shared reading
 `image/read.nix`, one definition for both realisers: an undeclared store path, a closure root that

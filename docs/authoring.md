@@ -69,7 +69,7 @@ declares eight keys at most; anything else is a row.
 | --- | --- |
 | `platforms` | list of system strings |
 | `claims.ports.<name>` | `{ proto, count, fixed }` — `fixed` is required, the planner allocates nothing |
-| `vars.<generator>.files.<file>` | `{ secrecy }` |
+| `vars.<generator>` | `{ files.<file> = { secrecy }, per ? "placement", deploy ? true, reads ? [ ] }` — below |
 | `uses.<slot>` | `{ interface, reach ? "one", reads ? <every export> }` |
 | `provides.<capability>` | `{ interface }` |
 | `pin` | `{ key, locked }` — the lock entry of the sources this module's packages came from, below |
@@ -157,10 +157,33 @@ not declare.
 
 Omitted, it is every export of the interface. Naming an export the interface
 does not declare is `slot-reads-unknown-export` with the declared list as
-evidence. Naming a `secret` export is `slot-reads-secret-export` — **refused on
-every machine regardless of placement**, including when producer and consumer
-share one. A service may use its own secret through its own unit without a
+evidence.
+
+Naming a `secret` export is what **delivers** it: the reader's machine joins
+that value's delivery set, and the reason is recorded on the value's entry. An
+export left out of `reads` is absent from `results.<slot>` rather than null, so
+an omission cannot be defaulted around, and the machine does not receive the
+bytes. A service may also use its own secret through its own unit without a
 slot, which is what `BORG_RSH` above does.
+
+### `vars`
+
+A generator is a name for one or more files whose bytes something outside the
+planner produces. The planner names them, never reads them, and decides which
+machines receive them.
+
+| Key | Means |
+| --- | --- |
+| `files.<file>.secrecy` | `"secret"` — the plan carries the path — or `"public"`, where it may carry the bytes |
+| `per` | `"placement"` (the default) is one value per machine the owner is placed on; `"instance"` is one value for the instance however many machines run it |
+| `deploy` | `false` means no machine receives the bytes. One value still exists, so a public file's value still travels in the plan, and anything that would open one of its files on a machine is refused |
+| `reads` | sibling generators of the same module. A `"placement"` generator may read an `"instance"` one; the reverse is `vars-reads-arity`, because the placements hold one value each and the reader is one value |
+
+A file's path is `/run/vars/<instance>/<generator>/<file>`, the same on every
+machine that receives it: one delivery of one value has one name. Two members of
+one instance declaring the same generator name is `vars-generator-claimed-twice`
+— a generator is addressed by instance and name, so the two declarations would
+be one address for two values.
 
 ### `pin`
 
@@ -572,16 +595,21 @@ of module and settings and never of a `wire`.
 
 ## Generated files
 
-`varsState` tells the planner which generated files exist:
+`varsState` tells the planner which generated files exist, keyed by the entry of
+the value they belong to:
 
 ```nix
-varsState.alpha.hostKey = {
+varsState."nightly:vars/hostKey@alpha" = {
   "ssh_host_ed25519_key" = { present = true; };
   "ssh_host_ed25519_key.pub" = { present = true; content = "ssh-ed25519 AAAA… root@alpha"; };
 };
 ```
 
-A machine the state does not name has not run its generator. Reading its public
+`<instance>:vars/<generator>@<machine>` for a `per = "placement"` value and
+`<instance>:vars/<generator>` for a `per = "instance"` one, so that one value
+has one answer about whether it exists no matter how many machines receive it.
+
+A value the state does not name has not run its generator. Reading its public
 half through a slot is a `set-entry-absent` **error** naming that machine: the
 entry stays in the set with a null value and an absent marker, and any artifact
 rendered over the set — the `authorized_keys` file above — is recorded as **not

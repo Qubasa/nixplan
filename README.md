@@ -45,11 +45,12 @@ nix build .#checks.x86_64-linux.treefmt -L               # nixfmt, shellcheck, y
 nix fmt                                                  # the same formatters, writing
 ```
 
-Two artifacts are built rather than checked, because each one is bytes a machine takes:
+Three artifacts are built rather than checked, because each one is bytes a machine takes:
 
 ```bash
-nix build .#planner-e2e-wired-pair      # the flakelet realiser over the end-to-end deployment
-nix build .#planner-e2e-portable-image  # the image realiser over the other one
+nix build .#planner-e2e-wired-pair       # the flakelet realiser over the wired deployment
+nix build .#planner-e2e-portable-image   # the image realiser over the confined one
+nix build .#planner-e2e-secret-delivery  # the three services a delivered secret runs between
 ```
 
 ## The shell
@@ -58,6 +59,6 @@ nix build .#planner-e2e-portable-image  # the image realiser over the other one
 nix develop  # the library, its suites, the perf harness and the formatters
 ```
 
-The machine layer needs four more variables, each naming a built artifact, and the
+The machine layer needs six more variables, each naming a built artifact, and the
 rookery it runs under. `eval "$(planner-e2e-env)"` exports them, and builds the guest
 image the first time it is called, so entering the shell does not.

@@ -203,8 +203,8 @@ its own rather than under a literal written in the library.
 
 ## What it deliberately does not do
 
-This subset carries no `locality`, no `lifecycle`, no `per`/`deploy`, no
-`placement.pick`, no member cuts, no externals, no collect family and no
+This subset carries no `locality`, no `lifecycle`, no `placement.pick`, no
+member cuts, no externals, no collect family and no
 runtime plane. Writing any of them is an **error row naming the condition that
 would bring the construct back**, not a silent drop — see
 [diagnostics.md](diagnostics.md#refusals-by-subtraction) and

@@ -10,9 +10,10 @@ None of it is a `check`. A build sandbox has no `/dev/kvm`, no `/dev/net/tun` an
 layer is one app:
 
 ```bash
-nix run .#planner-e2e                  # 29 passed in 78.65s - both folders, three machines
+nix run .#planner-e2e                  # 42 passed in 133.99s - three folders, six machines
 nix run .#planner-e2e wired-pair       # 21 passed in 60.87s - two machines
 nix run .#planner-e2e portable-image   # 8 passed in 18.24s - one machine
+nix run .#planner-e2e secret-delivery  # 7 passed in 80.62s - three machines
 nix run .#planner-e2e -- nosuchfolder  # refused, without building or booting anything
 ```
 
@@ -30,6 +31,7 @@ anyway.
 ===========================================
   the end-to-end tests are:
     portable-image
+    secret-delivery
     wired-pair
 ===========================================
 ```
@@ -71,14 +73,14 @@ Neither side names a version: `../pytest-env.nix` takes this nixpkgs' default `p
 rookery takes its own. The one dev shell that carries that environment lives in
 `../devshells.nix`.
 
-## The two folders
+## The three folders
 
 Each directory under `../tests/e2e/` is one end-to-end test and its own fixture: exactly one
 `test_*.py`, an `artifacts.nix` that realises the deployment it delivers, and a `deployment/` of
 `machines.nix`, `instances.nix`, `interfaces/` and `modules/`. The runner discovers them by looking
 for `test_*.py` under each directory, so a third folder needs no registration anywhere.
 
-`../tests/e2e/delivery.py` is the shared driver both folders import, `../tests/e2e/guest.nix` is
+`../tests/e2e/delivery.py` is the shared driver every folder imports, `../tests/e2e/guest.nix` is
 the guest both boot, and `../tests/e2e/test_harness.py` asserts the driver's pure half - which
 machine a key names, which address a delivery dials, which end-to-end tests exist - without a
 machine, as the `planner-delivery` check.
@@ -99,6 +101,20 @@ One test per scenario of
 named after it, plus one per scenario of
 [`tooling/machine-snapshots/spec.md`](../openspec/changes/resume-e2e-machines-from-snapshots/specs/tooling/machine-snapshots/spec.md),
 which is about how the machines were obtained rather than what the plan claims.
+
+### `secret-delivery` - 7 tests, three machines
+
+Three machines and one generated secret, and the subject is the set. `issuer` on `alpha` generates
+a session token; `probe` on `beta` declares a read of it; `gamma` runs a service that declares no
+generator and no slot. The plan names two machines in that value's delivery set and the run
+delivers the bytes to exactly those, so the third machine holding nothing is an assertion rather
+than an omission. The consumer then authenticates with the file it was given and is refused
+without it, which is what makes the delivery the thing under test rather than the path. A second
+value is declared `deploy = false`: its public half travels in the plan as an export the consumer
+reads from its environment, and no machine holds a file of it.
+
+One test per scenario of
+[`delivery/real-cluster/spec.md`](../openspec/changes/deliver-secrets-across-machines/specs/delivery/real-cluster/spec.md).
 
 ### `portable-image` - 8 tests, one machine
 
@@ -121,7 +137,7 @@ that is about what a real machine does with a built image.
 ## Where the machines come from
 
 Each folder's machines are a `@cluster_snapshot_fixture` stage, declared through
-`delivery.cluster_stage` so both folders state the same posture once: UEFI, no Secure Boot, no TPM,
+`delivery.cluster_stage` so every folder states the same posture once: UEFI, no Secure Boot, no TPM,
 2048 MiB and two CPUs per machine, session-scoped. The stage's body only waits - each machine to
 its vsock sshd and then to `multi-user.target`, then the cluster to its DHCP leases - and yields.
 The first run boots the machines and rookery cuts them there; every later run resumes that cut,
@@ -167,7 +183,7 @@ entry, it orphans it, and an orphan is about 2 GiB per machine, so an afternoon 
 preparation body left seven entries and 21.8 GB here. `gc --all` is the hygiene; there is no
 automatic eviction.
 
-The two folders keep two cuts rather than sharing one, because a cut's shape is
+The folders keep one cut each rather than sharing one, because a cut's shape is
 `vms=2;0:alpha:root;1:beta:root` against `vms=1;0:alpha:root`. That is not cosmetic: a resume seeds
 one overlay and one RAM file per slot, and each slot's address is frozen inside its own saved RAM,
 so there is nothing coherent for a one-machine cluster to do with beta's. Sharing would also mean
@@ -180,7 +196,7 @@ setup time (a two-slot resume is not dearer than a one-slot one) nor the isolati
 
 The plan is the only thing the driver reads to decide where a delivery goes: an entry's key names
 its machine, the machine's record carries the address, and an entry asked for on a machine the plan
-did not place it on is refused rather than dialled. Both folders hand their artifacts over as
+did not place it on is refused rather than dialled. Every folder hands its artifacts over as
 bytes, built here:
 
 ```
@@ -188,7 +204,15 @@ packages.planner-e2e-wired-pair/     packages.planner-e2e-portable-image/
   site/          check/               confined/     # planned for the machine the run boots
   site-changed/  sweep/               foreign/      # planned for aarch64-linux
   plan.json      plan-changed.json    plan.json
+
+packages.planner-e2e-secret-delivery/
+  issuer/  probe/  idle/  plan.json
 ```
+
+A generated value is not an artifact: it is bytes the run holds, and
+`delivery.deliver_value` writes each declared file to the path the plan names on every machine in
+that value's `delivery` list, refusing a member the plan gives no address for. The plan is again
+the only input - `vars_entries` reads the value entries out of it.
 
 `nix copy --to ssh://root@<address> --no-check-sigs <artifact>` is the delivery, run inside the
 cluster's namespace through rookery's `Cluster.run`, and `flakelet activate <name> <path>` over the
@@ -273,6 +297,8 @@ of running by hand.
 | `PLANNER_WIRED_PAIR` | the realised wired-pair artifacts | app and `planner-e2e-env` |
 | `PLANNER_WIRED_PAIR_DEPLOYMENT` | that folder's deployment - the store path in the app, the working tree in the shell | app and `planner-e2e-env` |
 | `PLANNER_PORTABLE_IMAGE` | the two built images | app and `planner-e2e-env` |
+| `PLANNER_SECRET_DELIVERY` | the three realised secret-delivery artifacts | app and `planner-e2e-env` |
+| `PLANNER_SECRET_DELIVERY_DEPLOYMENT` | that folder's deployment - the store path in the app, the working tree in the shell | app and `planner-e2e-env` |
 | `PLANNER_E2E_GUEST_IMAGE` | the qcow2 every machine boots | app and `planner-e2e-env` |
 | `PLANNER_E2E` | the layer's root, on `PYTHONPATH` so a test can `import delivery` | app; the shell puts the working tree there instead |
 | `PLANNER_E2E_STATE` | the run's state root | `runner.py` |
