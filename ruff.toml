@@ -1,7 +1,7 @@
 # This repository owns no python package, so there is no pyproject for ruff to read.
-# src names the two directories a module is imported from, so first-party imports
+# src names the directories a module is imported from, so first-party imports
 # sort the way they resolve at run time.
-src = ["perf", "tests/e2e"]
+src = ["cli", "perf", "tests/e2e"]
 line-length = 100
 # A floor, not the interpreter: pytest-env.nix builds nixpkgs' default python3,
 # which is newer, so UP may only rewrite to syntax 3.13 already accepts.

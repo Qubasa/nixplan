@@ -18,3 +18,32 @@ Main design goals:
 - Build with replacable secret interfaces, uses [NixOS Vars](https://github.com/NixOS/nixpkgs/pull/547171) by default
 - Multiple instances having their own postgresql should be possible.
 - Multiple instance sharing a postgresql should be possible.
+
+## What is where
+
+```
+lib/       the planner: a deployment in, a plan and a diagnostics table out
+image/     a realiser: one plan entry as a systemd portable-service image
+flakelet/  a realiser: one plan entry as a flakelet service artifact
+operator/  a whole deployment built: the plan, a manifest, one artifact per entry
+cli/       the operator's command, `planner`, which builds and applies one
+tests/unit/  nix-unit suites over the library, the realisers and the build
+tests/e2e/   three folders of real machines, and the harness they share
+fixtures/  the worked deployment the unit suites evaluate, with its golden plan
+perf/      two synthetic deployments, a measurement harness and committed budgets
+docs/      the documentation, starting at docs/README.md
+openspec/  the change records this repository was built from
+```
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `nix run .#planner -- --help` | the operator's command: `plan`, `build`, `apply`, `status`, `rollback` |
+| `nix build .#checks.x86_64-linux.planner-tests` | the unit suites |
+| `nix build .#checks.x86_64-linux.planner-perf` | the evaluation-cost gate |
+| `nix build .#checks.x86_64-linux.treefmt` | formatters, linters, type checker and prose |
+| `nix develop` | the one shell, with the interpreter the machine layer runs under |
+
+The machine layer needs real VMs, so it is an app rather than a check:
+`nix run .#planner-e2e` boots the guests and runs all three folders.

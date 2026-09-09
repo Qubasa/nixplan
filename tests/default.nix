@@ -7,6 +7,7 @@
   repoSource,
   changesRoot,
   imageSource,
+  operatorSource,
   flakeletSource,
 }:
 let
@@ -30,6 +31,14 @@ let
     platform = import ./unit/platform.nix { inherit planner support systems; };
     closure = import ./unit/closure.nix { inherit planner support; };
     image = import ./unit/image.nix { inherit planner support imageSource; };
+    operator = import ./unit/operator.nix {
+      inherit
+        planner
+        support
+        operatorSource
+        imageSource
+        ;
+    };
     flakelet = import ./unit/flakelet.nix {
       inherit
         planner

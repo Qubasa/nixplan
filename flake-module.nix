@@ -10,6 +10,7 @@ let
   changesRoot = ./openspec/changes;
   imageSource = ./image;
   flakeletSource = ./flakelet;
+  operatorSource = ./operator;
   suites = import ./tests {
     inherit
       korora
@@ -18,7 +19,7 @@ let
       changesRoot
       ;
     libSource = ./lib;
-    inherit imageSource flakeletSource;
+    inherit imageSource flakeletSource operatorSource;
     perfSource = ./perf;
     repoSource = ./.;
   };
@@ -34,7 +35,12 @@ in
   };
 
   perSystem =
-    { pkgs, system, ... }:
+    {
+      config,
+      pkgs,
+      system,
+      ...
+    }:
     let
       suite = pkgs.writeText "planner-suite.nix" ''
         import ${./tests} {
@@ -44,6 +50,7 @@ in
           libSource = ${./lib};
           imageSource = ${./image};
           flakeletSource = ${./flakelet};
+          operatorSource = ${./operator};
           perfSource = ${./perf};
           repoSource = ${./.};
           changesRoot = ${changesRoot};
@@ -98,26 +105,39 @@ in
 
       pytestEnv = import ./pytest-env.nix pkgs;
 
-      imageBuilder = import ./image {
-        inherit (pkgs) lib;
-        inherit pkgs planner;
-      };
+      # The one function that builds a deployment, handed to every folder as an
+      # argument. A folder resolves no path outside itself, which is what the
+      # end-to-end path scan holds it to.
+      operator = import ./operator;
 
-      flakeletBuilder = import ./flakelet {
-        inherit pkgs planner;
-      };
+      e2eRoot = ./tests/e2e;
 
-      wiredPairArtifacts = import ./tests/e2e/wired-pair/artifacts.nix {
-        inherit pkgs planner flakeletBuilder;
-      };
+      # Discovery rather than registration: a folder holding a deployment is a
+      # package of this flake without a line here, the way the runner already
+      # finds a folder's tests by looking.
+      e2eFolders = builtins.filter (
+        name: builtins.pathExists (e2eRoot + "/${name}/deployment/default.nix")
+      ) (builtins.attrNames (builtins.readDir e2eRoot));
 
-      portableImageArtifacts = import ./tests/e2e/portable-image/artifacts.nix {
-        inherit pkgs planner imageBuilder;
-      };
+      buildsOf =
+        folder:
+        import (e2eRoot + "/${folder}/deployment/default.nix") {
+          inherit pkgs planner operator;
+        };
 
-      secretDeliveryArtifacts = import ./tests/e2e/secret-delivery/artifacts.nix {
-        inherit pkgs planner flakeletBuilder;
-      };
+      # A folder's `default` build is the folder's own package name; any other
+      # build of the same folder is suffixed with its own.
+      e2eDeployments = builtins.listToAttrs (
+        builtins.concatLists (
+          map (
+            folder:
+            pkgs.lib.mapAttrsToList (build: deployment: {
+              name = "planner-e2e-${folder}" + (if build == "default" then "" else "-${build}");
+              value = deployment;
+            }) (buildsOf folder)
+          ) e2eFolders
+        )
+      );
 
       e2eGuest = import ./tests/e2e/guest.nix {
         inherit (pkgs) lib;
@@ -128,29 +148,31 @@ in
 
       # One row per variable a machine-layer run reads off a built artifact. The app
       # exports these paths directly and `planner-e2e-env` prints the same rows out of
-      # `e2eEnvPaths`, so neither can name an artifact the other does not.
+      # `e2eEnvPaths`, so neither can name an artifact the other does not. A
+      # deployment is absent on purpose: the machine layer builds one with the
+      # command, so no link farm is forced before pytest starts.
       e2eArtifactPaths = {
-        PLANNER_WIRED_PAIR = "${wiredPairArtifacts}";
-        PLANNER_PORTABLE_IMAGE = "${portableImageArtifacts}";
-        PLANNER_SECRET_DELIVERY = "${secretDeliveryArtifacts}";
         PLANNER_E2E_GUEST_IMAGE = "${e2eGuest}/nixos.qcow2";
         PLANNER_E2E_SSH_KEY = "${e2eGuest.sshPrivateKey}";
+        PLANNER_CLI = pkgs.lib.getExe config.packages.planner-cli;
+        PLANNER_CLI_SRC = "${config.packages.planner-cli-src}";
       };
 
-      # The deployment of each folder is the one variable that names the working tree
-      # in the shell and the store in the app, so both come out of one attrset rather
-      # than being written twice. `store` is that subtree alone: naming the checkout
-      # root instead would put every file in the runner's closure.
-      e2eDeploymentPaths = {
-        PLANNER_WIRED_PAIR_DEPLOYMENT = {
-          store = ./tests/e2e/wired-pair/deployment;
-          rel = "tests/e2e/wired-pair/deployment";
-        };
-        PLANNER_SECRET_DELIVERY_DEPLOYMENT = {
-          store = ./tests/e2e/secret-delivery/deployment;
-          rel = "tests/e2e/secret-delivery/deployment";
-        };
-      };
+      envNameOf = folder: pkgs.lib.toUpper (builtins.replaceStrings [ "-" ] [ "_" ] folder);
+
+      # The declaration of each folder is the one variable that names the working
+      # tree in the shell and the store in the app, so both come out of one attrset
+      # rather than being written twice. `store` is that subtree alone: naming the
+      # checkout root instead would put every file in the runner's closure.
+      e2eDeploymentPaths = builtins.listToAttrs (
+        map (folder: {
+          name = "PLANNER_${envNameOf folder}_DEPLOYMENT";
+          value = {
+            store = e2eRoot + "/${folder}/deployment";
+            rel = "tests/e2e/${folder}/deployment";
+          };
+        }) e2eFolders
+      );
 
       e2eExports = pkgs.lib.concatStrings (
         pkgs.lib.mapAttrsToList (name: path: "export ${name}=${path}\n") e2eArtifactPaths
@@ -170,6 +192,7 @@ in
         text = ''
           root="$(git rev-parse --show-toplevel)"
           cat "$(nix build --no-link --print-out-paths "$root#planner-e2e-env-paths")"
+          printf 'export PLANNER_E2E_FLAKE=%q\n' "$root"
           ${pkgs.lib.concatStrings (
             pkgs.lib.mapAttrsToList (
               name: paths: "printf 'export ${name}=%q\\n' \"$root/${paths.rel}\"\n"
@@ -184,6 +207,7 @@ in
       e2eRunner = pkgs.writeShellApplication {
         name = "planner-e2e";
         runtimeInputs = [
+          pkgs.git
           pkgs.nix
           pkgs.openssh
         ];
@@ -192,6 +216,11 @@ in
           ${pkgs.lib.concatStrings (
             pkgs.lib.mapAttrsToList (name: paths: "export ${name}=${paths.store}\n") e2eDeploymentPaths
           )}
+          # `planner build` resolves a flake reference, so the checkout is what it
+          # is given. A run from outside one sets nothing and the folders skip.
+          if root="$(git rev-parse --show-toplevel 2> /dev/null)"; then
+            export PLANNER_E2E_FLAKE="$root"
+          fi
           export PLANNER_E2E=${./tests/e2e}
           exec ${pytestEnv}/bin/python3 ${./tests/e2e/runner.py} "$@"
         '';
@@ -237,18 +266,18 @@ in
             nativeBuildInputs = [ pytestEnv ];
           }
           ''
+            export PYTHONPATH=${./cli}
             python3 -m pytest -q -rs --no-header -p no:cacheprovider ${./tests/e2e}/test_harness.py
             touch "$out"
           '';
 
-      packages.planner-perf = perf;
-      packages.planner-perf-results = measurement;
-      packages.planner-e2e-wired-pair = wiredPairArtifacts;
-      packages.planner-e2e-guest = e2eGuest;
-      packages.planner-e2e-portable-image = portableImageArtifacts;
-      packages.planner-e2e-secret-delivery = secretDeliveryArtifacts;
-      packages.planner-e2e-env = e2eEnvScript;
-      packages.planner-e2e-env-paths = e2eEnvPaths;
+      packages = e2eDeployments // {
+        planner-perf = perf;
+        planner-perf-results = measurement;
+        planner-e2e-guest = e2eGuest;
+        planner-e2e-env = e2eEnvScript;
+        planner-e2e-env-paths = e2eEnvPaths;
+      };
 
       # An app rather than a check: a build sandbox has no tun device and no vhost-vsock,
       # and cannot ask the daemon whether a path is valid, which is what a delivery does

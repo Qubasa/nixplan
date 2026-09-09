@@ -53,6 +53,8 @@ let
     "lib" = "the library";
     "image" = "a realiser";
     "flakelet" = "a realiser";
+    "operator" = "the deployment build";
+    "cli" = "the operator's command";
     "tests" = "the tests";
     "pytest.ini" = "the tests";
     "fixtures" = "the fixtures the tests read";
@@ -243,12 +245,52 @@ let
     )
   );
 
+  # Planning a deployment, realising an entry and collecting the result are the
+  # repository's own code, so a folder that names one of them is a folder that has
+  # taken the machinery back.
+  builderNeedles = [
+    "mkPlan"
+    "linkFarm"
+    "imageBuilder"
+    "flakeletBuilder"
+  ];
+
+  builders = sorted (
+    concatLists (
+      map (
+        entry:
+        let
+          text = readFile (e2eRoot + "/${entry.folder}/${entry.rel}");
+        in
+        map (needle: "tests/e2e/${entry.folder}/${entry.rel} names ${needle}") (
+          filter (needle: hasInfix needle text) builderNeedles
+        )
+      ) allFolderFiles
+    )
+  );
+
+  flakeModule = readFile (repoRoot + "/flake-module.nix");
+
+  namedInTheFlake = sorted (
+    map (name: "flake-module.nix names tests/e2e/${name}") (
+      filter (name: hasInfix name flakeModule) e2eNames
+    )
+  );
+
+  undiscoverable = sorted (
+    map (name: "tests/e2e/${name} holds no deployment/default.nix") (
+      filter (name: !(pathExists (e2eRoot + "/${name}/deployment/default.nix"))) e2eNames
+    )
+  );
+
   # openspec is absent on purpose. A record describes the repository as it was, so a
   # path it names is history rather than a claim about today.
   scannedDirectories = [
     "lib"
     "image"
     "flakelet"
+    "operator"
+    "cli"
     "perf"
     "tests"
     "fixtures"
@@ -402,6 +444,22 @@ in
     expected = [ ];
   };
 
+  testAnEndToEndFolderHoldsABuilderOfItsOwn = {
+    expr = builders;
+    expected = [ ];
+  };
+
+  testAnEndToEndFolderIsAddedWithoutEditingTheFlake = {
+    expr = {
+      named = namedInTheFlake;
+      inherit undiscoverable;
+    };
+    expected = {
+      named = [ ];
+      undiscoverable = [ ];
+    };
+  };
+
   testATestWritesAStandInForASystemBinary = {
     expr = standIns;
     expected = [ ];
@@ -434,6 +492,7 @@ in
     expr = {
       present = hasRootDocument;
       unsaid = filter (needle: !(hasInfix needle rootDocument)) [
+        "cli/"
         "docs/"
         "docs/README.md"
         "fixtures/"
@@ -444,7 +503,9 @@ in
         "nix build .#checks.x86_64-linux.planner-tests"
         "nix build .#checks.x86_64-linux.treefmt"
         "nix develop"
+        "nix run .#planner"
         "openspec/"
+        "operator/"
         "perf/"
         "tests/e2e/"
         "tests/unit/"

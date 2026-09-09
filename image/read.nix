@@ -152,6 +152,7 @@ rec {
     profileNames
     systemdDirectives
     backend
+    nameOf
     unitFileName
     timerFileName
     stagingOf

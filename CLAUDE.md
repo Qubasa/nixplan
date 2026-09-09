@@ -27,6 +27,11 @@ without reading the code first.
 - `image/` and `flakelet/` do the opposite and raise. A fact the entry does not record is a
   refusal naming the entry and the field, never a default. Every refusal there is a condition
   `mkPlan` also reports as a row.
+- `operator/read.nix` is on `lib/`'s side and `operator/default.nix` is on the realisers'. The
+  reading is total and every refusal it makes is a row, so a unit suite can assert the decision; the
+  derivations over it raise, and the message of an inapplicable deployment is `planner.render` of
+  the planner's own table. A table carrying warnings and no error builds, because a warning that
+  stopped a build would be an error.
 
 ## Diagnostics
 
@@ -54,6 +59,12 @@ without reading the code first.
   whether it exists however many machines receive it.
 - An image's version digest is deliberately not the entry key. A configuration file's content
   moves the key and never enters the image, so keying the image on it would rebuild equal bytes.
+- An artifact is addressed by the name its plan key projects onto: `:` and `@` become `-`, so
+  `issuer:api@alpha` is `entries/issuer-api-alpha`. The key itself is not a directory name because
+  `@` and `:` are what the key grammar splits on, and a name the caller chooses is the local
+  convention that cannot be generic. The projection is not injective, so two keys sharing one name
+  is `operator-entry-name-collision` rather than a silent overwrite, and `manifest.json` records the
+  mapping so nothing reconstructs a name from a key.
 
 ## Interfaces, composition, reads
 
@@ -114,6 +125,37 @@ without reading the code first.
 - `flakelet/read.nix` restates two rules from flakelet's own `manager.rs`: `validate_name` and
   `validate_units`. `LOCKED_URL_PREFIX` in `tests/e2e/delivery.py` must match the prefix written
   there.
+- Which realiser realises an entry is stated beside the deployment, never inferred: no plan field
+  records it and the same entry can legitimately be both, which `portable-image` and `wired-pair`
+  demonstrate between them. The statement is read by plan key, then by the `<instance>:<service>`
+  prefix, then `default`, and `flakelet` is the default because it needs no further fact. An `image`
+  entry with no `profile` is `operator-image-profile-missing`, never a profile the builder chose.
+
+## The operator's command
+
+- `operator/` is evaluated and `cli/` is run. They are one role and two kinds of thing, so they are
+  two directories that import nothing of each other: merging them would put a python file under a
+  directory the unit layer imports, and an interpreter in the closure of what
+  `tests/unit/operator.nix` evaluates.
+- The command is wired by `cli/flake-module.nix`, imported by `flake.nix` beside `./flake-module.nix`
+  and `./devshells.nix`. The root module is where the suites, the perf harness and the machine layer
+  are registered, and it reads `PLANNER_CLI` and `PLANNER_CLI_SRC` off that module's own attributes
+  rather than constructing either, so a rename cannot leave the app and the environment disagreeing.
+- `cli/` imports nothing under `lib/`, `operator/` or `tests/`. Its inputs are a built directory, a
+  flake reference and a value source, and what a deployment is it learns from `manifest.json`.
+- `apply` orders by `plan.<consumer>.reads.<slot>.entry`, never by `dependsOn`: a consumer's
+  `dependsOn` is `machine:<name>@<hash>`, which is key provenance rather than order. Values are
+  written before any entry is activated, and an entry is copied before it is activated.
+- Two instances wiring each other is a legal deployment whose activation graph has no first element,
+  so the walk breaks the cycle at the lowest key by sort order and prints the edge it ordered
+  against. Refusing would refuse a deployment the library accepts; silence would make a one-off
+  startup failure unexplainable.
+- The value source is a directory of bytes and nothing in this repository fills it. The required set
+  is the declared files of every value entry whose delivery set is non-empty: bytes are needed only
+  for a file that will be written, and the plan carries the bytes of nothing.
+- `manifest.json` addresses an artifact inside the build, and the build is a farm of symlinks, so
+  `cli/manifest.py` resolves each artifact path to its store path. The path an activation names on
+  the machine has to be the path the copy put there.
 
 ## Registration points
 
@@ -123,13 +165,20 @@ silently unobserved.
 - A new unit suite goes in `suites` in `tests/default.nix`. That attrset is the only registration
   point, and its key names feed the coverage cross-walk. `coverage` is passed its own name too;
   that is not a cycle.
-- A new top-level file or directory goes in `classOf` in `tests/unit/layers.nix`.
+- A new top-level file or directory goes in `classOf` in `tests/unit/layers.nix`, and in
+  `scannedDirectories` there if its files should be held to the path scan.
+- A deliverable with its own flake wiring goes in the `imports` of `flake.nix`, the way
+  `cli/flake-module.nix` and `devshells.nix` do. An end-to-end folder is the opposite case: it is
+  discovered from `tests/e2e/*/deployment/default.nix`, and `flake-module.nix` naming one fails
+  `testAnEndToEndFolderIsAddedWithoutEditingTheFlake`.
+- A new directory of python modules goes in `programs.mypy.directories` in `treefmt.nix` and in
+  `src` in `ruff.toml`.
 - A new `spec.md` anywhere goes in `accountable` or `excused` in `tests/unit/coverage.nix`.
 - A new excluded construct goes in `lib/excluded.nix`, gets a test in `tests/unit/exclusions.nix`,
   and moves the row count that suite compares against the fixture README's table.
 - `README.md` must keep naming `docs/`, `docs/README.md`, `lib/`, `image/`, `flakelet/`,
-  `fixtures/`, `perf/`, `openspec/`, `tests/unit/`, `tests/e2e/` and the four documented commands.
-  `tests/unit/layers.nix` asserts each literal.
+  `operator/`, `cli/`, `fixtures/`, `perf/`, `openspec/`, `tests/unit/`, `tests/e2e/` and the five
+  documented commands. `tests/unit/layers.nix` asserts each literal.
 - A `#### Scenario:` heading names its test by construction: `test_<snake_case>` under pytest,
   `test<CamelCase>` under nix-unit. A name present in both layers is a failure, not a bonus.
 - `openspec/**` is exempt from the path scan: a record describes the repository as it was.
@@ -176,9 +225,15 @@ silently unobserved.
   0 for warning-level rules. Every `*.md` outside the excludes is linted, this file included.
 - mypy runs once per directory of top-level modules, because that is what each import expects to
   be beside. `e2e-folders` is a label rather than a path, and its run happens from `tests/e2e` so
-  that `import delivery` resolves the way it does under pytest.
+  that `import delivery` resolves the way it does under pytest; its module list is read from the
+  directory, so a folder is checked by existing. Both `tests/e2e` roots carry `cli` on
+  `extraPythonPaths` because `test_harness.py` and a folder's test import the command's modules,
+  and `pythonRoot` turns it into a path relative to the run's directory rather than writing that
+  path out: written out it would resolve from neither `treefmt.nix` nor the repository root, which
+  `layers.testAFileNamesAPathThatIsNotThere` refuses. A store path is also wrong here - mypy then
+  reads the modules as an installed distribution and demands a `py.typed` marker.
 - `ruff.toml` carries the rules because this repository owns no python package. `src` names the
-  two import roots. The one devshell carries the interpreter `pytest-env.nix` builds, and
+  three import roots. The one devshell carries the interpreter `pytest-env.nix` builds, and
   `tests/e2e/runner.py` refuses a run where it and rookery's own disagree. `target-version` is a
   floor below that interpreter, not a record of it: it bounds what `UP` may rewrite to.
 - `devshells.nix` is one shell and it names no built artifact. A store reference in its hook
@@ -198,9 +253,16 @@ silently unobserved.
   bump is a different python minor version. That is reported as `PYTHON VERSION MISMATCH`, which
   reads like a real pin disagreement and is not one: check the resolved revision before changing
   `pytest-env.nix`.
-- vulture and harper are deliberately not run. Vulture's only finding is `cmd` in the `Namespace`
-  protocol of `tests/e2e/delivery.py`, which is an interface parameter name. Harper flags
-  `realiser`, `flakelet` and `keyset`.
+- `tests/e2e/runner.py` puts `$PLANNER_E2E` and `$PLANNER_CLI_SRC` on the child's `PYTHONPATH`;
+  `tests/e2e/conftest.py` edits `sys.path` for neither. pytest loads no conftest above the
+  directory of the ini file it found, so `nix run .#planner-e2e wired-pair` collects a path with no
+  conftest below it and a `sys.path` edit there reaches nothing. The whole-layer run happened to
+  work, which is why the gap surfaced only when one folder was named.
+- `devshells.nix` puts the checkout's `tests/e2e` and `cli` on `PYTHONPATH`, because in the shell an
+  edit is what a run should read; the app and the `planner-delivery` check name store paths.
+- vulture and harper are deliberately not run. Vulture's only finding is `cmd` in the `Runner`
+  protocol of `cli/remote.py`, which is an interface parameter name. Harper flags `realiser`,
+  `flakelet` and `keyset`.
 - Build the individual check. Never `nix flake check` the whole flake.
 
 ## End-to-end layer
@@ -213,6 +275,18 @@ silently unobserved.
   pass vacuously.
 - TCP sshd is the delivery channel, and systemd's ssh generator derives the vsock control channel
   from it.
+- A folder holds `deployment/` and one `test_*.py`, and no builder. `deployment/default.nix` takes
+  `pkgs`, `planner` and `operator` as arguments and returns one deployment build per name, because
+  `testAReaderOpensAnEndToEndDirectory` fails any path token that leaves the folder: the builder
+  arrives as an argument rather than as an import. A build named `default` is
+  `packages.planner-e2e-<folder>` and any other name is suffixed with its own.
+- A folder's test builds its own deployment with `planner build`, in the pytest process, and
+  applies it with `planner apply` through `Cluster.run`. The split is the one that already existed:
+  a delivery has to run where the cluster's addresses resolve and a build must not, so no
+  evaluation and no build happens inside the cluster's user namespace.
+- `Cluster.run` replaces the environment rather than extending it, so `delivery.command_env` carries
+  the caller's own plus the `NIX_SSHOPTS` a throwaway guest needs. Those options are the guest's and
+  never an operator's, which is why the command extends what it is given instead of deciding it.
 - `additionalSpace = "2048M"` is room for the two delivered artifacts and their closures.
 - Machine addresses are rookery's static MAC-keyed dnsmasq leases, `10.0.0.(10 + i)`. They are not
   free-choice test values.

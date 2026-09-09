@@ -46,6 +46,16 @@ let
       exit "$status"
     '';
   };
+
+  # A source root, not a `PYTHONPATH` entry: mypy reads an importable directory on
+  # `PYTHONPATH` as an installed distribution and then wants a `py.typed` marker,
+  # while `mypy_path` reads it as source. It arrives through a written config
+  # because the flag mypy has for it is `--config-file`, and as a store path
+  # because a relative one is read from the run's directory rather than from here.
+  mypyConfig = pkgs.writeText "mypy.ini" ''
+    [mypy]
+    mypy_path = ${./cli}
+  '';
 in
 {
   projectRootFile = "flake.nix";
@@ -59,26 +69,34 @@ in
   programs.mypy.enable = true;
 
   # One run per directory of top-level modules, because that is what each import
-  # expects beside it: check_test.py imports check, test_harness.py imports delivery.
+  # expects beside it: check_test.py imports check, test_harness.py imports the
+  # command's own modules, a folder's test imports delivery.
   programs.mypy.directories = {
     "perf".options = [ "--strict" ];
 
+    "cli".options = [ "--strict" ];
+
     "tests/e2e" = {
-      options = [ "--strict" ];
+      options = [
+        "--strict"
+        "--config-file=${mypyConfig}"
+      ];
       extraPythonPackages = [ pkgs.python3Packages.pytest ];
     };
 
-    # mypy descends into a subdirectory only when it is a package, and these two are
-    # not. Naming them as roots is what gets them checked at all. The name is a label
-    # rather than a path.
+    # mypy descends into a subdirectory only when it is a package, and an
+    # end-to-end folder is not. Naming them as roots is what gets them checked at
+    # all, and the list is read rather than written: a folder is added by existing.
+    # The name is a label rather than a path.
     "e2e-folders" = {
       directory = "tests/e2e";
-      modules = [
-        "wired-pair"
-        "portable-image"
-        "secret-delivery"
+      modules = builtins.attrNames (
+        lib.filterAttrs (_: kind: kind == "directory") (builtins.readDir ./tests/e2e)
+      );
+      options = [
+        "--strict"
+        "--config-file=${mypyConfig}"
       ];
-      options = [ "--strict" ];
       extraPythonPackages = [ pkgs.python3Packages.pytest ];
     };
   };

@@ -10,10 +10,10 @@ None of it is a `check`. A build sandbox has no `/dev/kvm`, no `/dev/net/tun` an
 layer is one app:
 
 ```bash
-nix run .#planner-e2e                  # 42 passed in 133.99s - three folders, six machines
-nix run .#planner-e2e wired-pair       # 21 passed in 60.87s - two machines
-nix run .#planner-e2e portable-image   # 8 passed in 18.24s - one machine
-nix run .#planner-e2e secret-delivery  # 7 passed in 80.62s - three machines
+nix run .#planner-e2e                  # three folders, six machines
+nix run .#planner-e2e wired-pair       # two machines
+nix run .#planner-e2e portable-image   # one machine booted, two images built
+nix run .#planner-e2e secret-delivery  # three machines
 nix run .#planner-e2e -- nosuchfolder  # refused, without building or booting anything
 ```
 
@@ -76,25 +76,54 @@ rookery takes its own. The one dev shell that carries that environment lives in
 ## The three folders
 
 Each directory under `../tests/e2e/` is one end-to-end test and its own fixture: exactly one
-`test_*.py`, an `artifacts.nix` that realises the deployment it delivers, and a `deployment/` of
-`machines.nix`, `instances.nix`, `interfaces/` and `modules/`. The runner discovers them by looking
-for `test_*.py` under each directory, so a third folder needs no registration anywhere.
+`test_*.py` and a `deployment/` of `default.nix`, `machines.nix`, `instances.nix`, `interfaces/` and
+`modules/`. A folder carries no builder of its own. Its `deployment/default.nix` takes `pkgs`,
+`planner` and `operator`, applies its own packages to its own modules, states how its entries are
+realised, and returns one deployment build per name:
 
-`../tests/e2e/delivery.py` is the shared driver every folder imports, `../tests/e2e/guest.nix` is
-the guest both boot, and `../tests/e2e/test_harness.py` asserts the driver's pure half - which
-machine a key names, which address a delivery dials, which end-to-end tests exist - without a
-machine, as the `planner-delivery` check.
+```nix
+{ pkgs, planner, operator }:
+{
+  default = operator.mkDeployment { /* args, and realise when the default is wrong */ };
+}
+```
 
-### `wired-pair` - 27 tests, two machines
+A build named `default` is exposed as `packages.planner-e2e-<folder>`, and any other name as
+`packages.planner-e2e-<folder>-<name>`, which is where `planner-e2e-wired-pair-changed` comes from.
+A folder owns its fixture and the statement of how its entries are realised; the planning, the
+realising and the collecting are the repository's and arrive as `operator`, documented in
+[`operator.md`](operator.md).
+
+Both discoveries happen by looking. The runner finds a folder's tests as `test_*.py` under each
+directory, and `../flake-module.nix` finds a folder's deployment at
+`tests/e2e/<folder>/deployment/default.nix`, so a fourth folder needs no registration anywhere and
+the flake names no folder. `../tests/unit/layers.nix` holds both halves: no file of a folder names
+`mkPlan`, a link farm or either realiser's builder, and every folder carrying a deployment is
+reachable as a package.
+
+`../tests/e2e/delivery.py` is what only a test needs: the plan readers its assertions use, the ssh
+options a throwaway guest has to be reached with, the run's state root, and the cluster stage. It
+carries no delivery step. Copying an artifact, writing a generated value, activating an entry,
+asking a machine what it holds and rolling one entry back are steps of the command, and
+`../tests/e2e/test_harness.py` asserts that pure half without a machine, as the `planner-delivery`
+check. `../tests/e2e/guest.nix` is the guest every machine boots.
+
+What the command itself is held to lives in the
+[specification of applying a deployment](../openspec/changes/apply-deployments-with-an-operator-command/specs/operator/apply-command/spec.md),
+and the division is the same one: a scenario a recorder can observe is asserted in
+`../tests/e2e/test_harness.py`, and a scenario that needs a machine to answer is asserted in a
+folder.
+
+### `wired-pair` - two machines
 
 Two machines, one plan, and the wire between them. The phases are ordered and the file order is the
 order, so each test asserts the state it depends on rather than assuming it: the participants are
-real machines running nothing yet; both entries are delivered by `nix copy` and activated through
-the endpoint; the receiving machine evaluated nothing and can reach no store but its own; the wire
-is traffic to the address the plan recorded, and cutting the far end is visible; an unchanged
-redelivery is a no-op, a changed one is generation 2 and a rollback returns generation 1; a
-scheduled entry is registered with its timer enabled and is not fired by deploying it; and both
-machines reboot with the entries coming back without a second delivery.
+real machines running nothing yet; both entries are applied by the command, copied with `nix copy`
+and activated through the endpoint; the receiving machine evaluated nothing and can reach no store
+but its own; the wire is traffic to the address the plan recorded, and cutting the far end is
+visible; an unchanged redelivery is a no-op, a changed one is generation 2 and a rollback returns
+generation 1; a scheduled entry is registered with its timer enabled and is not fired by deploying
+it; and both machines reboot with the entries coming back without a second delivery.
 
 One test per scenario of
 [`delivery/real-cluster/spec.md`](../openspec/changes/prove-plan-on-real-machines/specs/delivery/real-cluster/spec.md),
@@ -102,7 +131,7 @@ named after it, plus one per scenario of
 [`tooling/machine-snapshots/spec.md`](../openspec/changes/resume-e2e-machines-from-snapshots/specs/tooling/machine-snapshots/spec.md),
 which is about how the machines were obtained rather than what the plan claims.
 
-### `secret-delivery` - 7 tests, three machines
+### `secret-delivery` - three machines
 
 Three machines and one generated secret, and the subject is the set. `issuer` on `alpha` generates
 a session token; `probe` on `beta` declares a read of it; `gamma` runs a service that declares no
@@ -116,7 +145,7 @@ reads from its environment, and no machine holds a file of it.
 One test per scenario of
 [`delivery/real-cluster/spec.md`](../openspec/changes/deliver-secrets-across-machines/specs/delivery/real-cluster/spec.md).
 
-### `portable-image` - 8 tests, one machine
+### `portable-image` - one machine, two images
 
 One machine and two built images, one planned for it and one planned for a machine of another
 architecture. What the machine does with them is the subject: the image is attached by the
@@ -192,34 +221,53 @@ folders would then share one live cluster, which is exactly what `test_a_cut_car
 and the attach tests deny. Two cuts cost 11s once and 2 GiB each; sharing would save neither the
 setup time (a two-slot resume is not dearer than a one-slot one) nor the isolation.
 
-## What a delivery is
+## Building here and applying there
 
-The plan is the only thing the driver reads to decide where a delivery goes: an entry's key names
-its machine, the machine's record carries the address, and an entry asked for on a machine the plan
-did not place it on is refused rather than dialled. Every folder hands its artifacts over as
-bytes, built here:
+A run drives the operator's command, and the two halves of it run in two places
+([design D8](../openspec/changes/apply-deployments-with-an-operator-command/design.md)):
+
+- `planner build <flake reference>` runs in the pytest process, with `subprocess.run`, before a
+  machine is dialled. A build is `nix build` and a read of two files, and it needs no cluster. The
+  reference is `$PLANNER_E2E_FLAKE#planner-e2e-<folder>`, so what a folder applies is what
+  `nix build` of that attribute produces.
+- `planner apply`, `planner status` and `planner rollback` run through rookery's `Cluster.run`,
+  because the machines' addresses exist only in the cluster's network namespace.
+
+No evaluation and no build therefore happens inside the cluster's user namespace, and a folder whose
+deployment fails to build fails as a test error naming the build rather than as a missing artifact.
+A built deployment is the tree [`operator.md`](operator.md) describes:
 
 ```
-packages.planner-e2e-wired-pair/     packages.planner-e2e-portable-image/
-  site/          check/               confined/     # planned for the machine the run boots
-  site-changed/  sweep/               foreign/      # planned for aarch64-linux
-  plan.json      plan-changed.json    plan.json
-
-packages.planner-e2e-secret-delivery/
-  issuer/  probe/  idle/  plan.json
+/nix/store/...-planner-deployment/
+  plan.json  manifest.json  diagnostics.json  diagnostics.txt
+  entries/site-server-alpha  entries/check-client-beta  entries/sweep-job-alpha
 ```
 
-A generated value is not an artifact: it is bytes the run holds, and
-`delivery.deliver_value` writes each declared file to the path the plan names on every machine in
-that value's `delivery` list, refusing a member the plan gives no address for. The plan is again
-the only input - `vars_entries` reads the value entries out of it.
+`Cluster.run` replaces the environment rather than extending it, so `delivery.command_env` carries
+the caller's own: the command shells out to `nix copy`, which needs its `PATH`, its `HOME` and its
+daemon socket. It adds one variable, `NIX_SSHOPTS`.
 
-`nix copy --to ssh://root@<address> --no-check-sigs <artifact>` is the delivery, run inside the
-cluster's namespace through rookery's `Cluster.run`, and `flakelet activate <name> <path>` over the
-vsock control channel is the activation. `NIX_SSHOPTS` carries `-F /dev/null`, which is load-bearing
-rather than tidy: inside rookery's single-uid user namespace a real-root-owned `ssh_config` appears
-owned by `nobody` and ssh refuses to read it at all, so the copy fails with
-`Bad owner or permissions`.
+Those ssh options are the guest's, and the harness is what supplies them
+(`delivery.guest_ssh_options`). `-F /dev/null` is load-bearing rather than tidy: inside rookery's
+single-uid user namespace a real-root-owned `ssh_config` appears owned by `nobody`, and ssh then
+refuses to read it at all and fails to connect with `Bad owner or permissions`. The guest is
+generated per run, so no host key was accepted beforehand and no known-hosts file, global or
+per-user, exists to have written one to. The command extends what it inherits and adds nothing but
+`-i` for `--ssh-key`, which is why a run passes no `--ssh-key`: the key is already in the options.
+
+The plan stays the only answer about where a step goes: an entry's key names its machine, the
+machine's record carries the address, and an entry asked for on a machine the plan did not place it
+on is refused rather than dialled. `../tests/e2e/delivery.py` keeps those readers because the
+assertions read the plan too, and a test that reads a plan the way the tool does is a test that can
+disagree with the tool. What a folder delivers, it takes from `manifest.json`: the artifact the
+build produced for that plan key, copied to the address the plan recorded and activated there
+through the endpoint, both over the guest's TCP sshd.
+
+A generated value is not an artifact. Its bytes are the operator's, and a folder that needs one
+writes it into a value source directory under the run's state root and applies with
+`planner apply --values <dir>`. The command checks that source against the plan before it dials,
+writes each declared file at mode 0400 outside the store, and writes it only to the machines the
+value's `delivery` set names.
 
 ## The guest image
 
@@ -233,7 +281,7 @@ Its `nixos.qcow2` is the disk every machine boots, and is what the app and `plan
 `passthru`, because `make-disk-image` builds inside a VM whose result carries none: the qcow2
 references nothing, while the system inside it references everything.
 
-One image serves both folders, and it carries no artifact of any plan and no declared flakelet
+One image serves every folder, and it carries no artifact of any plan and no declared flakelet
 service: the endpoint is enabled with an empty service set, so everything a machine runs arrived by
 delivery. It does carry the run's credential, and that is deliberate. A snapshot cut is RAM plus
 device state, so a resumable cluster can mount no virtiofs share to be handed a key over, and a
@@ -248,7 +296,7 @@ Because rookery is resolved at run time, `base-image-configuration.nix` is not a
 evaluation and this configuration is ours, and every invariant a rookery guest has to hold is an
 `assertion` in `../tests/e2e/guest.nix` whose message names what depends on it. A trim that drops
 one fails `nix build` instead of producing a guest that boots and is never reachable. The
-portable-service manager the second folder needs is one of them, in the same form:
+portable-service manager `portable-image` needs is one of them, in the same form:
 
 > `tests/e2e/portable-image/` attaches a planner-built image by running the artifact's own
 > `bin/attach` on this guest, and that script calls `portablectl`, which talks to
@@ -266,8 +314,8 @@ what keeps the guest snapshottable.
 
 ## Running pytest by hand
 
-`nix develop` is one shell, and the machine layer's environment is not in it at entry: every
-variable in the table below names a built artifact, and a store reference in the hook would make
+`nix develop` is one shell, and the machine layer's environment is not in it at entry: most
+variables in the table below name a built artifact, and a store reference in the hook would make
 entering the checkout build the guest image. `planner-e2e-env` prints those exports when it is
 called, followed by the runner's own `--print-env`, so a manual `pytest` runs against the same
 artifacts and the same rookery `nix run .#planner-e2e` would have used:
@@ -276,7 +324,7 @@ artifacts and the same rookery `nix run .#planner-e2e` would have used:
 nix develop --command bash -c 'eval "$(planner-e2e-env)"; python3 --version'
 # Python 3.14.7 - this repository's; the runner refuses if rookery's minor differs
 nix develop --command bash -c 'eval "$(planner-e2e-env)"; pytest tests/e2e/portable-image/test_portable_image.py -k confinement'
-# 1 passed, 7 deselected in 14.82s - the machine was resumed, not booted
+# 1 passed - the machine was resumed, not booted
 ```
 
 `nix develop` consumes `-k` as its own `--keep-going`, which is why the selection sits inside
@@ -288,26 +336,33 @@ minor version, so the runner compares the two and refuses with both named when t
 rookery nixpkgs bump is what moves them. `planner-e2e-env` prints that refusal, exports the
 artifacts anyway, and the suites then skip themselves naming rookery.
 
-Every variable it exports names a built store path, except the two an edit has to be able to
-change: the deployment and the harness itself come from the working tree, because that is the point
-of running by hand.
+Every variable it exports names a built store path, except the ones an edit has to be able to
+change: each folder's deployment, the harness itself and the checkout a build resolves against come
+from the working tree, because that is the point of running by hand.
 
 | Variable | What it names | Set by |
 | --- | --- | --- |
-| `PLANNER_WIRED_PAIR` | the realised wired-pair artifacts | app and `planner-e2e-env` |
+| `PLANNER_CLI` | the operator's command, as an executable | app and `planner-e2e-env` |
+| `PLANNER_CLI_SRC` | the command's source root, put on `PYTHONPATH` by `../tests/e2e/runner.py` so a test reads a built deployment the way the command reads it | app and `planner-e2e-env` |
+| `PLANNER_E2E_FLAKE` | the checkout, the base of the flake reference a folder builds | app and `planner-e2e-env` |
 | `PLANNER_WIRED_PAIR_DEPLOYMENT` | that folder's deployment - the store path in the app, the working tree in the shell | app and `planner-e2e-env` |
-| `PLANNER_PORTABLE_IMAGE` | the two built images | app and `planner-e2e-env` |
-| `PLANNER_SECRET_DELIVERY` | the three realised secret-delivery artifacts | app and `planner-e2e-env` |
-| `PLANNER_SECRET_DELIVERY_DEPLOYMENT` | that folder's deployment - the store path in the app, the working tree in the shell | app and `planner-e2e-env` |
+| `PLANNER_PORTABLE_IMAGE_DEPLOYMENT` | the same, for that folder | app and `planner-e2e-env` |
+| `PLANNER_SECRET_DELIVERY_DEPLOYMENT` | the same, for that folder | app and `planner-e2e-env` |
 | `PLANNER_E2E_GUEST_IMAGE` | the qcow2 every machine boots | app and `planner-e2e-env` |
 | `PLANNER_E2E` | the layer's root, on `PYTHONPATH` so a test can `import delivery` | app; the shell puts the working tree there instead |
 | `PLANNER_E2E_STATE` | the run's state root | `runner.py` |
 | `PLANNER_E2E_SSH_KEY` | the store file holding the key the image authorizes | app and `planner-e2e-env` |
 
-The driver and the deployment being the working tree is the point of running by hand: an edit to
-either is what runs. A checkout where `$ROOKERY_FLAKE` cannot be fetched still opens its shell, and
-`planner-e2e-env` says so rather than failing. A missing device prints the banner there too: the
-environment is still correct, and the boot is what would fail.
+One deployment row exists per folder, and the rows are written from the same discovery the packages
+are, so a fourth folder gains its variable by existing. No variable names a built
+deployment: the machine layer builds one with the command, which keeps three link farms out of the
+app's closure and lets a folder's build failure be a test error. A folder skips itself when a
+variable it needs names nothing, and `-rs` in `../pytest.ini` is what prints the reason.
+
+The harness and the deployments being the working tree is the point of running by hand: an edit to
+any of them is what runs. A checkout where `$ROOKERY_FLAKE` cannot be fetched still opens its
+shell, and `planner-e2e-env` says so rather than failing. A missing device prints the banner there
+too: the environment is still correct, and the boot is what would fail.
 
 ## When a run fails
 

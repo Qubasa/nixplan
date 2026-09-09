@@ -136,6 +136,10 @@ let
     "deliver-secrets-across-machines/specs/realiser/flakelet-artifact/spec.md"
     "deliver-secrets-across-machines/specs/realiser/portable-service-image/spec.md"
     "deliver-secrets-across-machines/specs/delivery/real-cluster/spec.md"
+    "apply-deployments-with-an-operator-command/specs/operator/deployment-build/spec.md"
+    "apply-deployments-with-an-operator-command/specs/operator/apply-command/spec.md"
+    "apply-deployments-with-an-operator-command/specs/delivery/real-cluster/spec.md"
+    "apply-deployments-with-an-operator-command/specs/tooling/test-layers/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -151,6 +155,16 @@ let
       "an unimplemented change: no task of declare-service-state has been done, so nothing in this package claims to satisfy it yet";
     "declare-service-state/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of declare-service-state has been done, so nothing in this package claims to satisfy it yet";
+    "generate-values-with-nixos-secrets/specs/delivery/generated-values/spec.md" =
+      "an unimplemented change: no task of generate-values-with-nixos-secrets has been done, so nothing in this package claims to satisfy it yet";
+    "generate-values-with-nixos-secrets/specs/delivery/real-cluster/spec.md" =
+      "an unimplemented change: no task of generate-values-with-nixos-secrets has been done, so nothing in this package claims to satisfy it yet";
+    "generate-values-with-nixos-secrets/specs/planner/plan-artifact/spec.md" =
+      "an unimplemented change: no task of generate-values-with-nixos-secrets has been done, so nothing in this package claims to satisfy it yet";
+    "generate-values-with-nixos-secrets/specs/planner/secret-delivery/spec.md" =
+      "an unimplemented change: no task of generate-values-with-nixos-secrets has been done, so nothing in this package claims to satisfy it yet";
+    "generate-values-with-nixos-secrets/specs/realiser/secrets-configuration/spec.md" =
+      "an unimplemented change: no task of generate-values-with-nixos-secrets has been done, so nothing in this package claims to satisfy it yet";
   };
 
   isSpecFile = path: match ".*/spec\\.md" path != null;

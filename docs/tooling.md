@@ -36,7 +36,9 @@ those two directories and nothing else beside `default.nix` and `report.nix`,
 the evaluating layer is Nix and only Nix, each end-to-end directory holds
 exactly one `test_*.py` with its fixture inside it, no directory reaches into a
 sibling by path or by name, a fixture two of them need lives at the layer root,
-nothing names a directory that has been deleted, and no test writes an
+nothing names a directory that has been deleted, no end-to-end folder carries a
+builder of its own, every folder carrying a deployment is reachable as a package
+while the flake names no folder, and no test writes an
 executable standing in for `portablectl`, `systemctl`, `nix-store` or `ssh`. One
 behaviour asserted in both layers is a failure too, reported with both files, by
 `tests/unit/coverage.nix`.
@@ -44,11 +46,11 @@ behaviour asserted in both layers is a failure too, reported with both files, by
 ## Run the evaluating layer
 
 ```bash
-nix build .#checks.x86_64-linux.planner-tests -L      # 237 tests through nix-unit
+nix build .#checks.x86_64-linux.planner-tests -L      # every nix-unit suite
 ```
 
-The last line is the count: `🎉 263/263 successful`. Take the number from there
-rather than from this page.
+The last line is the count. Take the number from there rather than from this
+page.
 
 Faster, while iterating - the same suites evaluated directly, with no derivation
 in the way:
@@ -80,8 +82,9 @@ The suites, and how many tests each holds:
 | `closure` | 21 | what a unit may name and what it must declare |
 | `image` | 27 | the portable-service-image realiser's reading of an entry |
 | `flakelet` | 14 | the flakelet realiser's reading: enablement, identity, the two name refusals |
+| `operator` | 11 | the deployment build's reading: the artifact name, `manifest.json`, the realiser statement, its four refusals |
 | `perf` | 6 | the synthetic fleet is deterministic and realises nothing |
-| `layers` | 12 | the shape of the test tree itself |
+| `layers` | 14 | the shape of the test tree itself |
 | `coverage` | 8 | every specification heading is a test, an omission or an alias |
 
 That column is a value, not a tally kept by hand:
@@ -90,6 +93,14 @@ That column is a value, not a tally kept by hand:
 nix eval --json '.#planner.suites' \
   --apply 'builtins.mapAttrs (_: s: builtins.length (builtins.attrNames s))'
 ```
+
+Seventeen suites, counted as the keys of `suites` in `tests/default.nix`, and
+276 tests, counted as the test attributes of the files under `tests/unit/`. That
+attrset is the only registration point: a suite file nothing there imports is a
+file nothing runs, and the key names are what the coverage cross-walk reads. A
+suite that asserts a directory's reading takes it as an argument threaded from
+`flake-module.nix` - `operator` takes `operatorSource` and `imageSource` the way
+the two realiser suites take theirs - because a suite may name no built output.
 
 `support.nix` and `worked.nix` sit in the same directory and are not suites:
 they are the helpers and the worked deployment the suites are written against.
@@ -100,20 +111,22 @@ Two machines and the network between them are devices a build sandbox does not
 have, so this layer is an app rather than a check:
 
 ```bash
-ROOKERY_FLAKE=/path/to/rookery nix run .#planner-e2e                 # three folders, 42 tests
+ROOKERY_FLAKE=/path/to/rookery nix run .#planner-e2e                 # three folders
 ROOKERY_FLAKE=/path/to/rookery nix run .#planner-e2e portable-image  # one folder
 ```
 
-See [cluster.md](cluster.md) for the host it needs, the two folders, what a run
+See [cluster.md](cluster.md) for the host it needs, the three folders, what a run
 observes and how to drive `pytest` by hand against the working tree.
 
-The harness's own pure half - which machine a key names, which address a
-delivery dials, what the copy runs in - has no machine in it and is a check like
-any other: `nix build .#checks.x86_64-linux.planner-delivery -L`, 8 tests over
-`tests/e2e/test_harness.py`. `nix develop` carries the same `pytest`
-and puts that directory on `PYTHONPATH`, so
-`pytest -q tests/e2e/test_harness.py` runs against the working tree
-and prints `8 passed`.
+The pure half of that layer needs no machine and is a check like any other:
+`nix build .#checks.x86_64-linux.planner-delivery -L`, 17 tests over
+`tests/e2e/test_harness.py`. Most of them are the command's rather than the
+harness's now - the order `apply` walks, the refusals it makes before it dials -
+because the harness hands the command a recorder in place of a process table and
+reads the argv it produced. The check exports `PYTHONPATH` naming `cli/`, since
+that is where those modules live. `nix develop` carries the same `pytest`, so
+`PYTHONPATH=cli pytest -q tests/e2e/test_harness.py` runs the same 17 against
+the working tree.
 
 ## Mapping a specification scenario to a test
 
@@ -146,7 +159,7 @@ tool it tests rather than in either layer - a budget checker is not the planner
 package's, so calling them omissions would be a false sentence.
 
 The same suite classifies every `spec.md` in the repository: `accountable` lists
-the thirty this package's tests answer for, `excused` maps each of the others
+the thirty-four this package's tests answer for, `excused` maps each of the others
 to the reason they are not this package's - an excluded construct, a
 specification a later change's delta removed, a change nothing here implements
 yet. A new specification is a failure naming the file rather than a silently
@@ -267,32 +280,66 @@ nix fmt                                                  # the same set, applied
 
 `treefmt.nix` runs `ruff format`, `ruff check` and `mypy --strict` over the
 Python here beside the Nix formatters, so an edit is told about a lint by
-`nix fmt` rather than by a build. `ruff.toml` holds the rules; mypy runs once
-per directory of top-level modules, because that is what each `import` expects
-to be beside. Note that `nix fmt` also runs prose linters over the
+`nix fmt` rather than by a build. `ruff.toml` holds the rules, and its `src`
+names the three roots a first-party module is imported from: `cli`, `perf` and
+`tests/e2e`. mypy runs once per directory of top-level modules, because that is
+what each `import` expects to be beside:
+
+| mypy root | Holds | Also sees |
+| --- | --- | --- |
+| `perf` | the budget checker and its own tests | nothing else |
+| `cli` | the operator's command | nothing else |
+| `tests/e2e` | the harness and `test_harness.py` | `cli`, and pytest |
+| `e2e-folders` | each folder under `tests/e2e/`, as a module list | `cli`, and pytest |
+
+The last row is a label rather than a path: mypy descends into a subdirectory
+only when it is a package, and an end-to-end folder is not one, so naming the
+folders as modules of the `tests/e2e` directory is what gets them checked at
+all. That list is read rather than written: `builtins.readDir` over `tests/e2e`
+answers it, and a folder is therefore checked by existing.
+
+Note that `nix fmt` also runs prose linters over the
 repository's markdown and currently fails on files this library does not own.
+
+The command carries its own flake module, `cli/flake-module.nix`, imported by
+`flake.nix` beside `flake-module.nix` and `devshells.nix`. The root module is
+where the suites, the performance harness and the end-to-end layer are
+registered, and a package an operator installs does not belong in that file:
+deleting the command is deleting one directory and one import line. The root
+module reads `PLANNER_CLI` and `PLANNER_CLI_SRC` off the two attributes that
+module publishes rather than constructing either, so a rename cannot leave the
+app and the machine layer's environment disagreeing.
 
 Everything the flake exposes, so a reader can tell what runs where:
 
 | `nix build .#checks.x86_64-linux.<name>` | Needs | Subject |
 | --- | --- | --- |
-| `planner-tests` | nothing | the fifteen nix-unit suites, evaluated |
-| `planner-delivery` | nothing | the end-to-end harness's pure half: addressing, refusal, what a copy runs in |
+| `planner-tests` | nothing | the seventeen nix-unit suites, evaluated |
+| `planner-delivery` | nothing | the pure half of the machine layer: the order `apply` walks, the refusals it makes before it dials, addressing |
 | `planner-perf` | nothing | the counter budgets and the growth bound |
 | `planner-perf-checker` | nothing | the budget checker's own tests |
 | `treefmt` | nothing | formatting and linting, repository-wide: nixfmt, deadnix, shellcheck, yamlfmt, vale, `ruff`, `mypy --strict` |
 
 | `nix run .#<name>` | Needs | Subject |
 | --- | --- | --- |
+| `planner` | `nix`, and ssh reach to the machines for `apply` | the operator's command: build a deployment and put it on the machines it names - [operator.md](operator.md) |
 | `planner-e2e` | `/dev/kvm`, `/dev/net/tun`, `/dev/vhost-vsock`, `$ROOKERY_FLAKE` | real machines, a delivery between them, and the wire the planner resolved - [cluster.md](cluster.md) |
 | `planner-perf` | nothing | the same measurement and check, on your machine rather than in a sandbox |
 
 | `nix build .#packages.x86_64-linux.<name>` | Subject |
 | --- | --- |
-| `planner-e2e-wired-pair` | the flakelet artifacts one folder's machines are handed |
-| `planner-e2e-portable-image` | the images the other folder's machine is handed |
-| `planner-e2e-guest` | the guest image both boot |
+| `planner-cli` | the command itself, as `result/bin/planner` |
+| `planner-cli-src` | its source root, which `test_harness.py` imports the pure half from |
+| `planner-e2e-wired-pair` | one folder's deployment, built: the plan, `manifest.json`, the diagnostics and one artifact per placed entry |
+| `planner-e2e-wired-pair-changed` | the second build of that same folder, which differs in the file it serves |
+| `planner-e2e-portable-image` | that folder's deployment: two images, one of them for a machine this host is not |
+| `planner-e2e-secret-delivery` | that folder's deployment: three entries and two generated values |
+| `planner-e2e-guest` | the guest image every machine boots |
 | `planner-e2e-env` | the script `nix develop` carries: the exports a manual `pytest` run needs |
 | `planner-e2e-env-paths` | those exports as a file, built when the script is called |
 | `planner-perf` | the ad-hoc measurement script |
 | `planner-perf-results` | the raw measurements the budgets are recorded from |
+
+The `planner-e2e-<folder>` rows are one per folder and build rather than a list
+written here: `flake-module.nix` reads `tests/e2e/*/deployment/default.nix`, so a
+fourth folder becomes a package by existing.

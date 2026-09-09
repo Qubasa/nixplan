@@ -1,0 +1,401 @@
+# Building a deployment, and putting it on machines
+
+The library answers what a deployment is: `lib/` turns a declaration into a plan and a diagnostics
+table, and realises nothing. The two realisers answer what one entry of that plan is on disk:
+`image/` builds a portable-service image, `flakelet/` builds a service artifact the endpoint
+registers. Neither builds a deployment, and neither copies anything anywhere.
+
+Two directories close that distance, and this page is both of them:
+
+- `operator/` builds a whole deployment. One function over a declaration and a statement of how each
+  entry is realised, returning the plan, the interface a tool reads, and one artifact per placed
+  entry.
+- `cli/` is `planner`, the command an operator runs. It builds a deployment, writes the bytes of
+  each generated value, copies each artifact to the machine the plan placed it on, activates it
+  there, reports what each machine holds, and returns one entry to its previous generation.
+
+## What a deployment build is
+
+`operator/default.nix` exports one function:
+
+```nix
+operator.mkDeployment {
+  inherit pkgs planner;
+
+  args = {
+    # exactly the argument mkPlan takes: instances, machines, and the
+    # optional interfaces, sources, varsState and storeDir beside them
+  };
+
+  realise = {
+    default.realiser = "flakelet";
+    "watch:file" = {
+      realiser = "image";
+      profile = "strict";
+    };
+  };
+}
+```
+
+| Argument | What it is |
+| --- | --- |
+| `pkgs` | the package set the artifacts are built with |
+| `planner` | the library value, `import "${nixplan}/lib" { inherit korora systems; }` |
+| `args` | the deployment, exactly as [`README.md`](README.md#mkplan) documents it for `mkPlan` |
+| `realise` | how each entry is realised, optional, `{ default.realiser = "flakelet"; }` by default |
+
+The result is a link farm:
+
+```
+/nix/store/gvxcr0z2ms4ayqrlpi3602fb54mcq0kj-planner-deployment/
+  plan.json                     the plan artifact
+  manifest.json                 the interface below
+  diagnostics.json              the rows
+  diagnostics.txt               the same rows, rendered
+  entries/idle-job-gamma        -> /nix/store/xq3...-flakelet-idle-job
+  entries/issuer-api-alpha      -> /nix/store/xym...-flakelet-issuer-api
+  entries/probe-client-beta     -> /nix/store/zsh...-flakelet-probe-client
+```
+
+A Nix caller reads the same four answers off `passthru` without a build: `plan`, `manifest`,
+`diagnostics` and `entries`, the last being the derivation of each placed entry keyed by plan key.
+
+Something has to supply `pkgs`, `planner` and `operator` itself. The three end-to-end folders here
+are the worked examples, and each is a function of exactly those three. Shortened, with the folder's
+own `interfaces/default.nix`, `instances.nix` and `machines.nix` imported beside it as `interfaces`,
+`deployment` and `registry`:
+
+```nix
+{
+  pkgs,
+  planner,
+  operator,
+}:
+{
+  default = operator.mkDeployment {
+    inherit pkgs planner;
+
+    args = {
+      inherit (deployment) instances;
+      inherit (registry) machines;
+
+      interfaces = {
+        "interfaces/default.nix" = interfaces;
+      };
+    };
+  };
+}
+```
+
+That file is `tests/e2e/secret-delivery/deployment/default.nix`. `flake-module.nix` imports the
+`operator/` directory, hands each folder `pkgs`, `planner` and `operator`, and exposes the result as
+a package, so the complete file builds:
+
+```bash
+nix build .#planner-e2e-secret-delivery --no-link --print-out-paths
+nix build .#planner-e2e-wired-pair          # one folder, two builds of one source
+nix build .#planner-e2e-wired-pair-changed  # the second of them
+```
+
+## The artifact name a plan key projects onto
+
+A plan key is `<instance>:<service>@<machine>`. The artifact built for it is addressed by that key
+with `:` and `@` replaced by `-`, under `entries/`:
+
+```
+issuer:api@alpha   ->  entries/issuer-api-alpha
+watch:file@alpha   ->  entries/watch-file-alpha
+```
+
+The key is not the directory name, and the caller does not choose the name either
+([design D3](../openspec/changes/apply-deployments-with-an-operator-command/design.md)):
+
+| Approach | Why not |
+| --- | --- |
+| the key as the directory name | `@` and `:` are the two characters the key grammar splits on, so every consumer of the build would quote them |
+| a name the caller chooses | that is the local convention the three folders each had, and a local convention cannot be generic |
+| a projection plus a recorded mapping | one rule, and `manifest.json` carries the mapping as data |
+
+The tool never reconstructs a name from a key. It reads the mapping, which is why the projection is
+allowed to be the plain rule above. That rule is not injective: `a:b@c` and `a-b@c` both project
+onto `a-b-c`, and a member name may carry a hyphen of its own. Two keys projecting onto one name is
+therefore `operator-entry-name-collision`, an error row naming both keys, rather than one directory
+silently overwriting the other.
+
+## What `manifest.json` states
+
+`manifest.json` is the whole interface between the evaluating side and a tool. A consumer applies a
+build by reading `plan.json` and `manifest.json`, and evaluates no Nix.
+
+```json
+{
+  "version": 1,
+  "storeDir": "/nix/store",
+  "entries": {
+    "issuer:api@alpha": {
+      "path": "entries/issuer-api-alpha",
+      "realiser": "flakelet",
+      "profile": null,
+      "machine": "alpha",
+      "address": "10.0.0.10",
+      "units": [ "issuer-api-serve.service" ],
+      "key": "sha256-<sixteen hex digits>"
+    }
+  },
+  "values": {
+    "issuer:vars/session": {
+      "delivery": [ "alpha", "beta" ],
+      "files": {
+        "token": {
+          "path": "/run/vars/issuer/session/token",
+          "secrecy": "secret"
+        }
+      }
+    }
+  }
+}
+```
+
+Per placed entry:
+
+| Field | What it is |
+| --- | --- |
+| `path` | the artifact, relative to the build root. A consumer resolves it: the build is a farm of symlinks, and the path an activation names on the machine has to be the path the copy put there |
+| `realiser` | `flakelet` or `image`, as the statement said |
+| `profile` | the confinement profile of an image entry, `null` for a flakelet one |
+| `machine` | the machine the plan placed the entry on |
+| `address` | the address that machine's registry record declares |
+| `units` | the unit file names the entry declares, sorted, with the timer of a scheduled unit beside its service |
+| `key` | the entry's own identity digest, the `key` the plan records for it |
+
+Per value entry:
+
+| Field | What it is |
+| --- | --- |
+| `delivery` | the machines that receive the value, which may be empty |
+| `files` | each declared file by name, with the absolute `path` it lands at and its `secrecy` |
+
+`storeDir` is the store the artifacts were built in, and `version` is `1`. Nothing here is derived
+from the plan twice: the plan travels beside `manifest.json` and stays the single answer for
+everything else.
+
+## The realisation statement
+
+Nothing in a plan entry says which realiser an entry wants, and nothing should: the same entry can
+legitimately be either, which is what `tests/e2e/portable-image/` and `tests/e2e/wired-pair/`
+demonstrate between them. `realise` states it instead, and `operator/read.nix` reads a statement by
+plan key, then by the `<instance>:<service>` prefix of one, then by `default`:
+
+```nix
+realise = {
+  default.realiser = "flakelet";
+  "watch:file" = {
+    realiser = "image";
+    profile = "strict";
+  };
+  "issuer:api@alpha" = {
+    realiser = "flakelet";
+  };
+};
+```
+
+`flakelet` is the default because it is the realiser that needs no further fact: `flakelet.artifact`
+takes the plan and the key and nothing else. A statement that names an entry and no realiser still
+takes the default one, because what such a statement carries is the fact the default cannot. An
+image needs a confinement profile, which no plan field records, so an `image` statement carrying no
+`profile` is refused rather than defaulted. A realiser name nothing implements is refused naming the
+two that exist.
+
+Every refusal is an error row, and `operator/default.nix` raises on the table:
+
+| Row | What it means | The fix |
+| --- | --- | --- |
+| `operator-entry-name-collision` | two plan keys project onto one artifact name | rename one of the instances, services or machines |
+| `operator-realiser-unknown` | the statement names a realiser other than `flakelet` or `image` | state one of those two for that key |
+| `operator-image-profile-missing` | an `image` statement carries no `profile` | add one: `default`, `nonetwork`, `strict` or `trusted` |
+| `operator-entry-machine-no-address` | the entry's machine record declares no address | declare an `address` for that machine in the registry |
+
+## Why the build layer raises
+
+`lib/` never raises. Every check it makes is a diagnostics row, and one malformed declaration
+becomes a row while the rest of the deployment is still read. The realisers raise, for a fact an
+entry does not record. `operator/` raises for a third reason: a deployment the planner itself
+called inapplicable.
+
+`mkPlan` already answers `applicable`, and `render` already prints the table. `operator/read.nix`
+adds its own rows to that table, and `operator/default.nix` raises with the rendered result as the
+message when any row is an error, before a single artifact is realised. A table carrying warnings
+and no error builds: a warning that stopped a build would be an error.
+
+The split inside the directory is the realisers' own. `operator/read.nix` is the whole reading -
+which entries are placed, which realiser and profile each is stated to use, the name each key
+projects onto, what `manifest.json` says, and every refusal - and it is a pure function of the plan
+and the statement. `operator/default.nix` is derivations over that answer. The evaluating layer has
+no `pkgs`, so `tests/unit/operator.nix` can assert the reading and can never assert a built
+artifact. The bytes are what [`cluster.md`](cluster.md) is for.
+
+## The command
+
+```
+planner plan     <target>
+planner build    <target>
+planner apply    <target> [--values DIR] [--only KEY]... [--ssh-key PATH] [--user USER]
+planner status   <target> [--only KEY]... [--ssh-key PATH] [--user USER]
+planner rollback <target> --only KEY [--ssh-key PATH] [--user USER]
+```
+
+A `<target>` is either a built deployment directory or a flake reference. A directory is read as it
+is found; a reference is built once per invocation with `nix build --no-link --print-out-paths`. A
+reference that does not build is refused with the build's own output, which is where the rendered
+diagnostics table appears. `--user` is `root` by default, and `--only` is repeatable.
+
+A folder of *sources* is neither, and naming one is refused here rather than by nix: a deployment
+directory is not a flake, so `nix` would read `tests/e2e/wired-pair` as a registry reference and
+answer about commit hashes. Name the flake attribute that builds the folder
+(`.#planner-e2e-wired-pair`) or the directory a build wrote.
+
+Build the command, or run it out of the flake:
+
+```bash
+nix run .#planner -- --help                             # the five subcommands
+nix build .#planner-cli                                 # result/bin/planner
+nix run .#planner -- build .#planner-e2e-secret-delivery
+```
+
+**`plan`** prints the deployment's plan as sorted JSON, which is the same document
+[`plan.md`](plan.md) describes.
+
+**`build`** prints the store path of the build, then a line per placed entry and a line per value
+entry. This is the observed output of the third command above:
+
+```
+/nix/store/gvxcr0z2ms4ayqrlpi3602fb54mcq0kj-planner-deployment
+idle:job@gamma flakelet gamma 10.0.0.12 /nix/store/xq3...-flakelet-idle-job [idle-job-mark.service]
+issuer:api@alpha flakelet alpha 10.0.0.10 /nix/store/xym...-flakelet-issuer-api [issuer-api-serve.service]
+probe:client@beta flakelet beta 10.0.0.11 /nix/store/zsh...-flakelet-probe-client [probe-client-fetch.service]
+issuer:vars/ca delivered to [] files [ca.pub]
+issuer:vars/session delivered to [alpha beta] files [token]
+```
+
+An entry line is the plan key, the realiser, the machine, the address, the artifact and the unit
+files. The artifact column is the resolved store path, which is the path the copy puts on the
+machine and the path the activation names there. `issuer:vars/ca` is delivered to no machine because
+its generator is not deployed, and the line says so rather than leaving the value out.
+
+**`apply`** prints one line per step, in the order the steps happened:
+
+```
+ordered against the read of <provider> by <consumer>
+value <value key> <file> -> <user>@<address>:<path>
+copy <plan key> <artifact store path> -> <user>@<address>
+activate <plan key> (<realiser>) on <user>@<address>
+  <the endpoint's own report, one indented line each>
+```
+
+The first line appears only for an edge a cycle forced the walk to contradict. A flakelet entry is
+activated by the machine's own endpoint, `flakelet activate <name> <artifact>`; an image entry is
+attached by the script the artifact itself carries, `bin/attach`.
+
+**`status`** prints one line per entry, and asks rather than applies, so an entry a machine does not
+hold is reported as absent instead of as a failure:
+
+```
+issuer:api@alpha flakelet generation 1 of plan:issuer:api@alpha
+probe:client@beta flakelet absent
+watch:file@alpha image attached
+```
+
+**`rollback`** takes exactly one `--only`, prints `rollback <key> on <user>@<address>` and then the
+endpoint's own report. An image entry carries no generation to return to, so rolling one back is
+refused naming the entry and its realiser.
+
+**Where each subcommand runs.** `build` needs `nix` and runs anywhere. `apply`, `status` and
+`rollback` reach machines over ssh, so they have to run where the deployment's addresses resolve.
+That is one boundary rather than two commands: the machine layer here builds in the test process and
+applies inside the cluster's network namespace, which [`cluster.md`](cluster.md) describes.
+
+## Where the bytes of a generated value come from
+
+A generated value's bytes are never in the plan and never in an artifact. A path in a plan is
+deliverable; bytes in a plan are a leak. `apply --values <dir>` therefore reads them from a
+directory the operator names:
+
+```
+values/
+  issuer:vars/session/token
+  nightly:vars/hostKey@beta/ssh_host_ed25519_key
+```
+
+The layout is `<dir>/<entry-key>/<file>`. An entry key carries a `/` of its own, so
+`values/issuer:vars/session/token` is a real nested path and the directory is walked rather than
+split. The required set is the declared files of every value entry whose delivery set is non-empty:
+bytes are needed for a file that will be written, and a value delivered to no machine is written
+nowhere.
+
+The source is checked against the plan before anything is dialled. A file the plan declares that the
+source does not hold is refused naming the entry and the file. A file the source holds that no
+delivered value declares is refused naming the file. What the source holds is measured against the
+whole deployment even under `--only`, so a source that is right for a deployment stays right for a
+restricted run of it.
+
+Each file is written over ssh under `umask 077` and left at mode 0400, outside the store, at the
+path the value entry records. Not `nix copy`: a store object is readable by every process on the
+machine, which is the one property a generated secret cannot have.
+
+Nothing in this repository generates those bytes. The directory is where a generator hands them
+over, and `apply` cannot tell a minted secret from one an operator wrote by hand.
+
+## The order `apply` walks
+
+Both orderings come out of the plan, and the caller states neither.
+
+1. **Values before units.** A unit whose environment names `/run/vars/<instance>/<generator>/<file>`
+   reads it as soon as it is activated, so every value write happens before any activation.
+2. **Provider before consumer.** `plan.<consumer>.reads.<slot>.entry` names the provider's own plan
+   key, so the edges are already in the artifact. `dependsOn` is not that relation: a consumer's
+   `dependsOn` carries `machine:<name>@<hash>`, which is key provenance rather than order. A slot
+   the planner refused is absent from `reads`, so an absence is never an edge.
+
+Per entry the artifact is copied first and activated second. An activation that had to resolve
+anything would be activating something other than what was built.
+
+Ties break by plan key sort order, so one deployment always walks one way. Two instances wiring each
+other is a legal deployment - a capability's exports are a function of module and settings, never of
+a wire - but its activation graph genuinely has no first element. The walk breaks such a cycle at
+the lowest key by sort order and prints the edge it ordered against. Refusing would refuse a
+deployment the library considers correct, and silence would leave a one-off startup failure
+unexplainable.
+
+Every refusal the command can make from the plan, `manifest.json` and the value source happens
+before the first machine is contacted: an inapplicable deployment, a `--only` naming a key the
+deployment carries as neither an entry nor a value, a missing or unnamed value file, a machine with
+no address. A run that has started is a run whose remaining failures belong to a machine.
+
+## Two directories, one role
+
+`operator/` and `cli/` are one role and two kinds of thing
+([design D13](../openspec/changes/apply-deployments-with-an-operator-command/design.md)):
+
+| | `operator/` | `cli/` |
+| --- | --- | --- |
+| language | Nix | Python |
+| what it is | an evaluation | a program |
+| who reads it | `mkDeployment` callers, and `tests/unit/operator.nix` | an operator, and `tests/e2e/` |
+| closure | the artifacts it builds | an interpreter, `nix` and `openssh` |
+| checked by | `nix-unit` | `mypy --strict`, `ruff` and pytest |
+
+Merging them would put a Python file under a directory the unit layer imports, and put a store
+reference to an interpreter in the closure of the value `tests/unit/operator.nix` evaluates. It
+would also make the two checks one: the reading is asserted by evaluating it, and the command is
+asserted by handing it a recorder in place of a process table and reading the argv it produced.
+
+Nothing in `cli/` imports anything under `operator/`, `lib/` or `tests/`. Its inputs are a built
+directory, a flake reference and a value source, and what a deployment is it learns from
+`manifest.json`. That is what keeps the command replaceable: another tool that reads those two
+documents applies the same build.
+
+The command's flake wiring is `cli/flake-module.nix`, imported by `flake.nix` beside the root
+module and `devshells.nix`. It owns `packages.planner-cli`, `apps.planner` and
+`packages.planner-cli-src`, the source root the harness imports the command's pure half from. The
+root module reads `PLANNER_CLI` and `PLANNER_CLI_SRC` off those two package attributes rather than
+constructing either, so a rename cannot leave the app and the test environment disagreeing.

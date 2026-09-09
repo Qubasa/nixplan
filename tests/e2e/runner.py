@@ -23,9 +23,13 @@ refusal rather than a surprise:
    mismatch stops the run with both versions named rather than importing across
    it (design.md D4).
 
-``$PLANNER_E2E`` is the layer's root. It goes on ``PYTHONPATH`` rather than
-being copied flat, so a test imports the shared harness as ``import delivery``
-and reads its own fixture from beside its own file.
+``$PLANNER_E2E`` is the layer's root and ``$PLANNER_CLI_SRC`` is the command's.
+Both go on ``PYTHONPATH`` rather than being copied flat, so a test imports the
+shared harness as ``import delivery``, reads a built deployment as
+``import manifest``, and reads its own fixture from beside its own file. A
+``sys.path`` edit in ``conftest.py`` would not do: pytest loads no conftest above
+the ini file's directory, and a run naming one folder collects a path that has
+none below it.
 
 ``--print-env`` assembles the same environment and prints it as shell ``export``
 lines instead of handing over to pytest. That is the tail of what
@@ -328,7 +332,8 @@ def main(argv: list[str]) -> int:
         print(exc, file=sys.stderr)
         return 1
 
-    env["PYTHONPATH"] = os.pathsep.join([env["PYTHONPATH"], str(root)])
+    roots = [str(root), *(v for v in [os.environ.get("PLANNER_CLI_SRC")] if v is not None)]
+    env["PYTHONPATH"] = os.pathsep.join([env["PYTHONPATH"], *roots])
 
     # Keep this prefix short. The virtiofs socket path built underneath it hits the
     # 108 byte AF_UNIX limit, and virtiofsd then dies during startup with no clear
