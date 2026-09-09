@@ -17,17 +17,17 @@
       "date": "2026-09-08",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 844.625,
-        "nrFunctionCalls": 473.875,
-        "nrPrimOpCalls": 317.625,
-        "values.number": 1059.75,
-        "sets.bytes": 14642,
-        "envs.bytes": 10528,
-        "list.elements": 209.75,
-        "nrOpUpdateValuesCopied": 67.875,
-        "gc.totalBytes": 53950
+        "nrThunks": 687.4546,
+        "nrFunctionCalls": 388.6364,
+        "nrPrimOpCalls": 268.1819,
+        "values.number": 854,
+        "sets.bytes": 11279.2728,
+        "envs.bytes": 8544,
+        "list.elements": 170.6364,
+        "nrOpUpdateValuesCopied": 50.3637,
+        "gc.totalBytes": 42709.8182
       },
-      "note": "Moved by the `worked` argument `perf/eval.nix` gained in clean-up-transplant-residue: a measurement's inputs are now the library, the harness, the fixture and the fixture's loader named separately rather than one copy of the whole tree, so the argument set the harness applies carries one attribute more. Measured with perf/measure.sh on nix 2.34.8, per plan entry: envs.bytes 10528, gc.totalBytes 53950, nrFunctionCalls 473.875, sets.bytes 14642, values.number 1059.75; the largest move was +0.105%."
+      "note": "Moved by deliver-secrets-across-machines: a generated value is now an entry of the plan, so the fleet fixtures each gained one entry per machine and the `worked` fixture three. Per-entry cost fell at every fixture and every size because the denominator grew faster than the work did; the figures are re-recorded rather than the margin widened, so the next change is gated against the cheaper plan."
     },
     "fleet-4": {
       "fixture": "fleet",
@@ -35,17 +35,17 @@
       "date": "2026-09-08",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 762.6667,
-        "nrFunctionCalls": 418,
-        "nrPrimOpCalls": 291.6667,
-        "values.number": 938.8889,
-        "sets.bytes": 12968.8889,
-        "envs.bytes": 9216,
-        "list.elements": 186.2223,
-        "nrOpUpdateValuesCopied": 45.8889,
-        "gc.totalBytes": 46515.5556
+        "nrThunks": 602.7693,
+        "nrFunctionCalls": 335.3847,
+        "nrPrimOpCalls": 240.8462,
+        "values.number": 735.8462,
+        "sets.bytes": 9628.9231,
+        "envs.bytes": 7301.5385,
+        "list.elements": 148.3847,
+        "nrOpUpdateValuesCopied": 32.6924,
+        "gc.totalBytes": 36148.9231
       },
-      "note": "Moved by the `worked` argument `perf/eval.nix` gained in clean-up-transplant-residue: a measurement's inputs are now the library, the harness, the fixture and the fixture's loader named separately rather than one copy of the whole tree, so the argument set the harness applies carries one attribute more. Measured with perf/measure.sh on nix 2.34.8, per plan entry: envs.bytes 9216, gc.totalBytes 46515.5556, sets.bytes 12968.8889; the largest move was +0.034%."
+      "note": "Moved by deliver-secrets-across-machines: a generated value is now an entry of the plan, so the fleet fixtures each gained one entry per machine and the `worked` fixture three. Per-entry cost fell at every fixture and every size because the denominator grew faster than the work did; the figures are re-recorded rather than the margin widened, so the next change is gated against the cheaper plan."
     },
     "fleet-16": {
       "fixture": "fleet",
@@ -53,17 +53,17 @@
       "date": "2026-09-08",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 460,
-        "nrFunctionCalls": 288.9091,
-        "nrPrimOpCalls": 203.9091,
-        "values.number": 560.4243,
-        "sets.bytes": 7573.8182,
-        "envs.bytes": 5911.2728,
-        "list.elements": 135.8788,
-        "nrOpUpdateValuesCopied": 16.6364,
-        "gc.totalBytes": 28327.7576
+        "nrThunks": 370.5307,
+        "nrFunctionCalls": 232.9796,
+        "nrPrimOpCalls": 168.9592,
+        "values.number": 448.2041,
+        "sets.bytes": 5738.9388,
+        "envs.bytes": 4742.6939,
+        "list.elements": 108.6735,
+        "nrOpUpdateValuesCopied": 12.5103,
+        "gc.totalBytes": 22004.898
       },
-      "note": "Moved by the `worked` argument `perf/eval.nix` gained in clean-up-transplant-residue: a measurement's inputs are now the library, the harness, the fixture and the fixture's loader named separately rather than one copy of the whole tree, so the argument set the harness applies carries one attribute more. Measured with perf/measure.sh on nix 2.34.8, per plan entry: envs.bytes 5911.2728, sets.bytes 7573.8182; the largest move was +0.006%."
+      "note": "Moved by deliver-secrets-across-machines: a generated value is now an entry of the plan, so the fleet fixtures each gained one entry per machine and the `worked` fixture three. Per-entry cost fell at every fixture and every size because the denominator grew faster than the work did; the figures are re-recorded rather than the margin widened, so the next change is gated against the cheaper plan."
     },
     "fleet-64": {
       "fixture": "fleet",
@@ -71,17 +71,17 @@
       "date": "2026-09-08",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 375.5349,
-        "nrFunctionCalls": 252.8838,
-        "nrPrimOpCalls": 179.4187,
-        "values.number": 454.8063,
-        "sets.bytes": 6066.2326,
-        "envs.bytes": 4989.0233,
-        "list.elements": 121.8295,
-        "nrOpUpdateValuesCopied": 8.3489,
-        "gc.totalBytes": 22753.4884
+        "nrThunks": 307.9586,
+        "nrFunctionCalls": 205.3887,
+        "nrPrimOpCalls": 149.5907,
+        "values.number": 370.7047,
+        "sets.bytes": 4693.513,
+        "envs.bytes": 4053.2643,
+        "list.elements": 97.9741,
+        "nrOpUpdateValuesCopied": 7.2384,
+        "gc.totalBytes": 18186.1969
       },
-      "note": "Moved by the `worked` argument `perf/eval.nix` gained in clean-up-transplant-residue: a measurement's inputs are now the library, the harness, the fixture and the fixture's loader named separately rather than one copy of the whole tree, so the argument set the harness applies carries one attribute more. Measured with perf/measure.sh on nix 2.34.8, per plan entry: envs.bytes 4989.0233, sets.bytes 6066.2326; the largest move was +0.002%."
+      "note": "Moved by deliver-secrets-across-machines: a generated value is now an entry of the plan, so the fleet fixtures each gained one entry per machine and the `worked` fixture three. Per-entry cost fell at every fixture and every size because the denominator grew faster than the work did; the figures are re-recorded rather than the margin widened, so the next change is gated against the cheaper plan."
     },
     "fleet-256": {
       "fixture": "fleet",
@@ -89,17 +89,17 @@
       "date": "2026-09-08",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 353.8012,
-        "nrFunctionCalls": 243.6141,
-        "nrPrimOpCalls": 173.117,
-        "values.number": 427.6297,
-        "sets.bytes": 5678.3158,
-        "envs.bytes": 4751.7193,
-        "list.elements": 118.2145,
-        "nrOpUpdateValuesCopied": 6.2164,
-        "gc.totalBytes": 21311.4386
+        "nrThunks": 292.0105,
+        "nrFunctionCalls": 198.3564,
+        "nrPrimOpCalls": 144.6541,
+        "values.number": 350.9519,
+        "sets.bytes": 4425.727,
+        "envs.bytes": 3877.5449,
+        "list.elements": 95.2471,
+        "nrOpUpdateValuesCopied": 5.8115,
+        "gc.totalBytes": 17169.5605
       },
-      "note": "Moved by the `worked` argument `perf/eval.nix` gained in clean-up-transplant-residue: a measurement's inputs are now the library, the harness, the fixture and the fixture's loader named separately rather than one copy of the whole tree, so the argument set the harness applies carries one attribute more. Measured with perf/measure.sh on nix 2.34.8, per plan entry: envs.bytes 4751.7193, sets.bytes 5678.3158; the largest move was +0.001%."
+      "note": "Moved by deliver-secrets-across-machines: a generated value is now an entry of the plan, so the fleet fixtures each gained one entry per machine and the `worked` fixture three. Per-entry cost fell at every fixture and every size because the denominator grew faster than the work did; the figures are re-recorded rather than the margin widened, so the next change is gated against the cheaper plan."
     },
     "mesh-4": {
       "fixture": "mesh",
@@ -107,17 +107,17 @@
       "date": "2026-09-08",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 827.8889,
-        "nrFunctionCalls": 473.4445,
-        "nrPrimOpCalls": 343.1112,
-        "values.number": 1032.4445,
-        "sets.bytes": 13966.2223,
-        "envs.bytes": 10225.7778,
-        "list.elements": 228,
-        "nrOpUpdateValuesCopied": 46.2223,
-        "gc.totalBytes": 51397.3334
+        "nrThunks": 657.5385,
+        "nrFunctionCalls": 382.3847,
+        "nrPrimOpCalls": 286.5385,
+        "values.number": 812.2308,
+        "sets.bytes": 10334.1539,
+        "envs.bytes": 8153.2308,
+        "list.elements": 180.7693,
+        "nrOpUpdateValuesCopied": 32.9231,
+        "gc.totalBytes": 39790.7693
       },
-      "note": "Moved by the `worked` argument `perf/eval.nix` gained in clean-up-transplant-residue: a measurement's inputs are now the library, the harness, the fixture and the fixture's loader named separately rather than one copy of the whole tree, so the argument set the harness applies carries one attribute more. Measured with perf/measure.sh on nix 2.34.8, per plan entry: envs.bytes 10225.7778, sets.bytes 13966.2223; the largest move was +0.013%."
+      "note": "Moved by deliver-secrets-across-machines: a generated value is now an entry of the plan, so the fleet fixtures each gained one entry per machine and the `worked` fixture three. Per-entry cost fell at every fixture and every size because the denominator grew faster than the work did; the figures are re-recorded rather than the margin widened, so the next change is gated against the cheaper plan."
     },
     "mesh-16": {
       "fixture": "mesh",
@@ -125,17 +125,17 @@
       "date": "2026-09-08",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 531.6061,
-        "nrFunctionCalls": 350.6364,
-        "nrPrimOpCalls": 261.2425,
-        "values.number": 663.7576,
-        "sets.bytes": 8695.2728,
-        "envs.bytes": 7025.4546,
-        "list.elements": 182.1819,
-        "nrOpUpdateValuesCopied": 17.091,
-        "gc.totalBytes": 33795.8788
+        "nrThunks": 429.3878,
+        "nrFunctionCalls": 284.1837,
+        "nrPrimOpCalls": 218.8164,
+        "values.number": 530.6735,
+        "sets.bytes": 6509.8776,
+        "envs.bytes": 5662.8572,
+        "list.elements": 143.7143,
+        "nrOpUpdateValuesCopied": 12.8164,
+        "gc.totalBytes": 26048.3266
       },
-      "note": "Moved by the `worked` argument `perf/eval.nix` gained in clean-up-transplant-residue: a measurement's inputs are now the library, the harness, the fixture and the fixture's loader named separately rather than one copy of the whole tree, so the argument set the harness applies carries one attribute more. Measured with perf/measure.sh on nix 2.34.8, per plan entry: envs.bytes 7025.4546, sets.bytes 8695.2728; the largest move was +0.006%."
+      "note": "Moved by deliver-secrets-across-machines: a generated value is now an entry of the plan, so the fleet fixtures each gained one entry per machine and the `worked` fixture three. Per-entry cost fell at every fixture and every size because the denominator grew faster than the work did; the figures are re-recorded rather than the margin widened, so the next change is gated against the cheaper plan."
     },
     "mesh-64": {
       "fixture": "mesh",
@@ -143,17 +143,17 @@
       "date": "2026-09-08",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 448.9225,
-        "nrFunctionCalls": 316.3024,
-        "nrPrimOpCalls": 238.3644,
-        "values.number": 560.8683,
-        "sets.bytes": 7222.3256,
-        "envs.bytes": 6131.3489,
-        "list.elements": 169.3954,
-        "nrOpUpdateValuesCopied": 8.8373,
-        "gc.totalBytes": 28207.1318
+        "nrThunks": 367.9171,
+        "nrFunctionCalls": 257.684,
+        "nrPrimOpCalls": 200.5493,
+        "values.number": 454.8135,
+        "sets.bytes": 5482.1555,
+        "envs.bytes": 4991.2125,
+        "list.elements": 133.7306,
+        "nrOpUpdateValuesCopied": 7.5648,
+        "gc.totalBytes": 22226.6529
       },
-      "note": "Moved by the `worked` argument `perf/eval.nix` gained in clean-up-transplant-residue: a measurement's inputs are now the library, the harness, the fixture and the fixture's loader named separately rather than one copy of the whole tree, so the argument set the harness applies carries one attribute more. Measured with perf/measure.sh on nix 2.34.8, per plan entry: envs.bytes 6131.3489, sets.bytes 7222.3256; the largest move was +0.002%."
+      "note": "Moved by deliver-secrets-across-machines: a generated value is now an entry of the plan, so the fleet fixtures each gained one entry per machine and the `worked` fixture three. Per-entry cost fell at every fixture and every size because the denominator grew faster than the work did; the figures are re-recorded rather than the margin widened, so the next change is gated against the cheaper plan."
     },
     "mesh-256": {
       "fixture": "mesh",
@@ -161,17 +161,17 @@
       "date": "2026-09-08",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 427.6472,
-        "nrFunctionCalls": 307.4679,
-        "nrPrimOpCalls": 232.4776,
-        "values.number": 534.3938,
-        "sets.bytes": 6843.3217,
-        "envs.bytes": 5901.2866,
-        "list.elements": 166.1053,
-        "nrOpUpdateValuesCopied": 6.7135,
-        "gc.totalBytes": 26804.5848
+        "nrThunks": 352.2497,
+        "nrFunctionCalls": 250.9298,
+        "nrPrimOpCalls": 195.8934,
+        "values.number": 435.4786,
+        "sets.bytes": 5218.8817,
+        "envs.bytes": 4820.0261,
+        "list.elements": 131.186,
+        "nrOpUpdateValuesCopied": 6.1431,
+        "gc.totalBytes": 21238.6997
       },
-      "note": "Moved by the `worked` argument `perf/eval.nix` gained in clean-up-transplant-residue: a measurement's inputs are now the library, the harness, the fixture and the fixture's loader named separately rather than one copy of the whole tree, so the argument set the harness applies carries one attribute more. Measured with perf/measure.sh on nix 2.34.8, per plan entry: envs.bytes 5901.2866, sets.bytes 6843.3217; the largest move was +0.000%."
+      "note": "Moved by deliver-secrets-across-machines: a generated value is now an entry of the plan, so the fleet fixtures each gained one entry per machine and the `worked` fixture three. Per-entry cost fell at every fixture and every size because the denominator grew faster than the work did; the figures are re-recorded rather than the margin widened, so the next change is gated against the cheaper plan."
     }
   }
 }

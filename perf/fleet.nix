@@ -185,10 +185,12 @@ in
     };
   };
 
+  # Keyed by the value's own plan entry, which for a per-placement generator is
+  # the generator and the machine.
   varsState = listToAttrs (
     map (name: {
-      inherit name;
-      value.hostKey = {
+      name = "mesh:vars/hostKey@${name}";
+      value = {
         "key" = {
           present = true;
         };
