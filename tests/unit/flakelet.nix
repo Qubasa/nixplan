@@ -100,7 +100,7 @@ let
       };
       placement.every.only.machines = [ "one" ];
     };
-    varsState.one.hostKey."key" = {
+    varsState."svc:vars/hostKey@one"."key" = {
       present = true;
       content = "PRIVATE-KEY-BYTES";
     };
@@ -393,27 +393,40 @@ in
     };
   };
 
-  testAnEntryShownAGeneratedFile = {
-    expr = {
-      refused = raises (
-        reader.read {
-          plan = shownAGeneratedFile.plan;
-          key = "svc:only@one";
-        }
-      );
-      theImageRealiserShowsIt =
-        map (p: p.kind)
-          (reader.reader.read {
-            plan = shownAGeneratedFile.plan;
-            key = "svc:only@one";
-            profile = "trusted";
-          }).hostPaths;
+  # A generated file's host path is its own source rather than a staging
+  # destination, and its bytes arrive by delivery before the entry is activated,
+  # so there is no step here to be missing.
+  testAnEntryShownAGeneratedFile =
+    let
+      image = reader.read {
+        plan = shownAGeneratedFile.plan;
+        key = "svc:only@one";
+      };
+    in
+    {
+      expr = {
+        built = image.name;
+        shown = map (p: {
+          inherit (p) kind;
+          isItsOwnSource = p.from == p.path;
+        }) image.hostPaths;
+        renderedUnitNamesThePath = support.hasInfix "/run/vars/svc/hostKey/key" (
+          reader.renderUnit image "web"
+        );
+        bytesAnywhere = support.hasInfix "PRIVATE-KEY-BYTES" (builtins.toJSON image);
+      };
+      expected = {
+        built = "svc-only";
+        shown = [
+          {
+            kind = "generated-file";
+            isItsOwnSource = true;
+          }
+        ];
+        renderedUnitNamesThePath = true;
+        bytesAnywhere = false;
+      };
     };
-    expected = {
-      refused = true;
-      theImageRealiserShowsIt = [ "generated-file" ];
-    };
-  };
 
   testAnEntryShownNoHostFileIsBuilt =
     let

@@ -302,10 +302,10 @@ in
       expected = {
         forcingSucceeds = true;
         rows = [
+          "export-secret-not-a-reference"
           "interface-mismatch"
           "provider-export-missing"
           "reach-one-placement-count"
-          "slot-reads-secret-export"
           "slot-unwired"
         ];
         rowCount = 5;

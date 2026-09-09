@@ -248,7 +248,7 @@ in
     };
     expected = {
       roundTrips = true;
-      entryCount = 8;
+      entryCount = 11;
     };
   };
 
@@ -310,8 +310,10 @@ in
         everyHashIsThatEntrysOwn = all (d: workedPlan.${d.key}.key == d.hash) parsed;
         dependedOn = uniqueStrings (map (d: d.key) parsed);
       };
+      # Four placed entries and three generated values, each naming the machine
+      # whose fact reaches its key.
       expected = {
-        dependencyCount = 4;
+        dependencyCount = 7;
         everyKeyIsInThePlan = true;
         everyHashIsThatEntrysOwn = true;
         dependedOn = [
@@ -613,7 +615,7 @@ in
           placement.every.only.machines = [ "one" ];
           exposes = [ "identity" ];
         };
-        varsState.one.hostKey = {
+        varsState."holder:vars/hostKey@one" = {
           "ssh_host_ed25519_key" = {
             present = true;
             content = bytes;
@@ -641,12 +643,12 @@ in
           plane = "reference";
           readBy = [ ];
           secrecy = "secret";
-          value = "/run/vars/hostKey/ssh_host_ed25519_key";
+          value = "/run/vars/holder/hostKey/ssh_host_ed25519_key";
         };
-        env.KEYFILE = "/run/vars/hostKey/ssh_host_ed25519_key";
+        env.KEYFILE = "/run/vars/holder/hostKey/ssh_host_ed25519_key";
         varsRecord = {
           inPlan = "reference";
-          path = "/run/vars/hostKey/ssh_host_ed25519_key";
+          path = "/run/vars/holder/hostKey/ssh_host_ed25519_key";
           secrecy = "secret";
         };
         bytesAnywhereInThePlan = false;
@@ -666,7 +668,7 @@ in
         plane = "reference";
         readBy = [ ];
         secrecy = "secret";
-        value = "/run/vars/hostKey/ssh_host_ed25519_key";
+        value = "/run/vars/nightly/hostKey/ssh_host_ed25519_key";
       };
       publicHalfReadBy = [ "vault-repo:server@vault" ];
     };
@@ -788,7 +790,7 @@ in
         sameEntries = true;
         sameKeys = true;
         samePlan = true;
-        keyCount = 8;
+        keyCount = 11;
       };
     };
 
@@ -924,7 +926,7 @@ in
     };
     expected = {
       difference = [ ];
-      entries = 8;
+      entries = 11;
       typedByHand = [ ];
     };
   };
@@ -966,6 +968,9 @@ in
         "nightly:client@alpha"
         "nightly:client@beta"
         "nightly:client@gamma"
+        "nightly:vars/hostKey@alpha"
+        "nightly:vars/hostKey@beta"
+        "nightly:vars/hostKey@gamma"
         "vault-repo:server@vault"
       ];
     };

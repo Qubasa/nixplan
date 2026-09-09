@@ -493,16 +493,65 @@ in
     in
     {
       expr = {
-        webCarriesItsOwn = hasInfix "Environment=ROLE=web" web;
-        webCarriesTheOther = hasInfix "Environment=ROLE=db" web;
-        dbCarriesItsOwn = hasInfix "Environment=ROLE=db" db;
-        dbCarriesTheOther = hasInfix "Environment=ROLE=web" db;
+        webCarriesItsOwn = hasInfix "Environment=\"ROLE=web\"" web;
+        webCarriesTheOther = hasInfix "Environment=\"ROLE=db\"" web;
+        dbCarriesItsOwn = hasInfix "Environment=\"ROLE=db\"" db;
+        dbCarriesTheOther = hasInfix "Environment=\"ROLE=web\"" db;
       };
       expected = {
         webCarriesItsOwn = true;
         webCarriesTheOther = false;
         dbCarriesItsOwn = true;
         dbCarriesTheOther = false;
+      };
+    };
+
+  # The e2e run that found this: a public export whose value is
+  # `PLANNER-E2E-CA <hex>` reached the unit as two assignments, and the consumer
+  # read back the first word.
+  testAnEnvironmentValueCarriesASpace =
+    let
+      image = readOf { } (_: {
+        closure = [ borgbackup ];
+        units.web = {
+          command = "${borgbackup}/bin/borg serve";
+          env = {
+            CERT = "PLANNER-E2E-CA 03dc21046074f1";
+            QUOTED = "say \"hi\" c:\\path";
+          };
+        };
+      });
+      text = reader.renderUnit image "web";
+      envLines = builtins.filter (l: support.hasInfix "Environment=" l) (support.lines text);
+    in
+    {
+      expr = envLines;
+      expected = [
+        "Environment=\"CERT=PLANNER-E2E-CA 03dc21046074f1\""
+        "Environment=\"QUOTED=say \\\"hi\\\" c:\\\\path\""
+      ];
+    };
+
+  testAnEnvironmentValueCarriesANewline =
+    let
+      withValue =
+        value:
+        readOf { } (_: {
+          closure = [ borgbackup ];
+          units.web = {
+            command = "${borgbackup}/bin/borg serve";
+            env.PEM = value;
+          };
+        });
+    in
+    {
+      expr = {
+        refused = raises (withValue "-----BEGIN-----\nbytes\n-----END-----");
+        oneLineOfTheSameBytesBuilds = raises (withValue "-----BEGIN----- bytes -----END-----");
+      };
+      expected = {
+        refused = true;
+        oneLineOfTheSameBytesBuilds = false;
       };
     };
 
@@ -709,7 +758,7 @@ in
             };
             placement.every.only.machines = [ "one" ];
           };
-          varsState.one.hostKey."key" = {
+          varsState."holder:vars/hostKey@one"."key" = {
             present = true;
             content = "PRIVATE-KEY-BYTES";
           };
@@ -723,7 +772,7 @@ in
       attachment = reader.attachment image;
       baked = withSecret [
         borgbackup
-        "/run/vars/hostKey/key"
+        "/run/vars/holder/hostKey/key"
       ];
     in
     {
@@ -742,7 +791,7 @@ in
       };
       expected = {
         closure = [ borgbackup ];
-        hostPaths = [ "/run/vars/hostKey/key" ];
+        hostPaths = [ "/run/vars/holder/hostKey/key" ];
         kinds = [ "generated-file" ];
         bytesAnywhere = false;
         bakingItInRaises = true;
@@ -774,7 +823,7 @@ in
           };
           placement.every.only.machines = [ "one" ];
         };
-        varsState.one.hostKey."key" = {
+        varsState."holder:vars/hostKey@one"."key" = {
           present = true;
           content = "PRIVATE-KEY-BYTES";
         };
@@ -798,11 +847,11 @@ in
       expected = {
         paths = [
           "/etc/agent.conf"
-          "/run/vars/hostKey/key"
+          "/run/vars/holder/hostKey/key"
         ];
         staged = [
           "/run/portable-planner/holder-only/files/etc/agent.conf"
-          "/run/vars/hostKey/key"
+          "/run/vars/holder/hostKey/key"
         ];
         dispositions = [
           "render"
@@ -923,7 +972,7 @@ in
               };
               placement.every.only.machines = [ "one" ];
             };
-            varsState.one.hostKey."key" = {
+            varsState."holder:vars/hostKey@one"."key" = {
               present = true;
               content = "PRIVATE-KEY-BYTES";
             };

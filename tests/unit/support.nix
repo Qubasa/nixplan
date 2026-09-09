@@ -152,6 +152,12 @@ rec {
       rows = rowsById id result;
     in
     if rows == [ ] then null else (head rows).evidence;
+  resolutionById =
+    id: result:
+    let
+      rows = rowsById id result;
+    in
+    if rows == [ ] then null else (head rows).resolution;
 
   # Substring, not regex, so a needle may contain regex characters unescaped.
   hasInfix =

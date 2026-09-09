@@ -35,7 +35,8 @@ let
   registry = import (folder + "/deployment/machines.nix");
 
   hostKeyState = machine: pub: {
-    hostKey = {
+    name = "nightly:vars/hostKey@${machine}";
+    value = {
       "ssh_host_ed25519_key" = {
         present = true;
       };
@@ -62,11 +63,12 @@ in
     };
 
     # alpha and beta have run their generator, gamma deliberately has not. That one
-    # absence is what the whole folder exercises.
-    varsState = {
-      alpha = hostKeyState "alpha" "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICCyXFCyCrjDXgk161ICmYQX0iXoZgMe5sDtDnhA13q+";
-      beta = hostKeyState "beta" "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH2zYlcrdY8a7DJlJ8Az4edUdWjYfHMxcCuOpwUzwdQt";
-    };
+    # absence is what the whole folder exercises. The state of a value is keyed by
+    # the value's own plan entry.
+    varsState = builtins.listToAttrs [
+      (hostKeyState "alpha" "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICCyXFCyCrjDXgk161ICmYQX0iXoZgMe5sDtDnhA13q+")
+      (hostKeyState "beta" "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH2zYlcrdY8a7DJlJ8Az4edUdWjYfHMxcCuOpwUzwdQt")
+    ];
 
     # Module rows are relative to modules/, everything else to the folder root.
     sources = {

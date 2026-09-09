@@ -124,11 +124,12 @@ in
         fragments = length hub.configData."/etc/mesh/peers".render;
         readEntries = length (attrNames hub.reads.peers.entries);
       };
-      # One per machine. A fixture that collapses any of these keeps measuring and
-      # stops covering the shape the mesh exists for.
+      # One per machine, plus one host key per machine: sixteen peers, sixteen
+      # generated values, the hub and its machine records. A fixture that collapses
+      # any of these keeps measuring and stops covering the shape the mesh exists for.
       expected = {
         errors = [ ];
-        entries = 33;
+        entries = 49;
         units = 17;
         closure = 17;
         fragments = 16;

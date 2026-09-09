@@ -65,20 +65,6 @@ let
       })
     );
 
-  declaringVarsFile =
-    key: value:
-    oneInstance (
-      placedOn "one" (soleRoot {
-        module = _: {
-          vars.hostKey.files.key = {
-            secrecy = "secret";
-            ${key} = value;
-          };
-          impl = unit;
-        };
-      })
-    );
-
   declaringPlacement =
     key:
     oneInstance {
@@ -174,7 +160,6 @@ let
     "answers"
     "collects"
     "contributes"
-    "deploy"
     "dynamicPort"
     "enable"
     "externals"
@@ -183,7 +168,6 @@ let
     "locality"
     "memberWire"
     "orchestrator"
-    "per"
     "pick"
     "probes"
     "register"
@@ -244,20 +228,6 @@ in
         applicable = false;
       };
     };
-
-  testPerIsRefused = excludedKeyFacts {
-    result = declaringVarsFile "per" "consumer";
-    key = "per";
-    subject = "modules/svc.nix";
-    trigger = "the first value that is secret and has to reach";
-  };
-
-  testDeployIsRefused = excludedKeyFacts {
-    result = declaringVarsFile "deploy" { to = "consumer"; };
-    key = "deploy";
-    subject = "modules/svc.nix";
-    trigger = "a database password being the case";
-  };
 
   testPickIsRefused = excludedKeyFacts {
     result = declaringPlacement "pick";
@@ -398,15 +368,14 @@ in
     };
     expected = {
       headerFound = true;
-      readmeRowCount = 8;
-      coveredRowCount = 8;
+      readmeRowCount = 7;
+      coveredRowCount = 7;
       coveredRows = [
         "collect family"
         "externals"
         "lifecycle"
         "locality"
         "member cuts"
-        "per/deploy/delivery"
         "placement.pick/strategy/allocation"
         "runtime plane"
       ];
@@ -416,7 +385,6 @@ in
         "lifecycle"
         "locality"
         "member cuts"
-        "per/deploy/delivery"
         "placement.pick/strategy/allocation"
         "runtime plane"
       ];

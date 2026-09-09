@@ -23,9 +23,7 @@ let
     name = "host-identity";
     exports = {
       publicKey = publicString;
-      privateKey = publicString // {
-        secrecy = "secret";
-      };
+      privateKey = support.secretFile;
     };
   };
 
@@ -107,13 +105,14 @@ let
       consumerModule,
       providerModule ? provider,
       providerMachines ? [ "one" ],
+      varsState ? { },
       wire ? {
         instance = "provider";
         provides = "identity";
       },
     }:
     planOf {
-      inherit sources;
+      inherit sources varsState;
       interfaces = registry;
       instances = {
         consumer = {
@@ -315,17 +314,24 @@ in
       };
     };
 
+  # The refusal this used to assert is gone: a slot may read a secret export, and
+  # the read is what puts the reader's machine in the value's delivery set.
+  # Nothing in this subset caps an export at machine-local, so co-placement does
+  # not enter it either.
   testAConsumerAsksForThePrivateHalf =
     let
       pairProvider = _: {
+        vars.identity.files."key".secrecy = "secret";
         provides.identity.interface = pair;
-        impl = _: {
-          provides.identity.exports = {
-            publicKey = "ssh-ed25519 AAAA";
-            privateKey = "PRIVATE";
+        impl =
+          { vars, ... }:
+          {
+            provides.identity.exports = {
+              publicKey = "ssh-ed25519 AAAA";
+              privateKey = vars.identity."key";
+            };
+            units.only.command = "/bin/true";
           };
-          units.only.command = "/bin/true";
-        };
       };
       askFor =
         machines:
@@ -339,6 +345,7 @@ in
           };
           providerModule = pairProvider;
           providerMachines = machines;
+          varsState."provider:vars/identity@${builtins.head machines}"."key".present = true;
         };
       together = askFor [ "one" ];
       apart = askFor [ "two" ];
@@ -347,24 +354,31 @@ in
       expr = {
         togetherIds = rowIds together;
         apartIds = rowIds apart;
-        severity = severityById "slot-reads-secret-export" apart;
-        namesSlot = hasInfix "`far`" (messageById "slot-reads-secret-export" apart);
-        namesExport = hasInfix "`privateKey`" (messageById "slot-reads-secret-export" apart);
-        namesDeclaringFile = hasInfix "interfaces/default.nix" (
-          messageById "slot-reads-secret-export" apart
-        );
         togetherDelivered = together.plan."consumer:only@one".reads.far.delivered;
         apartDelivered = apart.plan."consumer:only@one".reads.far.delivered;
+        readAsAReference = apart.plan."consumer:only@one".reads.far.values.privateKey;
+        deliveredApart = apart.plan."provider:vars/identity@two".delivery;
+        derivedApart = apart.plan."provider:vars/identity@two".deliveryDerivedFrom;
+        deliveredTogether = together.plan."provider:vars/identity@one".delivery;
       };
       expected = {
-        togetherIds = [ "slot-reads-secret-export" ];
-        apartIds = [ "slot-reads-secret-export" ];
-        severity = "error";
-        namesSlot = true;
-        namesExport = true;
-        namesDeclaringFile = true;
-        togetherDelivered = false;
-        apartDelivered = false;
+        togetherIds = [ ];
+        apartIds = [ ];
+        togetherDelivered = true;
+        apartDelivered = true;
+        readAsAReference = {
+          path = "/run/vars/provider/identity/key";
+          secrecy = "secret";
+        };
+        deliveredApart = [
+          "one"
+          "two"
+        ];
+        derivedApart = [
+          "consumer:only@one named privateKey in uses.far.reads"
+          "provider:only@two owns it"
+        ];
+        deliveredTogether = [ "one" ];
       };
     };
 
@@ -379,13 +393,13 @@ in
         secrecy = privateKey.secrecy;
         value = privateKey.value;
         varsInPlan = client.vars.hostKey.files."ssh_host_ed25519_key".inPlan;
-        usedByItsOwnUnit = hasInfix "/run/vars/hostKey/ssh_host_ed25519_key" client.env.BORG_RSH;
+        usedByItsOwnUnit = hasInfix "/run/vars/nightly/hostKey/ssh_host_ed25519_key" client.env.BORG_RSH;
       };
       expected = {
         rowsAtProducer = [ ];
         plane = "reference";
         secrecy = "secret";
-        value = "/run/vars/hostKey/ssh_host_ed25519_key";
+        value = "/run/vars/nightly/hostKey/ssh_host_ed25519_key";
         varsInPlan = "reference";
         usedByItsOwnUnit = true;
       };

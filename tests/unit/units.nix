@@ -1044,7 +1044,7 @@ in
           };
           placement.every.only.machines = [ "one" ];
         };
-        varsState.one.hostKey."key" = {
+        varsState."holder:vars/hostKey@one"."key" = {
           present = true;
           content = bytes;
         };
@@ -1069,7 +1069,7 @@ in
         ];
         render = [
           { text = "key_file = "; }
-          { ref = "/run/vars/hostKey/key"; }
+          { ref = "/run/vars/holder/hostKey/key"; }
         ];
         structureHashIsAHash = true;
         bytesAnywhereInThePlan = false;

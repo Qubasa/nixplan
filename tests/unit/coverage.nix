@@ -129,6 +129,13 @@ let
     "clean-up-transplant-residue/specs/tooling/repository-shape/spec.md"
     "clean-up-transplant-residue/specs/tooling/nix-unit-suite/spec.md"
     "clean-up-transplant-residue/specs/tooling/evaluation-performance/spec.md"
+    "deliver-secrets-across-machines/specs/planner/secret-delivery/spec.md"
+    "deliver-secrets-across-machines/specs/planner/diagnostics/spec.md"
+    "deliver-secrets-across-machines/specs/planner/typed-edge/spec.md"
+    "deliver-secrets-across-machines/specs/planner/plan-artifact/spec.md"
+    "deliver-secrets-across-machines/specs/realiser/flakelet-artifact/spec.md"
+    "deliver-secrets-across-machines/specs/realiser/portable-service-image/spec.md"
+    "deliver-secrets-across-machines/specs/delivery/real-cluster/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
