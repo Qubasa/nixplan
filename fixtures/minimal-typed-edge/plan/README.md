@@ -1,6 +1,6 @@
 # The committed plan
 
-`backup.json` is `mkPlan` over this folder, as committed: eight entries, real
+`backup.json` is `mkPlan` over this folder, as committed: eleven entries, real
 hashes, real store path strings, no ellipsis and no invented hash. Every field
 in it is a field the planner produced, so it is compared with `==` in evaluation
 by `tests/unit/plan.nix` and regenerated with one command:
@@ -43,10 +43,19 @@ at-most-probed.
 
 ## `nightly:client@alpha/provides/identity/exports/privateKey`
 
-Declared and delivered to nobody. No slot in the plan names it, because a
-`reads` entry for a secret export is refused outright rather than checked
-against a machine boundary. The reference appears in this entry's own env
+Declared and read by nobody: `readBy` is empty because no slot in this
+deployment names it. A `reads` entry naming it would be what delivers it, and
+the machine of the entry that declared the read would join the delivery set of
+`nightly:vars/hostKey@alpha`. The reference appears in this entry's own env
 because the service that made the key is the service that uses it.
+
+## `nightly:vars/hostKey@alpha`
+
+One entry per generated value, and `per` is `placement`, so `nightly` has three
+of them and each names its own machine. `delivery` holds `alpha` alone —
+`vault-repo:server@vault` reads `publicKey`, which is the public half and
+travels in the plan, so it needs no bytes on disk. The machine reaches this
+key only through `dependsOn`, which is what makes the three entries differ.
 
 ## `nightly:client@alpha/reads/repo`
 

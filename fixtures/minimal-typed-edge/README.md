@@ -98,7 +98,7 @@ rests on.
 A repository on `vault` and three machines pushing to it. `alpha` and `beta` are
 ordinary. `gamma` was added this week and its keypair has not been generated yet.
 
-`deployment/instances.nix` is two instances and 57 lines, most of them comment:
+`deployment/instances.nix` is two instances and 34 lines:
 
 ```nix
 vault-repo = {
@@ -176,7 +176,6 @@ about the target rather than a judgement about the mechanism.
 | --- | ----------- | ----------------- |
 | `locality`, and with it §32.2's lattices, §32.4's bound-versus-tag split and §32.5's two dispositions | all six registered export interfaces in the target are readable from anywhere, so the field would admit one value on every atom | the first export whose value is a unix socket path or a loopback port |
 | `lifecycle`, and with it probes, facts and the register | everything the target evaluates is build-time static | already met elsewhere: two of twelve mesh sketches of the corpus assign an address only after the daemon authenticates |
-| `per`, `deploy`, per-consumer delivery | this folder can refuse a leak and cannot deliver a secret, so a routable secret is unexpressible here | the first value that is secret and has to reach another machine. A database password |
 | `placement.pick`, `strategy`, stable allocation rows | nothing in this deployment delegates a choice, and `pick` is what makes an otherwise pure planner stateful | the first service whose machine the operator is willing to let the planner choose |
 | `members.<name>.enable`, `wire.<member>.<use>` | both roots here have one member and nothing is cut | a module publishing a composition whose coherent cuts an operator wants |
 | externals | no non-fleet resource appears here | a non-fleet resource this deployment has to name, which the corpus records as U3 and U4 and neither is closed |
@@ -208,9 +207,10 @@ product of services and questions, and a chain whose failure rows name no author
 
 ## What it produces
 
-`plan/backup.json` has all eight entries the deployment produces: four
-placements and the four machines those placements depend on. It elides nothing,
-because an evaluator cannot. Two of the eight are there for the planner rather
+`plan/backup.json` has all eleven entries the deployment produces: four
+placements, the four machines those placements depend on, and the three host-key
+values `nightly` generates, one per placement. It elides nothing,
+because an evaluator cannot. Two of the eleven are there for the planner rather
 than for a reader, and the hand-written version of this file used to name them
 and skip them for exactly the reasons that still hold if you are reading rather
 than testing: `nightly:client@beta` is field for field `nightly:client@alpha`
@@ -252,18 +252,18 @@ and nothing further should be built on it.
 ## Files
 
 ```
-interfaces/exports.nix              114   four atoms, two fields each, and the argument for the two that are gone
-interfaces/default.nix               65   two interfaces, four exports
-modules/borg-repo/server.nix         89   the set-valued consumer, reach = "all"
-modules/borg-repo/default.nix        34   the root, one member, defaults and one fixed knob
-modules/borg-push/client.nix        105   the single-valued consumer, and the provider of the identity
-modules/borg-push/default.nix        30   the root
-deployment/instances.nix             57   two instances, two wires, two exposes
-deployment/machines.nix              41   four machines, one tag, one of them ungenerated
-plan/backup.json                    429   eight entries, generated, nothing elided
+interfaces/exports.nix               22   four atoms, two fields each, and the argument for the two that are gone
+interfaces/default.nix               23   two interfaces, four exports
+modules/borg-repo/server.nix         58   the set-valued consumer, reach = "all"
+modules/borg-repo/default.nix        22   the root, one member, defaults and one fixed knob
+modules/borg-push/client.nix         60   the single-valued consumer, and the provider of the identity
+modules/borg-push/default.nix        26   the root
+deployment/instances.nix             34   two instances, two wires, two exposes
+deployment/machines.nix              40   four machines, one tag, one of them ungenerated
+plan/backup.json                    660   eleven entries, generated, nothing elided
 plan/diagnostics.txt                262   two rows, five rejections, five gaps
 ```
 
-The author-facing half is `deployment/` at 98 lines, of which 54 are not comment
+The author-facing half is `deployment/` at 74 lines, of which 62 are not comment
 or blank. Every other folder in the corpus writes more than that in interfaces
 alone.
