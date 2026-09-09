@@ -76,6 +76,7 @@ in
       modules = [
         "wired-pair"
         "portable-image"
+        "secret-delivery"
       ];
       options = [ "--strict" ];
       extraPythonPackages = [ pkgs.python3Packages.pytest ];

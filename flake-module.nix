@@ -115,6 +115,10 @@ in
         inherit pkgs planner imageBuilder;
       };
 
+      secretDeliveryArtifacts = import ./tests/e2e/secret-delivery/artifacts.nix {
+        inherit pkgs planner flakeletBuilder;
+      };
+
       e2eGuest = import ./tests/e2e/guest.nix {
         inherit (pkgs) lib;
         inherit pkgs system;
@@ -128,8 +132,24 @@ in
       e2eArtifactPaths = {
         PLANNER_WIRED_PAIR = "${wiredPairArtifacts}";
         PLANNER_PORTABLE_IMAGE = "${portableImageArtifacts}";
+        PLANNER_SECRET_DELIVERY = "${secretDeliveryArtifacts}";
         PLANNER_E2E_GUEST_IMAGE = "${e2eGuest}/nixos.qcow2";
         PLANNER_E2E_SSH_KEY = "${e2eGuest.sshPrivateKey}";
+      };
+
+      # The deployment of each folder is the one variable that names the working tree
+      # in the shell and the store in the app, so both come out of one attrset rather
+      # than being written twice. `store` is that subtree alone: naming the checkout
+      # root instead would put every file in the runner's closure.
+      e2eDeploymentPaths = {
+        PLANNER_WIRED_PAIR_DEPLOYMENT = {
+          store = ./tests/e2e/wired-pair/deployment;
+          rel = "tests/e2e/wired-pair/deployment";
+        };
+        PLANNER_SECRET_DELIVERY_DEPLOYMENT = {
+          store = ./tests/e2e/secret-delivery/deployment;
+          rel = "tests/e2e/secret-delivery/deployment";
+        };
       };
 
       e2eExports = pkgs.lib.concatStrings (
@@ -150,7 +170,11 @@ in
         text = ''
           root="$(git rev-parse --show-toplevel)"
           cat "$(nix build --no-link --print-out-paths "$root#planner-e2e-env-paths")"
-          printf 'export PLANNER_WIRED_PAIR_DEPLOYMENT=%q\n' "$root/tests/e2e/wired-pair/deployment"
+          ${pkgs.lib.concatStrings (
+            pkgs.lib.mapAttrsToList (
+              name: paths: "printf 'export ${name}=%q\\n' \"$root/${paths.rel}\"\n"
+            ) e2eDeploymentPaths
+          )}
           if ! ${pytestEnv}/bin/python3 ${./tests/e2e/runner.py} --print-env; then
             echo "planner-e2e-env: no rookery, so the end-to-end tests will skip themselves" >&2
           fi
@@ -165,7 +189,9 @@ in
         ];
         text = ''
           ${e2eExports}
-          export PLANNER_WIRED_PAIR_DEPLOYMENT=${./tests/e2e/wired-pair/deployment}
+          ${pkgs.lib.concatStrings (
+            pkgs.lib.mapAttrsToList (name: paths: "export ${name}=${paths.store}\n") e2eDeploymentPaths
+          )}
           export PLANNER_E2E=${./tests/e2e}
           exec ${pytestEnv}/bin/python3 ${./tests/e2e/runner.py} "$@"
         '';
@@ -220,6 +246,7 @@ in
       packages.planner-e2e-wired-pair = wiredPairArtifacts;
       packages.planner-e2e-guest = e2eGuest;
       packages.planner-e2e-portable-image = portableImageArtifacts;
+      packages.planner-e2e-secret-delivery = secretDeliveryArtifacts;
       packages.planner-e2e-env = e2eEnvScript;
       packages.planner-e2e-env-paths = e2eEnvPaths;
 
