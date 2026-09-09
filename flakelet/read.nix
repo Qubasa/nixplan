@@ -120,11 +120,13 @@ in
 
       refusedUnits = filter (file: !(acceptsUnit image.name file)) (filesOf image);
 
-      # A host path reaches a unit through an assemble step, and this realiser has
-      # none: the endpoint reads the directory, links and starts. An entry shown a
-      # host file is refused rather than rendered into a unit whose bind mount
-      # names a path nothing on the machine creates.
-      shownPaths = sort (a: b: a.path < b.path) image.hostPaths;
+      # A configuration file's bytes come out of the store and land at a host path
+      # through an assemble step, and this realiser has none: the endpoint reads
+      # the directory, links and starts. A generated file is its own source, and
+      # its bytes arrive by delivery of the value the plan names before the entry
+      # is activated, so there is nothing here to assemble and nothing to refuse.
+      # A value no machine receives is already refused by the planner.
+      shownPaths = sort (a: b: a.path < b.path) (filter (p: p.from != p.path) image.hostPaths);
     in
     if !(acceptsName image.name) then
       fail "entry ${quote key} derives the service name ${quote image.name}, which the endpoint refuses: ${nameRule}"
@@ -134,7 +136,7 @@ in
       let
         first = head shownPaths;
       in
-      fail "entry ${quote key} is shown the host path ${quote first.path} as a ${first.kind}, and this realiser ships unit files and metadata only: it runs no step on the machine that could assemble or check that path"
+      fail "entry ${quote key} is shown the host path ${quote first.path} as a ${first.kind} assembled from ${quote first.from}, and this realiser ships unit files and metadata only: it runs no step on the machine that could assemble that path. A delivered generated file is not this case: its bytes arrive at the path the plan names"
     else
       image;
 
