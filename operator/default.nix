@@ -57,7 +57,9 @@
             inherit key;
           };
 
-      entries = builtins.mapAttrs artifactOf reading.entries;
+      entries = builtins.mapAttrs artifactOf (
+        planner.util.filterAttrs (_: entry: entry.realised) reading.entries
+      );
 
       json = name: value: pkgs.writeText "planner-${name}.json" (builtins.toJSON value);
 

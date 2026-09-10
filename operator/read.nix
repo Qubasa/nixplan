@@ -126,6 +126,8 @@ let
       address = if declared == "" then null else declared;
       entry = plan.${key};
       name = imageReader.nameOf parts;
+      realised = entry.units or { } != { };
+      named = realise ? ${key} || realise ? "${parts.instance}:${parts.service}";
     in
     {
       inherit
@@ -136,38 +138,50 @@ let
         name
         ;
       inherit (parts) instance service machine;
+      inherit realised;
       projection = projected key;
-      artifact = "entries/${projected key}";
+      artifact = if realised then "entries/${projected key}" else null;
       units = unitFilesOf name (entry.units or { });
       digest = entry.key;
       rows =
-        optional (!known) (
-          planner.error {
-            id = "operator-realiser-unknown";
-            subject = key;
-            message = "entry ${quote key} is stated to be realised by ${quote realiser}, and the realisers that exist are ${quoteList realisers}";
-            evidence = "the realisation statement is read by plan key, then by the `<instance>:<service>` prefix, then by `default`";
-            resolution = "state one of ${quoteList realisers} for ${quote key} in the deployment's `realise` argument";
-          }
-        )
-        ++ optional (known && realiser == "image" && profile == null) (
-          planner.error {
-            id = "operator-image-profile-missing";
-            subject = key;
-            message = "entry ${quote key} is stated to be realised as an image and its statement carries no ${quote "profile"}";
-            evidence = "a confinement profile is a build input no plan field records, so it is stated rather than chosen by the builder";
-            resolution = "add a `profile` to the `realise` statement of ${quote key}: one of ${quoteList imageReader.profileNames}";
-          }
-        )
-        ++ optional (address == null) (
-          planner.error {
-            id = "operator-entry-machine-no-address";
-            subject = key;
-            message = "entry ${quote key} is placed on machine ${quote parts.machine}, and the plan's `machine:${parts.machine}` record declares no address";
-            evidence = "an artifact is copied to the address the registry declared, and an entry's own target is never consulted for it";
-            resolution = "declare an `address` for ${quote parts.machine} in the deployment's machine registry";
-          }
-        );
+        if !realised then
+          optional named (
+            planner.error {
+              id = "operator-entry-realises-nothing";
+              subject = key;
+              message = "entry ${quote key} is stated to be realised by ${quote realiser} and declares no unit, so there is nothing to realise for it";
+              evidence = "an entry whose whole contribution is an export runs nothing, and a realiser of it would produce an artifact with no unit to attach";
+              resolution = "remove ${quote key} from the deployment's `realise` argument, or declare a unit for it";
+            }
+          )
+        else
+          optional (!known) (
+            planner.error {
+              id = "operator-realiser-unknown";
+              subject = key;
+              message = "entry ${quote key} is stated to be realised by ${quote realiser}, and the realisers that exist are ${quoteList realisers}";
+              evidence = "the realisation statement is read by plan key, then by the `<instance>:<service>` prefix, then by `default`";
+              resolution = "state one of ${quoteList realisers} for ${quote key} in the deployment's `realise` argument";
+            }
+          )
+          ++ optional (known && realiser == "image" && profile == null) (
+            planner.error {
+              id = "operator-image-profile-missing";
+              subject = key;
+              message = "entry ${quote key} is stated to be realised as an image and its statement carries no ${quote "profile"}";
+              evidence = "a confinement profile is a build input no plan field records, so it is stated rather than chosen by the builder";
+              resolution = "add a `profile` to the `realise` statement of ${quote key}: one of ${quoteList imageReader.profileNames}";
+            }
+          )
+          ++ optional (address == null) (
+            planner.error {
+              id = "operator-entry-machine-no-address";
+              subject = key;
+              message = "entry ${quote key} is placed on machine ${quote parts.machine}, and the plan's `machine:${parts.machine}` record declares no address";
+              evidence = "an artifact is copied to the address the registry declared, and an entry's own target is never consulted for it";
+              resolution = "declare an `address` for ${quote parts.machine} in the deployment's machine registry";
+            }
+          );
     };
 
   # `program` is recorded only where the plan records one, so the manifest of a

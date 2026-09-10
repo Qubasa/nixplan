@@ -70,7 +70,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   error row naming the key and the shapes. Verify a deployment with an instance called `machine`
   builds an artifact for it, and a member named inside the value namespace reads without a missing
   attribute.
-- [ ] 3.2 `operator/read.nix`: a placed entry declaring no unit is realised into nothing - present
+- [x] 3.2 `operator/read.nix`: a placed entry declaring no unit is realised into nothing - present
   in the deployment record, contributing no artifact, producing no row - and a statement naming such
   an entry is an error row. Verify `talker:main@host` of the documented example appears in the record
   with its machine, that the build produces one artifact and not two, and that stating a realiser for
