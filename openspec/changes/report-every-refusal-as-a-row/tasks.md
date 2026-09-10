@@ -205,9 +205,17 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
     `testAScenarioGainsNoTest` names every scenario with no test and answers empty, and
     `testOneBehaviourIsAssertedInBothLayers` answers empty, so no scenario's name is shared
     between the nix-unit layer and pytest.
-- [ ] 9.2 The documented example, end to end: evaluate `docs/README.md:52-125` as written, confirm
+- [x] 9.2 The documented example, end to end: evaluate `docs/README.md:52-125` as written, confirm
   `diagnostics = [ ]` and `applicable = true`, build it, and confirm the artifact of
   `hearer:main@host` exists and no artifact of `talker:main@host` does. Record the store path here.
+  - Evaluated as written: `diagnostics = [ ]`, `applicable = true`, and the plan carries
+    `hearer:main@host` with `closure = [ ]` and `talker:main@host` with `units = { }`, which is
+    the pruning exemption of 2.1. Built through `operator.mkDeployment` with the same `args`:
+    `/nix/store/rl6cvsx1h10895wj3mnwvarl28yx8cck-planner-deployment`. It holds
+    `entries/hearer-main-host` and no other artifact directory; the unit it carries is
+    `hearer-main-say.service` running `/bin/echo hello world`. `manifest.json` names both entries,
+    `talker:main@host` with `"path": null`. Before this change the same build raised
+    "entry `hearer:main@host` records no `closure`".
 - [ ] 9.3 Prove each new refusal can fire and only fires when it should: for each of the eleven rows
   the reading gains and the three the planner gains, mutate one deployment to trigger it, confirm
   exactly the tests of that scenario fail, and revert. Record the mutation and the failing test name
