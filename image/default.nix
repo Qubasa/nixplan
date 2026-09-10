@@ -135,11 +135,26 @@ in
       # store, a render list is concatenated from its literals and reference paths.
       # Neither needs an evaluator or the daemon, which is why it happens here.
       #
+      # `install -m` is what puts the file where the unit reads it, and it creates its
+      # destination owner-only before it writes a byte and chmods to the declared mode
+      # after, so the file is never readable by anyone the declaration excludes. A
+      # render is concatenated into an owner-only file beside it first, because the
+      # declared mode may carry no write bit and appending to a `0444` file is a
+      # privilege rather than a right.
+      #
+      # Creating the file with `: >` and chmod-ing at the end, which is what this did,
+      # left a configuration file rendering a secret at the attaching login's umask for
+      # the length of the append and at that mode for good if the script stopped there.
+      #
       # $root is PORTABLE_PLANNER_ROOT, empty on a machine attaching its own images and
       # a directory when the assembly is staged elsewhere. It prefixes host state and
       # never a store path.
       assemble =
         file:
+        let
+          staged = ''"$root"'' + lib.escapeShellArg file.staged;
+          partial = ''"$root"'' + lib.escapeShellArg "${file.staged}.assembling";
+        in
         ''
           install -d -m 0755 "$root$(dirname ${lib.escapeShellArg file.staged})"
         ''
@@ -147,30 +162,31 @@ in
           if file.source != null then
             ''
               [ -e ${lib.escapeShellArg file.source} ] || fail "the source of ${file.path} is not on this machine: ${file.source}"
-              cat ${lib.escapeShellArg file.source} > "$root"${lib.escapeShellArg file.staged}
+              install -m ${lib.escapeShellArg file.mode} ${lib.escapeShellArg file.source} ${staged}
             ''
           else
             ''
-              : > "$root"${lib.escapeShellArg file.staged}
+              install -m 0600 /dev/null ${partial}
             ''
             + concatStringsSep "" (
               map (
                 item:
                 if item ? text then
                   ''
-                    printf '%s' ${lib.escapeShellArg item.text} >> "$root"${lib.escapeShellArg file.staged}
+                    printf '%s' ${lib.escapeShellArg item.text} >> ${partial}
                   ''
                 else
                   ''
                     [ -e "$root"${lib.escapeShellArg item.ref} ] || fail "the reference ${item.ref} that ${file.path} is assembled from is not on this machine"
-                    cat "$root"${lib.escapeShellArg item.ref} >> "$root"${lib.escapeShellArg file.staged}
+                    cat "$root"${lib.escapeShellArg item.ref} >> ${partial}
                   ''
               ) (if file.render == null then [ ] else file.render)
             )
-        )
-        + ''
-          chmod ${lib.escapeShellArg file.mode} "$root"${lib.escapeShellArg file.staged}
-        '';
+            + ''
+              install -m ${lib.escapeShellArg file.mode} ${partial} ${staged}
+              rm -f ${partial}
+            ''
+        );
 
       # A file rendered over a set with an absent entry has no recipe to assemble, so
       # attaching refuses rather than writing an empty file over what the service reads.

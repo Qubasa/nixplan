@@ -46,7 +46,7 @@
 - [ ] 4.3 Add the unorderable-state scenario and the two announcement scenarios, and verify each can
   fail by reverting exactly the change it covers
 - [ ] 4.4 Register every new scenario in `tests/unit/coverage.nix`, and verify
-  `nix build .#checks.x86_64-linux.planner-unit` reports no unmapped scenario
+  `nix build .#checks.x86_64-linux.planner-tests` reports no unmapped scenario
 
 ## 5. Documents
 

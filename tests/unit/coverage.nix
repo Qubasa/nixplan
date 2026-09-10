@@ -171,6 +171,7 @@ let
     "hold-every-stated-guarantee/specs/operator/deployment-build/spec.md"
     "hold-every-stated-guarantee/specs/planner/diagnostics/spec.md"
     "hold-every-stated-guarantee/specs/planner/plan-artifact/spec.md"
+    "hold-every-stated-guarantee/specs/realiser/portable-service-image/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -200,8 +201,6 @@ let
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "deliver-a-secret-without-exposing-it/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-stated-guarantee/specs/realiser/portable-service-image/spec.md" =
-      "an unimplemented change: no task of hold-every-stated-guarantee has been done, so nothing in this package claims to satisfy it yet";
     "hold-every-stated-guarantee/specs/tooling/repository-shape/spec.md" =
       "an unimplemented change: no task of hold-every-stated-guarantee has been done, so nothing in this package claims to satisfy it yet";
     "hold-every-stated-guarantee/specs/tooling/test-layers/spec.md" =

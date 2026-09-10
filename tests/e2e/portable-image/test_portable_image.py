@@ -35,7 +35,9 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import shlex
+import shutil
 import subprocess
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
@@ -473,3 +475,107 @@ def test_a_host_file_the_image_was_shown_survives_detaching(detached: Run) -> No
     """A file the machine was shown is the machine's, so detaching does not touch it."""
     shown = detached.shown_path()
     assert detached.vm.ssh_succeed(f"cat {shlex.quote(shown)}") == SHOWN_TEXT
+
+
+# The assembly below runs on this host rather than on the machine, because what
+# it observes is a window inside one script and the machine only ever shows the
+# state after it. `PORTABLE_PLANNER_ROOT` is what the script already offers for
+# staging an assembly somewhere other than `/`, so nothing is stubbed: this is
+# the artifact's own script, reading the recipe the plan recorded.
+ASSEMBLY = pytest.mark.skipif(
+    shutil.which("systemctl") is None or platform.machine() != "x86_64",
+    reason="the attach script's own guards refuse a host that is not the target",
+)
+
+
+def _staged() -> tuple[Path, str, str, str]:
+    """The attach script, the file it stages, that file's mode, and the path it reads."""
+    entry = DEPLOYMENT.entries[CONFINED_KEY]
+    attachment = json.loads((manifest.artifact_of(entry) / "attachment.json").read_text())
+    configuration = [p for p in attachment["hostPaths"] if p["kind"] == "configuration-file"]
+    referenced = [p for p in attachment["hostPaths"] if p["disposition"] == "reference"]
+    assert len(configuration) == 1, attachment["hostPaths"]
+    assert len(referenced) == 1, attachment["hostPaths"]
+    return (
+        manifest.artifact_of(entry) / "bin" / "attach",
+        str(configuration[0]["from"]),
+        str(configuration[0]["mode"]),
+        str(referenced[0]["path"]),
+    )
+
+
+def _assemble(root: Path, mask: str) -> subprocess.CompletedProcess[str]:
+    """Run the artifact's attach script against a root of this host, under one umask.
+
+    It gets as far as `portablectl`, which is the first thing in it that needs a
+    machine, so everything before that - the guards, the reference checks and the
+    assembly - has happened by the time it returns.
+    """
+    script, _, _, _ = _staged()
+    return subprocess.run(
+        ["sh", "-c", f"umask {mask}; exec {shlex.quote(str(script))}"],
+        env={"PATH": os.environ["PATH"], "PORTABLE_PLANNER_ROOT": str(root)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+@ASSEMBLY
+def test_a_staged_file_renders_a_secret(tmp_path: Path) -> None:
+    """The staged file carries its declared mode, the bytes are the recipe's, and
+    nothing the assembly needed on the way is left behind."""
+    _, staged, mode, read = _staged()
+    (tmp_path / read.lstrip("/")).parent.mkdir(parents=True)
+    (tmp_path / read.lstrip("/")).write_text(SHOWN_TEXT)
+
+    _assemble(tmp_path, "000")
+
+    assembled = tmp_path / staged.lstrip("/")
+    assert oct(assembled.stat().st_mode & 0o7777) == oct(int(mode, 8))
+    assert assembled.read_text().endswith(SHOWN_TEXT)
+    assert not assembled.with_name(f"{assembled.name}.assembling").exists()
+
+
+@ASSEMBLY
+def test_the_assembly_of_a_file_fails_part_way(tmp_path: Path) -> None:
+    """A run that dies between the first byte and the last leaves nothing readable wider.
+
+    The referenced path is a directory, so it exists for the check the script
+    makes before it writes anything and then fails the `cat` that appends it.
+    What is on the host at that point is the half-written file the assembly
+    concatenates into, which nobody but its owner can read, and no file at the
+    path the unit is shown.
+    """
+    _, staged, mode, read = _staged()
+    (tmp_path / read.lstrip("/")).mkdir(parents=True)
+
+    interrupted = _assemble(tmp_path, "000")
+    assert interrupted.returncode != 0
+
+    assembled = tmp_path / staged.lstrip("/")
+    partial = assembled.with_name(f"{assembled.name}.assembling")
+    assert not assembled.exists()
+    assert partial.read_text() != ""
+    assert oct(partial.stat().st_mode & 0o7777) == "0o600"
+
+    (tmp_path / read.lstrip("/")).rmdir()
+    (tmp_path / read.lstrip("/")).write_text(SHOWN_TEXT)
+    _assemble(tmp_path, "000")
+    assert assembled.read_text().endswith(SHOWN_TEXT)
+    assert oct(assembled.stat().st_mode & 0o7777) == oct(int(mode, 8))
+
+
+@ASSEMBLY
+def test_the_mode_does_not_depend_on_the_attaching_environment(tmp_path: Path) -> None:
+    """Two attaching environments, one mode: the declaration decides it, not the login."""
+    _, staged, mode, read = _staged()
+    observed = []
+    for index, mask in enumerate(("000", "077")):
+        root = tmp_path / str(index)
+        (root / read.lstrip("/")).parent.mkdir(parents=True)
+        (root / read.lstrip("/")).write_text(SHOWN_TEXT)
+        _assemble(root, mask)
+        observed.append((root / staged.lstrip("/")).stat().st_mode & 0o7777)
+
+    assert observed == [int(mode, 8), int(mode, 8)]

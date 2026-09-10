@@ -72,12 +72,12 @@
 - [ ] 6.2 Add the two `tooling/test-layers` scenarios to `tests/unit/diagnostics.nix` and verify each
   can fail by breaking exactly what it names
 - [ ] 6.3 Register every new scenario in `tests/unit/coverage.nix` under `accountable`, and verify
-  `nix build .#checks.x86_64-linux.planner-unit` reports no unmapped scenario
+  `nix build .#checks.x86_64-linux.planner-tests` reports no unmapped scenario
 - [ ] 6.4 Document the new rows in `docs/diagnostics.md` under the secrets reading and the two halves
   of the generation build in `docs/secrets.md`, and verify `nix build .#checks.x86_64-linux.treefmt`
   passes
 - [ ] 6.5 Update `CLAUDE.md` so the layered rule names three realisers and states that a refusal
   carries its own row identifier, and verify the literal assertions in `tests/unit/layers.nix` still
   hold
-- [ ] 6.6 Run `nix build .#checks.x86_64-linux.planner-unit` and the secrets end-to-end folder, and
-  verify both pass with no golden regenerated
+- [ ] 6.6 Run `nix build .#checks.x86_64-linux.planner-tests` and verify it passes with no golden
+  regenerated

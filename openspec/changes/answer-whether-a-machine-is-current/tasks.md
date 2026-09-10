@@ -47,7 +47,7 @@
 - [ ] 4.6 Replace the hand comparison in `tests/e2e/wired-pair/test_wired_pair.py:739-741` with an
   assertion on the command's own verdict, and verify the folder still proves the identities line up
 - [ ] 4.7 Register every new scenario in `tests/unit/coverage.nix`, and verify
-  `nix build .#checks.x86_64-linux.planner-unit` reports no unmapped scenario
+  `nix build .#checks.x86_64-linux.planner-tests` reports no unmapped scenario
 
 ## 5. Documents
 
