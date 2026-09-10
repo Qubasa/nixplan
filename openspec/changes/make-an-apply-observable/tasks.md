@@ -28,7 +28,7 @@ only the scenarios listed below are new.
   Verify: `test_a_record_carries_no_table_of_entries` in `tests/e2e/test_harness.py`, over a record
   whose key is misspelled, asserts the refusal names the record; a record with `"entries": {}` still
   reads.
-- [ ] 1.3 `cli/manifest.py:_entry`: the address becomes optional, carried as an absence, because
+- [x] 1.3 `cli/manifest.py:_entry`: the address becomes optional, carried as an absence, because
   `report-every-refusal-as-a-row` makes `operator-entry-machine-no-address` a warning. Every place
   that dials resolves the address and refuses there.
   Verify: `test_a_record_carrying_an_entry_with_no_address_is_read` in `tests/e2e/test_harness.py`:

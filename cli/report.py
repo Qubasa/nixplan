@@ -19,7 +19,7 @@ from pathlib import Path
 
 import remote
 from errors import ApplyError
-from manifest import Deployment, Entry, image_file, service_name
+from manifest import Deployment, Entry, address_of, image_file, service_name
 
 
 def describe(deployment: Deployment) -> tuple[str, ...]:
@@ -34,7 +34,8 @@ def describe(deployment: Deployment) -> tuple[str, ...]:
         files, both in plan key order.
     """
     lines = [
-        f"{entry.key} {entry.realiser} {entry.machine} {entry.address} {entry.path} "
+        f"{entry.key} {entry.realiser} {entry.machine} {entry.address or 'unaddressed'} "
+        f"{entry.path} "
         f"[{' '.join(entry.units)}]"
         for entry in _entries(deployment)
     ]
@@ -76,8 +77,9 @@ def status(
     env = remote.copy_env(environment, opts)
     lines: list[str] = []
     for entry in _selected(deployment, only):
+        address = address_of(entry)
         reported = runner.output(
-            remote.ssh_argv(entry.address, _status_script(entry), opts=opts, user=user), env=env
+            remote.ssh_argv(address, _status_script(entry), opts=opts, user=user), env=env
         )
         lines.append(f"{entry.key} {entry.realiser} {_read_status(entry, reported)}")
     return tuple(lines)
@@ -118,13 +120,12 @@ def rollback(
     environment = os.environ if base_env is None else base_env
     opts = remote.ssh_opts(ssh_key, inherited=environment.get("NIX_SSHOPTS"))
     env = remote.copy_env(environment, opts)
+    address = address_of(entry)
     reported = runner.output(
-        remote.ssh_argv(
-            entry.address, remote.rollback_script(service_name(entry)), opts=opts, user=user
-        ),
+        remote.ssh_argv(address, remote.rollback_script(service_name(entry)), opts=opts, user=user),
         env=env,
     )
-    return (f"rollback {entry.key} on {user}@{entry.address}", *reported.splitlines())
+    return (f"rollback {entry.key} on {user}@{address}", *reported.splitlines())
 
 
 def _status_script(entry: Entry) -> str:

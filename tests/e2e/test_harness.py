@@ -795,3 +795,20 @@ def test_a_record_carries_no_table_of_entries(tmp_path: Path) -> None:
 
     empty = manifest.read(_record(tmp_path / "empty", {**shape, "entries": {}}))
     assert empty.entries == {}
+
+
+def test_a_record_carrying_an_entry_with_no_address_is_read(tmp_path: Path) -> None:
+    """A machine that declares no address is a warning, so the absence is carried."""
+    stated = _stated(SERVER_KEY, "alpha", "10.0.0.10")
+    deployment = _built(tmp_path, plan=PLAN, entries={SERVER_KEY: {**stated, "address": None}})
+    recorder = Recorder()
+
+    assert deployment.entries[SERVER_KEY].address is None
+
+    with pytest.raises(errors.ApplyError) as raised:
+        apply.apply(deployment, recorder, base_env={})
+
+    message = str(raised.value)
+    assert SERVER_KEY in message
+    assert "alpha" in message
+    assert recorder.commands == []

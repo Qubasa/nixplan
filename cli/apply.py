@@ -27,6 +27,7 @@ from manifest import (
     Entry,
     Value,
     ValueFile,
+    address_of,
     machine_address,
     service_name,
 )
@@ -191,6 +192,7 @@ def apply(
     planned = writes(deployment, source, reached)
     walked = order.walk(deployment.plan, keys)
     scripts = {key: activation(deployment.entries[key]) for key in walked.order}
+    addresses = {key: address_of(deployment.entries[key]) for key in walked.order}
 
     opts = remote.ssh_opts(ssh_key, inherited=environment.get("NIX_SSHOPTS"))
     env = remote.copy_env(environment, opts)
@@ -219,12 +221,13 @@ def apply(
 
     for key in walked.order:
         entry = deployment.entries[key]
-        runner.run(remote.copy_argv(entry.path, entry.address, user=user), env=env)
-        record(f"copy {key} {entry.path} -> {user}@{entry.address}")
+        address = addresses[key]
+        runner.run(remote.copy_argv(entry.path, address, user=user), env=env)
+        record(f"copy {key} {entry.path} -> {user}@{address}")
         report = runner.output(
-            remote.ssh_argv(entry.address, scripts[key], opts=opts, user=user), env=env
+            remote.ssh_argv(address, scripts[key], opts=opts, user=user), env=env
         )
-        record(f"activate {key} ({entry.realiser}) on {user}@{entry.address}")
+        record(f"activate {key} ({entry.realiser}) on {user}@{address}")
         for line in report.splitlines():
             record(f"  {line}")
     return tuple(lines)

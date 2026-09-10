@@ -70,7 +70,7 @@ class Entry:
     realiser: str
     profile: str | None
     machine: str
-    address: str
+    address: str | None
     units: tuple[str, ...]
 
 
@@ -197,6 +197,30 @@ def read(root: Path) -> Deployment:
     )
 
 
+def address_of(entry: Entry) -> str:
+    """Return the address to dial for one placed entry.
+
+    A machine that declares no address is a warning of the planner rather than
+    a refusal, so the record carries the absence and the refusal is made here,
+    where the machine would be reached.
+
+    Args:
+        entry: The placed entry.
+
+    Returns:
+        The address the record carries for the entry's machine.
+
+    Raises:
+        ApplyError: If the record carries no address for that machine.
+    """
+    if entry.address is None:
+        raise ApplyError(
+            f"{entry.key}: machine {entry.machine} declares no address, so the command cannot "
+            f"reach it"
+        )
+    return entry.address
+
+
 def machine_address(deployment: Deployment, machine: str, *, of: str) -> str:
     """Return the address the plan's machine record declares.
 
@@ -283,13 +307,16 @@ def _entry(root: Path, key: str, record: Mapping[str, Any]) -> Entry:
     profile = record.get("profile")
     if profile is not None and not isinstance(profile, str):
         raise ApplyError(f"{key} records profile as {profile!r}, which is not a profile name")
+    address = record.get("address")
+    if address is not None and not isinstance(address, str):
+        raise ApplyError(f"{key} records address as {address!r}, which is not an address")
     return Entry(
         key=key,
         path=(root / _text(record, "path", of=key)).resolve(),
         realiser=_text(record, "realiser", of=key),
         profile=profile,
         machine=_text(record, "machine", of=key),
-        address=_text(record, "address", of=key),
+        address=address or None,
         units=_texts(record, "units", of=key),
     )
 
