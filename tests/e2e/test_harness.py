@@ -1013,7 +1013,7 @@ def test_the_run_stops_at_the_step_that_broke(tmp_path: Path) -> None:
     """One boundary, not a set of them: nothing after the refused step is attempted."""
     _, failing, log = _broken(tmp_path)
 
-    assert _activated(log) == [SERVER_KEY]
+    assert _activated(tuple(log)) == [SERVER_KEY]
     assert [command[:2] for command in failing.commands] == [["nix", "copy"], ["ssh", "-o"]]
     assert all("10.0.0.11" not in " ".join(command) for command in failing.commands)
 

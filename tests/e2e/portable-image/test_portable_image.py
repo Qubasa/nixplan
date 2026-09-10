@@ -237,7 +237,7 @@ def delivered(run: Run) -> Run:
     run.vm.ssh_succeed(f"mkdir -p {shlex.quote(os.path.dirname(shown))}")
     run.vm.ssh_succeed(f"printf %s {shlex.quote(SHOWN_TEXT)} > {shlex.quote(shown)}")
 
-    address = run.entry(CONFINED_KEY).address
+    address = manifest.address_of(run.entry(CONFINED_KEY))
     run.cluster.run(
         [
             "nix",
