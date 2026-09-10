@@ -242,6 +242,75 @@ def test_a_consumer_reads_the_build_off_an_output() -> None:
     )
 
 
+def test_one_published_name_answers_two_different_things() -> None:
+    """The name the root advertises answers with the program, whoever asks.
+
+    `nix build` reads the packages and then the flake's own top-level attributes,
+    so a development attrset published as `planner` answered it with `found a
+    set` while `nix run` answered with the command. The name is the program's.
+    """
+    built = Path(
+        _host(
+            "nix",
+            "build",
+            "--no-link",
+            "--print-out-paths",
+            f"{FLAKE}#planner",
+            timeout=PATIENT,
+        )
+        .strip()
+        .splitlines()[-1]
+    )
+    assert (built / "bin" / "planner").is_file(), built
+
+    shown = json.loads(_host("nix", "flake", "show", "--json", str(FLAKE)))
+    assert "planner" not in shown, sorted(shown)
+
+
+def test_the_test_results_are_reachable_under_a_name_of_their_own() -> None:
+    """The suites, their failures and the worked plan are read off one name.
+
+    That name is nobody else's: no application and no package answers for it, so
+    the command and the development values cannot be confused for each other.
+    """
+    failures = json.loads(
+        _host("nix", "eval", "--json", f"{FLAKE}#debug.failures", timeout=PATIENT)
+    )
+    assert failures == [], failures
+
+    suites = json.loads(
+        _host(
+            "nix",
+            "eval",
+            "--json",
+            f"{FLAKE}#debug.suites",
+            "--apply",
+            "builtins.attrNames",
+            timeout=PATIENT,
+        )
+    )
+    assert "plan" in suites, suites
+
+    entries = json.loads(
+        _host(
+            "nix",
+            "eval",
+            "--json",
+            f"{FLAKE}#debug.worked.plan",
+            "--apply",
+            "builtins.attrNames",
+            timeout=PATIENT,
+        )
+    )
+    assert entries, entries
+
+    shown = json.loads(_host("nix", "flake", "show", "--json", str(FLAKE)))
+    assert "debug" in shown, sorted(shown)
+    for system in sorted(shown["apps"]):
+        assert "debug" not in shown["apps"][system], shown["apps"][system]
+        assert "debug" not in shown["packages"][system], sorted(shown["packages"][system])
+
+
 def _planner(work: Workstation, *argv: str, timeout: float = PATIENT) -> str:
     """Run the operator's command on the workstation and return its stdout.
 

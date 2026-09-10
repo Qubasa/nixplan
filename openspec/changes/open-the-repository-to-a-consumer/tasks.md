@@ -38,7 +38,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
 - [x] 2.2 `docs/tooling.md`, `docs/plan.md`, `CLAUDE.md`: every `.#planner.<field>` command line
   becomes `.#debug.<field>`. Verify each command in those documents runs as written, and
   `grep -F '.#planner.'` over the tree finds nothing outside `openspec/`.
-- [ ] 2.3 `tests/e2e/newcomer/test_newcomer.py`:
+- [x] 2.3 `tests/e2e/newcomer/test_newcomer.py`:
   `test_one_published_name_answers_two_different_things`
   and `test_the_test_results_are_reachable_under_a_name_of_their_own`, the machine layer's tests for
   the two scenarios of *A published name means one thing*. The first builds the advertised name and
