@@ -171,36 +171,41 @@ rec {
     }:
     mapAttrs (
       cap: record:
-      {
-        interface = record.interfaceName;
-        declaringFile = record.declaringFile;
-        inherit (record) keysetEqualsInterface;
-        exports = mapAttrs (
-          ename: e:
-          let
-            read =
-              readers."${placement.entryKey}|${cap}|${ename}" or {
-                readBy = [ ];
-                rows = [ ];
-              };
-          in
-          {
-            inherit (e) plane secrecy;
-            value = e.value;
-            inherit (read) readBy;
-          }
-          // (
-            if e.absent then
-              {
-                bytes = "absent";
-                inherit (read) rows;
-              }
-            else
-              { }
-          )
-        ) record.exports;
-      }
-      // (if record.interfaceId == null then { } else { interfaceId = record.interfaceId; })
+      let
+        published = {
+          interface = record.interfaceName;
+          declaringFile = record.declaringFile;
+          inherit (record) keysetEqualsInterface;
+          exports = mapAttrs (
+            ename: e:
+            let
+              read =
+                readers."${placement.entryKey}|${cap}|${ename}" or {
+                  readBy = [ ];
+                  rows = [ ];
+                };
+            in
+            {
+              inherit (e) plane secrecy;
+              value = e.value;
+              inherit (read) readBy;
+            }
+            // (
+              if e.absent then
+                {
+                  bytes = "absent";
+                  inherit (read) rows;
+                }
+              else
+                { }
+            )
+          ) record.exports;
+        };
+      in
+      if record.interfaceId == null then
+        published
+      else
+        published // { interfaceId = record.interfaceId; }
     ) placement.capabilities;
 
   # An absent entry of a set-valued read is named with a null value and a marker

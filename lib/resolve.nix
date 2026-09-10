@@ -363,13 +363,14 @@ in
             let
               iface = declared.interface;
               claim = if iface == null then null else interface.identityOf iface;
+              file = if iface == null then null else interface.fileOf reg iface;
             in
             {
               declaredNames = if iface == null then [ ] else interface.exportNames iface;
-              declaringFile = if iface == null then null else interface.fileOf reg iface;
+              declaringFile = file;
               interfaceName = if iface == null then null else iface.name;
               interfaceId = if claim == null then null else claim.id;
-              label = interface.label reg iface;
+              label = interface.labelFor iface file;
             }
           ) declaration.provides;
 
@@ -926,22 +927,23 @@ in
           capabilityClaim = if capability == null then null else interface.identityOf capability.interface;
 
           # Both ends must claim, or taking one side's word would capture a far
-          # end that never agreed to be captured. Value equality is tried first,
-          # so a wire inside one evaluation costs what it costs today.
+          # end that never agreed to be captured. The value comparison is named
+          # so it is made once and neither claim is forced where it succeeds.
+          sameValue =
+            capability != null && slot.interface != null && slot.interface == capability.interface;
+
           claimsMatch = slotClaim != null && slotClaim == capabilityClaim;
 
           # One conflict is one row wherever it was seen, so the wire builds the
           # same row the registry pass does and `dedup` keeps one.
           claimsConflict =
-            slotClaim != null
+            !sameValue
+            && slotClaim != null
             && capabilityClaim != null
             && slotClaim.id == capabilityClaim.id
             && slotClaim != capabilityClaim;
 
-          interfaceMatches =
-            capability != null
-            && slot.interface != null
-            && (slot.interface == capability.interface || claimsMatch);
+          interfaceMatches = sameValue || claimsMatch;
 
           readsAt =
             machine:

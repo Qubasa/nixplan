@@ -54,6 +54,6 @@
 
 ## 9. Measurement and close-out
 
-- [ ] 9.1 Re-measure the nine budgets with `perf/measure.sh` and re-pin `perf/budgets.json` only if the ratchet fires, recording interpreter version and date with the new figures; verify `nix eval --json .#planner.failuresBySuite.perf` is `[]`
+- [x] 9.1 Re-measure the nine budgets with `perf/measure.sh` and re-pin `perf/budgets.json` only if the ratchet fires, recording interpreter version and date with the new figures; verify `nix eval --json .#planner.failuresBySuite.perf` is `[]`
 - [ ] 9.2 Confirm the tree is green and the goldens did not move: verify `nix eval --json .#planner.failures` is `[]`, `nix eval --json .#planner.worked.plan` equals `fixtures/minimal-typed-edge/plan/backup.json`, and `nix eval --raw .#planner.rendered` equals `fixtures/minimal-typed-edge/plan/diagnostics.txt`
 - [ ] 9.3 Run the formatter once, at the end: `nix fmt`, then verify `nix build .#checks.<system>.treefmt` passes

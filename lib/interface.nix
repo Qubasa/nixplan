@@ -137,15 +137,14 @@ rec {
     else
       (builtins.head claimed).file;
 
-  label =
-    reg: iface:
-    let
-      file = fileOf reg iface;
-    in
+  labelFor =
+    iface: file:
     if file == null then
       "${util.quote iface.name} (declaring file not recorded in the `interfaces` argument of mkPlan)"
     else
       "${util.quote iface.name} (${file})";
+
+  label = reg: iface: labelFor iface (fileOf reg iface);
 
   subjectOf =
     reg: iface:
