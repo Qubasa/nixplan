@@ -634,6 +634,24 @@ def test_the_command_reports_what_a_machine_holds(delivered: Run) -> None:
     assert report._read_status(producer, elsewhere) == "absent"
 
 
+def test_the_identity_a_machine_holds_is_in_its_report_line(delivered: Run) -> None:
+    """The line is the endpoint's own record: the generation and the identity it stores.
+
+    Read back off the machine and compared with what the command printed, so
+    what is asserted is that the report answers with the endpoint's answer
+    rather than with anything the deployment record states.
+    """
+    entry = delivered.built.entries[SERVER_KEY]
+    own = _reported(delivered.vm(entry.machine), delivery.service_name(entry.path))
+
+    reported = _command(delivered, "status", str(delivered.built.root), "--only", entry.key)
+
+    assert reported == (
+        f"{entry.key} {entry.realiser} generation {own['generation']} of {own['locked_url']}",
+    ), reported
+    assert own["last_error"] is None, own
+
+
 def test_a_scheduled_unit_is_not_fired_by_deploying_it(delivered: Run) -> None:
     """Applying a scheduled entry installs a trigger, not a run."""
     server = delivered.vm(SERVER_MACHINE)

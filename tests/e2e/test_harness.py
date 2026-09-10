@@ -29,6 +29,7 @@ import generation
 import manifest
 import planner
 import remote
+import report
 import runner
 
 SERVER_ENTRY = "site:server"
@@ -1093,3 +1094,33 @@ def test_an_image_the_machine_already_holds_attached_is_not_attached_twice(
     assert all(f"{image}/bin/attach" not in command for command in dialled)
     assert f"attached {SERVER_KEY} already on root@10.0.0.10" in log
     assert _activated(log) == [CLIENT_KEY]
+
+
+HELD = json.dumps(
+    [
+        {
+            "generation": 2,
+            "locked_url": "path:/nix/store/1x8k?narHash=sha256-4444",
+            "last_error": "unit site-server-serve.service failed to start",
+        }
+    ]
+)
+
+
+def test_an_entry_the_endpoint_recorded_a_failure_for_is_not_reported_as_healthy(
+    tmp_path: Path,
+) -> None:
+    """The line is the endpoint's whole record, so an error it holds is in it."""
+    deployment = _built(
+        tmp_path,
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+    )
+    answering = Answering("flakelet status", HELD)
+
+    reported = report.status(deployment, answering, base_env={})
+
+    assert reported == (
+        f"{SERVER_KEY} flakelet generation 2 of path:/nix/store/1x8k?narHash=sha256-4444, "
+        f"last error unit site-server-serve.service failed to start",
+    )

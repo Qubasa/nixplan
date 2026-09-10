@@ -142,7 +142,8 @@ def _status_script(entry: Entry) -> str:
 
 def _read_status(entry: Entry, reported: str) -> str:
     if entry.realiser == "image":
-        return "attached" if reported.strip() == "attached" else "absent"
+        printed = reported.strip()
+        return "absent" if printed in ("", "detached") else printed
     try:
         registered = json.loads(reported) if reported.strip() else []
     except json.JSONDecodeError as malformed:
@@ -154,7 +155,9 @@ def _read_status(entry: Entry, reported: str) -> str:
     first = registered[0]
     if not isinstance(first, dict):
         raise ApplyError(f"{entry.key}: the endpoint reported {first!r}, which is not an entry")
-    return f"generation {first.get('generation')} of {first.get('locked_url')}"
+    held = f"generation {first.get('generation')} of {first.get('locked_url')}"
+    failed = first.get("last_error")
+    return held if failed in (None, "") else f"{held}, last error {failed}"
 
 
 def _entries(deployment: Deployment) -> tuple[Entry, ...]:
