@@ -1600,4 +1600,44 @@ in
         applicable = false;
       };
     };
+
+  testOneConflictObservedTwiceIsOneRow =
+    let
+      mine = claiming {
+        exports = {
+          publicKey = publicString;
+          hostName = publicString;
+        };
+      };
+      theirs = claiming { exports.publicKey = publicString; };
+      interfaces = {
+        "interfaces/mine.nix".identity = mine;
+        "interfaces/theirs.nix".identity = theirs;
+      };
+      wired = edge {
+        consumerModule = consumer {
+          interface = mine;
+          reads = [ "publicKey" ];
+        };
+        providerModule = providerOf theirs;
+        inherit interfaces;
+      };
+      attributed = planOf {
+        inherit sources interfaces;
+        instances = { };
+      };
+    in
+    {
+      expr = {
+        wiredRows = countById "interface-id-conflict" wired;
+        attributedRows = countById "interface-id-conflict" attributed;
+        oneAndTheSameRow =
+          rowsById "interface-id-conflict" wired == rowsById "interface-id-conflict" attributed;
+      };
+      expected = {
+        wiredRows = 1;
+        attributedRows = 1;
+        oneAndTheSameRow = true;
+      };
+    };
 }
