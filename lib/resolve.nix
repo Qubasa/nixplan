@@ -1192,6 +1192,17 @@ in
         filter (slot: slot.interface != null && slot.reach == "all") declaredSlots
       );
 
+      # Applied by the same rule a wire matches by, so an interface whose
+      # claim-equal twin is read with set reach is not reported as unread.
+      appliedSomewhere =
+        iface:
+        let
+          claim = interface.identityOf iface;
+        in
+        builtins.any (
+          applied: applied == iface || (claim != null && interface.identityOf applied == claim)
+        ) setReachInterfaces;
+
       foldDeclared = filter (iface: interface.foldOf iface != null) (
         map (r: r.value) (filter (r: interface.isInterface r.value) reg)
         ++ filter (iface: iface != null) (map (slot: slot.interface) declaredSlots)
@@ -1209,7 +1220,7 @@ in
           evidence = "a fold combines the set a read collects, so a deployment resolving only single-valued reads of this interface never applies it and never observes what it does";
           resolution = "declare `reach = \"all\"` on a slot reading this interface, or delete the fold from ${subject}";
         }
-      ) (filter (iface: !(builtins.any (applied: applied == iface) setReachInterfaces)) foldDeclared);
+      ) (filter (iface: !(appliedSomewhere iface)) foldDeclared);
 
       resolved = {
         instances = mapAttrs mkInstance instances;

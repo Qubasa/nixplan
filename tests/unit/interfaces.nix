@@ -905,4 +905,57 @@ in
         applicable = true;
       };
     };
+
+  testAnInterfaceClaimsNoIdentity =
+    let
+      claimless = planner.interface {
+        name = "identity";
+        exports.publicKey = publicString;
+      };
+      result = wired {
+        reads = claimless;
+        interfaces."interfaces/default.nix".identity = claimless;
+      };
+    in
+    {
+      expr = {
+        identity = planner.identityOf claimless;
+        declared = claimless.id;
+        rows = result.diagnostics;
+        stillResolves = result.plan."reader:only@one".reads.far.delivered;
+      };
+      expected = {
+        identity = null;
+        declared = null;
+        rows = [ ];
+        stillResolves = true;
+      };
+    };
+
+  testAnUnclaimedInterfaceKeepsAnUnnamedFold =
+    let
+      bare = planner.interface {
+        name = "identity";
+        exports.publicKey = publicString;
+        fold = set: builtins.attrNames set;
+      };
+      result = scenario {
+        interfaceValues.identity = bare;
+        instances = { };
+      };
+    in
+    {
+      expr = {
+        unnamedFold = countById "interface-id-unnamed-fold" result;
+        nameMalformed = countById "interface-fold-name-malformed" result;
+        notAFunction = countById "interface-fold-not-a-function" result;
+        theFoldHasNoName = planner.foldName (planner.foldOf bare);
+      };
+      expected = {
+        unnamedFold = 0;
+        nameMalformed = 0;
+        notAFunction = 0;
+        theFoldHasNoName = null;
+      };
+    };
 }

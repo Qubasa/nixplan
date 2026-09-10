@@ -1976,4 +1976,49 @@ in
         received = "k";
       };
     };
+
+  testANamedFoldIsPartOfTheClaim =
+    let
+      folded =
+        label:
+        planner.fold "union" (
+          set: "${label}:${builtins.concatStringsSep "," (builtins.attrNames set)}"
+        );
+      mine = claiming {
+        exports.publicKey = publicString;
+        fold = folded "mine";
+      };
+      theirs = claiming {
+        name = "host-identity";
+        exports.publicKey = publicString;
+        fold = folded "theirs";
+      };
+      result = edge {
+        consumerModule = folds {
+          iface = mine;
+          reads = [ "publicKey" ];
+        };
+        providerModule = providerOf theirs;
+        interfaces = {
+          "interfaces/mine.nix".identity = mine;
+          "interfaces/theirs.nix".identity = theirs;
+        };
+      };
+    in
+    {
+      expr = {
+        distinctValues = mine != theirs;
+        oneIdentity = planner.identityOf mine == planner.identityOf theirs;
+        ids = rowIds result;
+        delivered = result.plan."consumer:only@one".reads.far.delivered;
+        theConsumersOwnFoldRan = result.plan."consumer:only@one".units.only.env.FAR;
+      };
+      expected = {
+        distinctValues = true;
+        oneIdentity = true;
+        ids = [ "set-read-in-key" ];
+        delivered = true;
+        theConsumersOwnFoldRan = "mine:provider:only@one";
+      };
+    };
 }
