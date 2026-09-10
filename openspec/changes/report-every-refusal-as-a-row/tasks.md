@@ -158,7 +158,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
 
 ## 7. The realisers are narrowed and their claims restated
 
-- [ ] 7.1 `image/read.nix`: rewrite the header claim of `:5-8` as what will be true - a refusal here
+- [x] 7.1 `image/read.nix`: rewrite the header claim of `:5-8` as what will be true - a refusal here
   is a condition an error row of the planner's table or of the deployment build's table already
   reported, and a refusal about a fact the statement carries belongs to the deployment build. No
   refusal is deleted. Verify the file's raises are unchanged in wording and

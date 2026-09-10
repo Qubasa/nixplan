@@ -4,8 +4,12 @@
 #
 # These refusals raise, unlike the planner's rows. The planner must produce a plan
 # for a deployment that has mistakes in it, while an image built from a fact nobody
-# wrote is worse than no image. Every refusal here is a condition mkPlan reports
-# too, so a caller that wants the row already has it.
+# wrote is worse than no image. Every refusal here is a condition an error row
+# already reported: one from `mkPlan` where the fact is the plan's, and one from
+# `operator/read.nix` where the fact is the realisation statement's, which no plan
+# field carries and this file is never handed whole. A raise here is therefore the
+# answer a caller reaching this file directly receives, and no path through the
+# deployment build reaches one without the row having been produced first.
 { planner }:
 let
   inherit (builtins)
