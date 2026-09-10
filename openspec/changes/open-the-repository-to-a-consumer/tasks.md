@@ -113,7 +113,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
 
 ## 6. The shell and the root
 
-- [ ] 6.1 `devshells.nix`: add `config.packages.planner-cli` to the shell's packages, and derive the
+- [x] 6.1 `devshells.nix`: add `config.packages.planner-cli` to the shell's packages, and derive the
   root from the flake rather than from `git rev-parse --show-toplevel` in the caller's directory
   (design D8). Where the working tree is genuinely wanted, compare it with the flake's own root and
   refuse with both named rather than choosing. Verify `nix develop -c planner --help` prints the
