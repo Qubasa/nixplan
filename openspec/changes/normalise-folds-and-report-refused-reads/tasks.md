@@ -57,5 +57,12 @@
 
 - [x] 6.1 Run `nix build .#checks.x86_64-linux.planner-tests -L` as a supervised process and confirm it passes; verify `nix eval --json .#planner.failures` is `{}`. 321/321 successful, the three new tests among them.
 - [x] 6.2 Confirm no re-measurement is owed, per design D6: run `nix build .#checks.x86_64-linux.planner-perf -L` as a supervised process and verify it passes against the committed `perf/budgets.json` with no figure edited. The gate reports `check.py: 0 failures, 0 invalid comparisons`, and `git diff 6a4a060 -- perf/` is empty, so the derivation resolved to the store path `6a4a060` had built.
-- [ ] 6.3 Confirm the goldens did not move: `nix eval --json .#planner.worked.plan | jq -S .` still equals `fixtures/minimal-typed-edge/plan/backup.json`, the rendered table still equals `fixtures/minimal-typed-edge/plan/diagnostics.txt`, and `git status --porcelain fixtures` is empty
+- [x] 6.3 Confirm the goldens did not move: `nix eval --json .#planner.worked.plan | jq -S .` still equals `fixtures/minimal-typed-edge/plan/backup.json`, the rendered table still equals `fixtures/minimal-typed-edge/plan/diagnostics.txt`, and `git status --porcelain fixtures` is empty.
+  The plan comparison holds byte for byte, and `git status --porcelain fixtures` and
+  `git diff 6a4a060 -- fixtures` are both empty. The second clause is not what the tree does:
+  `plan/diagnostics.txt` is a prose record with the rendered rows embedded in it, not the output
+  of `planner.render`, so `nix eval --raw .#planner.rendered` is 825 bytes against that file's
+  17061 and the two are not comparable with `diff`. What holds the golden is
+  `testTheFoldersRowsAreProduced` in `tests/unit/plan.nix`, which parses the committed rows off
+  the renderer's layout and compares them with the produced ones. It passes in task 6.1's run.
 - [ ] 6.4 Run `nix fmt` and confirm the only changes are formatting of the markdown this change touched, and that `fixtures/**` is untouched
