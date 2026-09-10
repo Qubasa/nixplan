@@ -165,6 +165,8 @@ let
       "an unimplemented change: no task of declare-service-state has been done, so nothing in this package claims to satisfy it yet";
     "declare-service-state/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of declare-service-state has been done, so nothing in this package claims to satisfy it yet";
+    "normalise-folds-and-report-refused-reads/specs/planner/interface-fold/spec.md" =
+      "an unimplemented change: no task of normalise-folds-and-report-refused-reads has been done, so nothing in this package claims to satisfy it yet";
     "open-the-repository-to-a-consumer/specs/operator/apply-command/spec.md" =
       "an unimplemented change: `--dry-run` does not exist, so nothing in this package claims to satisfy it yet";
     "open-the-repository-to-a-consumer/specs/tooling/consumer-surface/spec.md" =
