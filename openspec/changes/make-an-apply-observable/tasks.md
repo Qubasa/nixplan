@@ -22,7 +22,7 @@ only the scenarios listed below are new.
   `test_a_record_states_a_version_the_command_does_not_implement` and
   `test_a_record_names_a_store_the_command_does_not_run_against`, each over a record written into
   `tmp_path`, and each asserts the recorder was handed no argv.
-- [ ] 1.2 `cli/manifest.py:read`: stop defaulting a missing table. `interface.get("entries", {})`
+- [x] 1.2 `cli/manifest.py:read`: stop defaulting a missing table. `interface.get("entries", {})`
   becomes a refusal naming the record and the field when the key is absent, while an empty table
   stays a deployment that places nothing.
   Verify: `test_a_record_carries_no_table_of_entries` in `tests/e2e/test_harness.py`, over a record

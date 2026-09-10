@@ -180,7 +180,7 @@ def read(root: Path) -> Deployment:
     plan = _load(root / PLAN)
     entries = {
         key: _entry(root, key, _mapping(record, of=f"manifest entry {key}"))
-        for key, record in sorted(_mapping(interface.get("entries", {}), of=MANIFEST).items())
+        for key, record in sorted(_mapping(interface["entries"], of=MANIFEST).items())
     }
     values = {
         key: _value(key, _mapping(record, of=f"manifest value {key}"))
@@ -272,6 +272,11 @@ def _shape(path: Path, interface: Mapping[str, Any]) -> None:
     running = store_dir()
     if stated != running:
         raise ApplyError(f"{path} names store {stated!r}, and this command runs against {running}")
+    if "entries" not in interface:
+        raise ApplyError(
+            f"{path} carries no entries table, and an absent table is not an empty one: this is "
+            f"not a record the command can read"
+        )
 
 
 def _entry(root: Path, key: str, record: Mapping[str, Any]) -> Entry:

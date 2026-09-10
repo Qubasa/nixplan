@@ -779,3 +779,19 @@ def test_a_record_names_a_store_the_command_does_not_run_against(tmp_path: Path)
     assert "/gnu/store" in message
     assert manifest.store_dir() in message
     assert recorder.commands == []
+
+
+def test_a_record_carries_no_table_of_entries(tmp_path: Path) -> None:
+    """A misspelled table is a record to refuse, never a deployment placing nothing."""
+    shape = {"version": 1, "storeDir": manifest.store_dir(), "values": {}}
+    misspelled = _record(tmp_path / "misspelled", {**shape, "entires": {}})
+
+    with pytest.raises(errors.ApplyError) as raised:
+        manifest.read(misspelled)
+
+    message = str(raised.value)
+    assert str(misspelled / manifest.MANIFEST) in message
+    assert "entries" in message
+
+    empty = manifest.read(_record(tmp_path / "empty", {**shape, "entries": {}}))
+    assert empty.entries == {}
