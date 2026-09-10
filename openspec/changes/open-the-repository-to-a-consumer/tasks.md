@@ -178,7 +178,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
 
 ## 9. Documentation and invariants
 
-- [ ] 9.1 `docs/operator.md`: the deployment build as an output rather than a path, the downstream
+- [x] 9.1 `docs/operator.md`: the deployment build as an output rather than a path, the downstream
   flake in full, and `flake.mkLib` beside `flake.lib` with what choosing one over the other decides.
   Verify every command in it runs as written and the downstream flake it shows is the one 5.4
   compares against.

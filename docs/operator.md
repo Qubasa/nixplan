@@ -40,7 +40,7 @@ operator.mkDeployment {
 | Argument | What it is |
 | --- | --- |
 | `pkgs` | the package set the artifacts are built with |
-| `planner` | the library value, `import "${nixplan}/lib" { inherit korora systems; }` |
+| `planner` | the library value, `nixplan.lib`, or `nixplan.mkLib { ... }` for a caller's own platform definitions |
 | `args` | the deployment, exactly as [`README.md`](README.md#mkplan) documents it for `mkPlan` |
 | `realise` | how each entry is realised, optional, `{ default.realiser = "flakelet"; }` by default |
 
@@ -102,8 +102,11 @@ nix build .#planner-e2e-wired-pair-changed  # the second of them
 `planner` and `operator` are flake outputs of this repository, and neither is system-specific:
 `lib` is the library, `operator` is the one attribute above, and both take the caller's own `pkgs`.
 `mkLib` is beside them for a consumer whose own package set should elaborate the platform records
-as well, which [`README.md`](README.md#what-the-library-exports) describes. A consumer therefore
-adds one input and wires three arguments.
+as well, which [`README.md`](README.md#what-the-library-exports) describes. The choice decides
+every entry key: a platform record is a field of every placed entry and the key is a digest over
+it, so `lib` keys a plan against the nixpkgs this flake pins and `mkLib { systems = ...; }` keys
+the same deployment against the caller's. One of the two is the answer, never both at once. A
+consumer therefore adds one input and wires three arguments.
 
 The flake that does it is committed rather than described: `tests/e2e/newcomer/template/flake.nix`,
 shown byte for byte by the root [README](../README.md#using-it-from-your-own-flake), which is the
