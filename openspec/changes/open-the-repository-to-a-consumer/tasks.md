@@ -161,10 +161,16 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
 
 ## 8. The command a document advertises
 
-- [ ] 8.1 Run `nix fmt` on a clean checkout and record here whether it succeeds. If it does, delete
+- [x] 8.1 Run `nix fmt` on a clean checkout and record here whether it succeeds. If it does, delete
   the sentence at `docs/tooling.md:301-302`. If it does not, name the files and the condition in
   that sentence, and exclude them in `treefmt.nix` where the exclusion is right (design D11). Verify
   the document and the observed behaviour agree, and record the observation in this task.
+  Observed: it succeeds. `nix fmt` on a clean checkout of this branch traversed 319 files, emitted
+  142 for processing, changed none and exited 0, and `nix build .#checks.x86_64-linux.treefmt` is
+  green over the same set. The sentence claiming it "currently fails on files this library does not
+  own" is therefore deleted rather than qualified, and no exclusion was added: `treefmt.nix` already
+  excludes `fixtures/**` and `openspec/**`, and `workdirs/**` never reaches the formatter because it
+  is gitignored and so is not part of the flake's source.
 - [ ] 8.2 `tests/unit/layers.nix`: `testADocumentAdvertisesACommandItAlsoSaysFails`, the evaluating
   layer's test for that scenario. It scans the documents for a command shown and elsewhere reported
   as failing, and names the document and both places. Verify it is red against the tree as it stood

@@ -299,9 +299,6 @@ folders as modules of the `tests/e2e` directory is what gets them checked at
 all. That list is read rather than written: `builtins.readDir` over `tests/e2e`
 answers it, and a folder is therefore checked by existing.
 
-Note that `nix fmt` also runs prose linters over the
-repository's markdown and currently fails on files this library does not own.
-
 The command carries its own flake module, `cli/flake-module.nix`, imported by
 `flake.nix` beside `flake-module.nix` and `devshells.nix`. The root module is
 where the suites, the performance harness and the end-to-end layer are
