@@ -885,3 +885,31 @@ def test_two_undeclared_files_are_both_named(tmp_path: Path) -> None:
     assert f"{SESSION_VALUE}/toekn" in message
     assert f"{SESSION_VALUE}/spare" in message
     assert recorder.commands == []
+
+
+RELAY_KEY = "probe:relay@alpha"
+
+
+def test_an_entry_off_the_cycle_keeps_its_order(tmp_path: Path) -> None:
+    """A read into a mutual pair is satisfied, and only the pair's own edge is contradicted."""
+    plan = {
+        **PLAN,
+        CLIENT_KEY: {"reads": {"relay": {"entry": RELAY_KEY}}},
+        RELAY_KEY: {"reads": {"site": {"entry": SERVER_KEY}}},
+        SERVER_KEY: {"reads": {"relay": {"entry": RELAY_KEY}}},
+    }
+    deployment = _built(
+        tmp_path,
+        plan=plan,
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            RELAY_KEY: _stated(RELAY_KEY, "alpha", "10.0.0.10"),
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+    )
+
+    log = apply.apply(deployment, Recorder(), base_env={})
+
+    assert _activated(log) == [RELAY_KEY, SERVER_KEY, CLIENT_KEY]
+    against = [line for line in log if line.startswith("ordered against ")]
+    assert against == [f"ordered against the read of {SERVER_KEY} by {RELAY_KEY}"]

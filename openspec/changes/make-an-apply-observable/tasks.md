@@ -56,7 +56,7 @@ only the scenarios listed below are new.
 
 ## 3. The ordering walk
 
-- [ ] 3.1 `cli/order.py:walk`: replace the `remaining[0]` tie-break with the rule of design D4. When
+- [x] 3.1 `cli/order.py:walk`: replace the `remaining[0]` tie-break with the rule of design D4. When
   no entry is ready, take the entries whose every unapplied provider is reachable from the entry
   itself, choose the lowest by key sort order, contradict only the edges into it from its own
   unapplied providers, and report each sorted by provider. The docstring states the rule and drops

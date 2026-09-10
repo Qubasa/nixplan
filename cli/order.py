@@ -8,8 +8,10 @@ order.
 
 Ties break by plan key sort order, so one deployment always walks one way. Two
 instances wiring each other is a legal deployment, and its activation graph
-genuinely has no first element, so a cycle is broken at the lowest key by sort
-order and the edge that was ordered against is reported. Refusing would refuse a
+genuinely has no first element, so an edge is contradicted. Only an edge on a
+cycle is: the entry the walk takes there is one every unapplied provider of
+which is reachable from it, so provider and consumer sit on one cycle, and an
+entry that merely reads into a cycle keeps its order. Refusing would refuse a
 deployment the library considers correct; silence would make a one-off startup
 failure unexplainable.
 """
@@ -39,6 +41,13 @@ def walk(plan: Mapping[str, Any], keys: Iterable[str]) -> WalkResult:
     Returns:
         Every key once, in application order, with the provider-before-consumer
         edges the order had to contradict, provider first.
+
+        With an entry ready, the lowest by key sort order is taken, except that
+        a provider a contradicted edge left behind is taken first: the consumer
+        already ran without it. With none ready, the entries whose every
+        unapplied provider is reachable from the entry itself are the eligible
+        ones, the lowest of those by key sort order is taken, and exactly the
+        edges into it from its own unapplied providers are contradicted.
     """
     nodes = sorted(set(keys))
     providers = {node: set[str]() for node in nodes}
@@ -47,20 +56,54 @@ def walk(plan: Mapping[str, Any], keys: Iterable[str]) -> WalkResult:
 
     order: list[str] = []
     broken: list[tuple[str, str]] = []
+    owed: set[str] = set()
     remaining = list(nodes)
     while remaining:
         ready = [node for node in remaining if not providers[node]]
         if ready:
-            chosen = ready[0]
+            chosen = next((node for node in ready if node in owed), ready[0])
         else:
-            chosen = remaining[0]
+            chosen = _eligible(remaining, providers)
             broken.extend((provider, chosen) for provider in sorted(providers[chosen]))
+            owed |= providers[chosen]
             providers[chosen].clear()
         remaining.remove(chosen)
+        owed.discard(chosen)
         order.append(chosen)
         for node in remaining:
             providers[node].discard(chosen)
     return WalkResult(order=tuple(order), broken=tuple(broken))
+
+
+def _eligible(remaining: list[str], providers: Mapping[str, set[str]]) -> str:
+    """Return the entry whose incoming edges the walk contradicts.
+
+    Args:
+        remaining: The entries still to apply, in key sort order.
+        providers: The unapplied providers of each of them.
+
+    Returns:
+        The lowest entry every unapplied provider of which it reaches forward.
+        One exists whenever no entry is ready: every remaining entry then has a
+        provider, so the graph holds a cycle, and every entry of a component
+        nothing outside it provides into is eligible.
+    """
+    forward: dict[str, set[str]] = {node: set() for node in remaining}
+    for consumer in remaining:
+        for provider in providers[consumer]:
+            forward[provider].add(consumer)
+    return next(node for node in remaining if providers[node] <= _reaches(node, forward))
+
+
+def _reaches(start: str, forward: Mapping[str, set[str]]) -> set[str]:
+    seen: set[str] = set()
+    stack = [start]
+    while stack:
+        for consumer in forward[stack.pop()]:
+            if consumer not in seen:
+                seen.add(consumer)
+                stack.append(consumer)
+    return seen
 
 
 def edges(plan: Mapping[str, Any], keys: Iterable[str]) -> tuple[tuple[str, str], ...]:
