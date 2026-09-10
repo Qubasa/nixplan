@@ -198,8 +198,13 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
 
 ## 9. Verification
 
-- [ ] 9.1 `nix build .#checks.x86_64-linux.planner-tests -L`: green, with one test per scenario of
+- [x] 9.1 `nix build .#checks.x86_64-linux.planner-tests -L`: green, with one test per scenario of
   the five spec files of this change and no name shared with a pytest test.
+  - Green as the supervised process `rr-tests` (exit 0). The scenario cross-walk is
+    `tests/unit/coverage.nix`, which is now accountable for all five spec files of this change:
+    `testAScenarioGainsNoTest` names every scenario with no test and answers empty, and
+    `testOneBehaviourIsAssertedInBothLayers` answers empty, so no scenario's name is shared
+    between the nix-unit layer and pytest.
 - [ ] 9.2 The documented example, end to end: evaluate `docs/README.md:52-125` as written, confirm
   `diagnostics = [ ]` and `applicable = true`, build it, and confirm the artifact of
   `hearer:main@host` exists and no artifact of `talker:main@host` does. Record the store path here.
