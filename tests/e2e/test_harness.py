@@ -16,6 +16,7 @@ can be asserted honestly.
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,7 @@ import apply
 import delivery
 import errors
 import manifest
+import generation
 import runner
 
 SERVER_ENTRY = "site:server"
@@ -450,3 +452,237 @@ def test_the_host_cannot_provide_what_a_machine_needs() -> None:
     named = [line for line in absent if "/dev/nothing-is-here" in line]
     assert len(named) == 1
     assert reason in named[0]
+
+
+ROOT_VALUE = "issuer:vars/root"
+TOKEN_VALUE = "issuer:vars/token"
+ROOT_NAME = "issuer:root"
+TOKEN_NAME = "issuer:token"
+ROOT_IDENTITY = "sha256-1111222233334444"
+TOKEN_IDENTITY = "sha256-5555666677778888"
+GENERATOR = "/nix/store/9dm4x2vqk7z1n5bpr3jlfg8ys6cwh0az-generate-token.drv"
+
+GENERATED_PLAN = {
+    ROOT_VALUE: {
+        "key": ROOT_IDENTITY,
+        "per": "instance",
+        "deploy": False,
+        "delivery": [],
+        "program": GENERATOR,
+        "files": {"key": {"path": "/run/vars/issuer/root/key", "secrecy": "secret"}},
+    },
+    TOKEN_VALUE: {
+        "key": TOKEN_IDENTITY,
+        "per": "instance",
+        "deploy": True,
+        "delivery": ["alpha", "beta"],
+        "reads": [ROOT_VALUE],
+        "program": GENERATOR,
+        "files": {
+            "secret": {"path": "/run/vars/issuer/token/secret", "secrecy": "secret"},
+            "fingerprint": {"path": "/run/vars/issuer/token/fingerprint", "secrecy": "public"},
+        },
+    },
+}
+
+CONFIGURATION = {
+    "_type": "secrets-configuration",
+    "store": {
+        ROOT_NAME: {
+            "backend": "age",
+            "dependencies": [],
+            "prompts": {},
+            "generate": GENERATOR,
+            "files": {"key": {"deploy": False}},
+        },
+        TOKEN_NAME: {
+            "backend": "age",
+            "dependencies": [ROOT_NAME],
+            "prompts": {},
+            "generate": GENERATOR,
+            "files": {"secret": {"deploy": True}, "fingerprint": {"deploy": True}},
+        },
+    },
+    "backends": {"prompt": {}, "store": {"age": {}}},
+}
+
+NAMES = {ROOT_VALUE: ROOT_NAME, TOKEN_VALUE: TOKEN_NAME}
+
+
+class Backend:
+    """A store backend that answers from a table and records every fetch.
+
+    The real one is a program per command, invoked by exit status. What the
+    driver does with a real one is asserted in `tests/e2e/generated-secret`, on
+    machines, against bytes a generator minted.
+    """
+
+    def __init__(
+        self,
+        holds: dict[tuple[str, str], str],
+        statuses: dict[tuple[str, str], int] | None = None,
+    ) -> None:
+        self.holds = holds
+        self.statuses = statuses or {}
+        self.fetched: list[tuple[str, str]] = []
+
+    def status(self, name: str, file: str) -> int:
+        if (name, file) in self.statuses:
+            return self.statuses[(name, file)]
+        return generation.HELD if (name, file) in self.holds else generation.NOT_HELD
+
+    def fetch(self, name: str, file: str) -> str:
+        self.fetched.append((name, file))
+        return self.holds[(name, file)]
+
+
+def _values() -> tuple[generation.Value, ...]:
+    return generation.values(GENERATED_PLAN, CONFIGURATION, NAMES)
+
+
+def _everything_held() -> Backend:
+    return Backend(
+        {
+            (ROOT_NAME, "key"): "root-bytes",
+            (TOKEN_NAME, "secret"): "secret-bytes",
+            (TOKEN_NAME, "fingerprint"): "0f1e2d3c",
+        }
+    )
+
+
+def test_an_unreadable_backend_answer_fails_the_run() -> None:
+    """`exists` answers 0 or 42. A third status is a backend that failed."""
+    values = _values()
+    backend = _everything_held()
+    backend.statuses[(TOKEN_NAME, "secret")] = 7
+
+    with pytest.raises(generation.GenerationError) as raised:
+        generation.state(values, backend)
+
+    message = str(raised.value)
+    assert TOKEN_NAME in message
+    assert "secret" in message
+    assert "7" in message
+    assert TOKEN_VALUE in message
+
+
+def test_a_generator_that_fails_stops_the_run() -> None:
+    """A non-zero exit is refused with the value the generator named."""
+    failed = subprocess.CompletedProcess(
+        args=["nixos-secrets", "generate"],
+        returncode=1,
+        stdout=f"Generating '{TOKEN_NAME}'\n",
+        stderr=f"Error generating '{TOKEN_NAME}': exit 1\n",
+    )
+
+    assert generation.failed_value(failed.stdout + failed.stderr) == TOKEN_NAME
+
+    with pytest.raises(generation.GenerationError) as raised:
+        generation.require_success(failed, what="generation")
+    assert TOKEN_NAME in str(raised.value)
+
+    timed_out = subprocess.CompletedProcess(
+        args=["nixos-secrets", "generate"],
+        returncode=1,
+        stdout="",
+        stderr=f"Generator '{ROOT_NAME}' timed out\n",
+    )
+    with pytest.raises(generation.GenerationError) as raised:
+        generation.require_success(timed_out, what="generation")
+    assert ROOT_NAME in str(raised.value)
+
+
+def test_a_generator_that_produced_nothing_stops_the_run() -> None:
+    """Success and an empty store is a refusal naming the value and its files."""
+    values = _values()
+    backend = Backend({(ROOT_NAME, "key"): "root-bytes"})
+    built = generation.state(values, backend)
+
+    assert built[TOKEN_VALUE]["secret"] == {"present": False}
+
+    with pytest.raises(generation.GenerationError) as raised:
+        generation.require_generated(values, built)
+
+    message = str(raised.value)
+    assert TOKEN_NAME in message
+    assert "secret" in message
+    assert "fingerprint" in message
+    assert ROOT_NAME not in message
+
+
+def test_a_regenerated_dependency_leaves_its_consumer_stale() -> None:
+    """The identity compared is the plan key over the declaration, both named."""
+    values = _values()
+    built = generation.state(values, _everything_held())
+
+    current = generation.identities(values)
+    assert current == {ROOT_NAME: ROOT_IDENTITY, TOKEN_NAME: TOKEN_IDENTITY}
+    generation.require_provenance(values, built, current)
+
+    stale = dict(current)
+    stale[TOKEN_NAME] = "sha256-0000000000000000"
+    with pytest.raises(generation.GenerationError) as raised:
+        generation.require_provenance(values, built, stale)
+
+    message = str(raised.value)
+    assert TOKEN_NAME in message
+    assert "sha256-0000000000000000" in message
+    assert TOKEN_IDENTITY in message
+    assert f"nixos-secrets generate -g {TOKEN_NAME}" in message
+    # The dependency was regenerated and agrees, so it is not what is named.
+    assert ROOT_NAME not in message.replace(TOKEN_NAME, "")
+
+
+def test_a_stored_value_of_unknown_provenance_is_refused() -> None:
+    """No record is a disagreement, and a value the backend holds none of is not."""
+    values = _values()
+    built = generation.state(values, _everything_held())
+
+    with pytest.raises(generation.GenerationError) as raised:
+        generation.require_provenance(values, built, {})
+    assert "a declaration nothing recorded" in str(raised.value)
+
+    ungenerated = generation.state(values, Backend({}))
+    assert generation.held(values, ungenerated) == ()
+    generation.require_provenance(values, ungenerated, {})
+
+
+def test_the_tool_cannot_be_resolved() -> None:
+    """The refusal names the variable and the reference that resolved to nothing."""
+    reference = "/nix/store/there-is-no-such-flake-here"
+
+    with pytest.raises(generation.GenerationError) as raised:
+        generation.tool(reference)
+
+    message = str(raised.value)
+    assert generation.FLAKE_VARIABLE in message
+    assert reference in message
+
+
+def _tool_tree(root: Path, schema: str) -> Path:
+    """Write a store-path-shaped tool holding one schema file."""
+    into = root / "lib" / "python3.14" / "site-packages" / "nixos_secrets"
+    into.mkdir(parents=True)
+    (into / "secrets-config.schema.json").write_text(schema)
+    return root
+
+
+def test_the_external_contract_has_changed(tmp_path: Path) -> None:
+    """A differing schema fails naming the reading, the revision and the file."""
+    moved = generation.contract_refusal(_tool_tree(tmp_path / "moved", '{"title": "Something"}'))
+
+    assert moved is not None
+    assert generation.READING in moved
+    assert generation.CONTRACT_REVISION in moved
+    assert generation.CONTRACT_FILE in moved
+    assert generation.CONTRACT_DIGEST in moved
+
+
+def test_the_external_contract_cannot_be_read(tmp_path: Path) -> None:
+    """An unreadable signal is not evidence the contract moved, so it passes."""
+    assert generation.contract_refusal(None) is None
+    # Resolved to nothing, and resolved to something carrying no contract: the
+    # run that needed the tool skips, and this check has nothing to compare.
+    assert generation.contract_refusal(tmp_path / "nothing-was-resolved") is None
+    (tmp_path / "no-schema").mkdir()
+    assert generation.contract_refusal(tmp_path / "no-schema") is None
