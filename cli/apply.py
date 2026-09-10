@@ -254,6 +254,7 @@ def apply(
     values.check(deployment, source, reached)
     planned = writes(deployment, source, reached)
     walked = order.walk(deployment.plan, keys)
+    withheld = order.unsatisfied(deployment.plan, keys, deployment.entries)
     # An entry that declares no unit is realised into nothing, which the planner
     # accepts: there is no artifact to copy and no unit to activate, so the run
     # takes no step against its machine and refuses nothing on its account.
@@ -274,8 +275,14 @@ def apply(
         lines.append(line)
         log(line)
 
+    for cycle in walked.cycles:
+        record(f"cycle of {', '.join(cycle)}")
+
     for provider, consumer in walked.broken:
         record(f"ordered against the read of {provider} by {consumer}")
+
+    for consumer, provider in withheld:
+        record(f"not applying {provider}, which {consumer} reads")
 
     for write in planned:
         step = (
