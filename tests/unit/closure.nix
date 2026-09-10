@@ -738,4 +738,63 @@ in
         theProgramIsInThePlan = true;
       };
     };
+
+  testADeclaredClosureRootIsNotAStorePath =
+    let
+      result = placed { } (_: {
+        closure = [ "/opt/vendor/agent" ];
+        units.only.command = "/opt/vendor/agent/bin/agent";
+      });
+    in
+    {
+      expr = {
+        rows = countById "closure-root-outside-store" result;
+        severity = severityById "closure-root-outside-store" result;
+        subjects = subjectsById "closure-root-outside-store" result;
+        namesTheRoot = hasInfix "/opt/vendor/agent" (messageById "closure-root-outside-store" result);
+        namesTheStoreDirectory = hasInfix "/nix/store" (messageById "closure-root-outside-store" result);
+        theEntryIsStillRead = (entryOf result).closure;
+      };
+      expected = {
+        rows = 1;
+        severity = "error";
+        subjects = [ "svc:only@one" ];
+        namesTheRoot = true;
+        namesTheStoreDirectory = true;
+        theEntryIsStillRead = [ "/opt/vendor/agent" ];
+      };
+    };
+
+  testADeclaredClosureRootArrivesByDelivery =
+    let
+      result = placed { } (_: {
+        closure = [ openssh ];
+        configData."/etc/svc/known_hosts" = {
+          mode = "0444";
+          reload = [ ];
+          render = [ { ref = openssh; } ];
+        };
+        units.only.command = "/bin/true";
+      });
+    in
+    {
+      expr = {
+        rows = countById "closure-root-is-delivered" result;
+        severity = severityById "closure-root-is-delivered" result;
+        subjects = subjectsById "closure-root-is-delivered" result;
+        namesTheRoot = hasInfix openssh (messageById "closure-root-is-delivered" result);
+        saysWhereTheBytesComeFrom = hasInfix "reach the units from the machine" (
+          evidenceById "closure-root-is-delivered" result
+        );
+        theEntryIsStillRead = (entryOf result).closure;
+      };
+      expected = {
+        rows = 1;
+        severity = "error";
+        subjects = [ "svc:only@one" ];
+        namesTheRoot = true;
+        saysWhereTheBytesComeFrom = true;
+        theEntryIsStillRead = [ openssh ];
+      };
+    };
 }

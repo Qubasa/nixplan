@@ -33,6 +33,7 @@ let
   inherit (support)
     countById
     hasInfix
+    messageById
     planOf
     publicString
     rowIds
@@ -1207,6 +1208,42 @@ in
         ];
         placement = "every";
         carriesItsSettings = true;
+      };
+    };
+
+  testAUnitValueNoUnitFileHasALineFor =
+    let
+      result = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = _: {
+            impl = _: {
+              units.say = {
+                command = "/bin/true";
+                env.MOTD = "first\nsecond";
+              };
+            };
+          };
+        });
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        severity = severityById "unit-env-value-newline" result;
+        subjects = subjectsById "unit-env-value-newline" result;
+        namesTheUnit = hasInfix "`say`" (messageById "unit-env-value-newline" result);
+        namesTheVariable = hasInfix "`MOTD`" (messageById "unit-env-value-newline" result);
+        applicable = result.applicable;
+        theEntryIsStillRead = attrNames result.plan."svc:only@one".units;
+      };
+      expected = {
+        rows = [ "unit-env-value-newline" ];
+        severity = "error";
+        subjects = [ "svc:only@one" ];
+        namesTheUnit = true;
+        namesTheVariable = true;
+        applicable = false;
+        theEntryIsStillRead = [ "say" ];
       };
     };
 }

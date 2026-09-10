@@ -55,7 +55,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   declared closure root the plan also records as a delivered reference. Each names the entry and the
   field, and each is the condition `image/read.nix:355`, `:343` and `:345` refuse. Verify the three
   conditions each produce one row and leave the rest of the plan readable.
-- [ ] 2.5 `tests/unit/plan.nix` and `tests/unit/closure.nix`: add
+- [x] 2.5 `tests/unit/plan.nix` and `tests/unit/closure.nix`: add
   `testAUnitValueNoUnitFileHasALineFor`, `testADeclaredClosureRootIsNotAStorePath` and
   `testADeclaredClosureRootArrivesByDelivery` (three scenarios of
   `specs/planner/diagnostics/spec.md`). All unit layer. Verify each row's identifier, subject and
