@@ -286,6 +286,84 @@ rec {
       }
     );
 
+  typeLabel = t: if t == null then "no korora type" else util.quote t;
+
+  foldLabel = n: if n == null then "no fold" else util.quote n;
+
+  identityDifference =
+    x: y:
+    let
+      onlyX = util.subtractList (attrNames x.exports) (attrNames y.exports);
+      onlyY = util.subtractList (attrNames y.exports) (attrNames x.exports);
+      shared = util.subtractList (attrNames x.exports) onlyX;
+      retyped = builtins.filter (e: x.exports.${e}.type != y.exports.${e}.type) shared;
+      resecreted = builtins.filter (e: x.exports.${e}.secrecy != y.exports.${e}.secrecy) shared;
+    in
+    if onlyX != [ ] then
+      "the first declares ${util.quoteList onlyX} and the second does not"
+    else if onlyY != [ ] then
+      "the second declares ${util.quoteList onlyY} and the first does not"
+    else if retyped != [ ] then
+      "export ${util.quote (builtins.head retyped)} is ${
+        typeLabel x.exports.${builtins.head retyped}.type
+      } to the first and ${typeLabel y.exports.${builtins.head retyped}.type} to the second"
+    else if resecreted != [ ] then
+      "export ${util.quote (builtins.head resecreted)} is ${
+        x.exports.${builtins.head resecreted}.secrecy
+      } to the first and ${y.exports.${builtins.head resecreted}.secrecy} to the second"
+    else
+      "the first names ${foldLabel x.fold} and the second names ${foldLabel y.fold}";
+
+  # A conflict is a fact about two interfaces and is observable from the registry
+  # and from a wire, so one function builds it: identical bytes are what lets
+  # `dedup` keep one row. Ordered by declaring file, then by the claim itself for
+  # two interfaces sharing one file, so the table renders the same twice.
+  claimOrder = reg: iface: util.joinLines [
+    (subjectOf reg iface)
+    (builtins.toJSON (identityOf iface))
+  ];
+
+  conflictRow =
+    reg: x: y:
+    let
+      swap = claimOrder reg y < claimOrder reg x;
+      first = if swap then y else x;
+      second = if swap then x else y;
+    in
+    diag.error {
+      subject = subjectOf reg first;
+      id = "interface-id-conflict";
+      message = "interface ${label reg first} and interface ${label reg second} both claim the identity ${
+        util.quote (identityOf first).id
+      }, and the two claims are not one identity";
+      evidence = "an identity is the claim, each export's korora type name and secrecy, and the fold's name: ${
+        identityDifference (identityOf first) (identityOf second)
+      }";
+      resolution = "make the two claims agree, or claim a different identity in ${subjectOf reg second}";
+    };
+
+  conflictRows =
+    reg:
+    let
+      claimed = builtins.filter (c: c.claim != null) (
+        map (r: {
+          inherit (r) value;
+          claim = identityOf r.value;
+        }) (builtins.filter (r: isInterface r.value) reg)
+      );
+      ids = util.uniqueStrings (map (c: c.claim.id) claimed);
+      rowsFor =
+        id:
+        let
+          group = builtins.filter (c: c.claim.id == id) claimed;
+          reference = builtins.head group;
+        in
+        map (c: conflictRow reg reference.value c.value) (
+          builtins.filter (c: c.claim != reference.claim) group
+        );
+    in
+    builtins.concatLists (map rowsFor ids);
+
   isInterface = v: isAttrs v && v ? name && v ? exports && isAttrs v.exports;
 
   registryRows =
@@ -298,7 +376,8 @@ rec {
         else
           [ ]
       ) reg
-    );
+    )
+    ++ conflictRows reg;
 
   unitExtension =
     {

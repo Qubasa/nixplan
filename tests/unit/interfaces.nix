@@ -89,6 +89,26 @@ let
         };
       };
     };
+
+  conflicting =
+    { mine, theirs }:
+    planOf {
+      instances = { };
+      interfaces = {
+        "interfaces/mine.nix".identity = mine;
+        "interfaces/theirs.nix".identity = theirs;
+      };
+    };
+
+  claiming =
+    args:
+    planner.interface (
+      {
+        name = "identity";
+        id = "example.com/identity";
+      }
+      // args
+    );
 in
 {
   testAnAtomOmitsSecrecy =
@@ -617,6 +637,120 @@ in
           "example.com-identity"
           "example/identity"
         ];
+      };
+    };
+
+  testTwoAttributedInterfacesConflictWithNoWire =
+    let
+      mine = claiming { exports.publicKey = publicString; };
+      theirs = claiming {
+        exports = {
+          publicKey = publicString;
+          hostName = publicString;
+        };
+      };
+      result = conflicting { inherit mine theirs; };
+      again = conflicting { inherit mine theirs; };
+      row = builtins.head (rowsById "interface-id-conflict" result);
+    in
+    {
+      expr = {
+        rows = countById "interface-id-conflict" result;
+        inherit (row) subject severity;
+        namesBothFiles = [
+          (hasInfix "interfaces/mine.nix" row.message)
+          (hasInfix "interfaces/theirs.nix" row.message)
+        ];
+        namesTheId = hasInfix "`example.com/identity`" row.message;
+        namesTheDifference = hasInfix "the second declares `hostName` and the first does not" row.evidence;
+        sameTwice = result.diagnostics == again.diagnostics;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = 1;
+        subject = "interfaces/mine.nix";
+        severity = "error";
+        namesBothFiles = [
+          true
+          true
+        ];
+        namesTheId = true;
+        namesTheDifference = true;
+        sameTwice = true;
+        applicable = false;
+      };
+    };
+
+  testOneClaimAndTwoTypesForOneExport =
+    let
+      mine = claiming { exports.publicKey = publicString; };
+      theirs = claiming { exports.publicKey = publicInt; };
+      result = conflicting { inherit mine theirs; };
+      row = builtins.head (rowsById "interface-id-conflict" result);
+    in
+    {
+      expr = {
+        rows = countById "interface-id-conflict" result;
+        inherit (row) subject;
+        namesTheExport = hasInfix "export `publicKey`" row.evidence;
+        namesBothTypes = hasInfix "`string` to the first and `int` to the second" row.evidence;
+      };
+      expected = {
+        rows = 1;
+        subject = "interfaces/mine.nix";
+        namesTheExport = true;
+        namesBothTypes = true;
+      };
+    };
+
+  testOneClaimAndTwoSecreciesForOneExport =
+    let
+      mine = claiming { exports.key = { type = k.secretRef; }; };
+      theirs = claiming {
+        exports.key = {
+          type = k.secretRef;
+          secrecy = "secret";
+        };
+      };
+      result = conflicting { inherit mine theirs; };
+      row = builtins.head (rowsById "interface-id-conflict" result);
+    in
+    {
+      expr = {
+        rows = countById "interface-id-conflict" result;
+        inherit (row) subject;
+        namesBothSecrecies = hasInfix "export `key` is public to the first and secret to the second" row.evidence;
+      };
+      expected = {
+        rows = 1;
+        subject = "interfaces/mine.nix";
+        namesBothSecrecies = true;
+      };
+    };
+
+  testOneClaimAndTwoFolds =
+    let
+      mine = claiming {
+        exports.publicKey = publicString;
+        fold = planner.fold "union" (set: builtins.attrNames set);
+      };
+      theirs = claiming {
+        exports.publicKey = publicString;
+        fold = planner.fold "sole" (set: builtins.attrNames set);
+      };
+      result = conflicting { inherit mine theirs; };
+      row = builtins.head (rowsById "interface-id-conflict" result);
+    in
+    {
+      expr = {
+        rows = countById "interface-id-conflict" result;
+        inherit (row) subject;
+        namesBothFolds = hasInfix "the first names `union` and the second names `sole`" row.evidence;
+      };
+      expected = {
+        rows = 1;
+        subject = "interfaces/mine.nix";
+        namesBothFolds = true;
       };
     };
 }
