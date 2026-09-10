@@ -1981,9 +1981,7 @@ in
     let
       folded =
         label:
-        planner.fold "union" (
-          set: "${label}:${builtins.concatStringsSep "," (builtins.attrNames set)}"
-        );
+        planner.fold "union" (set: "${label}:${builtins.concatStringsSep "," (builtins.attrNames set)}");
       mine = claiming {
         exports.publicKey = publicString;
         fold = folded "mine";

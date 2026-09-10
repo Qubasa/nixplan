@@ -202,10 +202,7 @@ rec {
           ) record.exports;
         };
       in
-      if record.interfaceId == null then
-        published
-      else
-        published // { interfaceId = record.interfaceId; }
+      if record.interfaceId == null then published else published // { interfaceId = record.interfaceId; }
     ) placement.capabilities;
 
   # An absent entry of a set-valued read is named with a null value and a marker

@@ -929,8 +929,7 @@ in
           # Both ends must claim, or taking one side's word would capture a far
           # end that never agreed to be captured. The value comparison is named
           # so it is made once and neither claim is forced where it succeeds.
-          sameValue =
-            capability != null && slot.interface != null && slot.interface == capability.interface;
+          sameValue = capability != null && slot.interface != null && slot.interface == capability.interface;
 
           claimsMatch = slotClaim != null && slotClaim == capabilityClaim;
 
@@ -1072,9 +1071,7 @@ in
                   resolution = "wire one of ${util.quoteList targetInstance.exposedNames} in ${deploymentFile}";
                 }
             )
-            ++ util.optional claimsConflict (
-              interface.conflictRow reg slot.interface capability.interface
-            )
+            ++ util.optional claimsConflict (interface.conflictRow reg slot.interface capability.interface)
             ++ util.optional (capability != null && slot.interface != null && !interfaceMatches) (
               diag.error {
                 inherit subject;

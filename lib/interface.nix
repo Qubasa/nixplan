@@ -328,10 +328,12 @@ rec {
   # and from a wire, so one function builds it: identical bytes are what lets
   # `dedup` keep one row. Ordered by declaring file, then by the claim itself for
   # two interfaces sharing one file, so the table renders the same twice.
-  claimOrder = reg: iface: util.joinLines [
-    (subjectOf reg iface)
-    (builtins.toJSON (identityOf iface))
-  ];
+  claimOrder =
+    reg: iface:
+    util.joinLines [
+      (subjectOf reg iface)
+      (builtins.toJSON (identityOf iface))
+    ];
 
   conflictRow =
     reg: x: y:
@@ -343,12 +345,8 @@ rec {
     diag.error {
       subject = subjectOf reg first;
       id = "interface-id-conflict";
-      message = "interface ${label reg first} and interface ${label reg second} both claim the identity ${
-        util.quote (identityOf first).id
-      }, and the two claims are not one identity";
-      evidence = "an identity is the claim, each export's korora type name and secrecy, and the fold's name: ${
-        identityDifference (identityOf first) (identityOf second)
-      }";
+      message = "interface ${label reg first} and interface ${label reg second} both claim the identity ${util.quote (identityOf first).id}, and the two claims are not one identity";
+      evidence = "an identity is the claim, each export's korora type name and secrecy, and the fold's name: ${identityDifference (identityOf first) (identityOf second)}";
       resolution = "make the two claims agree, or claim a different identity in ${subjectOf reg second}";
     };
 

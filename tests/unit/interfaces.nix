@@ -254,8 +254,7 @@ in
         unregisteredRows = unregistered.diagnostics;
         claimedRows = claimedAndUnregistered.diagnostics;
         sameKeys = builtins.attrNames registered.plan == builtins.attrNames unregistered.plan;
-        theClaimIsStillRecorded =
-          claimedAndUnregistered.plan."i:only@one".provides.identity.interfaceId;
+        theClaimIsStillRecorded = claimedAndUnregistered.plan."i:only@one".provides.identity.interfaceId;
       };
       expected = {
         registeredRows = [ ];
@@ -736,7 +735,11 @@ in
 
   testOneClaimAndTwoSecreciesForOneExport =
     let
-      mine = claiming { exports.key = { type = k.secretRef; }; };
+      mine = claiming {
+        exports.key = {
+          type = k.secretRef;
+        };
+      };
       theirs = claiming {
         exports.key = {
           type = k.secretRef;
@@ -807,8 +810,9 @@ in
         namesTheDeclaringFile = hasInfix "`host-identity` (interfaces/theirs.nix)" (
           evidenceById "slot-unwired" result
         );
-        foundByClaim =
-          planner.fileOf (planner.registry { "interfaces/theirs.nix".identity = attributed; }) elsewhere;
+        foundByClaim = planner.fileOf (planner.registry {
+          "interfaces/theirs.nix".identity = attributed;
+        }) elsewhere;
       };
       expected = {
         distinctValues = true;
@@ -838,8 +842,9 @@ in
         rendersNoFile = hasInfix "`identity` (declaring file not recorded in the `interfaces` argument of mkPlan)" (
           evidenceById "slot-unwired" result
         );
-        noFile =
-          planner.fileOf (planner.registry { "interfaces/theirs.nix".identity = attributed; }) claimless;
+        noFile = planner.fileOf (planner.registry {
+          "interfaces/theirs.nix".identity = attributed;
+        }) claimless;
       };
       expected = {
         rendersNoFile = true;
