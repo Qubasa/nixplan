@@ -391,6 +391,11 @@ in
         carriesTheTable = hasInfix "clients names three entries" reading.refusal;
         carriesTheReason = hasInfix "not applicable" reading.refusal;
         tableIsTheTable = reading.diagnostics == worked.diagnostics;
+        # Applicability is read from the rows: the reading carries no field of
+        # its own claiming it, and every entry is still named.
+        everyEntryStillRead = placedOf worked.plan == sorted (attrNames reading.entries);
+        applicabilityIsTheRows =
+          reading.refused == (filter (r: r.severity == "error") reading.diagnostics != [ ]);
       };
       expected = {
         applicable = false;
@@ -399,6 +404,8 @@ in
         carriesTheTable = true;
         carriesTheReason = true;
         tableIsTheTable = true;
+        everyEntryStillRead = true;
+        applicabilityIsTheRows = true;
       };
     };
 
@@ -431,8 +438,6 @@ in
       reading = workedRead;
       entry = reading.manifest.entries."vault-repo:server@vault";
       timers = readOf { } (deployment scheduled);
-      bare = reader.read { plan = addressless; };
-      row = builtins.head (rowsById "operator-entry-machine-no-address" bare);
     in
     {
       expr = {
@@ -443,14 +448,7 @@ in
         unplacedContributeNothing = filter (key: builtins.match ".*:vars/.*" key != null) (
           attrNames reading.manifest.entries
         );
-        noAddress = {
-          ids = idsOf bare;
-          count = length (rowsById "operator-entry-machine-no-address" bare);
-          namesTheEntry = hasInfix "`svc:only@bare`" row.message;
-          namesTheMachine = hasInfix "`bare`" row.message;
-          address = bare.manifest.entries."svc:only@bare".address;
-          refused = bare.refused;
-        };
+        everyPlacedKeyOnce = placedOf worked.plan == sorted (attrNames reading.manifest.entries);
       };
       expected = {
         keys = [
@@ -477,14 +475,7 @@ in
           "svc-only-only.timer"
         ];
         unplacedContributeNothing = [ ];
-        noAddress = {
-          ids = [ "operator-entry-machine-no-address" ];
-          count = 1;
-          namesTheEntry = true;
-          namesTheMachine = true;
-          address = null;
-          refused = false;
-        };
+        everyPlacedKeyOnce = true;
       };
     };
 
@@ -1050,6 +1041,80 @@ in
         namesTheAccess = true;
         namesTheProfile = true;
         refused = true;
+      };
+    };
+
+  testAMachineOfAPlacedEntryDeclaresNoAddress =
+    let
+      bare = reader.read { plan = addressless; };
+      row = builtins.head (rowsById "operator-entry-machine-no-address" bare);
+    in
+    {
+      expr = {
+        ids = idsOf bare;
+        severity = row.severity;
+        namesTheEntry = hasInfix "`svc:only@bare`" row.message;
+        namesTheMachine = hasInfix "`bare`" row.message;
+        recordsTheAbsence = bare.manifest.entries."svc:only@bare" ? address;
+        address = bare.manifest.entries."svc:only@bare".address;
+        artifact = bare.manifest.entries."svc:only@bare".path;
+        refused = bare.refused;
+      };
+      expected = {
+        ids = [ "operator-entry-machine-no-address" ];
+        severity = "warning";
+        namesTheEntry = true;
+        namesTheMachine = true;
+        recordsTheAbsence = true;
+        address = null;
+        artifact = "entries/svc-only-bare";
+        refused = false;
+      };
+    };
+
+  testAMachineAddressChangesAndNoArtifactByteDoes =
+    let
+      deploymentAt =
+        address:
+        planner.mkPlan {
+          machines.one = {
+            inherit address;
+            tags = [ ];
+            system = "x86_64-linux";
+            serviceManager = "systemd";
+          };
+          instances.svc = {
+            module = soleRoot { module = _: { impl = simple; }; };
+            placement.every.only.machines = [ "one" ];
+          };
+        };
+      before = deploymentAt "one.example:22";
+      after = deploymentAt "moved.example:22";
+      identityOf = result: (readOf { } result).manifest.entries.${oneKey}.key;
+      artifactOf = result: (readOf { } result).manifest.entries.${oneKey}.path;
+    in
+    {
+      expr = {
+        planKeyMoves = before.plan.${oneKey}.key != after.plan.${oneKey}.key;
+        machineKeyMoves = before.plan."machine:one".key != after.plan."machine:one".key;
+        publishedIdentityStays = identityOf before == identityOf after;
+        artifactNameStays = artifactOf before == artifactOf after;
+        # The identity published is the one the endpoint stores for the artifact.
+        theEndpointsOwn =
+          identityOf before == (flakeletReader.meta (
+            imageReader.read {
+              inherit (before) plan;
+              key = oneKey;
+              profile = flakeletReader.confinement;
+            }
+          )).settings_hash;
+      };
+      expected = {
+        planKeyMoves = true;
+        machineKeyMoves = true;
+        publishedIdentityStays = true;
+        artifactNameStays = true;
+        theEndpointsOwn = true;
       };
     };
 }

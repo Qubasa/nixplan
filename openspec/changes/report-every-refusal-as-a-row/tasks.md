@@ -141,7 +141,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   `plan.json` (D9). Verify changing one machine's address moves every plan entry key on it and moves
   no published identity, and that the value the record publishes is the value
   `flakelet/read.nix:153-159` writes into the endpoint's metadata.
-- [ ] 6.4 `tests/unit/operator.nix`: add `testAMachineOfAPlacedEntryDeclaresNoAddress` and
+- [x] 6.4 `tests/unit/operator.nix`: add `testAMachineOfAPlacedEntryDeclaresNoAddress` and
   `testAMachineAddressChangesAndNoArtifactByteDoes`, and rewrite
   `testTheManifestNamesEveryEntryThePlanPlaced` and `testADeploymentWhoseDiagnosticsCarryAnError`
   against the restated requirements. All unit layer. Verify the rewritten address assertion asserts a
