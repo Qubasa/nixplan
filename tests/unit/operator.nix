@@ -466,7 +466,10 @@ in
           machine = "vault";
           address = "vault.example";
           units = [ "vault-repo-server-borgRepo.service" ];
-          key = worked.plan."vault-repo:server@vault".key;
+          key = imageReader.versionFor {
+            key = "vault-repo:server@vault";
+            entry = worked.plan."vault-repo:server@vault";
+          };
         };
         units = [ "nightly-client-borgPush.service" ];
         withATimer = [

@@ -136,7 +136,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   (`:143-149`) and the deployment record carries the address as an absence rather than omitting the
   field (`:236-245`). Verify a deployment whose registry declares no address for one machine builds
   every artifact and reports one warning naming the entry and the machine.
-- [ ] 6.3 `operator/read.nix`: the per-entry identity the record publishes becomes the artifact
+- [x] 6.3 `operator/read.nix`: the per-entry identity the record publishes becomes the artifact
   version digest the endpoint records as `settings_hash`, and the plan entry digest is read from
   `plan.json` (D9). Verify changing one machine's address moves every plan entry key on it and moves
   no published identity, and that the value the record publishes is the value

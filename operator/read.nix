@@ -205,7 +205,9 @@ let
       projection = projected key;
       artifact = if realised then "entries/${projected key}" else null;
       units = unitFilesOf name (entry.units or { });
-      digest = entry.key;
+      # The identity the endpoint records for the artifact, so a report can
+      # compare a machine against a build. The plan entry key stays in the plan.
+      digest = imageReader.versionFor { inherit key entry; };
       rows =
         optional (malformed != [ ]) (
           planner.error {

@@ -254,6 +254,27 @@ rec {
         generated = generatedOf entry;
       };
 
+  # The digest the endpoint stores for an artifact, over the artifact's own
+  # content and never over the plan key: a fact that moves a key without moving a
+  # byte leaves this where it was.
+  versionFor =
+    { key, entry }:
+    let
+      parts = parseKey key;
+      name = nameOf parts;
+      target = entry.target or { };
+    in
+    versionOf {
+      inherit name;
+      units = entry.units or { };
+      closure = entry.closure or [ ];
+      storeDir = entry.storeDir or "";
+      serviceManager = target.serviceManager or "";
+      hostPaths = hostPathsOf { inherit name entry; };
+      inherit (parts) instance service machine;
+      platform = target.system or null;
+    };
+
   read =
     {
       plan,
@@ -309,18 +330,7 @@ rec {
       # then fails at NAMESPACE rather than at anything an operator can read.
       hostPaths = hostPathsOf { inherit name entry; };
 
-      version = versionOf {
-        inherit
-          name
-          units
-          closure
-          storeDir
-          serviceManager
-          hostPaths
-          ;
-        inherit (parts) instance service machine;
-        platform = system;
-      };
+      version = versionFor { inherit key entry; };
 
       mentions = unit: uniqueStrings (storePathsDeep storeDir (removeAttrs unit [ "extends" ]));
 
