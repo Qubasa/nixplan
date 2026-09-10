@@ -204,8 +204,10 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
 - [x] 10.2 `nix build .#checks.x86_64-linux.treefmt -L`: green, 142 files emitted and none
   changed. Vale caught one alert on the way, `BenBalter.AvoidJargon` against a shortening of
   "repository" in `CLAUDE.md`, and the sentence was rewritten rather than excluded.
-- [ ] 10.3 `nix run .#planner-e2e`: green for every folder, with the count recorded here against the
-  count before the change.
+- [x] 10.3 `nix run .#planner-e2e`: 75 passed in 191s, every folder run and none skipped, so
+  `newcomer` had egress and its walk was observed rather than reported as unobservable. The count
+  before this change was 66 at `2a5191c`; the nine added are all `newcomer`'s, which grew from six
+  tests to fifteen.
 - [ ] 10.4 Prove the new assertions can fail: point the consumer flake at a stale store path and
   confirm only the equality test fails; drop `apps.default` and confirm only the discovery test
   fails; add a path interpolation to the newcomer deployment and confirm the unit-layer scan and the
