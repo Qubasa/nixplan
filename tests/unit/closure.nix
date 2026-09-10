@@ -76,6 +76,32 @@ let
         placement.every.only.machines = [ "one" ];
       };
     };
+
+  generator = "/nix/store/9dm4x2vqk7z1n5bpr3jlfg8ys6cwh0az-generate-token.drv";
+
+  withProgram = planOf {
+    instances.svc = {
+      module = soleRoot {
+        module = _: {
+          vars.token = {
+            program = generator;
+            files."key".secrecy = "secret";
+          };
+          impl =
+            { vars, ... }:
+            {
+              closure = [ openssh ];
+              units.only = {
+                command = "${openssh}/bin/sshd";
+                env.KEYFILE = vars.token."key".path;
+              };
+            };
+        };
+      };
+      placement.every.only.machines = [ "one" ];
+    };
+    varsState."svc:vars/token@one"."key".present = true;
+  };
 in
 {
   # The grammar is Nix's own: the store directory, 32 base-32 characters without e,
@@ -664,6 +690,52 @@ in
         rows = [ "pin-malformed" ];
         namesTheKey = true;
         count = 2;
+      };
+    };
+
+  # A generator runs where the plan is read - on the machine holding the values,
+  # never on one receiving them - so the program it declares is the one store path
+  # in a plan that is not held against a declared closure.
+  testTheProgramIsMentionedWithoutEnteringAClosure =
+    let
+      result = withProgram;
+      value = result.plan."svc:vars/token@one";
+      entry = entryOf result;
+    in
+    {
+      expr = {
+        rows = result.diagnostics;
+        mentioned = value.program;
+        inTheClosure = builtins.elem generator entry.closure;
+        theEntryStillDeclaresItsOwn = entry.closure;
+        # The file's path is a mention like any other, and the value's own entry
+        # is what carries the program.
+        theUnitNamesThePath = entry.units.only.env.KEYFILE;
+      };
+      expected = {
+        rows = [ ];
+        mentioned = generator;
+        inTheClosure = false;
+        theEntryStillDeclaresItsOwn = [ openssh ];
+        theUnitNamesThePath = "/run/vars/svc/token/key";
+      };
+    };
+
+  testAMachineIsGivenNoGenerator =
+    let
+      closures = builtins.concatLists (
+        map (entry: entry.closure or [ ]) (builtins.attrValues withProgram.plan)
+      );
+    in
+    {
+      expr = {
+        # Every closure of the plan, and the generator is in none of them.
+        closures = planner.util.sortStrings (planner.util.uniqueStrings closures);
+        theProgramIsInThePlan = hasInfix generator (builtins.toJSON withProgram.plan);
+      };
+      expected = {
+        closures = [ openssh ];
+        theProgramIsInThePlan = true;
       };
     };
 }

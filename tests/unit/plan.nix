@@ -647,6 +647,7 @@ in
         };
         env.KEYFILE = "/run/vars/holder/hostKey/ssh_host_ed25519_key";
         varsRecord = {
+          deploy = true;
           inPlan = "reference";
           path = "/run/vars/holder/hostKey/ssh_host_ed25519_key";
           secrecy = "secret";
@@ -992,6 +993,122 @@ in
         committed = producedRows;
         count = 2;
         everyMessageIsRendered = true;
+      };
+    };
+
+  # The value's own entry carries the program, so a reader of the plan alone can
+  # run it. Nothing else in the plan mentions it: a service entry is what a
+  # machine is given, and no machine runs a generator.
+  testTheProgramIsInTheEntry =
+    let
+      generator = "/nix/store/9dm4x2vqk7z1n5bpr3jlfg8ys6cwh0az-generate-token.drv";
+      planWith =
+        declared:
+        planOf {
+          instances.svc = {
+            module = soleRoot {
+              module = _: {
+                vars.token = {
+                  per = "instance";
+                  files."key".secrecy = "secret";
+                }
+                // declared;
+                impl =
+                  { vars, ... }:
+                  {
+                    units.only = {
+                      command = "/bin/true";
+                      env.KEYFILE = vars.token."key".path;
+                    };
+                  };
+              };
+            };
+            placement.every.only.machines = [ "one" ];
+          };
+          varsState."svc:vars/token"."key".present = true;
+        };
+      declaring = planWith { program = generator; };
+      declaringNone = planWith { };
+    in
+    {
+      expr = {
+        rows = rowIds declaring ++ rowIds declaringNone;
+        recorded = declaring.plan."svc:vars/token".program;
+        # An absence rather than a path, and told apart by the key being absent.
+        absent = declaringNone.plan."svc:vars/token" ? program;
+        namedByTheServiceEntry = hasInfix generator (toJSON declaring.plan."svc:only@one");
+        entriesNamingIt = filter (key: hasInfix generator (toJSON declaring.plan.${key})) (
+          attrNames declaring.plan
+        );
+      };
+      expected = {
+        rows = [ ];
+        recorded = generator;
+        absent = false;
+        namedByTheServiceEntry = false;
+        entriesNamingIt = [ "svc:vars/token" ];
+      };
+    };
+
+  # Whether bytes arrive at a path is on the file's own record, because a realiser
+  # reads one entry and decides from it what it may show a unit.
+  testAFileRecordCarriesItsDelivery =
+    let
+      result = planOf {
+        instances.svc = {
+          module = soleRoot {
+            module = _: {
+              vars = {
+                root = {
+                  deploy = false;
+                  files."key".secrecy = "secret";
+                };
+                token = {
+                  reads = [ "root" ];
+                  files."secret".secrecy = "secret";
+                };
+              };
+              impl =
+                { vars, ... }:
+                {
+                  units.only = {
+                    command = "/bin/true";
+                    env.KEYFILE = vars.token."secret".path;
+                  };
+                };
+            };
+          };
+          placement.every.only.machines = [ "one" ];
+        };
+        varsState = {
+          "svc:vars/root@one"."key".present = true;
+          "svc:vars/token"."secret".present = true;
+        };
+      };
+      entry = result.plan."svc:only@one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        delivered = entry.vars.token.files."secret".deploy;
+        undelivered = entry.vars.root.files."key".deploy;
+        # The path is recorded either way: a site that opens it is a row, which it
+        # could not be if the record were absent.
+        pathOfEither = [
+          entry.vars.token.files."secret".path
+          entry.vars.root.files."key".path
+        ];
+        onTheValuesOwnEntry = result.plan."svc:vars/root@one".files."key".deploy;
+      };
+      expected = {
+        rows = [ ];
+        delivered = true;
+        undelivered = false;
+        pathOfEither = [
+          "/run/vars/svc/token/secret"
+          "/run/vars/svc/root/key"
+        ];
+        onTheValuesOwnEntry = false;
       };
     };
 }

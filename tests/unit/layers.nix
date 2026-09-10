@@ -55,6 +55,7 @@ let
     "flakelet" = "a realiser";
     "operator" = "the deployment build";
     "cli" = "the operator's command";
+    "secrets" = "a realiser";
     "tests" = "the tests";
     "pytest.ini" = "the tests";
     "fixtures" = "the fixtures the tests read";
@@ -291,6 +292,7 @@ let
     "flakelet"
     "operator"
     "cli"
+    "secrets"
     "perf"
     "tests"
     "fixtures"
@@ -412,6 +414,7 @@ in
       harness = [
         "conftest.py"
         "delivery.py"
+        "generation.py"
         "guest.nix"
         "runner.py"
         "test_harness.py"
@@ -498,6 +501,7 @@ in
         "fixtures/"
         "flakelet/"
         "image/"
+        "secrets/"
         "lib/"
         "nix build .#checks.x86_64-linux.planner-perf"
         "nix build .#checks.x86_64-linux.planner-tests"

@@ -798,6 +798,69 @@ in
       };
     };
 
+  testAnUndeployedValueIsShownAtNoPath =
+    let
+      result = planOf {
+        instances.holder = {
+          module = soleRoot {
+            module = _: {
+              vars = {
+                root = {
+                  deploy = false;
+                  files."key".secrecy = "secret";
+                };
+                token = {
+                  reads = [ "root" ];
+                  files."secret".secrecy = "secret";
+                };
+              };
+              impl =
+                { vars, ... }:
+                {
+                  closure = [ borgbackup ];
+                  units.only = {
+                    command = "${borgbackup}/bin/borg serve";
+                    env.KEYFILE = vars.token."secret".path;
+                  };
+                };
+            };
+          };
+          placement.every.only.machines = [ "one" ];
+        };
+        varsState = {
+          "holder:vars/root@one"."key".present = true;
+          "holder:vars/token@one"."secret".present = true;
+        };
+      };
+      image = reader.read {
+        plan = result.plan;
+        key = "holder:only@one";
+        profile = "trusted";
+      };
+      unit = reader.renderUnit image "only";
+    in
+    {
+      expr = {
+        rows = map (row: row.id) result.diagnostics;
+        # The undeployed value is on no machine, so the entry that owns it is shown
+        # no path for it: a bind mount of a path nothing delivers fails the unit at
+        # NAMESPACE, which names neither the value nor the declaration.
+        hostPaths = map (p: p.path) (reader.attachment image).hostPaths;
+        boundInTheUnit = hasInfix "/run/vars/holder/token/secret" unit;
+        undeployedBound = hasInfix "/run/vars/holder/root/key" unit;
+        # The plan still records the path, which is what lets a site that opens it
+        # be reported rather than silently mounted.
+        stillInThePlan = result.plan."holder:only@one".vars.root.files."key".path;
+      };
+      expected = {
+        rows = [ ];
+        hostPaths = [ "/run/vars/holder/token/secret" ];
+        boundInTheUnit = true;
+        undeployedBound = false;
+        stillInThePlan = "/run/vars/holder/root/key";
+      };
+    };
+
   testARenderRecipeIsAssembledOnTheHost =
     let
       result = planOf {

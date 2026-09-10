@@ -8,6 +8,7 @@
   changesRoot,
   imageSource,
   operatorSource,
+  secretsSource,
   flakeletSource,
 }:
 let
@@ -26,7 +27,8 @@ let
     postgres = import ./unit/postgres.nix { inherit planner support; };
     perf = import ./unit/perf.nix { inherit planner support; };
     exclusions = import ./unit/exclusions.nix { inherit planner support; };
-    secrets = import ./unit/secrets.nix { inherit planner support; };
+    vars = import ./unit/vars.nix { inherit planner support; };
+    secrets = import ./unit/secrets.nix { inherit planner support secretsSource; };
     units = import ./unit/units.nix { inherit planner support; };
     platform = import ./unit/platform.nix { inherit planner support systems; };
     closure = import ./unit/closure.nix { inherit planner support; };
