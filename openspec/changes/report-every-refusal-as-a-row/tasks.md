@@ -34,7 +34,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   example at `docs/README.md:52-125` carries `closure = [ ]` on `hearer:main@host` and `units = { }`
   on `talker:main@host`, and that `nix eval` of both entries through `image/read.nix` no longer
   raises about a field the entry does not record.
-- [ ] 2.2 `tests/unit/plan.nix`: add `testAUnitNamesNoStorePath`, `testAPlacedServiceRunsNoUnit` and
+- [x] 2.2 `tests/unit/plan.nix`: add `testAUnitNamesNoStorePath`, `testAPlacedServiceRunsNoUnit` and
   `testAnEntryThatIsPlacedNowhereRecordsNoUnit` (the three scenarios of
   `specs/planner/plan-artifact/spec.md`). All unit layer. Verify each fails against the tree as it
   stood before 2.1, except the third, which passes before and after and is the guard on the

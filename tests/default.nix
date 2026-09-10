@@ -31,7 +31,14 @@ let
         imageSource
         ;
     };
-    plan = import ./unit/plan.nix { inherit planner support folder; };
+    plan = import ./unit/plan.nix {
+      inherit
+        planner
+        support
+        folder
+        imageSource
+        ;
+    };
     postgres = import ./unit/postgres.nix { inherit planner support; };
     perf = import ./unit/perf.nix { inherit planner support; };
     exclusions = import ./unit/exclusions.nix { inherit planner support; };

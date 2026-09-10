@@ -4,6 +4,7 @@
   planner,
   support,
   folder,
+  imageSource,
 }:
 let
   inherit (builtins)
@@ -45,6 +46,8 @@ let
 
   worked = support.workedResult;
   workedPlan = worked.plan;
+
+  imageReader = import (imageSource + "/read.nix") { inherit planner; };
 
   fixture = fromJSON (readFile (folder + "/plan/backup.json"));
 
@@ -1109,6 +1112,101 @@ in
           "/run/vars/svc/root/key"
         ];
         onTheValuesOwnEntry = false;
+      };
+    };
+
+  testAUnitNamesNoStorePath =
+    let
+      result = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = _: {
+            impl = _: {
+              units.say.command = "/bin/echo hello";
+            };
+          };
+        });
+      };
+      entry = result.plan."svc:only@one";
+      image = imageReader.read {
+        inherit (result) plan;
+        key = "svc:only@one";
+        profile = "strict";
+      };
+      read = builtins.tryEval (builtins.deepSeq image image);
+    in
+    {
+      expr = {
+        recordsAClosure = entry ? closure;
+        closure = entry.closure or null;
+        rows = rowIds result;
+        artifactRead = read.success;
+        artifactClosure = if read.success then image.closure else null;
+      };
+      expected = {
+        recordsAClosure = true;
+        closure = [ ];
+        rows = [ ];
+        artifactRead = true;
+        artifactClosure = [ ];
+      };
+    };
+
+  testAPlacedServiceRunsNoUnit =
+    let
+      result = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = _: {
+            provides.thing.interface = pub;
+            impl = _: {
+              provides.thing.exports.publicKey = "ssh-ed25519 AAAA";
+            };
+          };
+          provides = [ "thing" ];
+        });
+      };
+      entry = result.plan."svc:only@one";
+    in
+    {
+      expr = {
+        recordsUnits = entry ? units;
+        units = entry.units or null;
+        rows = rowIds result;
+        applicable = result.applicable;
+      };
+      expected = {
+        recordsUnits = true;
+        units = { };
+        rows = [ ];
+        applicable = true;
+      };
+    };
+
+  testAnEntryThatIsPlacedNowhereRecordsNoUnit =
+    let
+      result = planOf {
+        instances.svc = {
+          module = soleRoot { module = quiet; };
+          placement.every.only.tags = [ "nowhere" ];
+        };
+      };
+      entry = result.plan."svc:only";
+    in
+    {
+      expr = {
+        planKeys = attrNames result.plan;
+        entryFields = attrNames entry;
+        placement = entry.placement.reason;
+        carriesItsSettings = entry ? settings;
+      };
+      expected = {
+        planKeys = [ "svc:only" ];
+        entryFields = [
+          "key"
+          "placement"
+          "settings"
+        ];
+        placement = "every";
+        carriesItsSettings = true;
       };
     };
 }
