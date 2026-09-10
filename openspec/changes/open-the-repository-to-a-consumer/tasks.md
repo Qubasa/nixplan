@@ -125,7 +125,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
 - [x] 6.3 `README.md`: name rookery beside `nix run .#planner-e2e`, and say a reader without access
   to it cannot run that command. Verify `testTheRootDoesNotSayWhatTheRepositoryIs` passes with
   `rookery` added to its needle list.
-- [ ] 6.4 `tests/unit/layers.nix`:
+- [x] 6.4 `tests/unit/layers.nix`:
   `testACommandTheRootAdvertisesNeedsSomethingThisRepositoryCannotProvide`, the evaluating layer's
   test for that scenario, and the needle-list addition from 6.3. Verify the test is red against the
   root as it stood before 6.3.

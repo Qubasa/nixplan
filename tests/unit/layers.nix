@@ -435,6 +435,47 @@ let
       ) shownTexts
     )
   );
+
+  # The command the root advertises whose run resolves something this repository
+  # does not publish, and the dependency's own name read off the runner that
+  # resolves it. Written here, a rename there would leave this passing.
+  advertisedCommand = "nix run .#planner-e2e";
+
+  runnerReference =
+    let
+      declaration = filter (line: match ".*ROOKERY_FLAKE = \".*" line != null) (
+        lines (readFile (e2eRoot + "/runner.py"))
+      );
+      quoted = match ".*\"(.*)\".*" (head declaration);
+      segments = filter isString (split "/" (head quoted));
+    in
+    if declaration == [ ] then null else elemAt segments (length segments - 1);
+
+  paragraphsOf = text: filter isString (split "\n\n+" text);
+
+  # The advertisement is one paragraph: the dependency has to be named where the
+  # command is, not in a document further down the reading order. The phrase is
+  # pinned because the claim is a claim in words, and this is the smallest part of
+  # it a check can hold.
+  advertisement = filter (para: hasInfix advertisedCommand para) (paragraphsOf rootDocument);
+
+  unnamed =
+    if advertisement == [ ] then
+      [ "README.md advertises no ${advertisedCommand}" ]
+    else
+      sorted (
+        concatLists (
+          map (
+            para:
+            map (needle: "README.md advertises ${advertisedCommand} without saying ${needle}") (
+              filter (needle: !(hasInfix needle para)) [
+                runnerReference
+                "cannot run"
+              ]
+            )
+          ) advertisement
+        )
+      );
 in
 {
   testTheTestTreeIsRead = {
@@ -590,6 +631,7 @@ in
         "openspec/"
         "operator/"
         "perf/"
+        "rookery"
         "tests/e2e/"
         "tests/unit/"
       ];
@@ -597,6 +639,17 @@ in
     expected = {
       present = true;
       unsaid = [ ];
+    };
+  };
+
+  testACommandTheRootAdvertisesNeedsSomethingThisRepositoryCannotProvide = {
+    expr = {
+      inherit unnamed;
+      dependency = runnerReference;
+    };
+    expected = {
+      unnamed = [ ];
+      dependency = "rookery";
     };
   };
 }
