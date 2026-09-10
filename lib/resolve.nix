@@ -353,7 +353,7 @@ in
           settings = member.settings;
 
           declaration = module.read {
-            inherit reg;
+            inherit reg storeDir;
             subject = moduleSubject;
             module = moduleLabel;
             declaration = member.declaration;

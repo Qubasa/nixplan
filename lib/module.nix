@@ -120,6 +120,7 @@ let
     "per"
     "deploy"
     "reads"
+    "program"
   ];
 
   # How many of a generated value exist. The default is `placement`, because the
@@ -350,6 +351,7 @@ rec {
     {
       subject,
       module,
+      storeDir,
       vars,
     }:
     let
@@ -379,6 +381,12 @@ rec {
       deployOf = g: if g ? deploy then g.deploy else true;
       readsOf = g: if g ? reads && isList g.reads then filter isString g.reads else [ ];
       declaredReadsOf = g: filter (name: vars ? ${name}) (readsOf g);
+
+      # A program is recorded and never run, so the only thing checked is that it
+      # is one store path and nothing else: that is what a consumer can hand to a
+      # tool that resolves them.
+      isProgram = p: isString p && util.storePathsIn storeDir p == [ p ];
+      programOf = g: if g ? program && isProgram g.program then g.program else null;
 
       # Generators reachable from one, so a value that transitively reads itself is
       # a row rather than an infinite recursion when the plan hashes what it reads.
@@ -433,6 +441,15 @@ rec {
             resolution = "write `deploy = false;` in ${subject}, or omit the key";
           }
         )
+        ++ util.optional (g ? program && programOf g == null) (
+          diag.error {
+            inherit subject;
+            id = "vars-program-malformed";
+            message = "${where} declares a program that is not a store path";
+            evidence = "a program is recorded as a literal string and neither run nor read here, and the one thing a consumer does with it is hand it to a tool that resolves store paths";
+            resolution = "write the `drvPath` of the package that produces the files in ${subject}, or omit the key";
+          }
+        )
         ++ util.optional (g ? reads && !(isList g.reads && all isString g.reads)) (
           diag.error {
             inherit subject;
@@ -481,6 +498,7 @@ rec {
         per = if elem (perOf g) cardinalities then perOf g else "placement";
         deploy = if builtins.isBool (deployOf g) then deployOf g else true;
         reads = if inCycle gen then [ ] else util.sortStrings (declaredReadsOf g);
+        program = programOf g;
       }) vars;
       rows = util.concatMapAttrsToList genRows vars;
     };
@@ -818,6 +836,7 @@ rec {
       reg,
       subject,
       module,
+      storeDir,
       declaration,
     }:
     let
@@ -826,7 +845,7 @@ rec {
         claims = declaration.claims or { };
       };
       vars = readVars {
-        inherit subject module;
+        inherit subject module storeDir;
         vars = declaration.vars or { };
       };
       uses = builtins.mapAttrs (
