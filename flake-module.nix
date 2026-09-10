@@ -4,8 +4,9 @@ let
   # flake's default.nix warns instead.
   korora = import "${inputs.korora}/types.nix";
   systems = inputs.nixpkgs.lib.systems;
+  platformSource = inputs.nixpkgs.rev;
   folder = ./fixtures/minimal-typed-edge;
-  planner = import ./lib { inherit korora systems; };
+  planner = import ./lib { inherit korora systems platformSource; };
   worked = planner.mkPlan (import ./tests/unit/worked.nix { inherit planner folder; }).args;
   changesRoot = ./openspec/changes;
   imageSource = ./image;

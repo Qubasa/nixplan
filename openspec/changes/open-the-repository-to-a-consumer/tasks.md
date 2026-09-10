@@ -48,7 +48,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
 
 ## 3. The platform elaboration a consumer receives
 
-- [ ] 3.1 `lib/default.nix`: the library records the identity of the platform definitions it was
+- [x] 3.1 `lib/default.nix`: the library records the identity of the platform definitions it was
   applied to, as a value beside `platform`. The identity is what the caller passed in, not a name
   this library invents. Verify the exported value equals the revision this flake's lock records for
   its package set.

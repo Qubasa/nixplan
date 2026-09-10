@@ -8,7 +8,15 @@
 # purpose: a missing attribute in library source is a bug that should fail loudly.
 #
 # systems is lib.systems of the pinned nixpkgs, the one dependency beside korora.
-{ korora, systems }:
+# platformSource is that package set's identity as its caller knows it. A platform
+# record is a field of every placed entry and an entry key is a digest over the
+# entry, so which elaboration ran decides identity. The library invents no name for
+# it and records nothing where a caller states none.
+{
+  korora,
+  systems,
+  platformSource ? null,
+}:
 let
   util = import ./util.nix;
   excluded = import ./excluded.nix;
@@ -51,6 +59,7 @@ in
     atoms
     excluded
     platform
+    platformSource
     util
     ;
 
