@@ -31,6 +31,11 @@ let
 
   sorted = builtins.sort (a: b: a < b);
 
+  pub = planner.interface {
+    name = "pub";
+    exports.publicKey = support.publicString;
+  };
+
   simple = _: {
     closure = [ borgbackup ];
     units.only.command = "${borgbackup}/bin/borg serve";
@@ -561,6 +566,147 @@ in
         rendered = true;
         artifacts = true;
         stated = "image";
+      };
+    };
+
+  testAnInstanceIsNamedMachine =
+    let
+      result = planOf {
+        instances.machine = {
+          module = soleRoot { module = _: { impl = simple; }; };
+          placement.every.only.machines = [ "one" ];
+        };
+      };
+      reading = readOf { } result;
+      entry = reading.entries."machine:only@one";
+    in
+    {
+      expr = {
+        planKeys = sorted (attrNames result.plan);
+        entries = attrNames reading.entries;
+        machine = entry.machine;
+        artifact = entry.artifact;
+        rows = idsOf reading;
+      };
+      expected = {
+        planKeys = [
+          "machine:one"
+          "machine:only@one"
+        ];
+        entries = [ "machine:only@one" ];
+        machine = "one";
+        artifact = "entries/machine-only-one";
+        rows = [ ];
+      };
+    };
+
+  testAMemberIsNamedInsideTheValueNamespace =
+    let
+      result = planOf {
+        instances.svc = {
+          module = root { members."vars/x".module = _: { impl = simple; }; };
+          placement.every."vars/x".machines = [ "one" ];
+        };
+      };
+      reading = readOf { } result;
+    in
+    {
+      expr = {
+        entries = attrNames reading.entries;
+        values = attrNames reading.values;
+        service = reading.entries."svc:vars/x@one".service;
+        rows = idsOf reading;
+        read = (builtins.tryEval (builtins.deepSeq reading.manifest reading.manifest)).success;
+      };
+      expected = {
+        entries = [ "svc:vars/x@one" ];
+        values = [ ];
+        service = "vars/x";
+        rows = [ ];
+        read = true;
+      };
+    };
+
+  testAKeyMatchesNoShapeThePlanCarries =
+    let
+      reading = reader.read {
+        plan = {
+          "machine:one" = {
+            address = "one.example:22";
+            tags = [ ];
+          };
+          "odd:record@one" = {
+            key = "sha256-0000000000000000";
+          };
+        };
+      };
+      row = builtins.head (rowsById "operator-plan-record-unclassified" reading);
+    in
+    {
+      expr = {
+        rows = idsOf reading;
+        refused = reading.refused;
+        entries = attrNames reading.entries;
+        namesTheKey = hasInfix "`odd:record@one`" row.message;
+        namesTheShapes =
+          hasInfix "`delivery`" row.message
+          && hasInfix "`placement`" row.message
+          && hasInfix "address" row.message;
+      };
+      expected = {
+        rows = [ "operator-plan-record-unclassified" ];
+        refused = true;
+        entries = [ ];
+        namesTheKey = true;
+        namesTheShapes = true;
+      };
+    };
+
+  testAPlacedEntryDeclaresNoUnit =
+    let
+      result = planOf {
+        instances.svc = {
+          module = soleRoot {
+            module = _: {
+              provides.thing.interface = pub;
+              impl = _: {
+                provides.thing.exports.publicKey = "ssh-ed25519 AAAA";
+              };
+            };
+            provides = [ "thing" ];
+          };
+          placement.every.only.machines = [ "one" ];
+        };
+      };
+      silent = readOf { } result;
+      asked = readOf {
+        ${oneKey} = {
+          realiser = "image";
+          profile = "strict";
+        };
+      } result;
+      row = builtins.head (rowsById "operator-entry-realises-nothing" asked);
+    in
+    {
+      expr = {
+        recorded = attrNames silent.manifest.entries;
+        machine = silent.manifest.entries.${oneKey}.machine;
+        artifact = silent.manifest.entries.${oneKey}.path;
+        rows = idsOf silent;
+        refused = silent.refused;
+        askedRows = idsOf asked;
+        askedRefused = asked.refused;
+        namesTheEntry = hasInfix "`${oneKey}`" row.message;
+      };
+      expected = {
+        recorded = [ oneKey ];
+        machine = "one";
+        artifact = null;
+        rows = [ ];
+        refused = false;
+        askedRows = [ "operator-entry-realises-nothing" ];
+        askedRefused = true;
+        namesTheEntry = true;
       };
     };
 }

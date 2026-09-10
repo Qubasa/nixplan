@@ -75,7 +75,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   an entry is an error row. Verify `talker:main@host` of the documented example appears in the record
   with its machine, that the build produces one artifact and not two, and that stating a realiser for
   it is refused naming the entry.
-- [ ] 3.3 `tests/unit/operator.nix`: add `testAnInstanceIsNamedMachine`,
+- [x] 3.3 `tests/unit/operator.nix`: add `testAnInstanceIsNamedMachine`,
   `testAMemberIsNamedInsideTheValueNamespace`, `testAKeyMatchesNoShapeThePlanCarries` and
   `testAPlacedEntryDeclaresNoUnit` (the four scenarios of `Every record of a plan is classified by
   the shape of its record`). All unit layer. Verify the second fails with a missing attribute against
