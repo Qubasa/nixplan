@@ -234,12 +234,38 @@ rec {
       }
     );
 
+  # A claim is refused rather than trusted, and a refused claim leaves the
+  # interface identified by its value: one bad string is one row, not a cascade.
+  writtenAs = v: if isString v then util.quote v else "a value of type ${builtins.typeOf v}";
+
+  idRows =
+    reg: iface:
+    let
+      subject = subjectOf reg iface;
+      id = iface.id or null;
+    in
+    util.optional (id != null && !isName id) (
+      diag.error {
+        inherit subject;
+        id = "interface-id-malformed";
+        message = "interface ${label reg iface} claims the identity ${writtenAs id}, and an identity is claimed with a non-empty string carrying no whitespace";
+        evidence = "an identity is claimed with a string two authors can both write, so a claim that is not one identifies nothing; this interface is identified by its value instead";
+        resolution = "write ${util.quote "id = \"<namespace>/<name>\";"} in ${subject}, or delete the key";
+      }
+    );
+
   isInterface = v: isAttrs v && v ? name && v ? exports && isAttrs v.exports;
 
   registryRows =
     reg:
     builtins.concatLists (
-      map (r: if isInterface r.value then atomRows reg r.value ++ foldRows reg r.value else [ ]) reg
+      map (
+        r:
+        if isInterface r.value then
+          atomRows reg r.value ++ foldRows reg r.value ++ idRows reg r.value
+        else
+          [ ]
+      ) reg
     );
 
   unitExtension =

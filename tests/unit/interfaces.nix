@@ -36,6 +36,59 @@ let
       inherit instances;
       interfaces."interfaces/default.nix" = interfaceValues;
     };
+
+  # A reader records the names of what it received, so a refused slot is
+  # observable without the test touching it and aborting the suite.
+  readerOf = iface: _: {
+    uses.far = {
+      interface = iface;
+      reads = [ "publicKey" ];
+    };
+    impl =
+      { results, ... }:
+      {
+        units.only = {
+          command = "/bin/true";
+          env.FAR = if results ? far then results.far.publicKey else "";
+        };
+      };
+  };
+
+  providerOf = iface: _: {
+    provides.identity.interface = iface;
+    impl = _: {
+      provides.identity.exports.publicKey = "ssh-ed25519 AAAA";
+      units.only.command = "/bin/true";
+    };
+  };
+
+  wired =
+    {
+      reads,
+      publishes ? reads,
+      interfaces,
+    }:
+    planOf {
+      inherit interfaces;
+      instances = {
+        reader = {
+          module = soleRoot { module = readerOf reads; };
+          placement.every.only.machines = [ "one" ];
+          wire.far = {
+            instance = "writer";
+            provides = "identity";
+          };
+        };
+        writer = {
+          module = soleRoot {
+            module = providerOf publishes;
+            provides = [ "identity" ];
+          };
+          placement.every.only.machines = [ "two" ];
+          exposes = [ "identity" ];
+        };
+      };
+    };
 in
 {
   testAnAtomOmitsSecrecy =
@@ -414,6 +467,44 @@ in
         exported = true;
         member = "only";
         capability = "identity";
+      };
+    };
+
+  testAMalformedClaimIsRefusedAndDisregarded =
+    let
+      malformed = planner.interface {
+        name = "identity";
+        exports.publicKey = publicString;
+        id = "example.com/two words";
+      };
+      result = wired {
+        reads = malformed;
+        interfaces."interfaces/default.nix".identity = malformed;
+      };
+      row = builtins.head (rowsById "interface-id-malformed" result);
+    in
+    {
+      expr = {
+        rows = countById "interface-id-malformed" result;
+        inherit (row) id subject severity;
+        namesTheInterface = hasInfix "interfaces/default.nix" row.message;
+        namesWhatWasWritten = hasInfix "`example.com/two words`" row.message;
+        identity = planner.identityOf malformed;
+        mismatches = countById "interface-mismatch" result;
+        stillResolves = result.plan."reader:only@one".reads.far.delivered;
+        received = result.plan."reader:only@one".units.only.env.FAR;
+      };
+      expected = {
+        rows = 1;
+        id = "interface-id-malformed";
+        subject = "interfaces/default.nix";
+        severity = "error";
+        namesTheInterface = true;
+        namesWhatWasWritten = true;
+        identity = null;
+        mismatches = 0;
+        stillResolves = true;
+        received = "ssh-ed25519 AAAA";
       };
     };
 }
