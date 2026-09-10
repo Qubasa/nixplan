@@ -84,7 +84,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
   scenarios of *The machine layer walks a newcomer's route* (design D6). Verify
   `nix run .#planner-e2e newcomer` is green, and that the module skips itself with a reason naming
   egress when the cluster cannot reach the substituter.
-- [ ] 4.4 `tests/e2e/newcomer/test_newcomer.py`:
+- [x] 4.4 `tests/e2e/newcomer/test_newcomer.py`:
   `test_a_consumer_is_asked_for_an_input_only_this_flake_pins`,
   the machine layer's test for the second scenario of *The flake publishes every layer a consumer
   builds with*. It asserts the template's lock holds the package set and this repository and

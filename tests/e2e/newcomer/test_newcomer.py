@@ -435,6 +435,24 @@ def test_the_template_names_the_published_flake(workstation: Workstation) -> Non
     assert nodes["nixpkgs"]["locked"]["type"] == "github", nodes["nixpkgs"]["locked"]
 
 
+def test_a_consumer_is_asked_for_an_input_only_this_flake_pins(workstation: Workstation) -> None:
+    """A reader declares this repository and a package set, and nothing further.
+
+    korora is what the documented call used to ask for: a source pin with no
+    flake of its own, whose revision has to be the one the library was built
+    against or the types compare unequal. The published library arrives applied
+    to it, so it reaches the lock as an input of this repository and never as one
+    a reader was asked to name.
+    """
+    locked = json.loads(workstation.vm.ssh_succeed(f"cat {CONSUMER}/flake.lock", timeout=BRIEF))
+    nodes = locked["nodes"]
+    asked = nodes["root"]["inputs"]
+
+    assert sorted(asked) == ["nixpkgs", "nixplan"], sorted(asked)
+    assert asked["nixpkgs"] == ["nixplan", "nixpkgs"], asked["nixpkgs"]
+    assert "korora" in nodes["nixplan"]["inputs"], nodes["nixplan"]["inputs"]
+
+
 def test_the_machine_builds_the_deployment_it_was_handed(
     booted: Any, workstation: Workstation, built: tuple[str, dict[str, Reported]]
 ) -> None:
