@@ -8,6 +8,7 @@ let
     planOf
     publicString
     publicUrl
+    resolutionById
     rowIds
     rowsById
     severityById
@@ -1638,6 +1639,123 @@ in
         wiredRows = 1;
         attributedRows = 1;
         oneAndTheSameRow = true;
+      };
+    };
+
+  testARefusedEdgeNamesTheRuleThatRefusedIt =
+    let
+      publishing = iface: ename: _: {
+        provides.identity.interface = iface;
+        impl = _: {
+          provides.identity.exports.${ename} = "k";
+          units.only.command = "/bin/true";
+        };
+      };
+      refusing =
+        {
+          mine,
+          theirs,
+          publishes ? "publicKey",
+        }:
+        planOf {
+          inherit sources;
+          interfaces = {
+            "interfaces/mine.nix".identity = mine;
+            "interfaces/theirs.nix".identity = theirs;
+          };
+          instances = {
+            consumer = {
+              module = soleRoot {
+                module = consumer {
+                  interface = mine;
+                  reads = [ "publicKey" ];
+                };
+              };
+              placement.every.only.machines = [ "one" ];
+              wire.far = {
+                instance = "provider";
+                provides = "identity";
+              };
+            };
+            provider = {
+              module = soleRoot {
+                module = publishing theirs publishes;
+                provides = [ "identity" ];
+              };
+              placement.every.only.machines = [ "one" ];
+              exposes = [ "identity" ];
+            };
+          };
+        };
+      byClaim = refusing {
+        mine = claiming { exports.publicKey = publicString; };
+        theirs = claiming {
+          exports.publicKey = publicString;
+          id = "example.com/other-identity";
+        };
+      };
+      byName = refusing {
+        mine = planner.interface {
+          name = "identity";
+          exports.publicKey = publicString;
+        };
+        theirs = planner.interface {
+          name = "identity";
+          exports.hostKey = publicString;
+        };
+        publishes = "hostKey";
+      };
+      byValue = refusing {
+        mine = claiming { exports.publicKey = publicString; };
+        theirs = planner.interface {
+          name = "host-identity";
+          exports.hostKey = publicString;
+        };
+        publishes = "hostKey";
+      };
+    in
+    {
+      expr = {
+        counts = map (countById "interface-mismatch") [
+          byClaim
+          byName
+          byValue
+        ];
+        severities = map (severityById "interface-mismatch") [
+          byClaim
+          byName
+          byValue
+        ];
+        evidence = map (evidenceById "interface-mismatch") [
+          byClaim
+          byName
+          byValue
+        ];
+        claimResolution = hasInfix "make the two claims one identity" (
+          resolutionById "interface-mismatch" byClaim
+        );
+        valueResolution = hasInfix "import the interface the far end declares" (
+          resolutionById "interface-mismatch" byValue
+        );
+      };
+      expected = {
+        counts = [
+          1
+          1
+          1
+        ];
+        severities = [
+          "error"
+          "error"
+          "error"
+        ];
+        evidence = [
+          "both ends claim an identity and the two claims differ, so the values were never compared"
+          "the two interfaces carry one name and are different values, which is why a row renders the declaring file beside the name"
+          "the two are different values and at most one of them claims an identity, so an interface is identified by the value an author imported, never by its name"
+        ];
+        claimResolution = true;
+        valueResolution = true;
       };
     };
 }

@@ -1077,11 +1077,17 @@ in
                 id = "interface-mismatch";
                 message = "slot ${util.quote slotName} of ${util.quote subject} declares ${ifaceLabel} and ${util.quote "${target}.${capName}"} declares ${interface.label reg capability.interface}";
                 evidence =
-                  if capability.interface.name == slot.interface.name then
+                  if slotClaim != null && capabilityClaim != null then
+                    "both ends claim an identity and the two claims differ, so the values were never compared"
+                  else if capability.interface.name == slot.interface.name then
                     "the two interfaces carry one name and are different values, which is why a row renders the declaring file beside the name"
                   else
-                    "an interface is identified by the value an author imported, never by its name";
-                resolution = "import the interface the far end declares into ${consumerFile}, or wire a capability that declares this one";
+                    "the two are different values and at most one of them claims an identity, so an interface is identified by the value an author imported, never by its name";
+                resolution =
+                  if slotClaim != null && capabilityClaim != null then
+                    "make the two claims one identity, or import the interface the far end declares into ${consumerFile}"
+                  else
+                    "import the interface the far end declares into ${consumerFile}, or wire a capability that declares this one";
               }
             )
             ++ util.optional (interfaceMatches && slot.reach != "all" && length placements != 1) (
