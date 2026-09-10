@@ -73,16 +73,17 @@ The suites, and how many tests each holds:
 | `composition` | 16 | roots, members, the settings namespace, defaults and fixed |
 | `resolution` | 17 | wiring, arity, secrecy, placement, keyset equality |
 | `diagnostics` | 13 | totality, ordering, severity, rendering, and the scan that finds no raising call under `lib/` |
-| `plan` | 20 | keys, planes, absences, dependencies, serialisation, the golden fixture |
+| `plan` | 22 | keys, planes, absences, dependencies, serialisation, the golden fixture |
 | `postgres` | 10 | one provider instance and two consumers, planned |
 | `exclusions` | 16 | one deployment per excluded construct, each refused |
-| `secrets` | 21 | a generated value's cardinality, its delivery set and its entry |
+| `vars` | 24 | a generated value's cardinality, its delivery set, its entry and the program that produces it |
 | `units` | 31 | the portable unit vocabulary, per field |
 | `platform` | 19 | a machine's target, elaborated |
-| `closure` | 21 | what a unit may name and what it must declare |
-| `image` | 27 | the portable-service-image realiser's reading of an entry |
+| `closure` | 23 | what a unit may name and what it must declare |
+| `image` | 28 | the portable-service-image realiser's reading of an entry |
 | `flakelet` | 14 | the flakelet realiser's reading: enablement, identity, the two name refusals |
 | `operator` | 11 | the deployment build's reading: the artifact name, `manifest.json`, the realiser statement, its four refusals |
+| `secrets` | 12 | the secrets realiser's reading: a plan as a generator configuration, the name projection, the rendered deploy step |
 | `perf` | 6 | the synthetic fleet is deterministic and realises nothing |
 | `layers` | 14 | the shape of the test tree itself |
 | `coverage` | 8 | every specification heading is a test, an omission or an alias |
@@ -323,7 +324,7 @@ Everything the flake exposes, so a reader can tell what runs where:
 | `nix run .#<name>` | Needs | Subject |
 | --- | --- | --- |
 | `planner` | `nix`, and ssh reach to the machines for `apply` | the operator's command: build a deployment and put it on the machines it names - [operator.md](operator.md) |
-| `planner-e2e` | `/dev/kvm`, `/dev/net/tun`, `/dev/vhost-vsock`, `$ROOKERY_FLAKE` | real machines, a delivery between them, and the wire the planner resolved - [cluster.md](cluster.md) |
+| `planner-e2e` | `/dev/kvm`, `/dev/net/tun`, `/dev/vhost-vsock`, `$ROOKERY_FLAKE`, and `$NIXOS_SECRETS_FLAKE` for `tests/e2e/generated-secret` | real machines, a delivery between them, and the wire the planner resolved - [cluster.md](cluster.md) |
 | `planner-perf` | nothing | the same measurement and check, on your machine rather than in a sandbox |
 
 | `nix build .#packages.x86_64-linux.<name>` | Subject |
@@ -334,6 +335,7 @@ Everything the flake exposes, so a reader can tell what runs where:
 | `planner-e2e-wired-pair-changed` | the second build of that same folder, which differs in the file it serves |
 | `planner-e2e-portable-image` | that folder's deployment: two images, one of them for a machine this host is not |
 | `planner-e2e-secret-delivery` | that folder's deployment: three entries and two generated values |
+| `planner-e2e-generated-secret` | the artifacts and the generator configuration of the folder that generates one |
 | `planner-e2e-guest` | the guest image every machine boots |
 | `planner-e2e-env` | the script `nix develop` carries: the exports a manual `pytest` run needs |
 | `planner-e2e-env-paths` | those exports as a file, built when the script is called |

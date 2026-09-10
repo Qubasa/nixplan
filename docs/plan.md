@@ -43,7 +43,7 @@ written. `nightly:client@alpha` has no `alloc` because it claims no ports.
   },
   "env": { "BORG_QUOTA_GIB": "500", "BORG_RSH": "…/bin/ssh -i /run/vars/nightly/hostKey/ssh_host_ed25519_key" },
   "settings": { "client": { "path": { "source": "deployment", "value": "/home" } } },
-  "vars": { "hostKey": { "files": { "ssh_host_ed25519_key": { "secrecy": "secret", "inPlan": "reference" } } } },
+  "vars": { "hostKey": { "files": { "ssh_host_ed25519_key": { "secrecy": "secret", "inPlan": "reference", "deploy": true } } } },
   "provides": { … },
   "reads": { … }
 }
@@ -67,7 +67,7 @@ field, and the table below says why.
 | `env` | the variables **every unit of the entry agrees on**, and nothing else. A unit's environment lives on the unit, so two units disagreeing about a variable is two records and no row |
 | `configData."<path>"` | `{ mode, reload, computed }` plus the file's identity, below |
 | `settings.<member>.<knob>` | `{ value, source }` where source is `defaults`, `deployment` or `fixed` — every resolved value records where it came from |
-| `vars.<gen>.files.<file>` | `{ path, secrecy, inPlan }`, plus `bytes: "absent"` when the generator has not run. The path is the same on every machine that receives the value |
+| `vars.<gen>.files.<file>` | `{ path, secrecy, inPlan, deploy }`, plus `bytes: "absent"` when the generator has not run. The path is the same on every machine that receives the value, and `deploy` is what tells a realiser whether bytes arrive at it: a realiser shows a path to a unit only where they do |
 | `alloc.ports.<claim>` | the fixed port |
 
 ## A machine entry
@@ -100,7 +100,7 @@ entry's `target.system`, once per placement rather than once per machine.
   "deliveryDerivedFrom": ["nightly:client@alpha owns it", "vault-repo:server@vault named publicKey in uses.clients.reads"],
   "dependsOn": ["machine:alpha@sha256-5840440439b3bbf1"],
   "files": {
-    "ssh_host_ed25519_key": { "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key", "secrecy": "secret", "inPlan": "reference" }
+    "ssh_host_ed25519_key": { "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key", "secrecy": "secret", "inPlan": "reference", "deploy": true }
   }
 }
 ```
@@ -118,7 +118,8 @@ that read it, and a `per = "instance"` value has no single placement to live in.
 | `deliveryDerivedFrom` | why each machine is in the set, sorted: the owning entry, and for a reader the entry, the slot and the export it declared. Always present, for the same reason |
 | `reads` | the sibling values' entry keys, absent when it reads none |
 | `dependsOn` | the sibling entries it reads, plus its own machine entry when `per = "placement"` |
-| `files.<file>` | `{ path, secrecy, inPlan }` plus `bytes: "absent"` when the generator has not run |
+| `files.<file>` | `{ path, secrecy, inPlan, deploy }` plus `bytes: "absent"` when the generator has not run |
+| `program` | the store path of the program that produces the files, as the generator declared it. **Absent** where none was declared, and it takes part in the entry's key only where one was, so a plan written before this field existed is keyed as it was. It is the one store path in a plan the closure scan does not hold against a declared closure: a generator runs where the plan is read, never on a machine receiving its output — see [secrets.md](secrets.md) |
 
 The set is derived from the owner's placements plus the machine of every entry
 that **declared** a read of an export backed by one of these files — not from

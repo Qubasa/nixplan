@@ -10,10 +10,11 @@ None of it is a `check`. A build sandbox has no `/dev/kvm`, no `/dev/net/tun` an
 layer is one app:
 
 ```bash
-nix run .#planner-e2e                  # four folders, nine machines
+nix run .#planner-e2e                  # five folders, twelve machines
 nix run .#planner-e2e wired-pair       # two machines
 nix run .#planner-e2e portable-image   # one machine booted, two images built
 nix run .#planner-e2e secret-delivery  # three machines
+nix run .#planner-e2e generated-secret # three machines, a real generator and a real store backend
 nix run .#planner-e2e newcomer         # three machines, and a build that runs on one of them
 nix run .#planner-e2e -- nosuchfolder  # refused, without building or booting anything
 ```
@@ -31,6 +32,7 @@ anyway.
   NO END-TO-END TEST NAMED 'nosuchfolder'
 ===========================================
   the end-to-end tests are:
+    generated-secret
     newcomer
     portable-image
     secret-delivery
@@ -164,6 +166,40 @@ was shown.
 One test per scenario of
 [`realiser/portable-service-image/spec.md`](../openspec/changes/emit-systemd-portable-service-images/specs/realiser/portable-service-image/spec.md)
 that is about what a real machine does with a built image.
+
+### `generated-secret` - three machines
+
+The same delivery-set claims as `secret-delivery`, over bytes nothing here wrote. `issuer:api` on
+`alpha` declares two generators, `root` and a `token` that reads it; `probe:client` on `beta`
+declares a read of the secret export, which is what puts `beta` in the value's delivery set; the
+instance on `gamma` declares neither a generator nor a read. Each generator declares the `drvPath`
+of the program that produces it, the external tool runs those programs in its own sandbox, and
+`../tests/e2e/generated-secret/backend.py` is the `age` store backend that keeps what they produced
+under the run's own state root. The artifact carries the `age` binary the backend runs, so a run
+mints its identity with the one it was built against rather than with whatever the host has on
+`PATH`.
+
+The folder builds its plan twice, because a plan is a function of `varsState`:
+`../tests/e2e/generated-secret/artifacts.nix` evaluates the deployment against a declared state so
+that the unit files and the generator configuration are a function of the declaration alone, and
+`../tests/e2e/generated-secret/test_generated_secret.py` re-evaluates it at run time against the
+state the backend answered, which is the plan every assertion reads. That second evaluation reads
+the copy of the deployment inside the artifact rather than the working tree, which is why this
+folder exports one variable where the others export two.
+
+`../tests/e2e/generation.py` is the operator side: it resolves the tool from `$NIXOS_SECRETS_FLAKE`
+with `--refresh`, reads `varsState` from the backend one declared file at a time, fetches the bytes
+of a public file only, and compares each stored value's recorded provenance with the plan key it
+was generated from before anything is delivered. An unresolvable tool and a kernel that denies the
+sandbox its user namespace each skip the folder with a reason, which `../pytest.ini`'s `-rs` prints.
+What the whole composition is and what it inherits from the external tool is
+[secrets.md](secrets.md).
+
+One test per scenario of
+[`delivery/generated-values/spec.md`](../openspec/changes/generate-values-with-nixos-secrets/specs/delivery/generated-values/spec.md),
+plus the one scenario
+[`delivery/real-cluster/spec.md`](../openspec/changes/generate-values-with-nixos-secrets/specs/delivery/real-cluster/spec.md)
+adds: a value's bytes come from a real generator rather than from the test.
 
 ### `newcomer` - three machines, and a walk that runs on one of them
 
@@ -385,6 +421,7 @@ from the working tree, because that is the point of running by hand.
 | `PLANNER_WIRED_PAIR_DEPLOYMENT` | that folder's deployment - the store path in the app, the working tree in the shell | app and `planner-e2e-env` |
 | `PLANNER_PORTABLE_IMAGE_DEPLOYMENT` | the same, for that folder | app and `planner-e2e-env` |
 | `PLANNER_SECRET_DELIVERY_DEPLOYMENT` | the same, for that folder | app and `planner-e2e-env` |
+| `PLANNER_GENERATED_SECRET` | the realised generated-secret artifacts, the generator configuration, the deployment the run re-evaluates and the `age` its backend runs | app and `planner-e2e-env` |
 | `PLANNER_E2E_GUEST_IMAGE` | the qcow2 every machine boots | app and `planner-e2e-env` |
 | `PLANNER_E2E` | the layer's root, on `PYTHONPATH` so a test can `import delivery` | app; the shell puts the working tree there instead |
 | `PLANNER_E2E_STATE` | the run's state root | `runner.py` |
@@ -400,6 +437,12 @@ The harness and the deployments being the working tree is the point of running b
 any of them is what runs. A checkout where `$ROOKERY_FLAKE` cannot be fetched still opens its
 shell, and `planner-e2e-env` says so rather than failing. A missing device prints the banner there
 too: the environment is still correct, and the boot is what would fail.
+
+Two variables of the fourth folder are inputs rather than exports. `$NIXOS_SECRETS_FLAKE` names the
+external secret generator and defaults to the revision `../tests/e2e/generation.py` records, and
+`$PLANNER_SECRETS_SSH_OPTS` reaches the `ssh` of the rendered deploy step unquoted, which is how a
+run states how to reach a guest whose host key nobody has accepted. Both are in
+[secrets.md](secrets.md).
 
 ## When a run fails
 

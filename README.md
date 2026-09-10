@@ -25,10 +25,11 @@ Main design goals:
 lib/       the planner: a deployment in, a plan and a diagnostics table out
 image/     a realiser: one plan entry as a systemd portable-service image
 flakelet/  a realiser: one plan entry as a flakelet service artifact
+secrets/   a realiser: a whole plan as a configuration for the external secret generator
 operator/  a whole deployment built: the plan, a manifest, one artifact per entry
 cli/       the operator's command, `planner`, which builds and applies one
 tests/unit/  nix-unit suites over the library, the realisers and the build
-tests/e2e/   four folders of real machines, and the harness they share
+tests/e2e/   five folders of real machines, and the harness they share
 fixtures/  the worked deployment the unit suites evaluate, with its golden plan
 perf/      two synthetic deployments, a measurement harness and committed budgets
 docs/      the documentation, starting at docs/README.md
@@ -74,4 +75,4 @@ which locks it against this checkout, builds it there and applies it to the othe
 | `nix develop` | the one shell, with the interpreter the machine layer runs under |
 
 The machine layer needs real VMs, so it is an app rather than a check:
-`nix run .#planner-e2e` boots the guests and runs all four folders.
+`nix run .#planner-e2e` boots the guests and runs all five folders.

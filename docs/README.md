@@ -15,9 +15,10 @@ nixplan/
   lib/       the library
   image/     the portable-service-image realiser
   flakelet/  the flakelet service-artifact realiser
+  secrets/   the nixos-secrets configuration realiser
   operator/  a whole deployment built: the plan, the manifest, one artifact per entry
   cli/       planner, the operator's command, which builds a deployment and applies it
-  tests/     nix-unit suites in unit/, four machine tests and their harness in e2e/
+  tests/     nix-unit suites in unit/, five machine tests and their harness in e2e/
   fixtures/  the worked deployment the unit suites evaluate, with its golden plan
   perf/      two synthetic deployments, measurement harness, committed budgets, checker
   docs/      you are here
@@ -34,14 +35,18 @@ nixplan/
 | [tooling.md](tooling.md) | flake attributes, checks, fixture regeneration, the perf gate |
 | [flakelet.md](flakelet.md) | the store-backed realiser: what a flakelet service artifact holds, who decides a unit is enabled, and what it refuses |
 | [operator.md](operator.md) | building a whole deployment, and the command that puts one on machines |
+| [secrets.md](secrets.md) | the realiser that reads a plan as a configuration for the external secret generator: the program a generator declares, the name projection, the rendered deploy step and the pinned contract |
 | [cluster.md](cluster.md) | real machines: what a delivery moves, the host it needs, how a consumer's own flake is proved, and how to attach to a live run |
 
-Two realisers read one plan and neither adds a field to it. The image is **store-less** - it
-carries its own closure and a machine attaches it with `portablectl`, which is the tier where no
-store and no daemon exist. The flakelet artifact is **store-backed** - it carries unit files and
-metadata only, and the machine runs them out of its own store. Build the one your target can
-hold: what this repository builds of each is the end-to-end fixture, `nix build
-.#planner-e2e-portable-image` or `nix build .#planner-e2e-wired-pair`.
+Two realisers read one plan into something a machine runs, and neither adds a field to it. The
+image is **store-less** - it carries its own closure and a machine attaches it with `portablectl`,
+which is the tier where no store and no daemon exist. The flakelet artifact is **store-backed** -
+it carries unit files and metadata only, and the machine runs them out of its own store. Build the
+one your target can hold: what this repository builds of each is the end-to-end fixture, `nix build
+.#planner-e2e-portable-image` or `nix build .#planner-e2e-wired-pair`. The third reading realises
+nothing a machine holds: it turns the same plan into a configuration for the external secret
+generator, and `secrets/backend.nix` renders the step that carries a generated file to the machines
+the plan says receive it.
 
 The worked example the library is built against is
 `fixtures/minimal-typed-edge/`. Everything below quotes it, and it is

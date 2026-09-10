@@ -101,7 +101,7 @@ declares eight keys at most; anything else is a row.
 | --- | --- |
 | `platforms` | list of system strings |
 | `claims.ports.<name>` | `{ proto, count, fixed }` — `fixed` is required, the planner allocates nothing |
-| `vars.<generator>` | `{ files.<file> = { secrecy }, per ? "placement", deploy ? true, reads ? [ ] }` — below |
+| `vars.<generator>` | `{ files.<file> = { secrecy }, per ? "placement", deploy ? true, reads ? [ ], program ? <store path> }` — below |
 | `uses.<slot>` | `{ interface, reach ? "one", reads ? <every export> }` |
 | `provides.<capability>` | `{ interface }` |
 | `pin` | `{ key, locked }` — the lock entry of the sources this module's packages came from, below |
@@ -215,12 +215,18 @@ machines receive them.
 | `per` | `"placement"` (the default) is one value per machine the owner is placed on; `"instance"` is one value for the instance however many machines run it |
 | `deploy` | `false` means no machine receives the bytes. One value still exists, so a public file's value still travels in the plan, and anything that would open one of its files on a machine is refused |
 | `reads` | sibling generators of the same module. A `"placement"` generator may read an `"instance"` one; the reverse is `vars-reads-arity`, because the placements hold one value each and the reader is one value |
+| `program` | the store path of the program that produces the files, recorded as a literal string and neither run nor read here. A declaration that is not exactly one store path is `vars-program-malformed`; omitting the key is valid, and the reader that needs a program is what refuses |
 
 A file's path is `/run/vars/<instance>/<generator>/<file>`, the same on every
 machine that receives it: one delivery of one value has one name. Two members of
 one instance declaring the same generator name is `vars-generator-claimed-twice`
 — a generator is addressed by instance and name, so the two declarations would
 be one address for two values.
+
+A deployment writes `<package>.drvPath` rather than an output path: the
+external generator this library reads a plan for wants a derivation, and a
+`drvPath` is a string a pure evaluation can produce — see
+[secrets.md](secrets.md).
 
 ### `pin`
 
