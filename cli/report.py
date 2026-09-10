@@ -121,11 +121,15 @@ def rollback(
     opts = remote.ssh_opts(ssh_key, inherited=environment.get("NIX_SSHOPTS"))
     env = remote.copy_env(environment, opts)
     address = address_of(entry)
-    reported = runner.output(
-        remote.ssh_argv(address, remote.rollback_script(service_name(entry)), opts=opts, user=user),
-        env=env,
-    )
-    return (f"rollback {entry.key} on {user}@{address}", *reported.splitlines())
+    step = f"rollback {entry.key} on {user}@{address}"
+    with remote.refusing(step, address):
+        reported = runner.output(
+            remote.ssh_argv(
+                address, remote.rollback_script(service_name(entry)), opts=opts, user=user
+            ),
+            env=env,
+        )
+    return (step, *reported.splitlines())
 
 
 def _status_script(entry: Entry) -> str:

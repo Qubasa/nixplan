@@ -75,7 +75,7 @@ only the scenarios listed below are new.
   asserts the argv carries the three options, that a caller's own `ConnectTimeout` in `NIX_SSHOPTS`
   appears before the command's, and that `test_a_throwaway_guest_is_reached_with_no_host_config`
   still passes with the guest's options first.
-- [ ] 4.2 `cli/remote.py:Subprocess`: `run` and `output` stop letting `CalledProcessError` escape.
+- [x] 4.2 `cli/remote.py:Subprocess`: `run` and `output` stop letting `CalledProcessError` escape.
   Each raises `ApplyError` naming the step's subject, the machine and what the machine printed, and
   the argv is not part of the message (`deliver-a-secret-without-exposing-it` owns why).
   Verify: `test_a_step_that_fails_names_the_machine_and_what_it_said` in

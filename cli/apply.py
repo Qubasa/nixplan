@@ -206,28 +206,34 @@ def apply(
         record(f"ordered against the read of {provider} by {consumer}")
 
     for write in planned:
-        runner.run(
-            remote.ssh_argv(
-                write.address,
-                remote.write_script(write.file.path, write.content),
-                opts=opts,
-                user=user,
-            ),
-            env=env,
-        )
-        record(
+        step = (
             f"value {write.value.key} {write.file.name} -> {user}@{write.address}:{write.file.path}"
         )
+        with remote.refusing(step, write.address):
+            runner.run(
+                remote.ssh_argv(
+                    write.address,
+                    remote.write_script(write.file.path, write.content),
+                    opts=opts,
+                    user=user,
+                ),
+                env=env,
+            )
+        record(step)
 
     for key in walked.order:
         entry = deployment.entries[key]
         address = addresses[key]
-        runner.run(remote.copy_argv(entry.path, address, user=user), env=env)
-        record(f"copy {key} {entry.path} -> {user}@{address}")
-        report = runner.output(
-            remote.ssh_argv(address, scripts[key], opts=opts, user=user), env=env
-        )
-        record(f"activate {key} ({entry.realiser}) on {user}@{address}")
-        for line in report.splitlines():
+        copy = f"copy {key} {entry.path} -> {user}@{address}"
+        with remote.refusing(copy, address):
+            runner.run(remote.copy_argv(entry.path, address, user=user), env=env)
+        record(copy)
+        step = f"activate {key} ({entry.realiser}) on {user}@{address}"
+        with remote.refusing(step, address):
+            reported = runner.output(
+                remote.ssh_argv(address, scripts[key], opts=opts, user=user), env=env
+            )
+        record(step)
+        for line in reported.splitlines():
             record(f"  {line}")
     return tuple(lines)

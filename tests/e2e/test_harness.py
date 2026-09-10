@@ -27,6 +27,8 @@ import delivery
 import errors
 import generation
 import manifest
+import planner
+import remote
 import runner
 
 SERVER_ENTRY = "site:server"
@@ -931,3 +933,46 @@ def test_an_unreachable_machine_is_refused_without_a_prompt(tmp_path: Path) -> N
     assert "ServerAliveInterval=30" in activation
     assert "ServerAliveCountMax=3" in activation
     assert activation.index("ConnectTimeout=1") < activation.index("ConnectTimeout=10")
+
+
+REFUSED = "No space left on device"
+
+
+class Failing(Recorder):
+    """A recorder whose machine refuses every step whose argv holds ``at``."""
+
+    def __init__(self, at: str) -> None:
+        super().__init__()
+        self.at = at
+
+    def run(self, cmd: list[str], *, env: dict[str, str] | None = None) -> object:
+        self._refuse(cmd)
+        return super().run(cmd, env=env)
+
+    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
+        self._refuse(cmd)
+        return super().output(cmd, env=env)
+
+    def _refuse(self, cmd: list[str]) -> None:
+        if self.at in " ".join(cmd):
+            raise subprocess.CalledProcessError(1, cmd, output="", stderr=f"{REFUSED}\n")
+
+
+def test_a_step_that_fails_names_the_machine_and_what_it_said(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A machine's refusal is the command's own, and no traceback reaches the operator."""
+    root = tmp_path / "built"
+    _built(root, plan=PLAN, entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")})
+    failing = Failing("10.0.0.10")
+    monkeypatch.setattr(remote, "Subprocess", lambda: failing)
+
+    assert planner.main(["apply", str(root)]) == 1
+
+    refusal = capsys.readouterr().err
+    assert SERVER_KEY in refusal
+    assert "10.0.0.10" in refusal
+    assert REFUSED in refusal
+    assert "Traceback" not in refusal

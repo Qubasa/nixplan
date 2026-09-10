@@ -25,12 +25,15 @@ caller who states one keeps it.
 from __future__ import annotations
 
 import base64
+import contextlib
 import shlex
 import subprocess
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Protocol
+
+from errors import ApplyError
 
 BOUNDS = (
     "-o",
@@ -66,12 +69,62 @@ class Subprocess:
     """The runner an operator gets: the local process table."""
 
     def run(self, cmd: list[str], *, env: dict[str, str] | None = None) -> object:
-        """Run ``cmd`` and refuse a non-zero exit."""
-        return subprocess.run(cmd, env=env, check=True)
+        """Run ``cmd`` and report a non-zero exit as the machine's refusal."""
+        return self._completed(cmd, env)
 
     def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
-        """Run ``cmd``, refuse a non-zero exit and return its standard output."""
-        return subprocess.run(cmd, env=env, check=True, capture_output=True, text=True).stdout
+        """Run ``cmd``, report a non-zero exit and return its standard output."""
+        return self._completed(cmd, env).stdout
+
+    def _completed(
+        self, cmd: list[str], env: dict[str, str] | None
+    ) -> subprocess.CompletedProcess[str]:
+        try:
+            return subprocess.run(cmd, env=env, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as refused:
+            raise ApplyError(f"{destination(cmd)} {printed(refused)}") from refused
+
+
+@contextlib.contextmanager
+def refusing(subject: str, address: str) -> Iterator[None]:
+    """Report a machine's refusal of one step as the command's own refusal.
+
+    Args:
+        subject: The step being taken, as the log names it.
+        address: The machine it is taken against.
+
+    Yields:
+        Nothing. The step is taken inside the context.
+
+    Raises:
+        ApplyError: If the step failed, naming the subject, the machine and
+            what the machine printed. The argv is no part of the message: a
+            value write carries the bytes of a secret.
+    """
+    try:
+        yield
+    except subprocess.CalledProcessError as refused:
+        raise ApplyError(f"{subject}: {address} {printed(refused)}") from refused
+    except ApplyError as refused:
+        raise ApplyError(f"{subject}: {refused}") from refused
+
+
+def printed(refused: subprocess.CalledProcessError) -> str:
+    """Return what a machine said when it refused a step."""
+    said = "\n".join(part.strip() for part in (refused.stderr, refused.stdout) if part)
+    return (
+        f"refused the step: {said}" if said else f"refused the step, exiting {refused.returncode}"
+    )
+
+
+def destination(cmd: Sequence[str]) -> str:
+    """Return the machine an argv addresses, which is all of it a refusal names."""
+    for word in cmd:
+        if word.startswith("ssh://"):
+            return word.removeprefix("ssh://")
+        if "@" in word:
+            return word
+    return "the machine"
 
 
 def ssh_opts(ssh_key: Path | None, *, inherited: str | None = None) -> str:
