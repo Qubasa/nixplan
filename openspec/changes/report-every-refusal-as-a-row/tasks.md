@@ -132,7 +132,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   `planner.render` of the table. Verify `nix build` of a deployment with an error row produces the
   three files, that `jq` reads the rows out of `diagnostics.json`, and that asking for one entry's
   artifact prints the table.
-- [ ] 6.2 `operator/read.nix`: `operator-entry-machine-no-address` becomes a warning
+- [x] 6.2 `operator/read.nix`: `operator-entry-machine-no-address` becomes a warning
   (`:143-149`) and the deployment record carries the address as an absence rather than omitting the
   field (`:236-245`). Verify a deployment whose registry declares no address for one machine builds
   every artifact and reports one warning naming the entry and the machine.

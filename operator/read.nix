@@ -258,12 +258,12 @@ let
               }
             )
             ++ optional (address == null) (
-              planner.error {
+              planner.warning {
                 id = "operator-entry-machine-no-address";
                 subject = key;
                 message = "entry ${quote key} is placed on machine ${quote parts.machine}, and the plan's `machine:${parts.machine}` record declares no address";
-                evidence = "an artifact is copied to the address the registry declared, and an entry's own target is never consulted for it";
-                resolution = "declare an `address` for ${quote parts.machine} in the deployment's machine registry";
+                evidence = "an address is read by the step that dials a machine and by no step that builds one, so the record carries the absence and the artifact is built";
+                resolution = "declare an `address` for ${quote parts.machine} in the deployment's machine registry before applying this entry";
               }
             )
             ++ map (

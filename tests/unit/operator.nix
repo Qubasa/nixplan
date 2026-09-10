@@ -480,7 +480,7 @@ in
           namesTheEntry = true;
           namesTheMachine = true;
           address = null;
-          refused = true;
+          refused = false;
         };
       };
     };
