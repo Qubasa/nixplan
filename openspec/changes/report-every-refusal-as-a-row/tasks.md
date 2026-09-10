@@ -49,7 +49,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
     because all four placed entries of the fixture already declare a closure root and a unit. The
     folder carries no `diagnostics.json`; its rendered table is `plan/diagnostics.txt` and it does
     not move either.
-- [ ] 2.4 `lib/plan.nix` and `lib/resolve.nix`: the three new planner rows of
+- [x] 2.4 `lib/plan.nix` and `lib/resolve.nix`: the three new planner rows of
   `specs/planner/diagnostics/spec.md` - an error for a unit value containing a line break, an error
   for a declared closure root that is not a path under the plan's store directory, and an error for a
   declared closure root the plan also records as a delivered reference. Each names the entry and the

@@ -103,6 +103,22 @@ rec {
       ) files;
     }) placement.vars;
 
+  referencePathsOf =
+    { vars, configData }:
+    util.uniqueStrings (
+      concatLists (
+        util.mapAttrsToList (
+          _: g: util.mapAttrsToList (_: f: f.path) (util.filterAttrs (_: f: f.inPlan == "reference") g.files)
+        ) vars
+      )
+      ++ concatLists (
+        util.mapAttrsToList (
+          _: file:
+          if file.render or null == null then [ ] else map (i: i.ref) (filter (i: i ? ref) file.render)
+        ) configData
+      )
+    );
+
   # Every read of a generated value, as a flat index from the value's entry key to
   # the entries that named it and what they named. The delivery set comes from
   # this and from the owner's placements: a routable secret is bounded by nobody,
@@ -449,6 +465,7 @@ rec {
       subject,
       storeDir,
       declared,
+      references,
       sites,
     }:
     let
@@ -467,6 +484,8 @@ rec {
       mentionedSet = util.stringSet (map (m: m.path) mentioned);
       undeclared = filter (m: !util.inStringSet declaredSet m.path) mentioned;
       unmentioned = filter (root: !util.inStringSet mentionedSet root) declared;
+      outsideTheStore = filter (root: util.storePathsIn storeDir root != [ root ]) declared;
+      delivered = filter (root: elem root references) declared;
     in
     map (
       m:
@@ -487,7 +506,27 @@ rec {
         evidence = "a root nothing names is either dead weight or a path assembled at runtime, and the second is worth having written down";
         resolution = "delete ${util.quote root} from `closure`, or leave it and expect the image to carry it";
       }
-    ) unmentioned;
+    ) unmentioned
+    ++ map (
+      root:
+      diag.error {
+        inherit subject;
+        id = "closure-root-outside-store";
+        message = "${subject} declares the closure root ${util.quote root}, which is not a path under the store directory ${util.quote storeDir} the plan is read against";
+        evidence = "a closure root is a literal path under the store the plan is read against, and a consumer populates a filesystem from those roots";
+        resolution = "declare a path under ${util.quote storeDir} in `closure`, or plan the deployment against the store ${util.quote root} belongs to";
+      }
+    ) outsideTheStore
+    ++ map (
+      root:
+      diag.error {
+        inherit subject;
+        id = "closure-root-is-delivered";
+        message = "${subject} declares the closure root ${util.quote root}, which the plan records as a delivered reference";
+        evidence = "the bytes of a reference reach the units from the machine that received them and never through a closure";
+        resolution = "delete ${util.quote root} from `closure`: the bytes arrive at ${util.quote root} by delivery";
+      }
+    ) delivered;
 
   # The key hashes the instance, the service, the machine, the target, the pin, the
   # units, the store paths the entry declares, the values it was handed and the
@@ -548,6 +587,10 @@ rec {
           inherit subject sites;
           storeDir = resolved.storeDir;
           declared = closure;
+          references = referencePathsOf {
+            vars = varsRecord placement;
+            configData = configData.record;
+          };
         }
         ++ undeployedRows {
           inherit subject placement;
