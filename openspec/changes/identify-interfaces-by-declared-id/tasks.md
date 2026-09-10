@@ -46,8 +46,8 @@
 
 ## 8. Documentation
 
-- [ ] 8.1 Document `id` in the interface section of `docs/authoring.md:14-48`: that it is optional, that it is a claim rather than a registration, that both ends must claim for a claim to be used, what an identity is made of, and that an unqualified one is warned about; verify the section agrees with `lib/interface.nix` field for field
-- [ ] 8.2 Document the named fold beside `fold` in `docs/authoring.md`, including that a claim requires one and an unclaimed interface does not; verify no other part of that file still implies a fold has no name
+- [x] 8.1 Document `id` in the interface section of `docs/authoring.md:14-48`: that it is optional, that it is a claim rather than a registration, that both ends must claim for a claim to be used, what an identity is made of, and that an unqualified one is warned about; verify the section agrees with `lib/interface.nix` field for field
+- [x] 8.2 Document the named fold beside `fold` in `docs/authoring.md`, including that a claim requires one and an unclaimed interface does not; verify no other part of that file still implies a fold has no name
 - [ ] 8.3 Add `fold` and `id` to the library export table in `docs/README.md:191-206`, and the capability record's new field to `docs/plan.md:203-204`; verify the plan document's rendered example matches the fixture it quotes
 - [ ] 8.4 Add the five new rows to `docs/diagnostics.md` in their sections with their message, evidence and resolution shapes, and update the `interface-mismatch` entry with its three evidence branches; verify every id the library can emit appears exactly once in that file
 - [ ] 8.5 Record the invariants in `CLAUDE.md` under "Interfaces, composition, reads": an interface is identified by the value an author imported **or** by an identity it claims with an `id`; a claim is the `id`, the export shape and the fold's name, and carries no function so it survives two evaluations of the library; both ends must claim; a refused claim falls back to the value; and `name` is still a label. Verify the file still names every registration point it names today

@@ -13,10 +13,11 @@ such where they appear.
 
 ## 1. Interfaces
 
-An interface is a value you import. It is identified by that value, validated
-against no registry, and its `name` is a label for diagnostic output only. Two
-interfaces in two files may carry the same `name` — wiring one to the other is
-an `interface-mismatch` row that prints both declaring files.
+An interface is a value you import. It is identified by that value or by an
+identity it claims, validated against no registry, and its `name` is a label for
+diagnostic output only. Two interfaces in two files may carry the same `name` —
+wiring one to the other is an `interface-mismatch` row that prints both
+declaring files.
 
 ```nix
 # interfaces/default.nix
@@ -39,7 +40,8 @@ an `interface-mismatch` row that prints both declaring files.
 ```
 
 The `korora` argument is `planner.korora`: korora's own types, the atom types
-this library owns, and the two constructors — `interface` and `unitExtension`.
+this library owns, and the three constructors — `interface`, `unitExtension` and
+`fold`.
 
 **An export atom declares `type` and may declare `secrecy`, and nothing else.**
 `secrecy` defaults to `"public"` and takes `"public"` or `"secret"`. Any other
@@ -59,6 +61,31 @@ against, and an interface or an extension field may bind to any of them:
 | `duration` | a span of time: counts with units (`30s`, `5min`, `1h30min`) or a bare count of seconds |
 | `schedule` | a named interval (`daily`, `weekly`) or a calendar expression with an optional weekday and date (`Mon 03:00`) |
 | `userName` | the account a unit runs as: the POSIX-portable name, never a uid, because the identity a name resolves to is the machine's answer and not the plan's |
+
+**An interface may claim an identity with `id`.** It is optional, it is a claim
+rather than a registration — an interface absent from every `interfaces` map is
+still an interface, and a claim makes none of them known to the planner — and
+**both** ends of a wire must claim before a claim is used: where either end
+claims nothing, two interfaces are one interface only when they are one value.
+Two authors evaluating this library twice hold unequal values of one shape, and
+a claim is what wires them:
+
+```nix
+# interfaces/default.nix, continued
+sshHostIdentity = korora.interface {
+  id = "example.com/ssh-host-identity";
+  name = "ssh-host-identity";
+  exports = { publicKey = { type = korora.string; }; };
+};
+```
+
+| Fact | Consequence |
+| --- | --- |
+| an identity is the `id`, each export's name, korora type name and resolved secrecy, and the fold's name | two interfaces claiming one `id` whose identities differ are `interface-id-conflict`, an error, and an edge between them is refused |
+| a claim carries no function | it survives two evaluations of this library, which value equality does not |
+| an `id` is a non-empty string carrying no whitespace | anything else is `interface-id-malformed` and the claim is disregarded: the interface is identified by its value |
+| an `id` carrying neither `.` nor `/` | `interface-id-unnamespaced`, a warning: it identifies exactly as a qualified one does, and the namespace is shared with every other author |
+| a claim decides only whether an edge exists | each side verifies its own values against the type it imported, and two korora types sharing one name are one type for identity however differently they verify |
 
 **An interface may also declare a `fold`.** A fold is one function of the set a
 set-valued read collects, and it is the interface's own policy for the set:
@@ -96,6 +123,9 @@ sshHostIdentity = korora.interface {
 | the planner forces it under a guard | a fold that raises is `interface-fold-raised` and the slot is then **absent** from `results`, the same as any refused read |
 | a fold that is not a function | `interface-fold-not-a-function` against the interface's declaring file, rather than an error at the read |
 | a fold no set-valued read applies | `interface-fold-unapplied`, a warning: a policy nobody applies is a policy nobody is held to |
+| a fold may carry a name | `fold = korora.fold "<name>" (set: …)`, which behaves in every respect as the bare function it carries |
+| an interface claiming an `id` needs a named fold | a fold's name is part of an identity and a bare function supplies none, so a claim beside a bare fold is `interface-id-unnamed-fold` and the claim is disregarded; an interface claiming nothing may spell its fold either way |
+| a fold name that is not a non-empty whitespace-free string | `interface-fold-name-malformed` against the declaring file, and the fold is not applied: the read delivers the provider-keyed set unchanged |
 
 An interface that declares no fold delivers the set unchanged, keyed by
 provider entry, which is what every interface in `fixtures/minimal-typed-edge/`
