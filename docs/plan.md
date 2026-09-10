@@ -203,6 +203,11 @@ elaborate the `system` string for the whole family.
   instead of standing beside it.
 - `interface` is the interface's `name`, and `declaringFile` is where it was
   declared — the pair is what makes two same-named interfaces distinguishable.
+- `interfaceId` is the identity that interface claimed, and it is **absent**
+  where nothing was claimed: never null and never the interface's name, so a
+  reader cannot mistake an unclaimed interface for one claiming its own label.
+  No interface in `fixtures/minimal-typed-edge/` claims one, which is why the
+  record above carries no such field. A claim does not re-key an entry.
 
 ## What a read records
 

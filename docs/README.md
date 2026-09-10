@@ -198,14 +198,15 @@ its own rather than under a literal written in the library.
 | Attribute | Use |
 | --- | --- |
 | `mkPlan` | the entry point above |
-| `interface { name, exports, fold ? null }` | declare an interface. A `fold` is the interface's own policy for the set a `reach = "all"` read collects: one function of that set, keyed by provider entry key, whose result is what the consuming `impl` receives |
+| `interface { name, exports, fold ? null, id ? null }` | declare an interface. A `fold` is the interface's own policy for the set a `reach = "all"` read collects: one function of that set, keyed by provider entry key, whose result is what the consuming `impl` receives. An `id` claims an identity: two interfaces both claiming one `id` are one interface without their values being compared, which is what wires two authors evaluating this library twice |
+| `fold <name> <function>` | name a fold, so two interfaces built by two evaluations can be compared. `{ name, apply }`, the shape `typedef name verify` already has; a bare function stays a legal fold, and an interface claiming an `id` needs a named one |
 | `unitExtension { backend, name, fields }` | declare the typed fields one service manager has and the portable unit vocabulary does not. Identified by the value, so two extensions may share a `name`; a unit applies one as `extends = [ { extension = <the value>; values = { … }; } ]` |
-| `korora` | korora's types plus this library's atoms and both constructors — the value an interfaces file takes as its argument |
+| `korora` | korora's types plus this library's atoms and the three constructors — the value an interfaces file takes as its argument |
 | `atoms` | `korora` without the constructors: korora's own types plus the atoms this library owns (`url`, `secretRef`, `unitRef`, `duration`, `schedule`, `userName`) |
 | `platform` | the projection a plan's `target.system` is: `record { system, microarchitecture }`, the name lists it is built from (`scalarNames`, `parsedNames`, `gccNames`, `abiExcluded`, `fieldNames`) and nixpkgs' own `elaborate` and `functionNames` |
 | `service`, `mkRoot` | composition, for a caller building roots outside a deployment: `mkRoot <root> <settingsOf>` applies the root to `{ service = service <settingsOf>; }`, and `settingsOf { name, defaults, fixed }` returns `{ values, sources, rows }`. A member record also carries `slotSet`, the slot names of the two readings a `slot-set-settings-derived` row is built from, or `null` when the deployment configured nothing |
 | `render`, `mkTable` | render a diagnostics table to text; build one from rows |
-| `registry`, `fileOf`, `label`, `atomRows`, `exportNames`, `secrecyOf`, `foldOf` | the attribution helpers row text is written with: index a caller's `interfaces` by value, find an interface's declaring file, print `` `name` (file) ``, check one interface's atoms, list its exports, read an atom's `secrecy`, read an interface's `fold` |
+| `registry`, `fileOf`, `label`, `atomRows`, `exportNames`, `secrecyOf`, `foldOf`, `foldName`, `foldApply`, `identityOf` | the attribution helpers row text is written with: index a caller's `interfaces` by value, find an interface's declaring file by value and then by claim, print `` `name` (file) ``, check one interface's atoms, list its exports, read an atom's `secrecy`, read an interface's `fold`, its fold's name and the function under it, and the identity it claims — `null` where it claims none |
 | `excluded` | the exclusion table as data: construct -> the trigger that would bring it back |
 | `util` | the list and attrset helpers the library runs on |
 
