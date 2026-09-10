@@ -35,7 +35,7 @@
 ## 6. Two evaluations as evidence
 
 - [x] 6.1 Give the `interfaces` suite the library source it needs to build a second evaluation: add `libSource` to its arguments in `tests/default.nix:21` the way the `diagnostics` suite already receives it, and expose a helper in `tests/unit/support.nix` that returns a second, independent `import libSource { inherit korora systems; }`; verify a throwaway `nix eval --expr` shows an interface of one shape built through each evaluation comparing unequal by value
-- [ ] 6.2 Pin the defect this change exists for: a test asserting that two interfaces of one shape built by two evaluations, over an atom this library owns, are unequal as values and equal as identities, and that a wire between them resolves; verify the test fails when `interfaceMatches` is reverted to value equality alone
+- [x] 6.2 Pin the defect this change exists for: a test asserting that two interfaces of one shape built by two evaluations, over an atom this library owns, are unequal as values and equal as identities, and that a wire between them resolves; verify the test fails when `interfaceMatches` is reverted to value equality alone
 
 ## 7. Scenario coverage
 

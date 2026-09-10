@@ -820,4 +820,89 @@ in
         noFile = null;
       };
     };
+
+  # The defect this change exists for: an atom of this library is built by
+  # applying a function to korora, so a second evaluation of `lib/` produces an
+  # unequal atom and an unequal interface over it, and a wire that is obviously
+  # correct was refused.
+  testOneClaimSpansTwoEvaluations =
+    let
+      elsewhere = support.anotherEvaluation libSource;
+      shapeOf =
+        library:
+        library.interface {
+          name = "identity";
+          exports.endpoint = {
+            type = library.korora.url;
+          };
+          id = "example.com/identity";
+        };
+      mine = shapeOf planner;
+      theirs = shapeOf elsewhere;
+      publisher = _: {
+        provides.identity.interface = theirs;
+        impl = _: {
+          provides.identity.exports.endpoint = "ssh://host.example/srv";
+          units.only.command = "/bin/true";
+        };
+      };
+      reader = _: {
+        uses.far = {
+          interface = mine;
+          reads = [ "endpoint" ];
+        };
+        impl =
+          { results, ... }:
+          {
+            units.only = {
+              command = "/bin/true";
+              env.FAR = if results ? far then results.far.endpoint else "";
+            };
+          };
+      };
+      result = planOf {
+        interfaces = {
+          "interfaces/mine.nix".identity = mine;
+          "interfaces/theirs.nix".identity = theirs;
+        };
+        instances = {
+          reader = {
+            module = soleRoot { module = reader; };
+            placement.every.only.machines = [ "one" ];
+            wire.far = {
+              instance = "writer";
+              provides = "identity";
+            };
+          };
+          writer = {
+            module = soleRoot {
+              module = publisher;
+              provides = [ "identity" ];
+            };
+            placement.every.only.machines = [ "two" ];
+            exposes = [ "identity" ];
+          };
+        };
+      };
+    in
+    {
+      expr = {
+        twoEvaluations = planner != elsewhere;
+        unequalAsValues = mine != theirs;
+        equalAsIdentities = planner.identityOf mine == elsewhere.identityOf theirs;
+        mismatches = countById "interface-mismatch" result;
+        delivered = result.plan."reader:only@one".reads.far.delivered;
+        received = result.plan."reader:only@one".units.only.env.FAR;
+        inherit (result) applicable;
+      };
+      expected = {
+        twoEvaluations = true;
+        unequalAsValues = true;
+        equalAsIdentities = true;
+        mismatches = 0;
+        delivered = true;
+        received = "ssh://host.example/srv";
+        applicable = true;
+      };
+    };
 }
