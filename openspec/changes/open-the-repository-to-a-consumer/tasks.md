@@ -17,7 +17,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
   is system-independent and sits outside `perSystem` (design D1). Verify
   `nix eval .#operator --apply builtins.attrNames` answers `["mkDeployment"]` and every
   `packages.planner-e2e-*` still builds to the store path it built to before.
-- [ ] 1.2 `flake.nix`: write the system list out as `x86_64-linux`, `aarch64-linux` and
+- [x] 1.2 `flake.nix`: write the system list out as `x86_64-linux`, `aarch64-linux` and
   `aarch64-darwin`, delete the `systems` input and its `flake.lock` entry, and comment the removal
   with the platform the pinned nixpkgs dropped (design D4). Verify `nix flake show` completes and
   prints an output for each of the three, and `nix flake metadata --json` names no `systems` input.
