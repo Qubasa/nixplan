@@ -13,8 +13,9 @@ what was built.
 
 from __future__ import annotations
 
+import contextlib
 import os
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -154,6 +155,32 @@ def _ignore(line: str) -> None:
     """Drop a step line, for a caller that reads the returned log instead."""
 
 
+@contextlib.contextmanager
+def _taking(step: str, address: str, record: Callable[[str], None]) -> Iterator[None]:
+    """Announce one step, take it, and name the failure if the machine refuses.
+
+    Args:
+        step: The line naming the step, printed before the step is attempted.
+        address: The machine it is taken against.
+        record: Where a line goes.
+
+    Yields:
+        Nothing. The step is taken inside the context.
+
+    Raises:
+        ApplyError: If the machine refused, so that nothing after it is
+            attempted. The last step line a run printed is then the step that
+            was running when it ended, and the failure line follows it.
+    """
+    record(step)
+    try:
+        with remote.refusing(step, address):
+            yield
+    except ApplyError as refused:
+        record(f"failed {refused}")
+        raise
+
+
 def apply(
     deployment: Deployment,
     runner: remote.Runner,
@@ -209,7 +236,7 @@ def apply(
         step = (
             f"value {write.value.key} {write.file.name} -> {user}@{write.address}:{write.file.path}"
         )
-        with remote.refusing(step, write.address):
+        with _taking(step, write.address, record):
             runner.run(
                 remote.ssh_argv(
                     write.address,
@@ -219,21 +246,16 @@ def apply(
                 ),
                 env=env,
             )
-        record(step)
 
     for key in walked.order:
         entry = deployment.entries[key]
         address = addresses[key]
-        copy = f"copy {key} {entry.path} -> {user}@{address}"
-        with remote.refusing(copy, address):
+        with _taking(f"copy {key} {entry.path} -> {user}@{address}", address, record):
             runner.run(remote.copy_argv(entry.path, address, user=user), env=env)
-        record(copy)
-        step = f"activate {key} ({entry.realiser}) on {user}@{address}"
-        with remote.refusing(step, address):
+        with _taking(f"activate {key} ({entry.realiser}) on {user}@{address}", address, record):
             reported = runner.output(
                 remote.ssh_argv(address, scripts[key], opts=opts, user=user), env=env
             )
-        record(step)
         for line in reported.splitlines():
             record(f"  {line}")
     return tuple(lines)

@@ -976,3 +976,42 @@ def test_a_step_that_fails_names_the_machine_and_what_it_said(
     assert "10.0.0.10" in refusal
     assert REFUSED in refusal
     assert "Traceback" not in refusal
+
+
+def _broken(tmp_path: Path) -> tuple[manifest.Deployment, Failing, list[str]]:
+    """Apply a two-entry deployment whose second entry's machine refuses the copy."""
+    deployment = _built(
+        tmp_path,
+        plan={**PLAN, CLIENT_KEY: {"reads": {"site": {"entry": SERVER_KEY}}}},
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+    )
+    failing = Failing("10.0.0.11")
+    log: list[str] = []
+
+    with pytest.raises(errors.ApplyError):
+        apply.apply(deployment, failing, base_env={}, log=log.append)
+
+    return deployment, failing, log
+
+
+def test_a_step_is_announced_before_it_is_attempted(tmp_path: Path) -> None:
+    """The step line of a step that never completed is the run's own last word about it."""
+    deployment, _, log = _broken(tmp_path)
+
+    steps = [line for line in log if not line.startswith(("  ", "failed "))]
+    assert steps[-1] == f"copy {CLIENT_KEY} {deployment.entries[CLIENT_KEY].path} -> root@10.0.0.11"
+    assert log[-1].startswith("failed ")
+    assert "10.0.0.11" in log[-1]
+    assert REFUSED in log[-1]
+
+
+def test_the_run_stops_at_the_step_that_broke(tmp_path: Path) -> None:
+    """One boundary, not a set of them: nothing after the refused step is attempted."""
+    _, failing, log = _broken(tmp_path)
+
+    assert _activated(log) == [SERVER_KEY]
+    assert [command[:2] for command in failing.commands] == [["nix", "copy"], ["ssh", "-o"]]
+    assert all("10.0.0.11" not in " ".join(command) for command in failing.commands)

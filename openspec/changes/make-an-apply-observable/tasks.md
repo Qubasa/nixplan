@@ -84,7 +84,7 @@ only the scenarios listed below are new.
 
 ## 5. The step log, the restriction and the second run
 
-- [ ] 5.1 `cli/apply.py:apply`: move each `record(...)` before its step, and add a failure line
+- [x] 5.1 `cli/apply.py:apply`: move each `record(...)` before its step, and add a failure line
   naming the step, the machine and the machine's output when a step raises. The returned tuple holds
   the same lines in the same order, and the run attempts nothing after the failed step.
   Verify: `test_a_step_is_announced_before_it_is_attempted` and
