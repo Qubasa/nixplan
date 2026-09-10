@@ -25,7 +25,7 @@ let
       atoms
       ;
   };
-  compose = import ./compose.nix { inherit util diag; };
+  compose = import ./compose.nix { inherit util diag excluded; };
   resolve = import ./resolve.nix {
     inherit
       util
@@ -64,6 +64,7 @@ in
     secrecyOf
     exportNames
     atomRows
+    foldOf
     registry
     fileOf
     label

@@ -43,15 +43,19 @@ rec {
   inherit secrecies;
 
   # The whole constructor. No registration and no side table: an interface nobody
-  # upstreamed is an interface.
+  # upstreamed is an interface. A `fold` is the policy for combining the set a
+  # set-valued read collects, and it is optional in every position.
   interface =
     {
       name,
       exports,
+      fold ? null,
     }:
     {
-      inherit name exports;
+      inherit name exports fold;
     };
+
+  foldOf = iface: iface.fold or null;
 
   secrecyOf = atom: atom.secrecy or "public";
 
@@ -169,10 +173,31 @@ rec {
     in
     util.concatMapAttrsToList atomRowsFor iface.exports;
 
+  # A fold is applied to a value the planner built, so a declared fold that cannot
+  # be applied is a row against the interface rather than an error at the read.
+  foldRows =
+    reg: iface:
+    let
+      subject = subjectOf reg iface;
+      fold = foldOf iface;
+    in
+    util.optional (fold != null && !isFunction fold) (
+      diag.error {
+        inherit subject;
+        id = "interface-fold-not-a-function";
+        message = "interface ${label reg iface} declares a fold that is not a function";
+        evidence = "a fold is applied to the set a read collects, keyed by provider entry key, and returns the value the consuming implementation receives";
+        resolution = "write ${util.quote "fold = set: …;"} in ${subject}, or delete the key";
+      }
+    );
+
   isInterface = v: isAttrs v && v ? name && v ? exports && isAttrs v.exports;
 
   registryRows =
-    reg: builtins.concatLists (map (r: if isInterface r.value then atomRows reg r.value else [ ]) reg);
+    reg:
+    builtins.concatLists (
+      map (r: if isInterface r.value then atomRows reg r.value ++ foldRows reg r.value else [ ]) reg
+    );
 
   unitExtension =
     {
