@@ -469,12 +469,31 @@ anything would be activating something other than what was built.
 
 Ties break by plan key sort order, so one deployment always walks one way. Two instances wiring each
 other is a legal deployment - a capability's exports are a function of module and settings, never of
-a wire - but its activation graph genuinely has no first element. Where nothing is ready, the walk
-takes the lowest entry every unapplied provider of which it can reach forward, contradicts exactly
-the reads into that entry, and prints each edge it ordered against. Every edge it prints therefore
-lies on a cycle, and an entry that merely reads into one keeps its order. Refusing would refuse a
-deployment the library considers correct, and silence would leave a one-off startup failure
-unexplainable.
+a wire - but its activation graph genuinely has no first element. The walk is over the strong
+components of that graph: a component no entry outside it reads into is applied first, a component
+of one entry is an entry with an order, and a component of more than one is a cycle. Its entries are
+applied in plan key order, and the edges of that component pointing backwards in that order are the
+ones the order contradicts. Every edge the command prints therefore lies on a cycle, and an entry
+that merely reads into one keeps its order. Refusing would refuse a deployment the library considers
+correct, and silence would leave a one-off startup failure unexplainable.
+
+A broken cycle prints two kinds of line, before the first machine is dialled:
+
+- `cycle of <key>, <key>` names every entry of the component the order was broken at. This is the
+  line that tells a cycle from a provider an earlier decision left behind.
+- `ordered against the read of <provider> by <consumer>`, one per contradicted edge, names the read
+  the order could not honour. The consumer is activated before that provider, so its first fetch can
+  fail once and the service manager restarts it when the provider comes up.
+
+Neither line asks the operator for an action on a deployment whose cycle is intended: two services
+that need each other are applied in a fixed order and settle. What the cycle line answers is whether
+the cycle was intended at all, because the entries it names are the declarations to read.
+
+A restricted run prints a third: `not applying <provider>, which <consumer> reads` names a read
+whose provider the `--only` selection excludes. That read is no ordering constraint, an entry the run
+does not apply being an entry that cannot be applied first, and the consumer is applied anyway,
+against whatever its provider's machine already holds. A run of the whole deployment prints none of
+these.
 
 Every refusal the command can make from the plan, `manifest.json` and the value source happens
 before the first machine is contacted: an inapplicable deployment, a `--only` naming a key the

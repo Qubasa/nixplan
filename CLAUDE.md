@@ -59,7 +59,8 @@ Recorded so the question is answered once.
   pure evaluation a consumer's own flake performs; a relation holds ground terms, while `impl`, a
   korora predicate and a fold are functions, which is why `identityOf` had to project one out to
   compare it at all; bottom-up evaluation has no per-node recovery, which `diag.guard` is; and the
-  only recursion in the tree is a generator reading a sibling and the walk in `cli/order.py`.
+  only recursion in the tree is a generator reading a sibling, the walk in `cli/order.py` being an
+  iterative Tarjan over a graph a fleet makes deeper than the interpreter's stack.
   Provenance in Datalog is a proof tree over relation names, not a resolution.
 - Prolog adds unification and backtracking, which is the search this design removed, and trades a
   deterministic ordered table for first-solution semantics.
@@ -363,12 +364,25 @@ Recorded so the question is answered once.
   contributes zero edges is what let that stand. Values are written before any entry is
   activated, and an entry is copied before it is activated.
 - Two instances wiring each other is a legal deployment whose activation graph has no first element,
-  so the walk contradicts an edge rather than refusing. Only an edge on a cycle is contradicted:
-  with nothing ready it takes the lowest entry every unapplied provider of which is reachable from
-  it, contradicts exactly the reads into that entry and prints each, and a provider left behind by
-  a contradicted edge is applied at the first opportunity. An entry that merely reads into a cycle
-  keeps its order. Refusing would refuse a deployment the library accepts; silence would make a
-  one-off startup failure unexplainable.
+  so the walk contradicts an edge rather than refusing. The order is the strong components of the
+  read graph, computed once and walked in the dependency order between them with ties broken by
+  each component's lowest plan key: a component of one entry is an entry with an order, a component
+  of more is a cycle whose entries are applied in plan key order, and the edges contradicted are
+  exactly that component's own edges pointing backwards in it. An entry that merely reads into a
+  cycle therefore keeps its order, ordering costs the graph rather than its square, and eligibility
+  is answered by construction rather than by a reachability search per candidate. Refusing a cycle
+  would refuse a deployment the library accepts; silence would make a one-off startup failure
+  unexplainable.
+- The walk of the condensation cannot run out of components, a condensation being acyclic, and it
+  refuses in that position anyway: an unorderable state is an `ApplyError` naming the entries and
+  the reads between them, because the `next(...)` that stood there ended a run in `StopIteration`,
+  which `cli/planner.py` does not handle. A future edge source is what makes the position reachable.
+- Three lines report what the order could not honour, all before the first dial: `cycle of <keys>`
+  names the component the order was broken at, one `ordered against the read of` line per
+  contradicted edge names the read a consumer may fail on once at startup, and `not applying
+  <provider>, which <consumer> reads` names a read whose provider a `--only` selection excludes.
+  The last one is an announcement and no edge: an entry the run does not apply cannot be applied
+  first, so the selection is applied as given.
 - A step's line is printed before the step is attempted, so the last step line a run printed names
   the step that was running when it ended, and a failure line follows it. A machine's refusal is
   the command's own error naming the entry, the machine and what the machine printed, never a
@@ -703,17 +717,9 @@ silently unobserved.
   states `path` as `null` rather than omitting it refuses the whole deployment for every subcommand,
   because the command's field reader demands a non-empty string. Observed as that refusal before
   `openspec/changes/hold-every-stated-guarantee` was applied to the tree.
-- The walk in `cli/order.py` rescans the entries still to apply once per entry applied, so ordering
-  costs the square of the fleet, and the cycle path rebuilds a reachability question per candidate.
-  Its eligibility `next(...)` has no default, so a violated invariant ends a run in `StopIteration`
-  rather than in a refusal, and `cli/planner.py` handles `ApplyError` only. Today's single edge
-  sources cannot violate it. `openspec/changes/order-a-cycle-by-its-strong-components`.
 - A fold's refusal is an in-band sentinel: `lib/resolve.nix` reads a returned attrset carrying a
   `refused` attribute as a refusal, so a fold whose own successful result carries that name cannot
   succeed. A tagged pair costs one line per fold.
-- `planner apply --only` drops the edge of a provider the selection excludes and prints nothing,
-  while a contradicted cycle edge prints a line. Both are reads the run does not honour.
-  `openspec/changes/order-a-cycle-by-its-strong-components`.
 - Every refusal in `secrets/read.nix` and `secrets/backend.nix` sits above no row and outside the
   accounting in `tests/unit/diagnostics.nix`, whose `realiserFiles` names two files. A generator
   declaring no `program`, a file name outside the external grammar and a recipient machine with no
