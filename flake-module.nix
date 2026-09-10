@@ -221,7 +221,18 @@ in
           pkgs.nix
         ];
         text = ''
-          root="$(git rev-parse --show-toplevel)"
+          # Every path this prints is a path in the working tree, so a working tree
+          # of this repository is what it needs. `git rev-parse --show-toplevel`
+          # answers about the caller's own directory, and continuing on its answer
+          # printed `export PLANNER_E2E=/tests/e2e` from anywhere else.
+          if ! root="$(git rev-parse --show-toplevel 2> /dev/null)"; then
+            echo "planner-e2e-env: $PWD is in no git checkout, and this prints the paths of one: run it from a checkout of nixplan" >&2
+            exit 1
+          fi
+          if ! cmp -s "$root/flake.nix" ${./flake.nix}; then
+            echo "planner-e2e-env: $root is not a checkout of nixplan, and this prints that checkout's own paths: its flake.nix is not the one this command was built from" >&2
+            exit 1
+          fi
           cat "$(nix build --no-link --print-out-paths "$root#planner-e2e-env-paths")"
           printf 'export PLANNER_E2E_FLAKE=%q\n' "$root"
           ${pkgs.lib.concatStrings (

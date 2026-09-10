@@ -119,7 +119,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
   refuse with both named rather than choosing. Verify `nix develop -c planner --help` prints the
   subcommands, and that entering the shell from an unrelated repository sets no directory of that
   repository on `PYTHONPATH`.
-- [ ] 6.2 `flake-module.nix:193`: `planner-e2e-env` refuses when it is not run from a checkout of
+- [x] 6.2 `flake-module.nix:193`: `planner-e2e-env` refuses when it is not run from a checkout of
   this repository, naming what it needed, instead of continuing with an empty root. Verify running
   it from `/tmp` prints the refusal and exits non-zero.
 - [ ] 6.3 `README.md`: name rookery beside `nix run .#planner-e2e`, and say a reader without access
