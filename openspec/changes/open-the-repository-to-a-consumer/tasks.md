@@ -222,6 +222,26 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
     either.
   - `planner` removed from the one shell: 1 failed, 14 passed, the failure being
     `test_the_shell_carries_the_command_its_documentation_is_about`.
-- [ ] 10.5 Walk the route by hand, in a clean directory outside this checkout, using only the
-  committed documents: write the flake, build the deployment, apply it. Record here every step that
-  needed a fact no document states.
+- [x] 10.5 Walked in `/tmp/oc-walk`, a git directory holding nothing else. The flake is
+  `README.md`'s block; `machines.nix`, `instances.nix` and `modules/hello/greet.nix` are
+  `docs/README.md`'s three blocks; the lock is `nix flake lock --override-input nixplan
+  path:<checkout>`, which is `cluster.md`'s substitution for the published reference. `nix build .`
+  produced `/nix/store/xq406l4g176jw4ifsh1j8hh25jd5j3v6-planner-deployment`, the same store path
+  `nix build .#planner-e2e-newcomer` produces, and `nix run path:<checkout> -- apply --dry-run
+  <built>` printed the four steps and `a dry run, so no machine was contacted`, exiting 0.
+
+  Two facts the walk needed and no document states, both in the two files
+  `docs/README.md` says it does not show:
+  - the value `instances.<name>.module` takes. `authoring.md` shows a root file returning
+    `{ services = { inherit <member>; }; }` and, twenty lines later, a deployment reading
+    `borgRepo.services.default`. Neither says that a file returning a bare root function is
+    wrapped by its caller as `{ services.default = import ./default.nix { ... }; }`, which is what
+    the template does and what the walk had to guess.
+  - that a package reaches a module as a string. The template writes
+    `{ greeter = "${greeter}"; }`; handing the derivation itself is accepted by the module and
+    fails inside `writeShellApplication` several frames away from the mistake. `docs/README.md`
+    states the rule for the plan ("no store path that is not a literal string") and not for the
+    argument.
+
+  Both are gaps in `authoring.md`, which this change does not own; recorded here rather than
+  fixed.
