@@ -1102,6 +1102,107 @@ in
       };
     };
 
+  testAGuardedConsumerStillReportsARefusedFold =
+    let
+      why = "no provider of this set publishes a rotatable key";
+      iface = folding (_: {
+        refused = why;
+      });
+      guarded = _: {
+        uses.far = {
+          interface = iface;
+          reach = "all";
+          reads = [ "publicKey" ];
+        };
+        impl =
+          { results, ... }:
+          {
+            units.only = {
+              command = "/bin/true";
+              env.FAR = if results ? far then results.far else "<undelivered>";
+            };
+          };
+      };
+      consuming = {
+        module = soleRoot { module = guarded; };
+        placement.every.only.machines = [ "one" ];
+        wire.far = {
+          instance = "provider";
+          provides = "identity";
+        };
+      };
+      result = planOf {
+        sources = sources // {
+          modules = sources.modules // {
+            authz = "modules/authz/default.nix";
+            hosts = "modules/hosts/default.nix";
+          };
+          leaves = sources.leaves // {
+            authz.only = "modules/authz/leaf.nix";
+            hosts.only = "modules/hosts/leaf.nix";
+          };
+        };
+        interfaces = folderRegistry iface;
+        instances = {
+          provider = {
+            module = soleRoot {
+              module = providerOf iface;
+              provides = [ "identity" ];
+            };
+            placement.every.only.machines = [
+              "one"
+              "two"
+            ];
+            exposes = [ "identity" ];
+          };
+          authz = consuming;
+          hosts = consuming;
+        };
+      };
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        subjects = subjectsById "interface-fold-refused" result;
+        messages = map (r: r.message) result.diagnostics;
+        delivered = [
+          result.plan."authz:only@one".reads.far.delivered
+          result.plan."hosts:only@one".reads.far.delivered
+        ];
+        rendered = result.plan."authz:only@one".units.only.env.FAR;
+        applicable = result.applicable;
+        planKeys = builtins.attrNames result.plan;
+      };
+      expected = {
+        ids = [
+          "interface-fold-refused"
+          "interface-fold-refused"
+        ];
+        subjects = [
+          "authz:only"
+          "hosts:only"
+        ];
+        messages = [
+          why
+          why
+        ];
+        delivered = [
+          false
+          false
+        ];
+        rendered = "<undelivered>";
+        applicable = false;
+        planKeys = [
+          "authz:only@one"
+          "hosts:only@one"
+          "machine:one"
+          "machine:two"
+          "provider:only@one"
+          "provider:only@two"
+        ];
+      };
+    };
+
   testAFoldNobodyReaches =
     let
       iface = folding joined;
