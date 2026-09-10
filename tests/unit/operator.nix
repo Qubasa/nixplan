@@ -495,6 +495,39 @@ in
       };
     };
 
+  testTheManifestNamesTheProgramAValueDeclares =
+    let
+      generated = unreceived // {
+        "holder:vars/minted" = {
+          delivery = [ "bare" ];
+          deliveryDerivedFrom = [ "holder:app@bare owns it" ];
+          program = "/nix/store/9dm4x2vqk7z1n5bpr3jlfg8ys6cwh0az-mint.drv";
+          files."token" = {
+            path = "/run/vars/holder/minted/token";
+            secrecy = "secret";
+          };
+        };
+      };
+      reading = reader.read { plan = generated; };
+    in
+    {
+      expr = {
+        minted = reading.manifest.values."holder:vars/minted";
+        unprogrammed = reading.manifest.values."holder:vars/app" ? program;
+      };
+      expected = {
+        minted = {
+          delivery = [ "bare" ];
+          program = "/nix/store/9dm4x2vqk7z1n5bpr3jlfg8ys6cwh0az-mint.drv";
+          files."token" = {
+            path = "/run/vars/holder/minted/token";
+            secrecy = "secret";
+          };
+        };
+        unprogrammed = false;
+      };
+    };
+
   testTheSameDeploymentIsReadTwice =
     let
       realise = {

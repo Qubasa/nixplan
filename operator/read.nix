@@ -150,6 +150,11 @@ let
         };
     };
 
+  # `program` is recorded only where the plan records one, so the manifest of a
+  # deployment whose values are the operator's own is the bytes it always was.
+  # The command reads it to know whose bytes a value's are: a value naming a
+  # generator is produced and delivered by the external tool, and an apply asks
+  # the operator for none of it.
   readValue =
     plan: key:
     let
@@ -159,7 +164,8 @@ let
       inherit key;
       inherit (entry) delivery;
       files = mapAttrs (_: file: { inherit (file) path secrecy; }) entry.files;
-    };
+    }
+    // (if entry.program or null == null then { } else { inherit (entry) program; });
 
   collisionRows =
     entries:
@@ -242,7 +248,13 @@ in
             ;
           key = entry.digest;
         }) entries;
-        values = mapAttrs (_: value: { inherit (value) delivery files; }) values;
+        values = mapAttrs (
+          _: value:
+          {
+            inherit (value) delivery files;
+          }
+          // (if value ? program then { inherit (value) program; } else { })
+        ) values;
       };
     in
     {
