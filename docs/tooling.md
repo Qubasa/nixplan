@@ -84,21 +84,22 @@ The suites, and how many tests each holds:
 | --- | --- | --- |
 | `interfaces` | 13 | interface identity by value, export atoms, the omission rule |
 | `composition` | 21 | roots, members, the settings namespace, defaults and fixed |
-| `resolution` | 27 | wiring, arity, secrecy, placement, keyset equality |
-| `diagnostics` | 18 | totality, ordering, severity, rendering, and the scan that finds no raising call under `lib/` |
-| `plan` | 22 | keys, planes, absences, dependencies, serialisation, the golden fixture |
+| `resolution` | 30 | wiring, arity, secrecy, placement, keyset equality |
+| `diagnostics` | 22 | totality, ordering, severity, rendering, and the scan that finds no raising call under `lib/` |
+| `plan` | 26 | keys, planes, absences, dependencies, serialisation, the golden fixture |
 | `postgres` | 10 | one provider instance and two consumers, planned |
 | `exclusions` | 16 | one deployment per excluded construct, each refused |
 | `vars` | 24 | a generated value's cardinality, its delivery set, its entry and the program that produces it |
 | `units` | 31 | the portable unit vocabulary, per field |
 | `platform` | 19 | a machine's target, elaborated |
-| `closure` | 23 | what a unit may name and what it must declare |
+| `closure` | 25 | what a unit may name and what it must declare |
 | `image` | 28 | the portable-service-image realiser's reading of an entry |
 | `flakelet` | 14 | the flakelet realiser's reading: enablement, identity, the two name refusals |
-| `operator` | 11 | the deployment build's reading: the artifact name, `manifest.json`, the realiser statement, its four refusals |
+| `operator` | 29 | the deployment build's reading: the artifact name, `manifest.json`, the realiser statement, its refusals |
 | `secrets` | 12 | the secrets realiser's reading: a plan as a generator configuration, the name projection, the rendered deploy step |
+| `consumer` | 2 | what this flake publishes: the recorded platform identity, and a plan keyed by a caller's own nixpkgs |
 | `perf` | 6 | the synthetic fleet is deterministic and realises nothing |
-| `layers` | 14 | the shape of the test tree itself |
+| `layers` | 17 | the shape of the test tree itself, the root document and the one shell |
 | `coverage` | 8 | every specification heading is a test, an omission or an alias |
 
 That column is a value, not a tally kept by hand:
@@ -108,8 +109,8 @@ nix eval --json '.#debug.suites' \
   --apply 'builtins.mapAttrs (_: s: builtins.length (builtins.attrNames s))'
 ```
 
-Seventeen suites, counted as the keys of `suites` in `tests/default.nix`, and
-276 tests, counted as the test attributes of the files under `tests/unit/`. That
+Nineteen suites, counted as the keys of `suites` in `tests/default.nix`, and
+353 tests, counted as the test attributes of the files under `tests/unit/`. That
 attrset is the only registration point: a suite file nothing there imports is a
 file nothing runs, and the key names are what the coverage cross-walk reads. A
 suite that asserts a directory's reading takes it as an argument threaded from
@@ -133,13 +134,13 @@ See [cluster.md](cluster.md) for the host it needs, the five folders, what a run
 observes and how to drive `pytest` by hand against the working tree.
 
 The pure half of that layer needs no machine and is a check like any other:
-`nix build .#checks.x86_64-linux.planner-delivery -L`, 29 tests over
+`nix build .#checks.x86_64-linux.planner-delivery -L`, 54 tests over
 `tests/e2e/test_harness.py`. Most of them are the command's rather than the
 harness's now - the order `apply` walks, the refusals it makes before it dials -
 because the harness hands the command a recorder in place of a process table and
 reads the argv it produced. The check exports `PYTHONPATH` naming `cli/`, since
 that is where those modules live. `nix develop` carries the same `pytest`, so
-`PYTHONPATH=cli pytest -q tests/e2e/test_harness.py` runs the same 29 against
+`PYTHONPATH=cli pytest -q tests/e2e/test_harness.py` runs the same 54 against
 the working tree.
 
 ## Mapping a specification scenario to a test

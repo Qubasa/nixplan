@@ -192,7 +192,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
   command, the recorded platform identity and `mkLib`, that the newcomer deployment holds no path
   interpolation and why, that the documented example and the folder are one text, and the shell's
   root. Verify the file passes vale under `nix build .#checks.x86_64-linux.treefmt`.
-- [ ] 9.5 Registration: `consumer` in `suites` in `tests/default.nix`, and the four spec paths of
+- [x] 9.5 Registration: `consumer` in `suites` in `tests/default.nix`, and the four spec paths of
   this change in `accountable` in `tests/unit/coverage.nix`. Verify the coverage cross-walk reports
   an empty difference over the four files.
 
