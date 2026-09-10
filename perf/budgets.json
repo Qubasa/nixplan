@@ -14,164 +14,164 @@
     "worked": {
       "fixture": "worked",
       "interpreter": "2.34.8",
-      "date": "2026-09-08",
+      "date": "2026-09-09",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 687.4546,
-        "nrFunctionCalls": 388.6364,
-        "nrPrimOpCalls": 268.1819,
-        "values.number": 854,
-        "sets.bytes": 11279.2728,
-        "envs.bytes": 8544,
-        "list.elements": 170.6364,
+        "nrThunks": 702.3637,
+        "nrFunctionCalls": 396.4546,
+        "nrPrimOpCalls": 272.3637,
+        "values.number": 869.8182,
+        "sets.bytes": 11391.2728,
+        "envs.bytes": 8730.1819,
+        "list.elements": 173.2728,
         "nrOpUpdateValuesCopied": 50.3637,
-        "gc.totalBytes": 42709.8182
+        "gc.totalBytes": 42788.3637
       },
-      "note": "Moved by deliver-secrets-across-machines: a generated value is now an entry of the plan, so the fleet fixtures each gained one entry per machine and the `worked` fixture three. Per-entry cost fell at every fixture and every size because the denominator grew faster than the work did; the figures are re-recorded rather than the margin widened, so the next change is gated against the cheaper plan."
+      "note": "Moved by hold-declaration-shape-and-fold-set-reads: every member whose deployment wrote a knob is read a second time for its slot names, the interface value carries a `fold` field, and a set-valued read binds its entry-keyed set before delivering it. Every gated counter rose, by 0.05% at fleet-256 and mesh-256 and by at most 2.2% at the smallest fixtures, so the figures are re-recorded rather than the margin widened."
     },
     "fleet-4": {
       "fixture": "fleet",
       "interpreter": "2.34.8",
-      "date": "2026-09-08",
+      "date": "2026-09-09",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 602.7693,
-        "nrFunctionCalls": 335.3847,
-        "nrPrimOpCalls": 240.8462,
-        "values.number": 735.8462,
-        "sets.bytes": 9628.9231,
-        "envs.bytes": 7301.5385,
-        "list.elements": 148.3847,
+        "nrThunks": 613.3847,
+        "nrFunctionCalls": 341.3077,
+        "nrPrimOpCalls": 243.6924,
+        "values.number": 747.2308,
+        "sets.bytes": 9689.8462,
+        "envs.bytes": 7447.3847,
+        "list.elements": 150.3847,
         "nrOpUpdateValuesCopied": 32.6924,
-        "gc.totalBytes": 36148.9231
+        "gc.totalBytes": 36205.5385
       },
-      "note": "Moved by deliver-secrets-across-machines: a generated value is now an entry of the plan, so the fleet fixtures each gained one entry per machine and the `worked` fixture three. Per-entry cost fell at every fixture and every size because the denominator grew faster than the work did; the figures are re-recorded rather than the margin widened, so the next change is gated against the cheaper plan."
+      "note": "Moved by hold-declaration-shape-and-fold-set-reads: every member whose deployment wrote a knob is read a second time for its slot names, the interface value carries a `fold` field, and a set-valued read binds its entry-keyed set before delivering it. Every gated counter rose, by 0.05% at fleet-256 and mesh-256 and by at most 2.2% at the smallest fixtures, so the figures are re-recorded rather than the margin widened."
     },
     "fleet-16": {
       "fixture": "fleet",
       "interpreter": "2.34.8",
-      "date": "2026-09-08",
+      "date": "2026-09-09",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 370.5307,
-        "nrFunctionCalls": 232.9796,
-        "nrPrimOpCalls": 168.9592,
-        "values.number": 448.2041,
-        "sets.bytes": 5738.9388,
-        "envs.bytes": 4742.6939,
-        "list.elements": 108.6735,
+        "nrThunks": 373.347,
+        "nrFunctionCalls": 234.5511,
+        "nrPrimOpCalls": 169.7143,
+        "values.number": 451.2245,
+        "sets.bytes": 5755.1021,
+        "envs.bytes": 4791.1837,
+        "list.elements": 109.2041,
         "nrOpUpdateValuesCopied": 12.5103,
-        "gc.totalBytes": 22004.898
+        "gc.totalBytes": 22009.4694
       },
-      "note": "Moved by deliver-secrets-across-machines: a generated value is now an entry of the plan, so the fleet fixtures each gained one entry per machine and the `worked` fixture three. Per-entry cost fell at every fixture and every size because the denominator grew faster than the work did; the figures are re-recorded rather than the margin widened, so the next change is gated against the cheaper plan."
+      "note": "Moved by hold-declaration-shape-and-fold-set-reads: every member whose deployment wrote a knob is read a second time for its slot names, the interface value carries a `fold` field, and a set-valued read binds its entry-keyed set before delivering it. Every gated counter rose, by 0.05% at fleet-256 and mesh-256 and by at most 2.2% at the smallest fixtures, so the figures are re-recorded rather than the margin widened."
     },
     "fleet-64": {
       "fixture": "fleet",
       "interpreter": "2.34.8",
-      "date": "2026-09-08",
+      "date": "2026-09-09",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 307.9586,
-        "nrFunctionCalls": 205.3887,
-        "nrPrimOpCalls": 149.5907,
-        "values.number": 370.7047,
-        "sets.bytes": 4693.513,
-        "envs.bytes": 4053.2643,
-        "list.elements": 97.9741,
+        "nrThunks": 308.6736,
+        "nrFunctionCalls": 205.7876,
+        "nrPrimOpCalls": 149.7824,
+        "values.number": 371.4716,
+        "sets.bytes": 4697.6166,
+        "envs.bytes": 4075.5234,
+        "list.elements": 98.1089,
         "nrOpUpdateValuesCopied": 7.2384,
-        "gc.totalBytes": 18186.1969
+        "gc.totalBytes": 18207.0881
       },
-      "note": "Moved by deliver-secrets-across-machines: a generated value is now an entry of the plan, so the fleet fixtures each gained one entry per machine and the `worked` fixture three. Per-entry cost fell at every fixture and every size because the denominator grew faster than the work did; the figures are re-recorded rather than the margin widened, so the next change is gated against the cheaper plan."
+      "note": "Moved by hold-declaration-shape-and-fold-set-reads: every member whose deployment wrote a knob is read a second time for its slot names, the interface value carries a `fold` field, and a set-valued read binds its entry-keyed set before delivering it. Every gated counter rose, by 0.05% at fleet-256 and mesh-256 and by at most 2.2% at the smallest fixtures, so the figures are re-recorded rather than the margin widened."
     },
     "fleet-256": {
       "fixture": "fleet",
       "interpreter": "2.34.8",
-      "date": "2026-09-08",
+      "date": "2026-09-09",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 292.0105,
-        "nrFunctionCalls": 198.3564,
-        "nrPrimOpCalls": 144.6541,
-        "values.number": 350.9519,
-        "sets.bytes": 4425.727,
-        "envs.bytes": 3877.5449,
-        "list.elements": 95.2471,
+        "nrThunks": 292.1899,
+        "nrFunctionCalls": 198.4565,
+        "nrPrimOpCalls": 144.7023,
+        "values.number": 351.1444,
+        "sets.bytes": 4426.7569,
+        "envs.bytes": 3893.1184,
+        "list.elements": 95.2809,
         "nrOpUpdateValuesCopied": 5.8115,
-        "gc.totalBytes": 17169.5605
+        "gc.totalBytes": 17164.2341
       },
-      "note": "Moved by deliver-secrets-across-machines: a generated value is now an entry of the plan, so the fleet fixtures each gained one entry per machine and the `worked` fixture three. Per-entry cost fell at every fixture and every size because the denominator grew faster than the work did; the figures are re-recorded rather than the margin widened, so the next change is gated against the cheaper plan."
+      "note": "Moved by hold-declaration-shape-and-fold-set-reads: every member whose deployment wrote a knob is read a second time for its slot names, the interface value carries a `fold` field, and a set-valued read binds its entry-keyed set before delivering it. Every gated counter rose, by 0.05% at fleet-256 and mesh-256 and by at most 2.2% at the smallest fixtures, so the figures are re-recorded rather than the margin widened."
     },
     "mesh-4": {
       "fixture": "mesh",
       "interpreter": "2.34.8",
-      "date": "2026-09-08",
+      "date": "2026-09-09",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 657.5385,
-        "nrFunctionCalls": 382.3847,
-        "nrPrimOpCalls": 286.5385,
-        "values.number": 812.2308,
-        "sets.bytes": 10334.1539,
-        "envs.bytes": 8153.2308,
-        "list.elements": 180.7693,
+        "nrThunks": 666.2308,
+        "nrFunctionCalls": 387.6154,
+        "nrPrimOpCalls": 288.7693,
+        "values.number": 821.6924,
+        "sets.bytes": 10361.2308,
+        "envs.bytes": 8284.3077,
+        "list.elements": 182.5385,
         "nrOpUpdateValuesCopied": 32.9231,
-        "gc.totalBytes": 39790.7693
+        "gc.totalBytes": 40139.077
       },
-      "note": "Moved by deliver-secrets-across-machines: a generated value is now an entry of the plan, so the fleet fixtures each gained one entry per machine and the `worked` fixture three. Per-entry cost fell at every fixture and every size because the denominator grew faster than the work did; the figures are re-recorded rather than the margin widened, so the next change is gated against the cheaper plan."
+      "note": "Moved by hold-declaration-shape-and-fold-set-reads: every member whose deployment wrote a knob is read a second time for its slot names, the interface value carries a `fold` field, and a set-valued read binds its entry-keyed set before delivering it. Every gated counter rose, by 0.05% at fleet-256 and mesh-256 and by at most 2.2% at the smallest fixtures, so the figures are re-recorded rather than the margin widened."
     },
     "mesh-16": {
       "fixture": "mesh",
       "interpreter": "2.34.8",
-      "date": "2026-09-08",
+      "date": "2026-09-09",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 429.3878,
-        "nrFunctionCalls": 284.1837,
-        "nrPrimOpCalls": 218.8164,
-        "values.number": 530.6735,
-        "sets.bytes": 6509.8776,
-        "envs.bytes": 5662.8572,
-        "list.elements": 143.7143,
+        "nrThunks": 431.6939,
+        "nrFunctionCalls": 285.5715,
+        "nrPrimOpCalls": 219.4082,
+        "values.number": 533.1837,
+        "sets.bytes": 6517.0613,
+        "envs.bytes": 5707.4286,
+        "list.elements": 144.1837,
         "nrOpUpdateValuesCopied": 12.8164,
-        "gc.totalBytes": 26048.3266
+        "gc.totalBytes": 26052.898
       },
-      "note": "Moved by deliver-secrets-across-machines: a generated value is now an entry of the plan, so the fleet fixtures each gained one entry per machine and the `worked` fixture three. Per-entry cost fell at every fixture and every size because the denominator grew faster than the work did; the figures are re-recorded rather than the margin widened, so the next change is gated against the cheaper plan."
+      "note": "Moved by hold-declaration-shape-and-fold-set-reads: every member whose deployment wrote a knob is read a second time for its slot names, the interface value carries a `fold` field, and a set-valued read binds its entry-keyed set before delivering it. Every gated counter rose, by 0.05% at fleet-256 and mesh-256 and by at most 2.2% at the smallest fixtures, so the figures are re-recorded rather than the margin widened."
     },
     "mesh-64": {
       "fixture": "mesh",
       "interpreter": "2.34.8",
-      "date": "2026-09-08",
+      "date": "2026-09-09",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 367.9171,
-        "nrFunctionCalls": 257.684,
-        "nrPrimOpCalls": 200.5493,
-        "values.number": 454.8135,
-        "sets.bytes": 5482.1555,
-        "envs.bytes": 4991.2125,
-        "list.elements": 133.7306,
+        "nrThunks": 368.5026,
+        "nrFunctionCalls": 258.0363,
+        "nrPrimOpCalls": 200.6995,
+        "values.number": 455.4508,
+        "sets.bytes": 5483.9793,
+        "envs.bytes": 5012.4767,
+        "list.elements": 133.8498,
         "nrOpUpdateValuesCopied": 7.5648,
-        "gc.totalBytes": 22226.6529
+        "gc.totalBytes": 22268.7669
       },
-      "note": "Moved by deliver-secrets-across-machines: a generated value is now an entry of the plan, so the fleet fixtures each gained one entry per machine and the `worked` fixture three. Per-entry cost fell at every fixture and every size because the denominator grew faster than the work did; the figures are re-recorded rather than the margin widened, so the next change is gated against the cheaper plan."
+      "note": "Moved by hold-declaration-shape-and-fold-set-reads: every member whose deployment wrote a knob is read a second time for its slot names, the interface value carries a `fold` field, and a set-valued read binds its entry-keyed set before delivering it. Every gated counter rose, by 0.05% at fleet-256 and mesh-256 and by at most 2.2% at the smallest fixtures, so the figures are re-recorded rather than the margin widened."
     },
     "mesh-256": {
       "fixture": "mesh",
       "interpreter": "2.34.8",
-      "date": "2026-09-08",
+      "date": "2026-09-09",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 352.2497,
-        "nrFunctionCalls": 250.9298,
-        "nrPrimOpCalls": 195.8934,
-        "values.number": 435.4786,
-        "sets.bytes": 5218.8817,
-        "envs.bytes": 4820.0261,
-        "list.elements": 131.186,
+        "nrThunks": 352.3967,
+        "nrFunctionCalls": 251.0183,
+        "nrPrimOpCalls": 195.9311,
+        "values.number": 435.6385,
+        "sets.bytes": 5219.3395,
+        "envs.bytes": 4835.3499,
+        "list.elements": 131.2159,
         "nrOpUpdateValuesCopied": 6.1431,
-        "gc.totalBytes": 21238.6997
+        "gc.totalBytes": 21238.6164
       },
-      "note": "Moved by deliver-secrets-across-machines: a generated value is now an entry of the plan, so the fleet fixtures each gained one entry per machine and the `worked` fixture three. Per-entry cost fell at every fixture and every size because the denominator grew faster than the work did; the figures are re-recorded rather than the margin widened, so the next change is gated against the cheaper plan."
+      "note": "Moved by hold-declaration-shape-and-fold-set-reads: every member whose deployment wrote a knob is read a second time for its slot names, the interface value carries a `fold` field, and a set-valued read binds its entry-keyed set before delivering it. Every gated counter rose, by 0.05% at fleet-256 and mesh-256 and by at most 2.2% at the smallest fixtures, so the figures are re-recorded rather than the margin widened."
     }
   }
 }
