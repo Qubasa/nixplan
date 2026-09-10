@@ -10,6 +10,7 @@ let
     all
     attrValues
     concatLists
+    concatMap
     elem
     filter
     head
@@ -105,19 +106,13 @@ rec {
 
   referencePathsOf =
     { vars, configData }:
-    util.uniqueStrings (
-      concatLists (
-        util.mapAttrsToList (
-          _: g: util.mapAttrsToList (_: f: f.path) (util.filterAttrs (_: f: f.inPlan == "reference") g.files)
-        ) vars
-      )
-      ++ concatLists (
-        util.mapAttrsToList (
-          _: file:
-          if file.render or null == null then [ ] else map (i: i.ref) (filter (i: i ? ref) file.render)
-        ) configData
-      )
-    );
+    util.concatMapAttrsToList (
+      _: g: util.concatMapAttrsToList (_: f: if f.inPlan == "reference" then [ f.path ] else [ ]) g.files
+    ) vars
+    ++ util.concatMapAttrsToList (
+      _: file:
+      if file ? render then concatMap (i: if i ? ref then [ i.ref ] else [ ]) file.render else [ ]
+    ) configData;
 
   # Every read of a generated value, as a flat index from the value's entry key to
   # the entries that named it and what they named. The delivery set comes from
@@ -484,7 +479,7 @@ rec {
       mentionedSet = util.stringSet (map (m: m.path) mentioned);
       undeclared = filter (m: !util.inStringSet declaredSet m.path) mentioned;
       unmentioned = filter (root: !util.inStringSet mentionedSet root) declared;
-      outsideTheStore = filter (root: util.storePathsIn storeDir root != [ root ]) declared;
+      outsideTheStore = filter (root: scan root != [ root ]) declared;
       delivered = filter (root: elem root references) declared;
     in
     map (
@@ -549,6 +544,7 @@ rec {
       closure = placement.closure;
       dependsOn = [ "machine:${machine}@${machineKeys.${machine}}" ];
       reads = readsRecord { inherit subject member; };
+      vars = varsRecord placement;
       configData = configDataRecord {
         inherit subject member placement;
       };
@@ -588,7 +584,7 @@ rec {
           storeDir = resolved.storeDir;
           declared = closure;
           references = referencePathsOf {
-            vars = varsRecord placement;
+            inherit vars;
             configData = configData.record;
           };
         }
@@ -613,7 +609,7 @@ rec {
           storeDir = resolved.storeDir;
           placement = member.placementRecord;
           alloc = if member.alloc.ports == { } then { } else { inherit (member.alloc) ports; };
-          vars = varsRecord placement;
+          inherit vars;
           configData = configData.record;
           provides = providesRecord {
             inherit readers placement;

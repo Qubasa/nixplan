@@ -664,6 +664,14 @@ rec {
             }
         );
 
+      unprintable = filter (
+        key:
+        let
+          value = record.env.${key};
+        in
+        builtins.isString value && builtins.match ".*[\n\r].*" value != null
+      ) (attrNames (record.env or { }));
+
       rows =
         map (
           key:
@@ -709,7 +717,17 @@ rec {
             ) (strangersIn k)
           ) references
         )
-        ++ builtins.concatLists (map (e: e.rows) extends);
+        ++ builtins.concatLists (map (e: e.rows) extends)
+        ++ map (
+          key:
+          diag.error {
+            inherit subject;
+            id = "unit-env-value-newline";
+            message = "${where} sets ${util.quote key} to a value containing a line break";
+            evidence = "a unit file is line oriented, so an environment assignment has no second line to put the rest on";
+            resolution = "write ${util.quote key} as one line in ${module}, or write the bytes to a file the unit reads";
+          }
+        ) unprintable;
     in
     {
       inherit record rows;

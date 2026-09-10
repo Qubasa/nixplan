@@ -687,32 +687,6 @@ in
             ) units
           );
 
-          unprintableRows = concatLists (
-            util.mapAttrsToList (
-              uname: u:
-              map
-                (
-                  k:
-                  diag.error {
-                    subject = entryKey;
-                    id = "unit-env-value-newline";
-                    message = "unit ${util.quote uname} of ${entryKey} sets ${util.quote k} to a value containing a line break";
-                    evidence = "a unit file is line oriented, so an environment assignment has no second line to put the rest on";
-                    resolution = "write ${util.quote k} as one line in ${member.moduleLabel}, or write the bytes to a file the unit reads";
-                  }
-                )
-                (
-                  filter (
-                    k:
-                    let
-                      v = u.record.env.${k};
-                    in
-                    builtins.isString v && builtins.match ".*[\n\r].*" v != null
-                  ) (attrNames (u.record.env or { }))
-                )
-            ) units
-          );
-
           capabilities = mapAttrs (
             cap: declared:
             mkCapability {
@@ -783,7 +757,6 @@ in
               }
             )
             ++ (if target == null || !(target ? serviceManager) then [ ] else backendRows)
-            ++ unprintableRows
             ++ util.concatMapAttrsToList (_: u: u.rows) units
             ++ util.concatMapAttrsToList (_: f: f.rows) configFiles
             ++ util.concatMapAttrsToList (_: c: c.rows) capabilities;
