@@ -64,6 +64,17 @@ rec {
 
   foldOf = iface: iface.fold or null;
 
+  # `typedef name verify` with the words changed: a function plus the only part of
+  # it two evaluations can compare. A bare function stays a fold, so foldApply is
+  # what a caller applies and foldName is what an identity carries.
+  fold = name: apply: { inherit name apply; };
+
+  isNamedFold = f: isAttrs f && f ? name && f ? apply;
+
+  foldName = f: if isNamedFold f then f.name else null;
+
+  foldApply = f: if isNamedFold f then f.apply else f;
+
   secrecyOf = atom: atom.secrecy or "public";
 
   exportNames = iface: attrNames iface.exports;

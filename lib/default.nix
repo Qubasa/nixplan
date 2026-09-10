@@ -55,12 +55,15 @@ in
     ;
 
   korora = atoms // {
-    inherit (interface) interface unitExtension;
+    inherit (interface) interface unitExtension fold;
   };
 
   inherit (interface)
     interface
     unitExtension
+    fold
+    foldName
+    foldApply
     secrecyOf
     exportNames
     atomRows
