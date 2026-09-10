@@ -216,10 +216,35 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
     `hearer-main-say.service` running `/bin/echo hello world`. `manifest.json` names both entries,
     `talker:main@host` with `"path": null`. Before this change the same build raised
     "entry `hearer:main@host` records no `closure`".
-- [ ] 9.3 Prove each new refusal can fire and only fires when it should: for each of the eleven rows
+- [x] 9.3 Prove each new refusal can fire and only fires when it should: for each of the eleven rows
   the reading gains and the three the planner gains, mutate one deployment to trigger it, confirm
   exactly the tests of that scenario fail, and revert. Record the mutation and the failing test name
   per row.
+  - Each row was fired against a deployment written for it, and then each row producer was mutated
+    in place (its identifier renamed, so the row is still produced and no test can find it) and
+    `nix eval --json .#planner.failures` recorded. Every mutation was reverted; the suite is green
+    between each. The reading gains nine rows rather than eleven: D2 counts flakelet's name rule
+    and its unit-file rule as two, and this implementation answers both with
+    `operator-entry-name-refused` because the realiser publishes one predicate per rule and the
+    row states whichever rule refused; and D2's two extension-table refusals stay refusals of the
+    builder's own directive table, which `testARealiserRefusesAConditionNoRowReports` records as
+    such rather than as rows.
+
+  | Row | Mutation that fires it | Tests that fail when the row is mutated away |
+  | --- | --- | --- |
+  | `unit-env-value-newline` | a unit's `env.MOTD` set to `"first\nsecond"` | `plan.testAUnitValueNoUnitFileHasALineFor`, `image.testAnEnvironmentValueCarriesANewline`, `diagnostics.testARealiserRefusesAConditionNoRowReports` |
+  | `closure-root-outside-store` | `closure = [ "/opt/vendor/agent" ]` | `closure.testADeclaredClosureRootIsNotAStorePath`, `diagnostics.testARealiserRefusesAConditionNoRowReports` |
+  | `closure-root-is-delivered` | a `render` item whose `ref` is a declared closure root | `closure.testADeclaredClosureRootArrivesByDelivery`, `diagnostics.testARealiserRefusesAConditionNoRowReports` |
+  | `operator-plan-record-unclassified` | a plan record carrying neither `delivery`, `placement` nor an address | `operator.testAKeyMatchesNoShapeThePlanCarries`, `diagnostics.testARealiserRefusesAConditionNoRowReports` |
+  | `operator-entry-realises-nothing` | `realise` naming an entry that publishes an export and declares no unit | `operator.testAPlacedEntryDeclaresNoUnit`, `diagnostics.testARealiserRefusesAConditionNoRowReports` |
+  | `operator-statement-names-nothing` | `realise."svc:onlyy"` against a plan carrying `svc:only@one` | `operator.testAStatementNamesAnEntryThePlanDoesNotCarry` and `operator.testAnEntryStatesNoRealiser`, both of which then have no row to read |
+  | `operator-statement-not-a-record` | `realise."svc:only" = "image"` | `operator.testAStatementIsNotARecord` |
+  | `operator-image-profile-unknown` | `profile = "stricT"` | `operator.testAStatedProfileIsOutsideTheDomain`, `diagnostics.testARealiserRefusesAConditionNoRowReports` |
+  | `operator-entry-path-not-assembled` | the worked fixture's `vault-repo:server@vault` under the default flakelet statement | `operator.testAConfigurationFileMeetsARealiserWithNoAssembleStep`, `flakelet.testAnEntryShownAConfigurationFile`, `diagnostics.testARealiserRefusesAConditionNoRowReports` |
+  | `operator-entry-service-manager-mismatch` | an entry placed on the launchd machine of `tests/unit/support.nix` | `operator.testAnEntryIsStatedForARealiserItsMachineCannotRun`, `diagnostics.testARealiserRefusesAConditionNoRowReports` |
+  | `operator-entry-name-refused` | a member named `needs.a.dot`, and a unit named `web@one@two` | `operator.testANameTheEndpointRefusesIsARowBeforeItIsARaise`, `flakelet.testAnUnusableInstanceName`, `flakelet.testAUnitNameOutsideTheServicesNamespace`, `diagnostics.testARealiserRefusesAConditionNoRowReports` |
+  | `operator-entry-access-denied` | a unit declaring `user = "borg"` under `profile = "strict"`, and the fixture's `nightly:client` under `strict` | `operator.testAUnitNeedingAHostUserMeetsAConfiningProfile`, `operator.testAnEntryOwningARootOnlyFileMeetsAConfiningProfile`, `diagnostics.testARealiserRefusesAConditionNoRowReports` |
+  | `operator-entry-machine-no-address` (demoted to a warning) | a machine record declaring no address | `operator.testAMachineOfAPlacedEntryDeclaresNoAddress`, which then has no row to read |
 - [ ] 9.4 Prove the rule holds mechanically: add a `fail` to `image/read.nix` with no row above it
   and confirm `testARealiserRefusesAConditionNoRowReports` names it; remove it and confirm the suite
   is green.
