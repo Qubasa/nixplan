@@ -10,6 +10,7 @@ let
     elem
     elemAt
     filter
+    foldl'
     genList
     head
     isString
@@ -373,6 +374,50 @@ let
     );
 
   standIns = sorted (concatLists (map standInsIn testFiles));
+
+  # The example a document shows and the deployment a folder holds are one text.
+  # Two files of the deployment are not shown: each imports a sibling by a relative
+  # path, and a path written anywhere in this tree has to resolve from the file that
+  # writes it, which `testAFileNamesAPathThatIsNotThere` holds every document to.
+  exampleDocument = "docs/README.md";
+  exampleFolder = "tests/e2e/newcomer/template/deployment";
+  exampleFiles = [
+    "machines.nix"
+    "instances.nix"
+    "modules/hello/greet.nix"
+  ];
+
+  fencedBlocks =
+    text:
+    (foldl'
+      (
+        state: line:
+        if !state.inside then
+          state // { inside = line == "```nix"; }
+        else if line == "```" then
+          {
+            inside = false;
+            current = [ ];
+            blocks = state.blocks ++ [ (concatStringsSep "\n" state.current + "\n") ];
+          }
+        else
+          state // { current = state.current ++ [ line ]; }
+      )
+      {
+        inside = false;
+        current = [ ];
+        blocks = [ ];
+      }
+      (lines text)
+    ).blocks;
+
+  shownBlocks = fencedBlocks (readFile (repoRoot + "/${exampleDocument}"));
+
+  unshown = sorted (
+    map (rel: "${exampleDocument} shows no block equal to ${exampleFolder}/${rel}") (
+      filter (rel: !(elem (readFile (repoRoot + "/${exampleFolder}/${rel}")) shownBlocks)) exampleFiles
+    )
+  );
 in
 {
   testTheTestTreeIsRead = {
@@ -471,6 +516,23 @@ in
   testAFileNamesAPathThatIsNotThere = {
     expr = unresolvedReferences;
     expected = [ ];
+  };
+
+  testTheExampleADocumentShowsIsTheExampleAFolderHolds = {
+    expr = {
+      inherit unshown;
+      held = sorted (filesUnder (repoRoot + "/${exampleFolder}"));
+    };
+    expected = {
+      unshown = [ ];
+      held = [
+        "default.nix"
+        "instances.nix"
+        "machines.nix"
+        "modules/hello/default.nix"
+        "modules/hello/greet.nix"
+      ];
+    };
   };
 
   testARecordIsReadAsHistory = {
