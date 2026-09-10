@@ -739,6 +739,8 @@ def test_the_endpoint_reports_the_identity_the_build_published(delivered: Run) -
         held = json.loads(vm.ssh_succeed(f"cat {entry.path}/meta.json"))
         assert held["settings_hash"] == published[key]["key"], (held, published[key])
         assert published[key]["key"] != delivered.plan[key]["key"], published[key]
+
+
 def _apply_however_it_ends(run: Run, *argv: str) -> tuple[int, list[str]]:
     """Apply inside the cluster and keep the exit status, however the run ends.
 

@@ -1226,10 +1226,12 @@ in
           {
             units.only = {
               command = "/bin/true";
-              env = {
-                FOLDED = builtins.toJSON results.far;
-                RENDERED = render results.far;
-              };
+              env.FOLDED = builtins.toJSON results.far;
+            };
+            configData."/etc/identity" = {
+              mode = "0444";
+              reload = [ "only" ];
+              render = [ { text = render results.far; } ];
             };
           };
       };
@@ -1271,15 +1273,17 @@ in
       };
       authzUnit = result.plan."authz:only@one".units.only;
       hostsUnit = result.plan."hosts:only@one".units.only;
+      authzFile = result.plan."authz:only@one".configData."/etc/identity";
+      hostsFile = result.plan."hosts:only@one".configData."/etc/identity";
     in
     {
       expr = {
         ids = rowIds result;
         onePolicyOneValue = authzUnit.env.FOLDED == hostsUnit.env.FOLDED;
         folded = authzUnit.env.FOLDED;
-        authorized = authzUnit.env.RENDERED;
-        known = hostsUnit.env.RENDERED;
-        twoOutputs = authzUnit.env.RENDERED != hostsUnit.env.RENDERED;
+        authorized = (builtins.head authzFile.render).text;
+        known = (builtins.head hostsFile.render).text;
+        twoOutputs = authzFile.contentHash != hostsFile.contentHash;
         applicable = result.applicable;
       };
       expected = {
