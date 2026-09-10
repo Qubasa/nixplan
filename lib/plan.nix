@@ -735,7 +735,7 @@ rec {
               {
                 key = util.shortHash (builtins.toJSON keyInput);
                 inherit (g) per deploy;
-                inherit files dependsOn;
+                inherit dependsOn;
                 reads = map (r: r.name) siblings;
               }
               # Recorded, never run, and never a closure root: a generator runs
@@ -743,10 +743,11 @@ rec {
               # machine is given it.
               // (if g.program == null then { } else { inherit (g) program; })
             )
-            # Always present, empty or not: the delivery set and the reason each
-            # machine is in it are the two fields a reader must not be able to
-            # mistake for an absence.
+            # Always present, empty or not: the file set, the delivery set and
+            # the reason each machine is in it are the fields a reader must not
+            # be able to mistake for an absence.
             // {
+              inherit files;
               delivery =
                 if !g.deploy then [ ] else util.sortStrings (util.uniqueStrings (owners ++ read.machines));
               deliveryDerivedFrom =
