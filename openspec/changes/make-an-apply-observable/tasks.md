@@ -98,7 +98,7 @@ only the scenarios listed below are new.
   Verify: `test_a_restricted_run_contacts_only_the_machines_of_the_entries_it_applies` and
   `test_a_restriction_that_names_a_value_entry_reaches_its_delivery_set` in
   `tests/e2e/test_harness.py`, both by reading the addresses out of the recorder's argv.
-- [ ] 5.3 `cli/apply.py`: before running an image entry's attach script, ask the machine whether it
+- [x] 5.3 `cli/apply.py`: before running an image entry's attach script, ask the machine whether it
   already holds that image attached, using the same script `cli/remote.py:image_status_script`
   builds. An attached image is reported as already attached and the walk continues; anything else
   attaches.

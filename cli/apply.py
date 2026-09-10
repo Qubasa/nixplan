@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import subprocess
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +30,7 @@ from manifest import (
     Value,
     ValueFile,
     address_of,
+    image_file,
     machine_address,
     service_name,
 )
@@ -154,6 +156,43 @@ def activation(entry: Entry) -> str:
     )
 
 
+def holds_attached(
+    runner: remote.Runner,
+    entry: Entry,
+    address: str,
+    *,
+    opts: str,
+    user: str,
+    env: dict[str, str],
+) -> bool:
+    """Return whether the machine already holds one image entry attached.
+
+    The attach script runs under `set -eu` and `portablectl` refuses an image
+    it already holds, so a second run over an attached entry would fail on a
+    machine that is in the intended state.
+
+    Args:
+        runner: The channel every remote step goes through.
+        entry: The placed entry, realised as an image.
+        address: The machine's address.
+        opts: The ssh options of this invocation.
+        user: The login user on the machine.
+        env: The environment a remote step runs under.
+
+    Returns:
+        Whether the machine answered with an attachment. A machine that could
+        not answer is one the attachment is attempted on: a question that
+        failed is no evidence that the image is there, and the artifact's own
+        script is what decides.
+    """
+    script = remote.image_status_script(entry.path / image_file(entry))
+    try:
+        answered = runner.output(remote.ssh_argv(address, script, opts=opts, user=user), env=env)
+    except (ApplyError, subprocess.CalledProcessError):
+        return False
+    return answered.strip() not in ("", "detached")
+
+
 def _ignore(line: str) -> None:
     """Drop a step line, for a caller that reads the returned log instead."""
 
@@ -255,6 +294,11 @@ def apply(
         address = addresses[key]
         with _taking(f"copy {key} {entry.path} -> {user}@{address}", address, record):
             runner.run(remote.copy_argv(entry.path, address, user=user), env=env)
+        if entry.realiser == "image" and holds_attached(
+            runner, entry, address, opts=opts, user=user, env=env
+        ):
+            record(f"attached {key} already on {user}@{address}")
+            continue
         with _taking(f"activate {key} ({entry.realiser}) on {user}@{address}", address, record):
             reported = runner.output(
                 remote.ssh_argv(address, scripts[key], opts=opts, user=user), env=env

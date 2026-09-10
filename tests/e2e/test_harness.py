@@ -1056,3 +1056,40 @@ def test_a_restriction_that_names_a_value_entry_reaches_its_delivery_set(tmp_pat
     assert any("10.0.0.10" in command for command in dialled)
     assert any("10.0.0.11" in command for command in dialled)
     assert all("flakelet activate" not in command for command in dialled)
+
+
+class Answering(Recorder):
+    """A recorder whose machine answers ``said`` to the script naming ``asked``."""
+
+    def __init__(self, asked: str, said: str) -> None:
+        super().__init__()
+        self.asked = asked
+        self.said = said
+
+    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
+        answered = super().output(cmd, env=env)
+        return self.said if self.asked in " ".join(cmd) else answered
+
+
+def test_an_image_the_machine_already_holds_attached_is_not_attached_twice(
+    tmp_path: Path,
+) -> None:
+    """`portablectl` refuses an image it holds, so a second run asks before it attaches."""
+    deployment = _built(
+        tmp_path,
+        plan={**PLAN, CLIENT_KEY: {"reads": {"site": {"entry": SERVER_KEY}}}},
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            SERVER_KEY: {**_stated(SERVER_KEY, "alpha", "10.0.0.10"), "realiser": "image"},
+        },
+    )
+    image = deployment.entries[SERVER_KEY].path
+    (image / "attachment.json").write_text(json.dumps({"image": "site-server.raw"}))
+    recorder = Answering("portablectl is-attached", "running\n")
+
+    log = apply.apply(deployment, recorder, base_env={})
+
+    dialled = [" ".join(command) for command in recorder.commands]
+    assert all(f"{image}/bin/attach" not in command for command in dialled)
+    assert f"attached {SERVER_KEY} already on root@10.0.0.10" in log
+    assert _activated(log) == [CLIENT_KEY]
