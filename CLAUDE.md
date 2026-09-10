@@ -95,13 +95,19 @@ Recorded so the question is answered once.
   refusal naming the entry and the field, never a default.
 - Three layers hold three kinds of fact, and a refusal belongs to the layer that holds one. A fact
   the plan carries is a row from `mkPlan`. A fact the realisation statement carries is a row from
-  `operator/read.nix`, which is the only layer handed the statement. A realiser raises only for a
-  condition one of those two already reported as an error row, so no path through a deployment
-  build reaches a raise before a row. A raise is what a caller reaching `image/read.nix` or
-  `flakelet/read.nix` directly receives, and `tests/unit/diagnostics.nix` crosses every `fail` of
-  the two against the row producers of `lib/` and `operator/read.nix`: a refusal with no row above
-  it fails the suite. The reading asks each realiser for the rules only it knows rather than
-  restating one, so the row and the raise print the same sentence.
+  `operator/read.nix`, which is the only layer handed the statement. A fact the external
+  generator's contract carries is a row from `secrets/read.nix`, which is the only layer handed
+  that. A realiser raises only for a condition one of those already reported as an error row, so
+  no path through a deployment build or a generation build reaches a raise before a row. A raise
+  is what a caller reaching `image/read.nix`, `flakelet/read.nix` or `secrets/read.nix` directly
+  receives, and every one of those refusals carries the identifier of the row that reports it, or
+  a recorded reason why no deployment reaches it. `tests/unit/diagnostics.nix` crosses that data
+  against the rows `lib/`, `operator/read.nix` and the secrets reading produce: a refusal with no
+  row above it fails the suite, an account naming a row nobody produces fails it, and which files
+  are examined is read off the realiser sources the suite is handed rather than written out, so a
+  fourth realiser is accounted for by existing. The pairing is the account and never a fragment of
+  a message, so rewording a refusal moves nothing. The reading asks each realiser for the rules
+  only it knows rather than restating one, so the row and the raise print the same sentence.
 - `operator/read.nix` is on `lib/`'s side and `operator/default.nix` is on the realisers'. The
   reading is total and every refusal it makes is a row, so a unit suite can assert the decision; the
   derivations over it raise, and the message of an inapplicable deployment is `planner.render` of
@@ -295,6 +301,15 @@ Recorded so the question is answered once.
 - `flakelet/read.nix` restates two rules from flakelet's own `manager.rs`: `validate_name` and
   `validate_units`. `LOCKED_URL_PREFIX` in `tests/e2e/delivery.py` must match the prefix written
   there.
+- The secrets reading has two halves, the way `operator/read.nix` and `operator/default.nix` do,
+  and one description per condition: `rows` and `generation` answer a table and raise nothing,
+  `store`, `configuration` and `deliveriesOf` refuse with the sentence that row states, and
+  `operator.mkGeneration` writes `diagnostics.json` and `diagnostics.txt` into the generation farm
+  and refuses through `planner.render` of the whole table. Four of its conditions are reachable
+  from a plan the planner calls applicable: a value recording no `program`, a file name outside the
+  contract's grammar, a recipient machine with no address, and an address the rendered step cannot
+  carry as one shell word. A missing address is an error there and a warning of a deployment build,
+  because the rendered step is the one build artifact that carries an address.
 - The secrets realiser projects a value's key onto `<instance>:<generator>`, and onto
   `<instance>:<generator>:<machine>` for a per-placement value. A colon is what the contract's
   `safe-name` admits and `/` and `@` are not, and a hash would make the tool's own listing and its
