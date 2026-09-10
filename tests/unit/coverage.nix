@@ -172,6 +172,7 @@ let
     "hold-every-stated-guarantee/specs/planner/diagnostics/spec.md"
     "hold-every-stated-guarantee/specs/planner/plan-artifact/spec.md"
     "hold-every-stated-guarantee/specs/realiser/portable-service-image/spec.md"
+    "hold-every-stated-guarantee/specs/tooling/test-layers/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -202,8 +203,6 @@ let
     "deliver-a-secret-without-exposing-it/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "hold-every-stated-guarantee/specs/tooling/repository-shape/spec.md" =
-      "an unimplemented change: no task of hold-every-stated-guarantee has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-stated-guarantee/specs/tooling/test-layers/spec.md" =
       "an unimplemented change: no task of hold-every-stated-guarantee has been done, so nothing in this package claims to satisfy it yet";
     "order-a-cycle-by-its-strong-components/specs/operator/apply-command/spec.md" =
       "an unimplemented change: no task of order-a-cycle-by-its-strong-components has been done, so nothing in this package claims to satisfy it yet";
@@ -372,6 +371,9 @@ let
     "The service is reachable" = "test_the_consumer_reaches_the_producer";
     "No test double is involved" = "test_every_participant_is_the_real_one";
     "Nothing else changes with it" = "testAnAddressChanges";
+    "An assertion holds for every input" = "testAGeneratorNamesItsProgram";
+    "A claimed property needs another observation" =
+      "testTwoAttributedInterfacesConflictWithNoWire";
   };
 
   hasTest = title: existing ? ${snakeName title} || existing ? ${camelName title};

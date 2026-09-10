@@ -293,6 +293,46 @@ def ratchet_counter(result: Result, counter: str, budget: float, margin: float) 
     )
 
 
+def measured_figures(results: Sequence[Result]) -> set[tuple[str, str]]:
+    """Return every (fixture, counter) pair this run carries a measurement for."""
+    return {
+        (result.key, counter)
+        for result in results
+        for counter in GATED_COUNTERS
+        if counter in result.runs[0].counters
+    }
+
+
+def gated_figures(fixtures: dict[str, RawBudgetEntry]) -> set[tuple[str, str]]:
+    """Return every (fixture, counter) pair the budget file gates."""
+    return {
+        (name, counter)
+        for name, entry in fixtures.items()
+        for counter in GATED_COUNTERS
+        if (entry.get("perEntry") or {}).get(counter) is not None
+    }
+
+
+def check_coverage(results: Sequence[Result], fixtures: dict[str, RawBudgetEntry]) -> list[Finding]:
+    """Refuse a run that measured none of a figure the budget file gates.
+
+    A gate reporting no failures because it compared nothing is the failure this
+    exists for: the absence is named per fixture, with the figures it covers.
+    """
+    absent: dict[str, list[str]] = {}
+    for name, counter in sorted(gated_figures(fixtures) - measured_figures(results)):
+        absent.setdefault(name, []).append(counter)
+    return [
+        Finding(
+            "FAIL",
+            f"the budget file gates {len(counters)} figures of fixture {name} - "
+            f"{', '.join(counters)} - and this run measured none of them, so nothing was "
+            f"compared for {name}",
+        )
+        for name, counters in sorted(absent.items())
+    ]
+
+
 def check_ratchet(results: Sequence[Result], budgets: RawBudgets, skip: set[str]) -> list[Finding]:
     """Run the two-sided ratchet over every comparable fixture."""
     fixtures = budgets.get("fixtures", {})
@@ -305,7 +345,7 @@ def check_ratchet(results: Sequence[Result], budgets: RawBudgets, skip: set[str]
         margin = entry.get("margin", default_margin)
         for counter in GATED_COUNTERS:
             budget = (entry.get("perEntry") or {}).get(counter)
-            if budget is None:
+            if budget is None or counter not in result.runs[0].counters:
                 continue
             findings.append(ratchet_counter(result, counter, budget, margin))
     return findings
@@ -424,7 +464,16 @@ def report_timings(results: Sequence[Result]) -> list[Finding]:
     return findings
 
 
-def run_checks(results_dir: Path, budgets_path: Path) -> list[Finding]:
+@dataclass(frozen=True)
+class Report:
+    """Every finding, and how much of the gate the run actually compared."""
+
+    findings: list[Finding]
+    compared: int
+    gated: int
+
+
+def run_checks(results_dir: Path, budgets_path: Path) -> Report:
     """Run every check in order and return the whole report."""
     budgets = cast(RawBudgets, json.loads(budgets_path.read_text(encoding="utf-8")))
     fixtures = budgets.get("fixtures", {})
@@ -434,13 +483,15 @@ def run_checks(results_dir: Path, budgets_path: Path) -> list[Finding]:
     unstable, reproducibility = check_reproducibility(results)
     mismatched, interpreter = check_interpreter(results, fixtures)
     unusable, provenance = check_provenance(results, fixtures)
+    ratchet = check_ratchet(results, budgets, unstable | mismatched | unusable)
     findings.extend(reproducibility)
     findings.extend(interpreter)
     findings.extend(provenance)
-    findings.extend(check_ratchet(results, budgets, unstable | mismatched | unusable))
+    findings.extend(check_coverage(results, fixtures))
+    findings.extend(ratchet)
     findings.extend(check_growth(results, budgets, unstable))
     findings.extend(report_timings(results))
-    return findings
+    return Report(findings=findings, compared=len(ratchet), gated=len(gated_figures(fixtures)))
 
 
 def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
@@ -454,12 +505,15 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> int:
     """Print the report and return 0 when no gated counter failed."""
     args = parse_args(argv)
-    findings = run_checks(args.results, args.budgets)
-    for finding in findings:
+    report = run_checks(args.results, args.budgets)
+    for finding in report.findings:
         print(finding)
-    failures = [finding for finding in findings if finding.kind == "FAIL"]
-    invalid = [finding for finding in findings if finding.kind == "INVALID"]
-    print(f"check.py: {len(failures)} failures, {len(invalid)} invalid comparisons")
+    failures = [finding for finding in report.findings if finding.kind == "FAIL"]
+    invalid = [finding for finding in report.findings if finding.kind == "INVALID"]
+    print(
+        f"check.py: {len(failures)} failures, {len(invalid)} invalid comparisons, "
+        f"{report.compared} of {report.gated} gated figures compared"
+    )
     return 1 if failures else 0
 
 

@@ -899,6 +899,31 @@ def test_a_stored_value_of_unknown_provenance_is_refused() -> None:
     generation.require_provenance(values, ungenerated, {})
 
 
+def test_a_guard_compares_a_record_with_the_values_that_wrote_it(tmp_path: Path) -> None:
+    """A record the run wrote from the declarations it then compares is not a guard.
+
+    `write_provenance` records the identity of every declaration handed to it,
+    so a comparison against it agrees whatever the backend holds. What can
+    disagree is a record an earlier run left behind, which is why the folder
+    reads the record before it generates anything and writes it afterwards.
+    """
+    values = _values()
+    built = generation.state(values, _everything_held())
+    record = tmp_path / generation.PROVENANCE_FILE
+
+    generation.write_provenance(record, values)
+    generation.require_provenance(values, built, generation.read_provenance(record))
+
+    earlier = generation.identities(values)
+    earlier[TOKEN_NAME] = "sha256-0000000000000000"
+    record.write_text(json.dumps(earlier))
+    with pytest.raises(generation.GenerationError):
+        generation.require_provenance(values, built, generation.read_provenance(record))
+
+    folder = (Path(__file__).parent / "generated-secret" / "test_generated_secret.py").read_text()
+    assert folder.index("read_provenance") < folder.index("write_provenance")
+
+
 def test_the_tool_cannot_be_resolved() -> None:
     """The refusal names the variable and the reference that resolved to nothing."""
     reference = "/nix/store/there-is-no-such-flake-here"

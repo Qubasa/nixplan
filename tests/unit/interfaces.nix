@@ -672,15 +672,35 @@ in
 
   testTwoAttributedInterfacesConflictWithNoWire =
     let
-      mine = claiming { exports.publicKey = publicString; };
-      theirs = claiming {
-        exports = {
-          publicKey = publicString;
-          hostName = publicString;
+      # The pair is built twice, once by this library and once by a second,
+      # independent evaluation of it, whose atoms are unequal values. Comparing
+      # the two tables is then a claim about the row rather than about one pure
+      # function applied twice, which is what Nix would answer for free.
+      pairFrom = library: {
+        mine = library.interface {
+          name = "identity";
+          id = "example.com/identity";
+          exports.publicKey = {
+            type = library.korora.url;
+          };
+        };
+        theirs = library.interface {
+          name = "identity";
+          id = "example.com/identity";
+          exports = {
+            publicKey = {
+              type = library.korora.url;
+            };
+            hostName = {
+              type = library.korora.url;
+            };
+          };
         };
       };
-      result = conflicting { inherit mine theirs; };
-      again = conflicting { inherit mine theirs; };
+      here = pairFrom planner;
+      there = pairFrom (support.anotherEvaluation libSource);
+      result = conflicting here;
+      again = conflicting there;
       row = builtins.head (rowsById "interface-id-conflict" result);
     in
     {
@@ -693,6 +713,7 @@ in
         ];
         namesTheId = hasInfix "`example.com/identity`" row.message;
         namesTheDifference = hasInfix "the second declares `hostName` and the first does not" row.evidence;
+        unequalAsValues = here.mine != there.mine;
         sameTwice = result.diagnostics == again.diagnostics;
         applicable = result.applicable;
       };
@@ -706,6 +727,7 @@ in
         ];
         namesTheId = true;
         namesTheDifference = true;
+        unequalAsValues = true;
         sameTwice = true;
         applicable = false;
       };

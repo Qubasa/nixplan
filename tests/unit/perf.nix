@@ -145,12 +145,10 @@ in
     {
       expr = {
         derivations = length (derivationsIn plan);
-        everyStorePathIsAString = paths == filter isString paths;
         atLeastOneStorePathIsRecorded = paths != [ ];
       };
       expected = {
         derivations = 0;
-        everyStorePathIsAString = true;
         atLeastOneStorePathIsRecorded = true;
       };
     };

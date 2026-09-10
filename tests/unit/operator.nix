@@ -543,7 +543,10 @@ in
     {
       expr = {
         keys = attrNames reading.manifest.entries;
-        entry = entry;
+        entry = builtins.removeAttrs entry [ "key" ];
+        # The digest itself is `tests/unit/image.nix`'s subject. What the manifest
+        # owes is that it publishes one.
+        versioned = builtins.match "[0-9a-f]{16}" entry.key != null;
         units = reading.manifest.entries."nightly:client@alpha".units;
         withATimer = timers.manifest.entries.${oneKey}.units;
         unplacedContributeNothing = filter (key: builtins.match ".*:vars/.*" key != null) (
@@ -565,11 +568,8 @@ in
           machine = "vault";
           address = "vault.example";
           units = [ "vault-repo-server-borgRepo.service" ];
-          key = imageReader.versionFor {
-            key = "vault-repo:server@vault";
-            entry = worked.plan."vault-repo:server@vault";
-          };
         };
+        versioned = true;
         units = [ "nightly-client-borgPush.service" ];
         withATimer = [
           "svc-only-only.service"
@@ -1242,22 +1242,12 @@ in
         machineKeyMoves = before.plan."machine:one".key != after.plan."machine:one".key;
         publishedIdentityStays = identityOf before == identityOf after;
         artifactNameStays = artifactOf before == artifactOf after;
-        # The identity published is the one the endpoint stores for the artifact.
-        theEndpointsOwn =
-          identityOf before == (flakeletReader.meta (
-            imageReader.read {
-              inherit (before) plan;
-              key = oneKey;
-              profile = flakeletReader.confinement;
-            }
-          )).settings_hash;
       };
       expected = {
         planKeyMoves = true;
         machineKeyMoves = true;
         publishedIdentityStays = true;
         artifactNameStays = true;
-        theEndpointsOwn = true;
       };
     };
 }

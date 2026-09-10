@@ -867,15 +867,16 @@ in
         rows = rowIds result;
         recorded = entry.program;
         # A literal string, like every other store path in a plan: nothing here
-        # realises it and nothing reads it.
+        # realises it and nothing reads it. Nix equality ignores context, so the
+        # absence is observed rather than compared for.
         literal = builtins.isString entry.program;
-        withoutContext = builtins.unsafeDiscardStringContext entry.program == entry.program;
+        withoutContext = builtins.hasContext entry.program;
       };
       expected = {
         rows = [ ];
         recorded = program;
         literal = true;
-        withoutContext = true;
+        withoutContext = false;
       };
     };
 

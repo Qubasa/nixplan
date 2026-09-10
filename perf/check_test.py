@@ -91,7 +91,7 @@ class CheckerTest(unittest.TestCase):
         self.budgets.write_text(json.dumps(document), encoding="utf-8")
 
     def check(self) -> list[check.Finding]:
-        return check.run_checks(self.results, self.budgets)
+        return check.run_checks(self.results, self.budgets).findings
 
     def failures(self) -> list[str]:
         return [f.message for f in self.check() if f.kind == "FAIL"]
@@ -102,6 +102,12 @@ class CheckerTest(unittest.TestCase):
     def exit_code(self) -> int:
         with contextlib.redirect_stdout(io.StringIO()):
             return check.main(["--results", str(self.results), "--budgets", str(self.budgets)])
+
+    def printed(self) -> str:
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            check.main(["--results", str(self.results), "--budgets", str(self.budgets)])
+        return buffer.getvalue()
 
     def test_a_counter_is_not_reproducible(self) -> None:
         counters = counter_map(80)
@@ -263,6 +269,43 @@ class CheckerTest(unittest.TestCase):
             failures,
         )
         self.assertEqual(1, self.exit_code())
+
+    def test_a_measurement_is_absent(self) -> None:
+        """A budget the run measured nothing for is a failure, not a silent pass."""
+        self.write_result("worked", result_doc("worked", None, 8, [run_doc(counter_map(80))]))
+        self.write_budgets(
+            {
+                "worked": budget_doc("worked", budget_figures(10)),
+                "fleet-4": budget_doc("fleet", budget_figures(10)),
+                "fleet-16": budget_doc("fleet", budget_figures(10)),
+            }
+        )
+
+        failures = self.failures()
+        self.assertTrue(any("fixture fleet-4" in m for m in failures), failures)
+        self.assertTrue(any("fixture fleet-16" in m for m in failures), failures)
+        self.assertFalse(any("fixture worked" in m for m in failures), failures)
+        self.assertEqual(1, self.exit_code())
+
+    def test_every_gated_figure_was_measured(self) -> None:
+        """A run that compared the whole gate says how much of it that was."""
+        self.write_result("worked", result_doc("worked", None, 8, [run_doc(counter_map(80))]))
+        self.write_result("mesh-4", result_doc("mesh", 4, 9, [run_doc(counter_map(90))]))
+        self.write_budgets(
+            {
+                "worked": budget_doc("worked", budget_figures(10)),
+                "mesh-4": budget_doc("mesh", budget_figures(10)),
+            }
+        )
+
+        report = check.run_checks(self.results, self.budgets)
+        self.assertEqual([], self.failures())
+        self.assertEqual(2 * len(check.GATED_COUNTERS), report.gated)
+        self.assertEqual(report.gated, report.compared)
+        self.assertIn(
+            f"{report.compared} of {report.gated} gated figures compared", self.printed()
+        )
+        self.assertEqual(0, self.exit_code())
 
 
 if __name__ == "__main__":
