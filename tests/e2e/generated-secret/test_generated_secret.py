@@ -347,6 +347,27 @@ def delivered(generated: Run) -> Run:
     return run
 
 
+def test_a_generation_build_carries_both_halves_of_its_table() -> None:
+    """The generation farm holds its diagnostics as rows and as a rendered table.
+
+    A tool reads `diagnostics.json` and a person reads `diagnostics.txt`, and the
+    plan of this folder carries no row at all, which is what makes their presence
+    an observation rather than a side effect of something having gone wrong.
+    """
+    held = sorted(path.name for path in GENERATION.iterdir())
+    assert held == [
+        "diagnostics.json",
+        "diagnostics.txt",
+        "names.json",
+        "plan.nix",
+        "secrets.json",
+    ], held
+
+    rows = json.loads((GENERATION / "diagnostics.json").read_text())
+    assert rows == []
+    assert (GENERATION / "diagnostics.txt").read_text() == "\n"
+
+
 def test_an_ungenerated_value_is_absent_not_empty(generated: Run) -> None:
     """Read from an empty backend, every declared file is absent."""
     run = generated
