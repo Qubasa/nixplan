@@ -1,7 +1,7 @@
 ## 1. Registration while the change is in flight
 
 - [x] 1.1 `git add openspec/changes/normalise-folds-and-report-refused-reads/` so the flake can see the change, and add `normalise-folds-and-report-refused-reads/specs/planner/interface-fold/spec.md` to `excused` in `tests/unit/coverage.nix` with the precedent reason `hold-declaration-shape-and-fold-set-reads` used while in flight ("an unimplemented change: no task of normalise-folds-and-report-refused-reads has been done, so nothing in this package claims to satisfy it yet"); verify `nix eval --json .#planner.suites.coverage.testEverySpecificationIsClassified.expr` reports empty `unclassified`, `vanished` and `unreadable`
-- [ ] 1.2 Confirm the tree is green before any edit: verify `nix eval --json .#planner.failures` is `{}`
+- [x] 1.2 Confirm the tree is green before any edit: verify `nix eval --json .#planner.failures` is `{}`
 
 ## 2. The guarded half of a refused fold
 
