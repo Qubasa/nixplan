@@ -9,6 +9,7 @@ let
     publicString
     publicUrl
     rowIds
+    rowsById
     severityById
     soleRoot
     subjectsById
@@ -160,6 +161,14 @@ let
       name = "identity";
       exports.publicKey = publicString;
       inherit fold;
+    };
+
+  namedFolding =
+    name: apply:
+    planner.interface {
+      name = "identity";
+      exports.publicKey = publicString;
+      fold = planner.fold name apply;
     };
 
   folderRegistry = iface: registry // { "interfaces/folded.nix".folded = iface; };
@@ -1487,6 +1496,44 @@ in
         unapplied = 0;
         ids = [ "set-read-in-key" ];
         theSetReadWasFolded = "provider:only@one=ssh-ed25519 AAAA";
+      };
+    };
+
+  testAFoldNameThatIsNotAName =
+    let
+      iface = namedFolding "" joined;
+      result = edge {
+        consumerModule = consumer {
+          interface = iface;
+          reach = "all";
+          reads = [ "publicKey" ];
+        };
+        providerModule = providerOf iface;
+        interfaces = folderRegistry iface;
+        providerMachines = [
+          "one"
+          "two"
+        ];
+      };
+      row = builtins.head (rowsById "interface-fold-name-malformed" result);
+    in
+    {
+      expr = {
+        rows = countById "interface-fold-name-malformed" result;
+        inherit (row) subject severity;
+        namesWhatWasWritten = hasInfix "names its fold ``" row.message;
+        statesTheConsequence = hasInfix "the fold is not applied" row.evidence;
+        unfolded = result.plan."consumer:only@one".units.only.env.FAR;
+        delivered = result.plan."consumer:only@one".reads.far.delivered;
+      };
+      expected = {
+        rows = 1;
+        subject = "interfaces/folded.nix";
+        severity = "error";
+        namesWhatWasWritten = true;
+        statesTheConsequence = true;
+        unfolded = "provider:only@one,provider:only@two";
+        delivered = true;
       };
     };
 }

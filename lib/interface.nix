@@ -218,19 +218,32 @@ rec {
 
   # A fold is applied to a value the planner built, so a declared fold that cannot
   # be applied is a row against the interface rather than an error at the read.
+  foldApplicable =
+    f: f != null && isFunction (foldApply f) && (!isNamedFold f || isName (foldName f));
+
   foldRows =
     reg: iface:
     let
       subject = subjectOf reg iface;
-      fold = foldOf iface;
+      declaredFold = foldOf iface;
+      name = foldName declaredFold;
     in
-    util.optional (fold != null && !isFunction fold) (
+    util.optional (declaredFold != null && !isFunction (foldApply declaredFold)) (
       diag.error {
         inherit subject;
         id = "interface-fold-not-a-function";
         message = "interface ${label reg iface} declares a fold that is not a function";
         evidence = "a fold is applied to the set a read collects, keyed by provider entry key, and returns the value the consuming implementation receives";
         resolution = "write ${util.quote "fold = set: …;"} in ${subject}, or delete the key";
+      }
+    )
+    ++ util.optional (isNamedFold declaredFold && !isName name) (
+      diag.error {
+        inherit subject;
+        id = "interface-fold-name-malformed";
+        message = "interface ${label reg iface} names its fold ${writtenAs name}, and a fold's name is a non-empty string carrying no whitespace";
+        evidence = "a fold's name is the only part of it two evaluations of this library can compare, so a name that is not one compares with nothing; the fold is not applied and a set-valued read delivers the set it collected";
+        resolution = "write ${util.quote "fold = planner.fold \"<name>\" (set: …);"} in ${subject}, or declare the fold as a bare function";
       }
     );
 

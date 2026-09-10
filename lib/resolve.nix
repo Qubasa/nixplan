@@ -21,7 +21,6 @@ let
     elem
     filter
     head
-    isFunction
     length
     mapAttrs
     ;
@@ -976,14 +975,14 @@ in
 
           # A fold is the interface's policy for the set, so it is applied to the
           # value the read already built and only where that read would deliver.
-          foldApplies = deliverable && slot.reach == "all" && declaredFold != null && isFunction declaredFold;
+          foldApplies = deliverable && slot.reach == "all" && interface.foldApplicable declaredFold;
 
           folded = safe {
             inherit subject;
             id = "interface-fold-raised";
             what = "the fold of ${ifaceLabel} for slot ${util.quote slotName} of ${util.quote subject}";
             fallback = null;
-            value = declaredFold entryKeyed;
+            value = (interface.foldApply declaredFold) entryKeyed;
           };
 
           foldRaised = foldApplies && folded.rows != [ ];
