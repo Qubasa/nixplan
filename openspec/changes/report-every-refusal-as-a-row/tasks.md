@@ -270,3 +270,35 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
     the artifact's `settings_hash`, so the identity is read off the `meta.json` of the artifact
     the machine holds, at the path the copy put it, while the endpoint's own record supplies the
     plan key it registered under.
+
+## 10. What the change costs
+
+Neither the proposal nor the design costed this change, and the gated counters of `perf/` are the
+one thing in the tree that answers for cost. The task is here rather than in a follow-up because
+the budgets are a record of what the library costs today, and a change that moves them and does not
+re-record them leaves every later change gated against a tree that no longer exists.
+
+- [x] 10.1 Attribute the rise, remove what is avoidable, and re-record what is not.
+  - `nix build .#checks.x86_64-linux.planner-perf` went red on 81 of the gated counters, every
+    fixture over budget by five to six percent, with the growth ratios across sizes unchanged: a
+    level shift in cost per plan entry, not a change in complexity class.
+  - Attributed by measuring one library against another with `perf/measure.sh --lib <dir>`, one
+    ingredient removed at a time, at `fleet-16`: the pruning exemption costs nothing measurable
+    (recording two fields is marginally cheaper than filtering them out), the unit environment
+    check cost 1.2 percent of thunks, and the two closure rows cost 5.0 percent.
+  - Three of those were avoidable and are gone: `placedEntry` computed `varsRecord placement`
+    twice, once for the entry and once for the reference paths, and now binds it once;
+    `referencePathsOf` deduplicated a list only a membership test reads and built an intermediate
+    attribute set per value group, and now concatenates once; the store-directory check compiled
+    its own regular expression per declared root, and now reuses the scanner `closureRows` already
+    holds. The unit environment check moved from a second traversal of an entry's units in
+    `lib/resolve.nix` into `module.readUnit`, which is where a unit's own rows are produced, so a
+    unit is read once. Together they returned about half the rise: `fleet-16` thunks per entry
+    397.27 at the first measurement, 385.82 after.
+  - What remains is inherent: two checks over every declared closure root, one check over every
+    unit environment value, and two more fields on every placed entry. Re-recorded with
+    `bash perf/measure.sh` at the prescribed repeats and sizes, written into `perf/budgets.json`
+    by `perf/check.py`'s own `figure` and `per_entry`, with the margin at 0.15 and the growth bound
+    at 1.25 untouched. `fleet-256` nrThunks per entry moves 293.53 -> 304.22 (+3.6 percent),
+    gc.totalBytes 17222.30 -> 17618.13 (+2.3 percent), nrPrimOpCalls 144.70 -> 154.05
+    (+6.5 percent). `nix build .#checks.x86_64-linux.planner-perf -L` is green.

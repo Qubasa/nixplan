@@ -17,17 +17,17 @@
       "date": "2026-09-10",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 704.091,
-        "nrFunctionCalls": 396.7273,
-        "nrPrimOpCalls": 272.3637,
-        "values.number": 871.5455,
-        "sets.bytes": 11416,
-        "envs.bytes": 8740.3637,
-        "list.elements": 173.3637,
-        "nrOpUpdateValuesCopied": 50.3637,
-        "gc.totalBytes": 42429.091
+        "nrThunks": 715.4546,
+        "nrFunctionCalls": 404,
+        "nrPrimOpCalls": 283.9091,
+        "values.number": 887.2728,
+        "sets.bytes": 11440,
+        "envs.bytes": 8884.3637,
+        "list.elements": 178.5455,
+        "nrOpUpdateValuesCopied": 51.091,
+        "gc.totalBytes": 43562.1819
       },
-      "note": "Moved by generate-values-with-nixos-secrets: a generated value's entry gained the program its generator declares, every file record in the plan gained `deploy`, and a declared program enters the value's key. Two more fields per value entry and one per file, so per-entry cost rose by a fraction of a percent at every fixture and every size. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
+      "note": "Moved by report-every-refusal-as-a-row: every placed entry now records `closure` and `units` empty or not, and the planner gained three checks over an entry it did not make before - a declared closure root against the store directory, a declared closure root against the entry's own delivered references, and every unit environment value against a line break. The rise is a level shift in cost per plan entry of about three percent in thunks and five in primop calls, and the growth across sizes is unchanged. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
     },
     "fleet-4": {
       "fixture": "fleet",
@@ -35,17 +35,17 @@
       "date": "2026-09-10",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 615.1539,
-        "nrFunctionCalls": 341.5385,
-        "nrPrimOpCalls": 243.6924,
-        "values.number": 749,
-        "sets.bytes": 9715.6924,
-        "envs.bytes": 7456,
-        "list.elements": 150.4616,
-        "nrOpUpdateValuesCopied": 32.6924,
-        "gc.totalBytes": 35911.3847
+        "nrThunks": 627.1539,
+        "nrFunctionCalls": 348.6924,
+        "nrPrimOpCalls": 253.8462,
+        "values.number": 764,
+        "sets.bytes": 9736.6154,
+        "envs.bytes": 7604.9231,
+        "list.elements": 154.3077,
+        "nrOpUpdateValuesCopied": 33.4616,
+        "gc.totalBytes": 36787.6924
       },
-      "note": "Moved by generate-values-with-nixos-secrets: a generated value's entry gained the program its generator declares, every file record in the plan gained `deploy`, and a declared program enters the value's key. Two more fields per value entry and one per file, so per-entry cost rose by a fraction of a percent at every fixture and every size. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
+      "note": "Moved by report-every-refusal-as-a-row: every placed entry now records `closure` and `units` empty or not, and the planner gained three checks over an entry it did not make before - a declared closure root against the store directory, a declared closure root against the entry's own delivered references, and every unit environment value against a line break. The rise is a level shift in cost per plan entry of about three percent in thunks and five in primop calls, and the growth across sizes is unchanged. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
     },
     "fleet-16": {
       "fixture": "fleet",
@@ -53,17 +53,17 @@
       "date": "2026-09-10",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 374.796,
-        "nrFunctionCalls": 234.6123,
-        "nrPrimOpCalls": 169.7143,
-        "values.number": 452.6735,
-        "sets.bytes": 5777.6327,
-        "envs.bytes": 4793.4694,
-        "list.elements": 109.2245,
-        "nrOpUpdateValuesCopied": 12.5103,
-        "gc.totalBytes": 22097.9592
+        "nrThunks": 385.8164,
+        "nrFunctionCalls": 241.6531,
+        "nrPrimOpCalls": 179.2654,
+        "values.number": 465.9592,
+        "sets.bytes": 5785.1429,
+        "envs.bytes": 4938.7756,
+        "list.elements": 112.9388,
+        "nrOpUpdateValuesCopied": 13.2041,
+        "gc.totalBytes": 22464
       },
-      "note": "Moved by generate-values-with-nixos-secrets: a generated value's entry gained the program its generator declares, every file record in the plan gained `deploy`, and a declared program enters the value's key. Two more fields per value entry and one per file, so per-entry cost rose by a fraction of a percent at every fixture and every size. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
+      "note": "Moved by report-every-refusal-as-a-row: every placed entry now records `closure` and `units` empty or not, and the planner gained three checks over an entry it did not make before - a declared closure root against the store directory, a declared closure root against the entry's own delivered references, and every unit environment value against a line break. The rise is a level shift in cost per plan entry of about three percent in thunks and five in primop calls, and the growth across sizes is unchanged. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
     },
     "fleet-64": {
       "fixture": "fleet",
@@ -71,17 +71,17 @@
       "date": "2026-09-10",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 310.0363,
-        "nrFunctionCalls": 205.8032,
-        "nrPrimOpCalls": 149.7824,
-        "values.number": 372.8342,
-        "sets.bytes": 4719.2539,
-        "envs.bytes": 4076.1037,
-        "list.elements": 98.114,
-        "nrOpUpdateValuesCopied": 7.2384,
-        "gc.totalBytes": 18271.4197
+        "nrThunks": 320.7928,
+        "nrFunctionCalls": 212.8135,
+        "nrPrimOpCalls": 159.171,
+        "values.number": 385.6581,
+        "sets.bytes": 4723.1503,
+        "envs.bytes": 4220.4353,
+        "list.elements": 101.7928,
+        "nrOpUpdateValuesCopied": 7.912,
+        "gc.totalBytes": 18618.7773
       },
-      "note": "Moved by generate-values-with-nixos-secrets: a generated value's entry gained the program its generator declares, every file record in the plan gained `deploy`, and a declared program enters the value's key. Two more fields per value entry and one per file, so per-entry cost rose by a fraction of a percent at every fixture and every size. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
+      "note": "Moved by report-every-refusal-as-a-row: every placed entry now records `closure` and `units` empty or not, and the planner gained three checks over an entry it did not make before - a declared closure root against the store directory, a declared closure root against the entry's own delivered references, and every unit environment value against a line break. The rise is a level shift in cost per plan entry of about three percent in thunks and five in primop calls, and the growth across sizes is unchanged. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
     },
     "fleet-256": {
       "fixture": "fleet",
@@ -89,17 +89,17 @@
       "date": "2026-09-10",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 293.5306,
-        "nrFunctionCalls": 198.4604,
-        "nrPrimOpCalls": 144.7023,
-        "values.number": 352.4851,
-        "sets.bytes": 4448.1665,
-        "envs.bytes": 3893.264,
-        "list.elements": 95.2822,
-        "nrOpUpdateValuesCopied": 5.8115,
-        "gc.totalBytes": 17222.3043
+        "nrThunks": 304.2198,
+        "nrFunctionCalls": 205.463,
+        "nrPrimOpCalls": 154.0495,
+        "values.number": 365.1912,
+        "sets.bytes": 4451.1418,
+        "envs.bytes": 4037.3473,
+        "list.elements": 98.9519,
+        "nrOpUpdateValuesCopied": 6.4799,
+        "gc.totalBytes": 17617.8102
       },
-      "note": "Moved by generate-values-with-nixos-secrets: a generated value's entry gained the program its generator declares, every file record in the plan gained `deploy`, and a declared program enters the value's key. Two more fields per value entry and one per file, so per-entry cost rose by a fraction of a percent at every fixture and every size. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
+      "note": "Moved by report-every-refusal-as-a-row: every placed entry now records `closure` and `units` empty or not, and the planner gained three checks over an entry it did not make before - a declared closure root against the store directory, a declared closure root against the entry's own delivered references, and every unit environment value against a line break. The rise is a level shift in cost per plan entry of about three percent in thunks and five in primop calls, and the growth across sizes is unchanged. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
     },
     "mesh-4": {
       "fixture": "mesh",
@@ -107,17 +107,17 @@
       "date": "2026-09-10",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 668,
-        "nrFunctionCalls": 387.8462,
-        "nrPrimOpCalls": 288.7693,
-        "values.number": 823.4616,
-        "sets.bytes": 10387.077,
-        "envs.bytes": 8292.9231,
-        "list.elements": 182.6154,
-        "nrOpUpdateValuesCopied": 32.9231,
-        "gc.totalBytes": 40470.1539
+        "nrThunks": 681.8462,
+        "nrFunctionCalls": 396.1539,
+        "nrPrimOpCalls": 302.3077,
+        "values.number": 841.8462,
+        "sets.bytes": 10408,
+        "envs.bytes": 8457.8462,
+        "list.elements": 188.3077,
+        "nrOpUpdateValuesCopied": 33.6924,
+        "gc.totalBytes": 40086.1539
       },
-      "note": "Moved by generate-values-with-nixos-secrets: a generated value's entry gained the program its generator declares, every file record in the plan gained `deploy`, and a declared program enters the value's key. Two more fields per value entry and one per file, so per-entry cost rose by a fraction of a percent at every fixture and every size. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
+      "note": "Moved by report-every-refusal-as-a-row: every placed entry now records `closure` and `units` empty or not, and the planner gained three checks over an entry it did not make before - a declared closure root against the store directory, a declared closure root against the entry's own delivered references, and every unit environment value against a line break. The rise is a level shift in cost per plan entry of about three percent in thunks and five in primop calls, and the growth across sizes is unchanged. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
     },
     "mesh-16": {
       "fixture": "mesh",
@@ -125,17 +125,17 @@
       "date": "2026-09-10",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 433.1429,
-        "nrFunctionCalls": 285.6327,
-        "nrPrimOpCalls": 219.4082,
-        "values.number": 534.6327,
-        "sets.bytes": 6539.5919,
-        "envs.bytes": 5709.7143,
-        "list.elements": 144.2041,
-        "nrOpUpdateValuesCopied": 12.8164,
-        "gc.totalBytes": 26141.3878
+        "nrThunks": 446.1225,
+        "nrFunctionCalls": 293.9592,
+        "nrPrimOpCalls": 232.5511,
+        "values.number": 551.5103,
+        "sets.bytes": 6547.1021,
+        "envs.bytes": 5872.9796,
+        "list.elements": 149.8776,
+        "nrOpUpdateValuesCopied": 13.5103,
+        "gc.totalBytes": 26589.7143
       },
-      "note": "Moved by generate-values-with-nixos-secrets: a generated value's entry gained the program its generator declares, every file record in the plan gained `deploy`, and a declared program enters the value's key. Two more fields per value entry and one per file, so per-entry cost rose by a fraction of a percent at every fixture and every size. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
+      "note": "Moved by report-every-refusal-as-a-row: every placed entry now records `closure` and `units` empty or not, and the planner gained three checks over an entry it did not make before - a declared closure root against the store directory, a declared closure root against the entry's own delivered references, and every unit environment value against a line break. The rise is a level shift in cost per plan entry of about three percent in thunks and five in primop calls, and the growth across sizes is unchanged. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
     },
     "mesh-64": {
       "fixture": "mesh",
@@ -143,17 +143,17 @@
       "date": "2026-09-10",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 369.8653,
-        "nrFunctionCalls": 258.0519,
-        "nrPrimOpCalls": 200.6995,
-        "values.number": 456.8135,
-        "sets.bytes": 5505.6166,
-        "envs.bytes": 5013.057,
-        "list.elements": 133.855,
-        "nrOpUpdateValuesCopied": 7.5648,
-        "gc.totalBytes": 22333.0985
+        "nrThunks": 382.6114,
+        "nrFunctionCalls": 266.3835,
+        "nrPrimOpCalls": 213.7358,
+        "values.number": 473.285,
+        "sets.bytes": 5509.513,
+        "envs.bytes": 5175.8757,
+        "list.elements": 139.5234,
+        "nrOpUpdateValuesCopied": 8.2384,
+        "gc.totalBytes": 22834.57
       },
-      "note": "Moved by generate-values-with-nixos-secrets: a generated value's entry gained the program its generator declares, every file record in the plan gained `deploy`, and a declared program enters the value's key. Two more fields per value entry and one per file, so per-entry cost rose by a fraction of a percent at every fixture and every size. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
+      "note": "Moved by report-every-refusal-as-a-row: every placed entry now records `closure` and `units` empty or not, and the planner gained three checks over an entry it did not make before - a declared closure root against the store directory, a declared closure root against the entry's own delivered references, and every unit environment value against a line break. The rise is a level shift in cost per plan entry of about three percent in thunks and five in primop calls, and the growth across sizes is unchanged. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
     },
     "mesh-256": {
       "fixture": "mesh",
@@ -161,17 +161,17 @@
       "date": "2026-09-10",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 353.7374,
-        "nrFunctionCalls": 251.0222,
-        "nrPrimOpCalls": 195.9311,
-        "values.number": 436.9792,
-        "sets.bytes": 5240.7491,
-        "envs.bytes": 4835.4955,
-        "list.elements": 131.2172,
-        "nrOpUpdateValuesCopied": 6.1431,
-        "gc.totalBytes": 21301.9922
+        "nrThunks": 366.424,
+        "nrFunctionCalls": 259.3551,
+        "nrPrimOpCalls": 208.9402,
+        "values.number": 453.3473,
+        "sets.bytes": 5243.7244,
+        "envs.bytes": 4998.2003,
+        "list.elements": 136.8843,
+        "nrOpUpdateValuesCopied": 6.8115,
+        "gc.totalBytes": 21808.645
       },
-      "note": "Moved by generate-values-with-nixos-secrets: a generated value's entry gained the program its generator declares, every file record in the plan gained `deploy`, and a declared program enters the value's key. Two more fields per value entry and one per file, so per-entry cost rose by a fraction of a percent at every fixture and every size. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
+      "note": "Moved by report-every-refusal-as-a-row: every placed entry now records `closure` and `units` empty or not, and the planner gained three checks over an entry it did not make before - a declared closure root against the store directory, a declared closure root against the entry's own delivered references, and every unit environment value against a line break. The rise is a level shift in cost per plan entry of about three percent in thunks and five in primop calls, and the growth across sizes is unchanged. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
     }
   }
 }
