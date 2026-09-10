@@ -628,16 +628,19 @@ def test_an_entry_the_endpoint_does_not_register_is_reported_as_absent(delivered
     entry the phases after this one still read, so it is obtained from a machine
     that genuinely registers no such service - the consumer's, asked for the
     producer's entry - through the command's own script and the command's own
-    reading of what came back. What that proves is the whole claim: the endpoint
-    answers rather than fails, and the command calls it absent.
+    reading of what came back. The endpoint refuses a name it holds nothing
+    under with a status of its own, which is what tells this apart from a
+    machine carrying no endpoint at all.
     """
     producer = delivered.built.entries[SERVER_KEY]
-    elsewhere = delivered.vm(CLIENT_MACHINE).ssh_succeed(
+    asked = delivered.vm(CLIENT_MACHINE).ssh(
         remote.flakelet_status_script(delivery.service_name(producer.path))
     )
 
-    assert json.loads(elsewhere) == [], elsewhere
-    assert report._read_status(producer, elsewhere) == "absent"
+    assert asked.returncode != 0, asked
+    assert asked.returncode not in (*remote.MISSING, remote.UNREACHABLE), asked
+    answer = remote.Answer(asked.returncode, asked.stderr.strip())
+    assert report._answered(producer, answer) == "absent", asked
 
 
 def test_the_identity_a_machine_holds_is_in_its_report_line(delivered: Run) -> None:
@@ -784,7 +787,7 @@ def test_a_run_broken_between_two_machines_names_the_step_that_broke(
     consumer = interrupted.built.entries[CLIENT_KEY]
     reached = interrupted.plan[f"machine:{CLIENT_MACHINE}"]["address"]
     serving = interrupted.plan[f"machine:{SERVER_MACHINE}"]["address"]
-    steps = [line for line in printed if not line.startswith(("  ", "failed ", "planner:"))]
+    steps = [line for line in printed if line.startswith(("value ", "copy ", "activate "))]
 
     assert interrupted.observed["interrupted_status"] != 0, printed
     assert f"activate {SERVER_KEY} (flakelet) on root@{serving}" in steps, printed

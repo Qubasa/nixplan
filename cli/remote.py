@@ -46,6 +46,7 @@ BOUNDS = (
     "ServerAliveCountMax=3",
 )
 UNREACHABLE = 255
+MISSING = (126, 127)
 
 
 class Runner(Protocol):
@@ -279,11 +280,13 @@ def attach_script(artifact: Path) -> str:
 def flakelet_status_script(name: str) -> str:
     """Return the endpoint's own report for one entry.
 
-    Neither the standard error nor the exit status is discarded. An endpoint
-    that holds nothing under the name, one that is not on the machine's path
-    and one that refuses the caller need four different things done about
-    them, and a script that answered the empty list for all of them told an
-    operator none of it.
+    Neither the standard error nor the exit status is discarded, because the
+    status is what tells the four situations apart. The endpoint refuses a name
+    it holds nothing under with its own non-zero status, which is an answer
+    about the deployment; a shell that cannot run the endpoint at all exits
+    `MISSING`, which is an answer about the machine; ssh exits `UNREACHABLE`
+    when nothing answered. A script ending in `|| printf '[]'` reported all
+    three as the first.
     """
     return f"flakelet status --json {shlex.quote(name)}"
 

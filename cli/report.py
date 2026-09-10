@@ -5,8 +5,11 @@ A status is what the machine's own endpoint says, and absence is one of its
 answers rather than the report's: an entry the endpoint answers about and does
 not register is absent, a machine whose endpoint cannot be run carries no
 endpoint, a machine that answers nothing is unreachable, and an entry whose
-machine declares no address is one the command will not dial. Printing absence
-for any of the last three would tell an operator the deployment was never
+machine declares no address is one the command will not dial. The exit status
+is what tells the four apart, because an endpoint refuses a name it holds
+nothing under with a status of its own: only a shell that could not run the
+endpoint at all, and only ssh that reached nothing, are the other two. Printing
+absence for either of those would tell an operator the deployment was never
 applied when the truth is that nobody was asked. Each line is printed as it is
 known, because one machine's silence says nothing about another's answer.
 
@@ -110,7 +113,7 @@ def status(
         line = f"{entry.key} {entry.realiser} {_answered(entry, answer)}"
         lines.append(line)
         log(line)
-        if answer.status != 0:
+        if not _the_endpoint_answered(answer):
             unasked.add(entry.machine)
     return Report(lines=tuple(lines), unasked=tuple(sorted(unasked)))
 
@@ -124,13 +127,20 @@ def _ask(
     return remote.asking(runner, argv, env=env)
 
 
+def _the_endpoint_answered(answer: remote.Answer) -> bool:
+    """Whether this answer came from the machine's own endpoint at all."""
+    return answer.status not in (UNDIALLED, remote.UNREACHABLE, *remote.MISSING)
+
+
 def _answered(entry: Entry, answer: remote.Answer) -> str:
     if answer.status == UNDIALLED:
         return f"not dialled: machine {entry.machine} declares no address"
     if answer.status == remote.UNREACHABLE:
         return f"unreachable: {entry.machine} at {entry.address} answered nothing"
-    if answer.status != 0:
+    if answer.status in remote.MISSING:
         return f"no endpoint on {entry.machine}: {answer.said}"
+    if answer.status != 0:
+        return "absent"
     return _read_status(entry, answer.said)
 
 
