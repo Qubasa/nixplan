@@ -245,9 +245,13 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   | `operator-entry-name-refused` | a member named `needs.a.dot`, and a unit named `web@one@two` | `operator.testANameTheEndpointRefusesIsARowBeforeItIsARaise`, `flakelet.testAnUnusableInstanceName`, `flakelet.testAUnitNameOutsideTheServicesNamespace`, `diagnostics.testARealiserRefusesAConditionNoRowReports` |
   | `operator-entry-access-denied` | a unit declaring `user = "borg"` under `profile = "strict"`, and the fixture's `nightly:client` under `strict` | `operator.testAUnitNeedingAHostUserMeetsAConfiningProfile`, `operator.testAnEntryOwningARootOnlyFileMeetsAConfiningProfile`, `diagnostics.testARealiserRefusesAConditionNoRowReports` |
   | `operator-entry-machine-no-address` (demoted to a warning) | a machine record declaring no address | `operator.testAMachineOfAPlacedEntryDeclaresNoAddress`, which then has no row to read |
-- [ ] 9.4 Prove the rule holds mechanically: add a `fail` to `image/read.nix` with no row above it
+- [x] 9.4 Prove the rule holds mechanically: add a `fail` to `image/read.nix` with no row above it
   and confirm `testARealiserRefusesAConditionNoRowReports` names it; remove it and confirm the suite
   is green.
+  - A branch reading `fail "entry ${quote key} was refused for a brand new reason nobody wrote a
+    row for"` was added above the no-unit refusal of `image/read.nix`. The suite went red on
+    exactly `diagnostics.testARealiserRefusesAConditionNoRowReports`, whose `unaccounted` field
+    named the new line verbatim. Removing the branch returned the suite to green.
 - [ ] 9.5 `nix build .#checks.x86_64-linux.treefmt -L` and `nix fmt`: no change to any file this
   change touched, and no blank line left where a comment moved.
 - [ ] 9.6 `nix run .#planner-e2e`: green, with the count recorded here against the count before the
