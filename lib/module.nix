@@ -164,7 +164,11 @@ rec {
       key,
       allowed,
       id ? "declaration-unknown-key",
+      note ? null,
     }:
+    let
+      also = if note == null then "" else "; ${note}";
+    in
     if excluded.constructs ? ${key} then
       diag.error {
         inherit subject;
@@ -179,7 +183,7 @@ rec {
         inherit id;
         message = "${where} declares ${util.quote key}, and this subset reads ${util.quoteList allowed}";
         evidence = "unknown keys are refused rather than ignored, so a misspelling is a row instead of a silence";
-        resolution = "delete or correct ${util.quote key} in ${subject}";
+        resolution = "delete or correct ${util.quote key} in ${subject}${also}";
       };
 
   severityRow =

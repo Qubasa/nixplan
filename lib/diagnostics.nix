@@ -58,6 +58,7 @@ rec {
       what,
       fallback,
       value,
+      id ? "module-raised",
     }:
     let
       attempt = builtins.tryEval (builtins.deepSeq value value);
@@ -72,8 +73,7 @@ rec {
         value = fallback;
         rows = [
           (error {
-            inherit subject;
-            id = "module-raised";
+            inherit subject id;
             message = "${what} raised a catchable error, so its value is recorded as not computed";
             evidence = "the planner forced the value inside `builtins.tryEval` and produced the rest of the plan";
             resolution = "fix the expression in the module file that produced ${what}";
