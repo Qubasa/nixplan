@@ -362,11 +362,13 @@ in
             _: declared:
             let
               iface = declared.interface;
+              claim = if iface == null then null else interface.identityOf iface;
             in
             {
               declaredNames = if iface == null then [ ] else interface.exportNames iface;
               declaringFile = if iface == null then null else interface.fileOf reg iface;
               interfaceName = if iface == null then null else iface.name;
+              interfaceId = if claim == null then null else claim.id;
               label = interface.label reg iface;
             }
           ) declaration.provides;
@@ -861,7 +863,7 @@ in
             extra
             ;
           interface = iface;
-          inherit (facts) declaringFile interfaceName;
+          inherit (facts) declaringFile interfaceName interfaceId;
           keysetEqualsInterface = missing == [ ] && extra == [ ];
           rows =
             guard.rows

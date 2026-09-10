@@ -29,7 +29,7 @@
 
 ## 5. The plan field
 
-- [ ] 5.1 Carry the claimed identity through the resolved capability record (`lib/resolve.nix:367-371`, beside `declaringFile` and `interfaceName`) and write it into the plan at `lib/plan.nix:157-160`, omitting the attribute entirely when no claim was made; verify `nix eval --json .#planner.worked.plan` still equals `fixtures/minimal-typed-edge/plan/backup.json` field for field, because no in-tree interface claims one
+- [x] 5.1 Carry the claimed identity through the resolved capability record (`lib/resolve.nix:367-371`, beside `declaringFile` and `interfaceName`) and write it into the plan at `lib/plan.nix:157-160`, omitting the attribute entirely when no claim was made; verify `nix eval --json .#planner.worked.plan` still equals `fixtures/minimal-typed-edge/plan/backup.json` field for field, because no in-tree interface claims one
 - [ ] 5.2 Assert the field in the `plan` suite: an entry providing a capability whose interface claims an `id` records it beside the name and the declaring file; an entry whose interface claims none carries no such attribute; adopting a claim leaves every entry key unchanged; verify each of the three fails when the attribute is written unconditionally or folded into the key
 
 ## 6. Two evaluations as evidence
