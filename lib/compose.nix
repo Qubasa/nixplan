@@ -3,7 +3,11 @@
 # A root keys each member's settings under that member's own name, including when
 # it owns exactly one member, and forwards nothing. Each knob it owns is either a
 # default a deployment may overwrite or a fixed value it may not.
-{ util, diag }:
+{
+  util,
+  diag,
+  excluded,
+}:
 let
   inherit (builtins) attrNames;
 
@@ -25,6 +29,25 @@ rec {
       fixed = args.fixed or { };
       settings = settingsOf { inherit name defaults fixed; };
       declaration = module { settings = settings.values; };
+
+      # Whether the deployment moved anything at all. With no deployment knob the
+      # member's own values are `settings.values` by construction, so the second
+      # reading below is not taken.
+      configured = builtins.any (source: source == "deployment") (builtins.attrValues settings.sources);
+
+      # The same module under the values the member declares for itself. Forced
+      # for its slot names alone and its rows are dropped: a module that raises on
+      # its own defaults is not a shape difference, and the raise it produces
+      # against resolved settings is already reported once.
+      observed = diag.guard {
+        subject = "member:${name}";
+        what = "the slots of member ${util.quote name} under its own values";
+        fallback = null;
+        value = {
+          resolved = attrNames (declaration.uses or { });
+          own = attrNames ((module { settings = defaults // fixed; }).uses or { });
+        };
+      };
     in
     {
       inherit
@@ -35,6 +58,7 @@ rec {
         settings
         declaration
         ;
+      slotSet = if configured then observed.value else null;
       unknownKeys = util.extraKeys serviceKeys args;
       provides = builtins.mapAttrs (
         capability: declared:
@@ -124,4 +148,30 @@ rec {
         resolution = "write `settings.<member>.${k}` in ${deploymentFile}";
       }
     ) (util.subtractList (attrNames settings) members);
+
+  # A slot set that moves with settings is a module publishing a cut, which is a
+  # decision a module may take. It is recorded rather than refused because it is
+  # the one declaration difference that otherwise leaves no trace: a slot nobody
+  # asked for is wired by nobody, and no unwired-slot row misses it.
+  slotSetRows =
+    {
+      subject,
+      name,
+      deploymentFile,
+      observation,
+    }:
+    let
+      removed = util.subtractList observation.own observation.resolved;
+      added = util.subtractList observation.resolved observation.own;
+      moved = util.sortStrings (removed ++ added);
+    in
+    util.optional (observation != null && moved != [ ]) (
+      diag.warning {
+        inherit subject;
+        id = "slot-set-settings-derived";
+        message = "member ${util.quote name} asks for ${util.quoteList moved} under one reading of its settings and not under the other, so the set of slots it declares is derived from what ${deploymentFile} wrote";
+        evidence = "the condition that introduces it: ${excluded.constructs.enable.trigger}";
+        resolution = "declare the slot unconditionally in ${subject} and branch on the setting inside `impl`, which leaves a wire the planner can refuse, or keep the cut and expect this row";
+      }
+    );
 }
