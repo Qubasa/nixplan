@@ -19,6 +19,7 @@ carry one, and a directory can.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -32,6 +33,9 @@ PLAN = "plan.json"
 TABLE = "diagnostics.txt"
 ROWS = "diagnostics.json"
 MACHINE_PREFIX = "machine:"
+VERSION = 1
+STORE_VARIABLE = "NIX_STORE_DIR"
+DEFAULT_STORE = "/nix/store"
 
 
 @dataclass(frozen=True)
@@ -66,7 +70,7 @@ class Entry:
     realiser: str
     profile: str | None
     machine: str
-    address: str
+    address: str | None
     units: tuple[str, ...]
 
 
@@ -96,6 +100,23 @@ class Deployment:
         """The rows that make the deployment inapplicable."""
         return tuple(row for row in self.diagnostics if row.severity == "error")
 
+    @property
+    def rendered(self) -> str:
+        """The table the build wrote, or the rows themselves where it wrote none."""
+        return self.table.strip() or "\n".join(
+            f"{row.id} {row.subject} {row.message}" for row in self.diagnostics
+        )
+
+
+def store_dir() -> str:
+    """Return the store directory this command runs against.
+
+    Returns:
+        The store nix itself resolves a path in: `NIX_STORE_DIR` where the
+        caller set it, and the default store otherwise.
+    """
+    return os.environ.get(STORE_VARIABLE) or DEFAULT_STORE
+
 
 def resolve(target: str) -> Path:
     """Resolve a target to the built deployment directory it names.
@@ -107,14 +128,20 @@ def resolve(target: str) -> Path:
         The directory the deployment was built into.
 
     Raises:
-        ApplyError: If the target is a directory that is neither, if the
-            reference does not build, or if it builds something that is not a
-            deployment. A build's message carries its own stderr, which is where
-            the rendered diagnostics table appears.
+        ApplyError: If the target is a directory that is neither, if it names a
+            store path that is no longer there, if the reference does not
+            build, or if it builds something that is not a deployment. A
+            build's message carries its own stderr, which is where the rendered
+            diagnostics table appears.
     """
     named = Path(target)
     if (named / MANIFEST).is_file():
         return named
+    if "#" not in target and named.is_relative_to(store_dir()) and not named.exists():
+        raise ApplyError(
+            f"{target} is not there any more: the build it names was collected, so build the "
+            f"reference that produced it again"
+        )
     # A directory carrying neither file cannot be read and cannot be built. Left
     # to nix it becomes a flake reference, and the answer is then about commit
     # hashes rather than about the deployment that was meant.
@@ -156,14 +183,17 @@ def read(root: Path) -> Deployment:
         deployment carrying no diagnostics file carries no row.
 
     Raises:
-        ApplyError: If a file is absent or unreadable, or if the manifest states
-            an entry without a field the command needs, naming both.
+        ApplyError: If a file is absent or unreadable, if the record states a
+            version this command does not implement or a store it does not run
+            against, or if the manifest states an entry without a field the
+            command needs, naming both.
     """
     interface = _load(root / MANIFEST)
+    _shape(root / MANIFEST, interface)
     plan = _load(root / PLAN)
     entries = {
         key: _entry(root, key, _mapping(record, of=f"manifest entry {key}"))
-        for key, record in sorted(_mapping(interface.get("entries", {}), of=MANIFEST).items())
+        for key, record in sorted(_mapping(interface["entries"], of=MANIFEST).items())
     }
     values = {
         key: _value(key, _mapping(record, of=f"manifest value {key}"))
@@ -178,6 +208,30 @@ def read(root: Path) -> Deployment:
         diagnostics=_rows(root / ROWS),
         table=table.read_text() if table.is_file() else "",
     )
+
+
+def address_of(entry: Entry) -> str:
+    """Return the address to dial for one placed entry.
+
+    A machine that declares no address is a warning of the planner rather than
+    a refusal, so the record carries the absence and the refusal is made here,
+    where the machine would be reached.
+
+    Args:
+        entry: The placed entry.
+
+    Returns:
+        The address the record carries for the entry's machine.
+
+    Raises:
+        ApplyError: If the record carries no address for that machine.
+    """
+    if entry.address is None:
+        raise ApplyError(
+            f"{entry.key}: machine {entry.machine} declares no address, so the command cannot "
+            f"reach it"
+        )
+    return entry.address
 
 
 def machine_address(deployment: Deployment, machine: str, *, of: str) -> str:
@@ -245,17 +299,37 @@ def image_file(entry: Entry) -> str:
     return image
 
 
+def _shape(path: Path, interface: Mapping[str, Any]) -> None:
+    version = interface.get("version")
+    if version != VERSION:
+        raise ApplyError(
+            f"{path} states version {version!r}, and this command implements version {VERSION}"
+        )
+    stated = interface.get("storeDir")
+    running = store_dir()
+    if stated != running:
+        raise ApplyError(f"{path} names store {stated!r}, and this command runs against {running}")
+    if "entries" not in interface:
+        raise ApplyError(
+            f"{path} carries no entries table, and an absent table is not an empty one: this is "
+            f"not a record the command can read"
+        )
+
+
 def _entry(root: Path, key: str, record: Mapping[str, Any]) -> Entry:
     profile = record.get("profile")
     if profile is not None and not isinstance(profile, str):
         raise ApplyError(f"{key} records profile as {profile!r}, which is not a profile name")
+    address = record.get("address")
+    if address is not None and not isinstance(address, str):
+        raise ApplyError(f"{key} records address as {address!r}, which is not an address")
     return Entry(
         key=key,
         path=(root / _text(record, "path", of=key)).resolve(),
         realiser=_text(record, "realiser", of=key),
         profile=profile,
         machine=_text(record, "machine", of=key),
-        address=_text(record, "address", of=key),
+        address=address or None,
         units=_texts(record, "units", of=key),
     )
 

@@ -155,6 +155,10 @@ let
     "report-every-refusal-as-a-row/specs/planner/plan-artifact/spec.md"
     "report-every-refusal-as-a-row/specs/realiser/flakelet-artifact/spec.md"
     "report-every-refusal-as-a-row/specs/realiser/portable-service-image/spec.md"
+    "make-an-apply-observable/specs/operator/apply-command/spec.md"
+    "make-an-apply-observable/specs/operator/deployment-build/spec.md"
+    "make-an-apply-observable/specs/operator/machine-report/spec.md"
+    "make-an-apply-observable/specs/delivery/real-cluster/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed

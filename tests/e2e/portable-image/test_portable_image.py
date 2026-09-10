@@ -237,7 +237,7 @@ def delivered(run: Run) -> Run:
     run.vm.ssh_succeed(f"mkdir -p {shlex.quote(os.path.dirname(shown))}")
     run.vm.ssh_succeed(f"printf %s {shlex.quote(SHOWN_TEXT)} > {shlex.quote(shown)}")
 
-    address = run.entry(CONFINED_KEY).address
+    address = manifest.address_of(run.entry(CONFINED_KEY))
     run.cluster.run(
         [
             "nix",
@@ -310,6 +310,26 @@ def test_an_image_entry_is_attached_by_the_command(attached: Run) -> None:
     for unit in attached.units_of(CONFINED_KEY):
         assert unit in report, report
         assert attached.vm.ssh(f"systemctl is-active {unit}").stdout.strip() == "active", report
+
+
+def test_an_image_reports_the_attachment_word_the_machine_printed(attached: Run) -> None:
+    """`portablectl` prints four words for an image a machine holds, and none is absence.
+
+    The attachment started the units, so the word this machine gives is
+    `running` rather than the plainest one the tool has. A report comparing
+    against the plainest word would call an entry it just applied absent.
+    """
+    printed = attached.vm.ssh_succeed(
+        f"portablectl is-attached {shlex.quote(attached.raw(CONFINED_KEY))}"
+    ).strip()
+
+    reported = attached.cluster.run(
+        [str(CLI), "status", str(BUILT), "--only", CONFINED_KEY],
+        env=delivery.command_env(dict(os.environ), attached.key),
+    ).stdout.splitlines()
+
+    assert reported == [f"{CONFINED_KEY} image {printed}"], reported
+    assert "absent" not in reported[0], reported
 
 
 def test_the_image_is_attached_by_the_script_the_artifact_carries(attached: Run) -> None:

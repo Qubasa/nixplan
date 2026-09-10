@@ -13,8 +13,10 @@ what was built.
 
 from __future__ import annotations
 
+import contextlib
 import os
-from collections.abc import Callable, Iterable, Mapping, Sequence
+import subprocess
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,6 +29,8 @@ from manifest import (
     Entry,
     Value,
     ValueFile,
+    address_of,
+    image_file,
     machine_address,
     service_name,
 )
@@ -83,20 +87,17 @@ def refuse_inapplicable(deployment: Deployment) -> None:
         deployment: The deployment being applied.
 
     Raises:
-        ApplyError: If any row is an error, with the rendered table as the
-            message, or the rows themselves when the deployment carries no
-            rendered table.
+        ApplyError: If any row is an error, with the diagnostics as the planner
+            rendered them as the message.
     """
-    rows = deployment.errors
-    if not rows:
+    if not deployment.errors:
         return
-    rendered = deployment.table.strip() or "\n".join(
-        f"{row.id} {row.subject} {row.message}" for row in rows
-    )
-    raise ApplyError(f"{deployment.root} is not applicable:\n{rendered}")
+    raise ApplyError(f"{deployment.root} is not applicable:\n{deployment.rendered}")
 
 
-def writes(deployment: Deployment, source: Path | None, keys: Iterable[str]) -> tuple[Write, ...]:
+def writes(
+    deployment: Deployment, source: Path | None, reaching: Mapping[str, tuple[str, ...]]
+) -> tuple[Write, ...]:
     """Return every generated file this run writes, and where it goes.
 
     Every address is resolved and every file is read here, so a source or a plan
@@ -106,21 +107,22 @@ def writes(deployment: Deployment, source: Path | None, keys: Iterable[str]) -> 
     Args:
         deployment: The deployment being applied.
         source: The value source, or ``None`` when the operator named none.
-        keys: The value entries this run is answerable for.
+        reaching: The value entries this run is answerable for, each with the
+            machines of its delivery set this run writes it to.
 
     Returns:
         The writes, by value entry, then delivery-set order, then file name.
 
     Raises:
-        ApplyError: If a machine of a delivery set has no address, or a declared
-            file cannot be read from the source.
+        ApplyError: If a machine written to has no address, or a declared file
+            cannot be read from the source.
     """
     planned: list[Write] = []
-    for value, file in values.required(deployment, keys):
+    for value, file in values.required(deployment, reaching):
         if source is None:
             raise ApplyError(f"{value.key} declares {file.name} and no value source was named")
         content = values.bytes_of(source, value, file)
-        for machine in value.delivery:
+        for machine in reaching[value.key]:
             address = machine_address(deployment, machine, of=value.key)
             planned.append(Write(value=value, file=file, address=address, content=content))
     return tuple(planned)
@@ -149,8 +151,71 @@ def activation(entry: Entry) -> str:
     )
 
 
+def holds_attached(
+    runner: remote.Runner,
+    entry: Entry,
+    address: str,
+    *,
+    opts: str,
+    user: str,
+    env: dict[str, str],
+) -> bool:
+    """Return whether the machine already holds one image entry attached.
+
+    The attach script runs under `set -eu` and `portablectl` refuses an image
+    it already holds, so a second run over an attached entry would fail on a
+    machine that is in the intended state.
+
+    Args:
+        runner: The channel every remote step goes through.
+        entry: The placed entry, realised as an image.
+        address: The machine's address.
+        opts: The ssh options of this invocation.
+        user: The login user on the machine.
+        env: The environment a remote step runs under.
+
+    Returns:
+        Whether the machine answered with an attachment. A machine that could
+        not answer is one the attachment is attempted on: a question that
+        failed is no evidence that the image is there, and the artifact's own
+        script is what decides.
+    """
+    script = remote.image_status_script(entry.path / image_file(entry))
+    try:
+        answered = runner.output(remote.ssh_argv(address, script, opts=opts, user=user), env=env)
+    except (ApplyError, subprocess.CalledProcessError):
+        return False
+    return answered.strip() not in ("", "detached")
+
+
 def _ignore(line: str) -> None:
     """Drop a step line, for a caller that reads the returned log instead."""
+
+
+@contextlib.contextmanager
+def _taking(step: str, address: str, record: Callable[[str], None]) -> Iterator[None]:
+    """Announce one step, take it, and name the failure if the machine refuses.
+
+    Args:
+        step: The line naming the step, printed before the step is attempted.
+        address: The machine it is taken against.
+        record: Where a line goes.
+
+    Yields:
+        Nothing. The step is taken inside the context.
+
+    Raises:
+        ApplyError: If the machine refused, so that nothing after it is
+            attempted. The last step line a run printed is then the step that
+            was running when it ended, and the failure line follows it.
+    """
+    record(step)
+    try:
+        with remote.refusing(step, address):
+            yield
+    except ApplyError as refused:
+        record(f"failed {refused}")
+        raise
 
 
 def apply(
@@ -191,6 +256,7 @@ def apply(
     planned = writes(deployment, source, reached)
     walked = order.walk(deployment.plan, keys)
     scripts = {key: activation(deployment.entries[key]) for key in walked.order}
+    addresses = {key: address_of(deployment.entries[key]) for key in walked.order}
 
     opts = remote.ssh_opts(ssh_key, inherited=environment.get("NIX_SSHOPTS"))
     env = remote.copy_env(environment, opts)
@@ -204,27 +270,34 @@ def apply(
         record(f"ordered against the read of {provider} by {consumer}")
 
     for write in planned:
-        runner.run(
-            remote.ssh_argv(
-                write.address,
-                remote.write_script(write.file.path, write.content),
-                opts=opts,
-                user=user,
-            ),
-            env=env,
-        )
-        record(
+        step = (
             f"value {write.value.key} {write.file.name} -> {user}@{write.address}:{write.file.path}"
         )
+        with _taking(step, write.address, record):
+            runner.run(
+                remote.ssh_argv(
+                    write.address,
+                    remote.write_script(write.file.path, write.content),
+                    opts=opts,
+                    user=user,
+                ),
+                env=env,
+            )
 
     for key in walked.order:
         entry = deployment.entries[key]
-        runner.run(remote.copy_argv(entry.path, entry.address, user=user), env=env)
-        record(f"copy {key} {entry.path} -> {user}@{entry.address}")
-        report = runner.output(
-            remote.ssh_argv(entry.address, scripts[key], opts=opts, user=user), env=env
-        )
-        record(f"activate {key} ({entry.realiser}) on {user}@{entry.address}")
-        for line in report.splitlines():
+        address = addresses[key]
+        with _taking(f"copy {key} {entry.path} -> {user}@{address}", address, record):
+            runner.run(remote.copy_argv(entry.path, address, user=user), env=env)
+        if entry.realiser == "image" and holds_attached(
+            runner, entry, address, opts=opts, user=user, env=env
+        ):
+            record(f"attached {key} already on {user}@{address}")
+            continue
+        with _taking(f"activate {key} ({entry.realiser}) on {user}@{address}", address, record):
+            reported = runner.output(
+                remote.ssh_argv(address, scripts[key], opts=opts, user=user), env=env
+            )
+        for line in reported.splitlines():
             record(f"  {line}")
     return tuple(lines)

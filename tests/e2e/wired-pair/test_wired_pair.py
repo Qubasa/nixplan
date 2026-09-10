@@ -24,6 +24,8 @@ assuming it:
 6. an unchanged re-apply is a no-op, a changed one is generation 2, a rollback
    returns generation 1
 7. both machines reboot, and the entries come back without a second apply
+8. a run broken between the two machines, and the second run that finishes it -
+   which restores the route it cut
 
 rookery is imported at run time rather than statically: it is resolved from
 ``$ROOKERY_FLAKE`` by the runner and is deliberately not an input of this flake
@@ -607,16 +609,8 @@ def test_the_command_rolls_one_entry_back(delivered: Run) -> None:
 def test_the_command_reports_what_a_machine_holds(delivered: Run) -> None:
     """`planner status` answers with each machine's own endpoint report.
 
-    The present half is asserted through the command itself: every entry is
-    applied at this point in the ordered phases, and its line has to be what that
-    entry's own machine says about it.
-
-    The absent half cannot be obtained from ``planner status`` here without
-    unapplying an entry the phases after this one still read, so it is obtained
-    from a machine that genuinely registers no such service - the consumer's,
-    asked for the producer's entry - through the command's own script and the
-    command's own reading of what came back. What that proves is the whole claim:
-    the endpoint answers rather than fails, and the command calls it absent.
+    Every entry is applied at this point in the ordered phases, and its line has
+    to be what that entry's own machine says about it.
     """
     entries = [delivered.built.entries[key] for key in KEYS]
     holds = _command(delivered, "status", str(delivered.built.root))
@@ -626,12 +620,45 @@ def test_the_command_reports_what_a_machine_holds(delivered: Run) -> None:
         line = f"{entry.key} {entry.realiser} generation {own['generation']} of {own['locked_url']}"
         assert line in holds, holds
 
+
+def test_an_entry_the_endpoint_does_not_register_is_reported_as_absent(delivered: Run) -> None:
+    """Absence is an endpoint's own answer, so it is read off a machine that answered.
+
+    It cannot be obtained from ``planner status`` here without unapplying an
+    entry the phases after this one still read, so it is obtained from a machine
+    that genuinely registers no such service - the consumer's, asked for the
+    producer's entry - through the command's own script and the command's own
+    reading of what came back. The endpoint refuses a name it holds nothing
+    under with a status of its own, which is what tells this apart from a
+    machine carrying no endpoint at all.
+    """
     producer = delivered.built.entries[SERVER_KEY]
-    elsewhere = delivered.vm(CLIENT_MACHINE).ssh_succeed(
+    asked = delivered.vm(CLIENT_MACHINE).ssh(
         remote.flakelet_status_script(delivery.service_name(producer.path))
     )
-    assert json.loads(elsewhere) == [], elsewhere
-    assert report._read_status(producer, elsewhere) == "absent"
+
+    assert asked.returncode != 0, asked
+    assert asked.returncode not in (*remote.MISSING, remote.UNREACHABLE), asked
+    answer = remote.Answer(asked.returncode, asked.stderr.strip())
+    assert report._answered(producer, answer) == "absent", asked
+
+
+def test_the_identity_a_machine_holds_is_in_its_report_line(delivered: Run) -> None:
+    """The line is the endpoint's own record: the generation and the identity it stores.
+
+    Read back off the machine and compared with what the command printed, so
+    what is asserted is that the report answers with the endpoint's answer
+    rather than with anything the deployment record states.
+    """
+    entry = delivered.built.entries[SERVER_KEY]
+    own = _reported(delivered.vm(entry.machine), delivery.service_name(entry.path))
+
+    reported = _command(delivered, "status", str(delivered.built.root), "--only", entry.key)
+
+    assert reported == (
+        f"{entry.key} {entry.realiser} generation {own['generation']} of {own['locked_url']}",
+    ), reported
+    assert own["last_error"] is None, own
 
 
 def test_a_scheduled_unit_is_not_fired_by_deploying_it(delivered: Run) -> None:
@@ -712,3 +739,110 @@ def test_the_endpoint_reports_the_identity_the_build_published(delivered: Run) -
         held = json.loads(vm.ssh_succeed(f"cat {entry.path}/meta.json"))
         assert held["settings_hash"] == published[key]["key"], (held, published[key])
         assert published[key]["key"] != delivered.plan[key]["key"], published[key]
+def _apply_however_it_ends(run: Run, *argv: str) -> tuple[int, list[str]]:
+    """Apply inside the cluster and keep the exit status, however the run ends.
+
+    ``Cluster.run`` is for commands that succeed, and the subject of this phase
+    is one that does not, so the command runs under a shell that reports its
+    status instead of passing it on. The two streams are merged because the
+    refusal is printed on standard error and the step log on standard output,
+    and the claim is about the order of the two.
+
+    Args:
+        run: The run whose cluster and credential to use.
+        argv: The arguments after `apply`.
+
+    Returns:
+        The command's exit status and the lines it printed.
+    """
+    quoted = shlex.join([str(CLI), "apply", *argv])
+    done = run.cluster.run(
+        ["sh", "-c", f"{quoted} 2>&1; echo exit=$?"],
+        env=delivery.command_env(dict(os.environ), run.key),
+    )
+    printed = done.stdout.splitlines()
+    return int(printed[-1].removeprefix("exit=")), printed[:-1]
+
+
+@pytest.fixture(scope="session")
+def interrupted(delivered: Run) -> Run:
+    """Phase 8: the route to the consumer's machine cut, and the run that breaks on it.
+
+    The route is cut before the run starts rather than raced against it from a
+    second thread, so the break is deterministic: the run reaches the producer's
+    machine and fails on the consumer's. What is cut is the delivery channel -
+    the TCP listener the plan's addresses reach - and the channel this fixture
+    drives the guest over is the vsock one, so the route can be restored
+    afterwards, which it is.
+
+    Both readings of the consumer's own endpoint are taken here, before the cut
+    and after the broken run, so what the machine held is compared with what it
+    holds whatever any later phase does.
+    """
+    if delivered.observed.get("interrupted"):
+        return delivered
+
+    client = delivered.vm(CLIENT_MACHINE)
+    service = delivery.service_name(delivered.artifact(CLIENT_KEY))
+    before = _reported(client, service)
+
+    client.ssh_succeed("systemctl stop sshd.service")
+    try:
+        status, printed = _apply_however_it_ends(delivered, str(delivered.built.root))
+    finally:
+        client.ssh_succeed("systemctl start sshd.service")
+
+    delivered.observed["interrupted"] = printed
+    delivered.observed["interrupted_status"] = status
+    delivered.observed["client_before"] = before
+    delivered.observed["client_after"] = _reported(client, service)
+    return delivered
+
+
+def test_a_run_broken_between_two_machines_names_the_step_that_broke(
+    interrupted: Run,
+) -> None:
+    """The last step line is the step that was running, and the failure names it."""
+    printed: list[str] = interrupted.observed["interrupted"]
+    consumer = interrupted.built.entries[CLIENT_KEY]
+    reached = interrupted.plan[f"machine:{CLIENT_MACHINE}"]["address"]
+    serving = interrupted.plan[f"machine:{SERVER_MACHINE}"]["address"]
+    steps = [line for line in printed if line.startswith(("value ", "copy ", "activate "))]
+
+    assert interrupted.observed["interrupted_status"] != 0, printed
+    assert f"activate {SERVER_KEY} (flakelet) on root@{serving}" in steps, printed
+    assert steps[-1] == f"copy {CLIENT_KEY} {consumer.path} -> root@{reached}", printed
+
+    failed = [line for line in printed if line.startswith("failed ")]
+    assert len(failed) == 1, printed
+    assert CLIENT_KEY in failed[0], failed
+    assert reached in failed[0], failed
+    assert "Traceback" not in "\n".join(printed), printed
+
+
+def test_a_second_run_finishes_what_the_broken_run_left(interrupted: Run) -> None:
+    """The recovery is another apply of the same build: every step it repeats is cheap."""
+    consumer = interrupted.built.entries[CLIENT_KEY]
+    client = interrupted.vm(CLIENT_MACHINE)
+
+    applied = _command(interrupted, "apply", str(interrupted.built.root))
+
+    assert f"copy {CLIENT_KEY} {consumer.path} -> root@{consumer.address}" in applied, applied
+    assert f"activate {CLIENT_KEY} (flakelet) on root@{consumer.address}" in applied, applied
+    assert [line for line in applied if line.startswith("failed ")] == [], applied
+
+    client.wait_until_succeeds(f"systemctl restart {CLIENT_UNIT}", timeout=120)
+    assert client.ssh_succeed(f"cat {RECORD_PATH}") == interrupted.page_text(
+        interrupted.artifact(SERVER_KEY)
+    )
+
+
+def test_a_machine_the_broken_run_never_reached_holds_what_it_held_before(
+    interrupted: Run,
+) -> None:
+    """A run that stopped at one machine left the machines after it untouched."""
+    before = interrupted.observed["client_before"]
+    after = interrupted.observed["client_after"]
+
+    assert after == before, (before, after)
+    assert after["last_error"] is None, after

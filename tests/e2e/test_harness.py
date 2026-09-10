@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import pytest
 
@@ -27,6 +27,9 @@ import delivery
 import errors
 import generation
 import manifest
+import planner
+import remote
+import report
 import runner
 
 SERVER_ENTRY = "site:server"
@@ -743,3 +746,533 @@ def test_the_external_contract_cannot_be_read(tmp_path: Path) -> None:
     assert generation.contract_refusal(tmp_path / "nothing-was-resolved") is None
     (tmp_path / "no-schema").mkdir()
     assert generation.contract_refusal(tmp_path / "no-schema") is None
+
+
+def _record(root: Path, record: dict[str, Any]) -> Path:
+    """Write a deployment record verbatim, for the reading to accept or refuse."""
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "plan.json").write_text(json.dumps(PLAN))
+    (root / "manifest.json").write_text(json.dumps(record))
+    return root
+
+
+def test_a_record_states_a_version_the_command_does_not_implement(tmp_path: Path) -> None:
+    """A record of another shape is refused before any entry of it is interpreted."""
+    root = _record(tmp_path, {"version": 2, "storeDir": manifest.store_dir(), "entries": {}})
+    recorder = Recorder()
+
+    with pytest.raises(errors.ApplyError) as raised:
+        apply.apply(manifest.read(root), recorder, base_env={})
+
+    message = str(raised.value)
+    assert "version 2" in message
+    assert f"version {manifest.VERSION}" in message
+    assert recorder.commands == []
+
+
+def test_a_record_names_a_store_the_command_does_not_run_against(tmp_path: Path) -> None:
+    """Artifact paths of another store are paths this command cannot copy."""
+    root = _record(tmp_path, {"version": 1, "storeDir": "/gnu/store", "entries": {}})
+    recorder = Recorder()
+
+    with pytest.raises(errors.ApplyError) as raised:
+        apply.apply(manifest.read(root), recorder, base_env={})
+
+    message = str(raised.value)
+    assert "/gnu/store" in message
+    assert manifest.store_dir() in message
+    assert recorder.commands == []
+
+
+def test_a_record_carries_no_table_of_entries(tmp_path: Path) -> None:
+    """A misspelled table is a record to refuse, never a deployment placing nothing."""
+    shape = {"version": 1, "storeDir": manifest.store_dir(), "values": {}}
+    misspelled = _record(tmp_path / "misspelled", {**shape, "entires": {}})
+
+    with pytest.raises(errors.ApplyError) as raised:
+        manifest.read(misspelled)
+
+    message = str(raised.value)
+    assert str(misspelled / manifest.MANIFEST) in message
+    assert "entries" in message
+
+    empty = manifest.read(_record(tmp_path / "empty", {**shape, "entries": {}}))
+    assert empty.entries == {}
+
+
+def test_a_record_carrying_an_entry_with_no_address_is_read(tmp_path: Path) -> None:
+    """A machine that declares no address is a warning, so the absence is carried."""
+    stated = _stated(SERVER_KEY, "alpha", "10.0.0.10")
+    deployment = _built(tmp_path, plan=PLAN, entries={SERVER_KEY: {**stated, "address": None}})
+    recorder = Recorder()
+
+    assert deployment.entries[SERVER_KEY].address is None
+
+    with pytest.raises(errors.ApplyError) as raised:
+        apply.apply(deployment, recorder, base_env={})
+
+    message = str(raised.value)
+    assert SERVER_KEY in message
+    assert "alpha" in message
+    assert recorder.commands == []
+
+
+def test_a_target_that_was_collected_is_named_as_collected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A path a collector removed is a build that is gone, not a reference that fails."""
+
+    def dialled(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("nix was asked to build a path that is not there")
+
+    monkeypatch.setattr(subprocess, "run", dialled)
+    collected = f"{manifest.store_dir()}/3k9m2x7vqz1n5bpr4jlfg8ys6cwh0d2a-deployment"
+
+    with pytest.raises(errors.ApplyError) as raised:
+        manifest.resolve(collected)
+
+    message = str(raised.value)
+    assert collected in message
+    assert "collected" in message
+    assert "don't know how to build" not in message
+
+
+def test_a_file_outside_every_values_own_directory_is_left_alone(tmp_path: Path) -> None:
+    """Bytes under no value's directory are a claim about no value, so nothing measures them."""
+    deployment = _built(
+        tmp_path / "built",
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+        values={SESSION_VALUE: {"delivery": ["alpha"], "files": TOKEN}},
+    )
+    source = _source(
+        tmp_path / "values",
+        {
+            f"{SESSION_VALUE}/token": "s3cret",
+            "README": "the bytes of this deployment's values",
+            ".gitignore": "*\n",
+        },
+    )
+    recorder = Recorder()
+
+    log = apply.apply(deployment, recorder, source=source, base_env={})
+
+    assert [line for line in log if line.startswith("value ")] == [
+        f"value {SESSION_VALUE} token -> root@10.0.0.10:/run/vars/issuer/session/token"
+    ]
+    assert "README" not in " ".join(" ".join(command) for command in recorder.commands)
+
+
+def test_two_undeclared_files_are_both_named(tmp_path: Path) -> None:
+    """An operator fixing a source wants the list, not the first line of it."""
+    deployment = _built(
+        tmp_path / "built",
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+        values={SESSION_VALUE: {"delivery": ["alpha"], "files": TOKEN}},
+    )
+    source = _source(
+        tmp_path / "values",
+        {
+            f"{SESSION_VALUE}/token": "s3cret",
+            f"{SESSION_VALUE}/toekn": "misspelled",
+            f"{SESSION_VALUE}/spare": "unnamed",
+        },
+    )
+    recorder = Recorder()
+
+    with pytest.raises(errors.ApplyError) as raised:
+        apply.apply(deployment, recorder, source=source, base_env={})
+
+    message = str(raised.value)
+    assert f"{SESSION_VALUE}/toekn" in message
+    assert f"{SESSION_VALUE}/spare" in message
+    assert recorder.commands == []
+
+
+RELAY_KEY = "probe:relay@alpha"
+
+
+def test_an_entry_off_the_cycle_keeps_its_order(tmp_path: Path) -> None:
+    """A read into a mutual pair is satisfied, and only the pair's own edge is contradicted."""
+    plan = {
+        **PLAN,
+        CLIENT_KEY: {"reads": {"relay": {"entry": RELAY_KEY}}},
+        RELAY_KEY: {"reads": {"site": {"entry": SERVER_KEY}}},
+        SERVER_KEY: {"reads": {"relay": {"entry": RELAY_KEY}}},
+    }
+    deployment = _built(
+        tmp_path,
+        plan=plan,
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            RELAY_KEY: _stated(RELAY_KEY, "alpha", "10.0.0.10"),
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+    )
+
+    log = apply.apply(deployment, Recorder(), base_env={})
+
+    assert _activated(log) == [RELAY_KEY, SERVER_KEY, CLIENT_KEY]
+    against = [line for line in log if line.startswith("ordered against ")]
+    assert against == [f"ordered against the read of {SERVER_KEY} by {RELAY_KEY}"]
+
+
+def test_an_unreachable_machine_is_refused_without_a_prompt(tmp_path: Path) -> None:
+    """Silence is bounded and the caller's own value for an option is the one used."""
+    deployment = _built(
+        tmp_path,
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+    )
+    recorder = Recorder()
+
+    apply.apply(deployment, recorder, base_env={"NIX_SSHOPTS": "-o ConnectTimeout=1"}, log=print)
+
+    _, activation = recorder.commands
+    assert "BatchMode=yes" in activation
+    assert "ServerAliveInterval=30" in activation
+    assert "ServerAliveCountMax=3" in activation
+    assert activation.index("ConnectTimeout=1") < activation.index("ConnectTimeout=10")
+
+
+REFUSED = "No space left on device"
+
+
+class Failing(Recorder):
+    """A recorder whose machine refuses every step whose argv holds ``at``."""
+
+    def __init__(self, at: str) -> None:
+        super().__init__()
+        self.at = at
+
+    def run(self, cmd: list[str], *, env: dict[str, str] | None = None) -> object:
+        self._refuse(cmd)
+        return super().run(cmd, env=env)
+
+    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
+        self._refuse(cmd)
+        return super().output(cmd, env=env)
+
+    def _refuse(self, cmd: list[str]) -> None:
+        if self.at in " ".join(cmd):
+            raise subprocess.CalledProcessError(1, cmd, output="", stderr=f"{REFUSED}\n")
+
+
+def test_a_step_that_fails_names_the_machine_and_what_it_said(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A machine's refusal is the command's own, and no traceback reaches the operator."""
+    root = tmp_path / "built"
+    _built(root, plan=PLAN, entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")})
+    failing = Failing("10.0.0.10")
+    monkeypatch.setattr(remote, "Subprocess", lambda: failing)
+
+    assert planner.main(["apply", str(root)]) == 1
+
+    refusal = capsys.readouterr().err
+    assert SERVER_KEY in refusal
+    assert "10.0.0.10" in refusal
+    assert REFUSED in refusal
+    assert "Traceback" not in refusal
+
+
+def _broken(tmp_path: Path) -> tuple[manifest.Deployment, Failing, list[str]]:
+    """Apply a two-entry deployment whose second entry's machine refuses the copy."""
+    deployment = _built(
+        tmp_path,
+        plan={**PLAN, CLIENT_KEY: {"reads": {"site": {"entry": SERVER_KEY}}}},
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+    )
+    failing = Failing("10.0.0.11")
+    log: list[str] = []
+
+    with pytest.raises(errors.ApplyError):
+        apply.apply(deployment, failing, base_env={}, log=log.append)
+
+    return deployment, failing, log
+
+
+def test_a_step_is_announced_before_it_is_attempted(tmp_path: Path) -> None:
+    """The step line of a step that never completed is the run's own last word about it."""
+    deployment, _, log = _broken(tmp_path)
+
+    steps = [line for line in log if not line.startswith(("  ", "failed "))]
+    assert steps[-1] == f"copy {CLIENT_KEY} {deployment.entries[CLIENT_KEY].path} -> root@10.0.0.11"
+    assert log[-1].startswith("failed ")
+    assert "10.0.0.11" in log[-1]
+    assert REFUSED in log[-1]
+
+
+def test_the_run_stops_at_the_step_that_broke(tmp_path: Path) -> None:
+    """One boundary, not a set of them: nothing after the refused step is attempted."""
+    _, failing, log = _broken(tmp_path)
+
+    assert _activated(tuple(log)) == [SERVER_KEY]
+    assert [command[:2] for command in failing.commands] == [["nix", "copy"], ["ssh", "-o"]]
+    assert all("10.0.0.11" not in " ".join(command) for command in failing.commands)
+
+
+def _restricted(tmp_path: Path, only: tuple[str, ...]) -> Recorder:
+    """Apply a two-machine deployment restricted to ``only`` and return the recorder."""
+    deployment = _built(
+        tmp_path,
+        plan=PLAN,
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+        values={SESSION_VALUE: {"delivery": ["alpha", "beta"], "files": TOKEN}},
+    )
+    recorder = Recorder()
+    source = _source(tmp_path / "values", {f"{SESSION_VALUE}/token": "s3cret"})
+
+    apply.apply(deployment, recorder, source=source, only=only, base_env={})
+
+    return recorder
+
+
+def test_a_restricted_run_contacts_only_the_machines_of_the_entries_it_applies(
+    tmp_path: Path,
+) -> None:
+    """A machine that receives a value only because an unselected entry reads it is left alone."""
+    recorder = _restricted(tmp_path, (SERVER_KEY,))
+
+    dialled = " ".join(" ".join(command) for command in recorder.commands)
+    assert "10.0.0.10" in dialled
+    assert "10.0.0.11" not in dialled
+
+
+def test_a_restriction_that_names_a_value_entry_reaches_its_delivery_set(tmp_path: Path) -> None:
+    """A value named directly is written to every machine that receives it, and nothing runs."""
+    recorder = _restricted(tmp_path, (SESSION_VALUE,))
+
+    dialled = [" ".join(command) for command in recorder.commands]
+    assert len(dialled) == 2
+    assert any("10.0.0.10" in command for command in dialled)
+    assert any("10.0.0.11" in command for command in dialled)
+    assert all("flakelet activate" not in command for command in dialled)
+
+
+class Answering(Recorder):
+    """A recorder whose machine answers ``said`` to the script naming ``asked``."""
+
+    def __init__(self, asked: str, said: str) -> None:
+        super().__init__()
+        self.asked = asked
+        self.said = said
+
+    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
+        answered = super().output(cmd, env=env)
+        return self.said if self.asked in " ".join(cmd) else answered
+
+
+def test_an_image_the_machine_already_holds_attached_is_not_attached_twice(
+    tmp_path: Path,
+) -> None:
+    """`portablectl` refuses an image it holds, so a second run asks before it attaches."""
+    deployment = _built(
+        tmp_path,
+        plan={**PLAN, CLIENT_KEY: {"reads": {"site": {"entry": SERVER_KEY}}}},
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            SERVER_KEY: {**_stated(SERVER_KEY, "alpha", "10.0.0.10"), "realiser": "image"},
+        },
+    )
+    image = deployment.entries[SERVER_KEY].path
+    (image / "attachment.json").write_text(json.dumps({"image": "site-server.raw"}))
+    recorder = Answering("portablectl is-attached", "running\n")
+
+    log = apply.apply(deployment, recorder, base_env={})
+
+    dialled = [" ".join(command) for command in recorder.commands]
+    assert all(f"{image}/bin/attach" not in command for command in dialled)
+    assert f"attached {SERVER_KEY} already on root@10.0.0.10" in log
+    assert _activated(log) == [CLIENT_KEY]
+
+
+HELD = json.dumps(
+    [
+        {
+            "generation": 2,
+            "locked_url": "path:/nix/store/1x8k?narHash=sha256-4444",
+            "last_error": "unit site-server-serve.service failed to start",
+        }
+    ]
+)
+
+
+def test_an_entry_the_endpoint_recorded_a_failure_for_is_not_reported_as_healthy(
+    tmp_path: Path,
+) -> None:
+    """The line is the endpoint's whole record, so an error it holds is in it."""
+    deployment = _built(
+        tmp_path,
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+    )
+    answering = Answering("flakelet status", HELD)
+
+    reported = report.status(deployment, answering, base_env={})
+
+    assert reported.lines == (
+        f"{SERVER_KEY} flakelet generation 2 of path:/nix/store/1x8k?narHash=sha256-4444, "
+        f"last error unit site-server-serve.service failed to start",
+    )
+    assert reported.unasked == ()
+
+
+class Silent(Recorder):
+    """A recorder whose machines exit ``status`` with ``said`` for the machine in ``at``."""
+
+    def __init__(self, at: str, status: int, said: str) -> None:
+        super().__init__()
+        self.at = at
+        self.status = status
+        self.said = said
+
+    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
+        answered = super().output(cmd, env=env)
+        if self.at in " ".join(cmd):
+            raise subprocess.CalledProcessError(self.status, cmd, output="", stderr=self.said)
+        return answered
+
+
+def _asked(tmp_path: Path, runner: Recorder, **stated: object) -> report.Report:
+    """Ask about a two-machine deployment, with ``stated`` overriding one entry's record."""
+    deployment = _built(
+        tmp_path,
+        plan=PLAN,
+        entries={
+            CLIENT_KEY: {**_stated(CLIENT_KEY, "beta", "10.0.0.11"), **stated},
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+    )
+    return report.status(deployment, runner, base_env={})
+
+
+def test_a_machine_with_no_endpoint_is_not_reported_as_absent(tmp_path: Path) -> None:
+    """An endpoint that cannot be run is a machine to install, not a deployment to apply."""
+    reported = _asked(tmp_path, Silent("10.0.0.11", 127, "flakelet: command not found\n"))
+
+    line = [text for text in reported.lines if text.startswith(CLIENT_KEY)]
+    assert line == [f"{CLIENT_KEY} flakelet no endpoint on beta: flakelet: command not found"]
+    assert reported.unasked == ("beta",)
+
+
+def test_a_machine_that_cannot_be_reached_is_reported_as_unreachable(tmp_path: Path) -> None:
+    """ssh exits 255 for a machine that answered nothing, and nothing is claimed about it."""
+    reported = _asked(tmp_path, Silent("10.0.0.11", 255, "ssh: connect to host: timed out\n"))
+
+    line = [text for text in reported.lines if text.startswith(CLIENT_KEY)]
+    assert line == [f"{CLIENT_KEY} flakelet unreachable: beta at 10.0.0.11 answered nothing"]
+    assert reported.unasked == ("beta",)
+
+
+def test_an_entry_whose_machine_records_no_address_is_not_dialled(tmp_path: Path) -> None:
+    """A machine with no address is not dialled and is not reported unreachable either."""
+    recorder = Recorder()
+
+    reported = _asked(tmp_path, recorder, address=None)
+
+    line = [text for text in reported.lines if text.startswith(CLIENT_KEY)]
+    assert line == [f"{CLIENT_KEY} flakelet not dialled: machine beta declares no address"]
+    assert all("10.0.0.11" not in " ".join(command) for command in recorder.commands)
+
+
+def test_one_unreachable_machine_does_not_hide_the_others(tmp_path: Path) -> None:
+    """A report is printed as it is known, so one dead machine costs one line."""
+    answering = Silent("10.0.0.11", 255, "ssh: connect to host: timed out\n")
+    printed: list[str] = []
+    deployment = _built(
+        tmp_path,
+        plan=PLAN,
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+    )
+
+    reported = report.status(deployment, answering, base_env={}, log=printed.append)
+
+    assert printed == list(reported.lines)
+    assert reported.lines[0].startswith(f"{CLIENT_KEY} flakelet unreachable")
+    assert reported.lines[1] == f"{SERVER_KEY} flakelet absent"
+
+
+def test_a_report_that_could_not_ask_every_machine_exits_non_zero(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every machine answering is a zero exit whatever it answered, silence is not."""
+    root = tmp_path / "built"
+    _built(
+        root,
+        plan=PLAN,
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+    )
+
+    monkeypatch.setattr(remote, "Subprocess", lambda: Recorder())
+    assert planner.main(["status", str(root)]) == 0
+
+    silent = Silent("10.0.0.11", 255, "ssh: connect to host: timed out\n")
+    monkeypatch.setattr(remote, "Subprocess", lambda: silent)
+    assert planner.main(["status", str(root)]) == 1
+
+
+def _row(severity: str) -> dict[str, str]:
+    return {
+        "id": "slot-unwired",
+        "subject": CLIENT_KEY,
+        "severity": severity,
+        "message": "no wire reaches site",
+        "evidence": "",
+        "resolution": "",
+    }
+
+
+TABLE = "slot-unwired  check:client@beta  no wire reaches site"
+
+
+def test_a_build_of_a_deployment_carrying_warnings_prints_them(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A warning is what a deployment holds as much as an entry is."""
+    root = tmp_path / "built"
+    _built(
+        root,
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+        values={SESSION_VALUE: {"delivery": ["alpha"], "files": TOKEN}},
+        rows=[_row("warning")],
+        table=f"{TABLE}\n",
+    )
+
+    assert planner.main(["build", str(root)]) == 0
+
+    printed = capsys.readouterr().out
+    assert SERVER_KEY in printed
+    assert SESSION_VALUE in printed
+    assert TABLE in printed
+
+
+def test_a_build_of_a_deployment_carrying_an_error_prints_the_table_and_refuses(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The planner refused it, so the report is that refusal rather than a second one."""
+    root = tmp_path / "built"
+    _built(root, plan=PLAN, entries={}, rows=[_row("error")], table=f"{TABLE}\n")
+
+    assert planner.main(["build", str(root)]) == 1
+
+    assert TABLE in capsys.readouterr().out

@@ -11,20 +11,42 @@ ssh then refuses to read it at all, reporting `Bad owner or permissions on
 /nix/store/...-libvirt/etc/ssh/ssh_config.d/30-libvirt-ssh-proxy.conf` and
 failing to connect. It also needs the host-key options a guest generated per run
 has no known-hosts entry for. Both are properties of that guest rather than of
-an operator, so the command extends the `NIX_SSHOPTS` its caller set and adds
-nothing but `-i` for `--ssh-key`: a real operator's ssh config is then what
-configures a real operator's ssh.
+an operator, so the command extends the `NIX_SSHOPTS` its caller set: a real
+operator's ssh config is then what configures a real operator's ssh.
+
+What the command adds of its own is `-i` for `--ssh-key` and the bound on
+silence: no question asked of a terminal, a connection given up on, and a
+connection that stopped carrying bytes ended. Work is not bounded, because a
+first `nix copy` onto a fresh machine legitimately runs for minutes. All of it
+is appended, because ssh takes the first value it is given for an option, so a
+caller who states one keeps it.
 """
 
 from __future__ import annotations
 
 import base64
+import contextlib
 import shlex
 import subprocess
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Protocol
+
+from errors import ApplyError
+
+BOUNDS = (
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=10",
+    "-o",
+    "ServerAliveInterval=30",
+    "-o",
+    "ServerAliveCountMax=3",
+)
+UNREACHABLE = 255
+MISSING = (126, 127)
 
 
 class Runner(Protocol):
@@ -49,12 +71,99 @@ class Subprocess:
     """The runner an operator gets: the local process table."""
 
     def run(self, cmd: list[str], *, env: dict[str, str] | None = None) -> object:
-        """Run ``cmd`` and refuse a non-zero exit."""
-        return subprocess.run(cmd, env=env, check=True)
+        """Run ``cmd`` and report a non-zero exit as the machine's refusal."""
+        return self._completed(cmd, env)
 
     def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
-        """Run ``cmd``, refuse a non-zero exit and return its standard output."""
-        return subprocess.run(cmd, env=env, check=True, capture_output=True, text=True).stdout
+        """Run ``cmd``, report a non-zero exit and return its standard output."""
+        return self._completed(cmd, env).stdout
+
+    def _completed(
+        self, cmd: list[str], env: dict[str, str] | None
+    ) -> subprocess.CompletedProcess[str]:
+        try:
+            return subprocess.run(cmd, env=env, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as refused:
+            raise Refused(destination(cmd), refused.returncode, printed(refused)) from refused
+
+
+class Refused(ApplyError):
+    """A machine refused a step: how it exited, and what it printed."""
+
+    def __init__(self, address: str, status: int, said: str) -> None:
+        told = f": {said}" if said else ""
+        super().__init__(f"{address} refused the step, exiting {status}{told}")
+        self.status = status
+        self.said = said
+
+
+@dataclass(frozen=True)
+class Answer:
+    """What one machine said to one question, and how the question exited."""
+
+    status: int
+    said: str
+
+
+def asking(runner: Runner, argv: list[str], *, env: dict[str, str]) -> Answer:
+    """Ask a machine one question and answer with what came back, however it exited.
+
+    Args:
+        runner: The channel every remote step goes through.
+        argv: The question, as argv.
+        env: The environment it runs under.
+
+    Returns:
+        The exit status and what the machine printed. A question is asked
+        rather than taken as a step, so a machine that refuses it is an answer
+        to read rather than a refusal to raise: the four things that can have
+        happened are told apart by the status.
+    """
+    try:
+        return Answer(0, runner.output(argv, env=env))
+    except Refused as refused:
+        return Answer(refused.status, refused.said)
+    except subprocess.CalledProcessError as refused:
+        return Answer(refused.returncode, printed(refused))
+
+
+@contextlib.contextmanager
+def refusing(subject: str, address: str) -> Iterator[None]:
+    """Report a machine's refusal of one step as the command's own refusal.
+
+    Args:
+        subject: The step being taken, as the log names it.
+        address: The machine it is taken against.
+
+    Yields:
+        Nothing. The step is taken inside the context.
+
+    Raises:
+        ApplyError: If the step failed, naming the subject, the machine and
+            what the machine printed. The argv is no part of the message: a
+            value write carries the bytes of a secret.
+    """
+    try:
+        yield
+    except subprocess.CalledProcessError as refused:
+        raise Refused(f"{subject}: {address}", refused.returncode, printed(refused)) from refused
+    except ApplyError as refused:
+        raise ApplyError(f"{subject}: {refused}") from refused
+
+
+def printed(refused: subprocess.CalledProcessError) -> str:
+    """Return what a machine said when it refused a step."""
+    return "\n".join(part.strip() for part in (refused.stderr, refused.stdout) if part)
+
+
+def destination(cmd: Sequence[str]) -> str:
+    """Return the machine an argv addresses, which is all of it a refusal names."""
+    for word in cmd:
+        if word.startswith("ssh://"):
+            return word.removeprefix("ssh://")
+        if "@" in word:
+            return word
+    return "the machine"
 
 
 def ssh_opts(ssh_key: Path | None, *, inherited: str | None = None) -> str:
@@ -65,12 +174,13 @@ def ssh_opts(ssh_key: Path | None, *, inherited: str | None = None) -> str:
         inherited: The `NIX_SSHOPTS` the caller set, if any.
 
     Returns:
-        The inherited options, extended with `-i` for the key.
+        The inherited options, extended with `-i` for the key and with the
+        bound on silence, appended so the caller's own value wins.
     """
     opts = shlex.split(inherited) if inherited else []
     if ssh_key is not None:
         opts += ["-i", str(ssh_key)]
-    return shlex.join(opts)
+    return shlex.join([*opts, *BOUNDS])
 
 
 def copy_env(base: Mapping[str, str], opts: str) -> dict[str, str]:
@@ -168,18 +278,22 @@ def attach_script(artifact: Path) -> str:
 
 
 def flakelet_status_script(name: str) -> str:
-    """Return the endpoint's report for one entry, or an empty list of entries.
+    """Return the endpoint's own report for one entry.
 
-    An entry the machine does not hold is an absence rather than a failure, so
-    an endpoint that refuses the name answers with the empty list it would give
-    for a name it holds nothing under.
+    Neither the standard error nor the exit status is discarded, because the
+    status is what tells the four situations apart. The endpoint refuses a name
+    it holds nothing under with its own non-zero status, which is an answer
+    about the deployment; a shell that cannot run the endpoint at all exits
+    `MISSING`, which is an answer about the machine; ssh exits `UNREACHABLE`
+    when nothing answered. A script ending in `|| printf '[]'` reported all
+    three as the first.
     """
-    return f"flakelet status --json {shlex.quote(name)} 2>/dev/null || printf '[]'"
+    return f"flakelet status --json {shlex.quote(name)}"
 
 
 def image_status_script(image: Path) -> str:
-    """Return whether the machine holds one image attached."""
-    return f"portablectl is-attached {shlex.quote(str(image))} 2>/dev/null || printf 'detached'"
+    """Return what the machine's own tool says about holding one image attached."""
+    return f"portablectl is-attached {shlex.quote(str(image))}"
 
 
 def rollback_script(name: str) -> str:

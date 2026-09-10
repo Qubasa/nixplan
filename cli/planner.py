@@ -41,9 +41,10 @@ def _plan(args: argparse.Namespace) -> int:
 def _build(args: argparse.Namespace) -> int:
     root = manifest.resolve(args.target)
     print(root)
-    for line in report.describe(manifest.read(root)):
+    deployment = manifest.read(root)
+    for line in report.describe(deployment):
         print(line)
-    return 0
+    return 1 if deployment.errors else 0
 
 
 def _apply(args: argparse.Namespace) -> int:
@@ -62,15 +63,18 @@ def _apply(args: argparse.Namespace) -> int:
 
 def _status(args: argparse.Namespace) -> int:
     deployment = manifest.read(manifest.resolve(args.target))
-    for line in report.status(
+    answered = report.status(
         deployment,
         remote.Subprocess(),
         only=tuple(args.only),
         ssh_key=Path(args.ssh_key) if args.ssh_key else None,
         user=args.user,
-    ):
-        print(line)
-    return 0
+        log=print,
+    )
+    if not answered.unasked:
+        return 0
+    print(f"planner: {', '.join(answered.unasked)} could not be asked", file=sys.stderr)
+    return 1
 
 
 def _rollback(args: argparse.Namespace) -> int:
