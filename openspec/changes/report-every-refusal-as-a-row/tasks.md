@@ -39,11 +39,16 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   `specs/planner/plan-artifact/spec.md`). All unit layer. Verify each fails against the tree as it
   stood before 2.1, except the third, which passes before and after and is the guard on the
   exemption's boundary.
-- [ ] 2.3 `fixtures/minimal-typed-edge/plan/plan.json`: regenerate with
+- [x] 2.3 `fixtures/minimal-typed-edge/plan/plan.json`: regenerate with
   `nix eval --json .#planner.worked.plan | jq -S .` and record here which entries gained which
   field. `diagnostics.txt` and `diagnostics.json` do not move, because no row changes. Verify
   `tests/unit/worked.nix` compares equal and the fixture carries no `...` and no hash that is not
   sixteen hex digits.
+  - The golden is `fixtures/minimal-typed-edge/plan/backup.json`, and the regeneration is a no-op:
+    the output of the command is byte identical to the committed file. No entry gained a field,
+    because all four placed entries of the fixture already declare a closure root and a unit. The
+    folder carries no `diagnostics.json`; its rendered table is `plan/diagnostics.txt` and it does
+    not move either.
 - [ ] 2.4 `lib/plan.nix` and `lib/resolve.nix`: the three new planner rows of
   `specs/planner/diagnostics/spec.md` - an error for a unit value containing a line break, an error
   for a declared closure root that is not a path under the plan's store directory, and an error for a
