@@ -8,7 +8,7 @@
 - [x] 2.1 Add `testAGuardedConsumerStillReportsARefusedFold` to `tests/unit/resolution.nix`, beside `testARefusedFoldLeavesTheSlotAbsent`, using the file's own `folding`/`planOf`/`soleRoot` helpers: one provider placed twice, an interface whose fold returns `{ refused = "<why>"; }`, and two consuming entries that read the slot under `results ? <slot>`; assert one `interface-fold-refused` row per consuming entry with two different subjects, both rows carrying the fold's own message, `reads.<slot>.delivered = false` on both consumers, `applicable = false`, and every provider and machine entry still present in the plan
 - [x] 2.2 Add `testTwoConsumersOfOneFoldReceiveOneValue`: two consuming entries reading one interface with `reach = "all"` over the same providers and the same `reads`; assert both received the identical folded value and that each entry's own unit records the different bytes it rendered from it, so the plan holds two outputs of one policy
 - [x] 2.3 Add `testTwoConsumersReadingDifferentExportsFoldDifferentSets`: one interface with two exports and a fold that reports the export names it was given per provider entry; one consumer reads one export, the other reads both; assert each consumer's folded value names only its own declared exports and that the export a consumer did not name is absent rather than null
-- [ ] 2.4 Verify the suite is green and the three tests are the only additions: `nix eval --json .#planner.failuresBySuite.resolution` is `{}`
+- [x] 2.4 Verify the suite is green and the three tests are the only additions: `nix eval --json .#planner.failuresBySuite.resolution` is `{}`
 
 ## 3. The scenario the suite cannot assert
 
