@@ -35,7 +35,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
   `clean-up-transplant-residue` recorded, which is argued in design D5. Verify
   `nix build .#planner` builds the command's wrapper and `nix eval --json .#debug.failures` answers
   `[]` on a green tree.
-- [ ] 2.2 `docs/tooling.md`, `docs/plan.md`, `CLAUDE.md`: every `.#planner.<field>` command line
+- [x] 2.2 `docs/tooling.md`, `docs/plan.md`, `CLAUDE.md`: every `.#planner.<field>` command line
   becomes `.#debug.<field>`. Verify each command in those documents runs as written, and
   `grep -F '.#planner.'` over the tree finds nothing outside `openspec/`.
 - [ ] 2.3 `tests/e2e/newcomer/test_newcomer.py`:

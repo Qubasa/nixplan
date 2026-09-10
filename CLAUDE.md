@@ -324,7 +324,7 @@ silently unobserved.
 
 - `fixtures/**` is excluded from the formatter. The suites evaluate it as committed and compare
   the golden plan with `==`, so a formatter would be editing a test's subject.
-- Regenerate the golden with `nix eval --json .#planner.worked.plan | jq -S .`. Nothing in the
+- Regenerate the golden with `nix eval --json .#debug.worked.plan | jq -S .`. Nothing in the
   evaluating layer can write to the working tree.
 - `gamma` deliberately has not run its generator. That one absence is what the folder exercises:
   `set-entry-absent`, the incomplete render and the absence marker.

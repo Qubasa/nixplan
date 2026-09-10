@@ -326,5 +326,5 @@ comparison, and what the `note` and `why` keys used to hold is beside it in
 Regenerate it - never by hand - with:
 
 ```bash
-nix eval --json '.#planner.worked.plan' | jq -S . > fixtures/minimal-typed-edge/plan/backup.json
+nix eval --json '.#debug.worked.plan' | jq -S . > fixtures/minimal-typed-edge/plan/backup.json
 ```

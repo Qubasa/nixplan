@@ -7,10 +7,10 @@ resolves rookery at run time and boots virtual machines.
 ## Look at the worked deployment
 
 ```bash
-nix eval --json .#planner.worked.plan | jq keys      # the eleven entries
-nix eval --json .#planner.worked.diagnostics | jq    # the rows, as records
-nix eval --raw  .#planner.rendered                   # the rows, rendered
-nix eval --json .#planner.worked.applicable          # false: one row is an error
+nix eval --json .#debug.worked.plan | jq keys      # the eleven entries
+nix eval --json .#debug.worked.diagnostics | jq    # the rows, as records
+nix eval --raw  .#debug.rendered                   # the rows, rendered
+nix eval --json .#debug.worked.applicable          # false: one row is an error
 ```
 
 `.#lib` is the library itself, for a caller that wants `mkPlan` from another
@@ -56,10 +56,10 @@ Faster, while iterating - the same suites evaluated directly, with no derivation
 in the way:
 
 ```bash
-nix eval --json .#planner.failures                    # [] on a green tree
-nix eval --json .#planner.failuresBySuite             # suite -> its failing test names
-nix eval --json .#planner.suites.plan.testThePlanSerialises | jq   # expr vs expected
-nix eval --json .#planner.suites --apply 'builtins.mapAttrs (_: builtins.attrNames)'
+nix eval --json .#debug.failures                    # [] on a green tree
+nix eval --json .#debug.failuresBySuite             # suite -> its failing test names
+nix eval --json .#debug.suites.plan.testThePlanSerialises | jq   # expr vs expected
+nix eval --json .#debug.suites --apply 'builtins.mapAttrs (_: builtins.attrNames)'
 ```
 
 `git add` a new file before evaluating: the flake does not see an untracked
@@ -91,7 +91,7 @@ The suites, and how many tests each holds:
 That column is a value, not a tally kept by hand:
 
 ```bash
-nix eval --json '.#planner.suites' \
+nix eval --json '.#debug.suites' \
   --apply 'builtins.mapAttrs (_: s: builtins.length (builtins.attrNames s))'
 ```
 
@@ -169,7 +169,7 @@ smaller check.
 To add a scenario:
 
 1. Add it to a spec under `openspec/changes/`.
-2. `nix eval --json .#planner.failuresBySuite.coverage` now names
+2. `nix eval --json .#debug.failuresBySuite.coverage` now names
    `testAScenarioGainsNoTest`, and the failure prints the two names the heading
    requires along with any existing name that shares a long prefix with them -
    which is what a rewording leaves behind.
@@ -181,12 +181,12 @@ To add a scenario:
 
 `fixtures/minimal-typed-edge/plan/backup.json` is the produced plan,
 committed. `testTheGoldenPlanMatches` in `tests/unit/plan.nix` compares it with
-`.#planner.worked.plan` field by field, and reports the attribute paths that
+`.#debug.worked.plan` field by field, and reports the attribute paths that
 differ rather than two documents. Every field participates, because the fixture
 carries nothing the planner did not write.
 
 ```bash
-nix eval --json .#planner.worked.plan | jq -S . \
+nix eval --json .#debug.worked.plan | jq -S . \
   > fixtures/minimal-typed-edge/plan/backup.json
 ```
 
