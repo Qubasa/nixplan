@@ -92,6 +92,7 @@ sshHostIdentity = korora.interface {
 | the fold applies to `reach = "all"` only | a single-valued read hands `results.<slot>` the read values directly, and the fold is not applied |
 | its input is keyed by provider plan entry key | `issuer:api@alpha`, the same keys the plan's `reads.<slot>.entries` names |
 | its input carries the slot's `reads` and nothing else | a fold cannot observe an export the slot did not name, cannot name a secret export a slot may not name, and cannot widen a delivery set |
+| its output is whatever its consumers can use | a fold returns records, and rendering bytes from them is the consuming implementation's, because one interface has one fold and any number of consumers |
 | the planner forces it under a guard | a fold that raises is `interface-fold-raised` and the slot is then **absent** from `results`, the same as any refused read |
 | a fold that is not a function | `interface-fold-not-a-function` against the interface's declaring file, rather than an error at the read |
 | a fold no set-valued read applies | `interface-fold-unapplied`, a warning: a policy nobody applies is a policy nobody is held to |
@@ -192,8 +193,11 @@ impl = { results, ... }: {
 
 The fold above is hand-written in the consuming module, which is what an
 interface declaring no `fold` leaves each consumer to do. When the interface
-declares one, `results.clients` is already the folded value and the consumer
-walks nothing.
+declares one, `results.clients` is the folded value and the consumer renders
+its own file from it. A second interface is for a different policy, never for
+a different output format: two consumers that write the same host keys as an
+`authorized_keys` file and as a `known_hosts` line read one interface and
+render twice.
 
 `reach = "local"` is refused: `local` derives from a locality this subset does
 not declare.
