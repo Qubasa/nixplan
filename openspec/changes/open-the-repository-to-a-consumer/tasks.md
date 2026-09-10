@@ -69,7 +69,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
   writes the address its entry was planned for. `tests/e2e/newcomer/deployment/default.nix` imports
   that deployment so the folder holds one (design D3). Verify
   `nix build .#planner-e2e-newcomer` reports two entry artifacts with different store paths.
-- [ ] 4.2 `tests/e2e/delivery.py`: `cluster_stage` takes `offline`, and states in its docstring that
+- [x] 4.2 `tests/e2e/delivery.py`: `cluster_stage` takes `offline`, and states in its docstring that
   a folder whose claim is about a machine fetching its own inputs is the one that turns it off.
   `tests/e2e/guest.nix`: the image carries `nix-command`, `flakes` and room for a build, with an
   assertion naming the folder that needs them. Verify `nix build .#planner-e2e-guest` is green and
