@@ -91,7 +91,7 @@ only the scenarios listed below are new.
   `test_the_run_stops_at_the_step_that_broke` in `tests/e2e/test_harness.py`, both with a runner
   that fails the second entry's copy: the log's last step line is that copy, and the recorder holds
   no argv after it.
-- [ ] 5.2 `cli/apply.py:writes` with `cli/values.py:reaching`: a restricted run resolves addresses
+- [x] 5.2 `cli/apply.py:writes` with `cli/values.py:reaching`: a restricted run resolves addresses
   and writes only for the machines of the selected entries, plus the delivery set of a value entry
   the restriction names directly. `values.check` keeps measuring the whole source (that property is
   unchanged); what narrows is the set of machines dialled.

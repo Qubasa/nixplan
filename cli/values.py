@@ -42,8 +42,8 @@ def delivered(deployment: Deployment) -> tuple[str, ...]:
 
 def reaching(
     deployment: Deployment, machines: Iterable[str], named: Iterable[str]
-) -> tuple[str, ...]:
-    """Return the value entries a run restricted to ``machines`` must hold bytes for.
+) -> dict[str, tuple[str, ...]]:
+    """Return the value entries a run must hold bytes for, and where each goes.
 
     Args:
         deployment: The deployment being applied.
@@ -51,15 +51,23 @@ def reaching(
         named: The keys `--only` named, which may include a value entry.
 
     Returns:
-        The delivered value keys the run is answerable for, sorted.
+        Each delivered value key the run is answerable for, in key order, with
+        the machines of its delivery set this run writes it to. A value the run
+        reaches because a selected entry's machine receives it is written to
+        the machines it selected and to no others, so a machine that receives
+        the value only because an unselected entry reads it is not dialled. A
+        value named directly is written to its whole delivery set.
     """
     reached = frozenset(machines)
     wanted = frozenset(named)
-    return tuple(
-        key
-        for key in delivered(deployment)
-        if key in wanted or reached.intersection(deployment.values[key].delivery)
-    )
+    answerable: dict[str, tuple[str, ...]] = {}
+    for key in delivered(deployment):
+        delivery = deployment.values[key].delivery
+        if key in wanted:
+            answerable[key] = delivery
+        elif reached.intersection(delivery):
+            answerable[key] = tuple(machine for machine in delivery if machine in reached)
+    return answerable
 
 
 def required(deployment: Deployment, keys: Iterable[str]) -> tuple[tuple[Value, ValueFile], ...]:

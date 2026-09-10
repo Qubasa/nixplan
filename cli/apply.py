@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import os
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -98,7 +98,9 @@ def refuse_inapplicable(deployment: Deployment) -> None:
     raise ApplyError(f"{deployment.root} is not applicable:\n{rendered}")
 
 
-def writes(deployment: Deployment, source: Path | None, keys: Iterable[str]) -> tuple[Write, ...]:
+def writes(
+    deployment: Deployment, source: Path | None, reaching: Mapping[str, tuple[str, ...]]
+) -> tuple[Write, ...]:
     """Return every generated file this run writes, and where it goes.
 
     Every address is resolved and every file is read here, so a source or a plan
@@ -108,21 +110,22 @@ def writes(deployment: Deployment, source: Path | None, keys: Iterable[str]) -> 
     Args:
         deployment: The deployment being applied.
         source: The value source, or ``None`` when the operator named none.
-        keys: The value entries this run is answerable for.
+        reaching: The value entries this run is answerable for, each with the
+            machines of its delivery set this run writes it to.
 
     Returns:
         The writes, by value entry, then delivery-set order, then file name.
 
     Raises:
-        ApplyError: If a machine of a delivery set has no address, or a declared
-            file cannot be read from the source.
+        ApplyError: If a machine written to has no address, or a declared file
+            cannot be read from the source.
     """
     planned: list[Write] = []
-    for value, file in values.required(deployment, keys):
+    for value, file in values.required(deployment, reaching):
         if source is None:
             raise ApplyError(f"{value.key} declares {file.name} and no value source was named")
         content = values.bytes_of(source, value, file)
-        for machine in value.delivery:
+        for machine in reaching[value.key]:
             address = machine_address(deployment, machine, of=value.key)
             planned.append(Write(value=value, file=file, address=address, content=content))
     return tuple(planned)

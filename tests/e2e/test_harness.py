@@ -1015,3 +1015,44 @@ def test_the_run_stops_at_the_step_that_broke(tmp_path: Path) -> None:
     assert _activated(log) == [SERVER_KEY]
     assert [command[:2] for command in failing.commands] == [["nix", "copy"], ["ssh", "-o"]]
     assert all("10.0.0.11" not in " ".join(command) for command in failing.commands)
+
+
+def _restricted(tmp_path: Path, only: tuple[str, ...]) -> Recorder:
+    """Apply a two-machine deployment restricted to ``only`` and return the recorder."""
+    deployment = _built(
+        tmp_path,
+        plan=PLAN,
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+        values={SESSION_VALUE: {"delivery": ["alpha", "beta"], "files": TOKEN}},
+    )
+    recorder = Recorder()
+    source = _source(tmp_path / "values", {f"{SESSION_VALUE}/token": "s3cret"})
+
+    apply.apply(deployment, recorder, source=source, only=only, base_env={})
+
+    return recorder
+
+
+def test_a_restricted_run_contacts_only_the_machines_of_the_entries_it_applies(
+    tmp_path: Path,
+) -> None:
+    """A machine that receives a value only because an unselected entry reads it is left alone."""
+    recorder = _restricted(tmp_path, (SERVER_KEY,))
+
+    dialled = " ".join(" ".join(command) for command in recorder.commands)
+    assert "10.0.0.10" in dialled
+    assert "10.0.0.11" not in dialled
+
+
+def test_a_restriction_that_names_a_value_entry_reaches_its_delivery_set(tmp_path: Path) -> None:
+    """A value named directly is written to every machine that receives it, and nothing runs."""
+    recorder = _restricted(tmp_path, (SESSION_VALUE,))
+
+    dialled = [" ".join(command) for command in recorder.commands]
+    assert len(dialled) == 2
+    assert any("10.0.0.10" in command for command in dialled)
+    assert any("10.0.0.11" in command for command in dialled)
+    assert all("flakelet activate" not in command for command in dialled)
