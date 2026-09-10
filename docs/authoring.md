@@ -61,8 +61,8 @@ against, and an interface or an extension field may bind to any of them:
 | `userName` | the account a unit runs as: the POSIX-portable name, never a uid, because the identity a name resolves to is the machine's answer and not the plan's |
 
 **An interface may also declare a `fold`.** A fold is one function of the set a
-set-valued read collects, and it is the interface's own policy for combining
-many providers into the value one consumer receives:
+set-valued read collects, and it is the interface's own policy for the set:
+validate it, refuse it, and hand every consumer one normal shape:
 
 ```nix
 # interfaces/default.nix, continued
@@ -71,11 +71,19 @@ sshHostIdentity = korora.interface {
   exports = { publicKey = { type = korora.string; }; };
   fold =
     set:
-    builtins.concatStringsSep "\n" (
-      builtins.attrValues (
-        builtins.mapAttrs (entry: read: "# ${entry}\n${read.publicKey}") set
-      )
-    );
+    let
+      entries = builtins.attrNames set;
+      blank = builtins.filter (entry: set.${entry}.publicKey == "") entries;
+    in
+    if blank != [ ] then
+      {
+        refused = "no host key published by ${builtins.concatStringsSep ", " blank}";
+      }
+    else
+      map (entry: {
+        inherit entry;
+        inherit (set.${entry}) publicKey;
+      }) entries;
 };
 ```
 
