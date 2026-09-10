@@ -108,7 +108,7 @@ only the scenarios listed below are new.
 
 ## 6. What a machine is asked, and what the answer says
 
-- [ ] 6.1 `cli/remote.py`: the two status scripts stop discarding standard error and stop turning
+- [x] 6.1 `cli/remote.py`: the two status scripts stop discarding standard error and stop turning
   every failure into the empty list. Each answers with what the machine said and its exit status, so
   the reading can tell an endpoint's answer from a machine that could not run one (design D6).
   Verify: the scripts hold no `2>/dev/null` and no `|| printf`, and
