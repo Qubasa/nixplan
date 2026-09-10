@@ -11,9 +11,15 @@ ssh then refuses to read it at all, reporting `Bad owner or permissions on
 /nix/store/...-libvirt/etc/ssh/ssh_config.d/30-libvirt-ssh-proxy.conf` and
 failing to connect. It also needs the host-key options a guest generated per run
 has no known-hosts entry for. Both are properties of that guest rather than of
-an operator, so the command extends the `NIX_SSHOPTS` its caller set and adds
-nothing but `-i` for `--ssh-key`: a real operator's ssh config is then what
-configures a real operator's ssh.
+an operator, so the command extends the `NIX_SSHOPTS` its caller set: a real
+operator's ssh config is then what configures a real operator's ssh.
+
+What the command adds of its own is `-i` for `--ssh-key` and the bound on
+silence: no question asked of a terminal, a connection given up on, and a
+connection that stopped carrying bytes ended. Work is not bounded, because a
+first `nix copy` onto a fresh machine legitimately runs for minutes. All of it
+is appended, because ssh takes the first value it is given for an option, so a
+caller who states one keeps it.
 """
 
 from __future__ import annotations
@@ -25,6 +31,17 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Protocol
+
+BOUNDS = (
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=10",
+    "-o",
+    "ServerAliveInterval=30",
+    "-o",
+    "ServerAliveCountMax=3",
+)
 
 
 class Runner(Protocol):
@@ -65,12 +82,13 @@ def ssh_opts(ssh_key: Path | None, *, inherited: str | None = None) -> str:
         inherited: The `NIX_SSHOPTS` the caller set, if any.
 
     Returns:
-        The inherited options, extended with `-i` for the key.
+        The inherited options, extended with `-i` for the key and with the
+        bound on silence, appended so the caller's own value wins.
     """
     opts = shlex.split(inherited) if inherited else []
     if ssh_key is not None:
         opts += ["-i", str(ssh_key)]
-    return shlex.join(opts)
+    return shlex.join([*opts, *BOUNDS])
 
 
 def copy_env(base: Mapping[str, str], opts: str) -> dict[str, str]:

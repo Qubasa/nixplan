@@ -913,3 +913,21 @@ def test_an_entry_off_the_cycle_keeps_its_order(tmp_path: Path) -> None:
     assert _activated(log) == [RELAY_KEY, SERVER_KEY, CLIENT_KEY]
     against = [line for line in log if line.startswith("ordered against ")]
     assert against == [f"ordered against the read of {SERVER_KEY} by {RELAY_KEY}"]
+
+
+def test_an_unreachable_machine_is_refused_without_a_prompt(tmp_path: Path) -> None:
+    """Silence is bounded and the caller's own value for an option is the one used."""
+    deployment = _built(
+        tmp_path,
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+    )
+    recorder = Recorder()
+
+    apply.apply(deployment, recorder, base_env={"NIX_SSHOPTS": "-o ConnectTimeout=1"}, log=print)
+
+    _, activation = recorder.commands
+    assert "BatchMode=yes" in activation
+    assert "ServerAliveInterval=30" in activation
+    assert "ServerAliveCountMax=3" in activation
+    assert activation.index("ConnectTimeout=1") < activation.index("ConnectTimeout=10")

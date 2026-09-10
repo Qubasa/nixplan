@@ -68,7 +68,7 @@ only the scenarios listed below are new.
 
 ## 4. Reaching a machine
 
-- [ ] 4.1 `cli/remote.py:ssh_opts`: append `BatchMode=yes`, a `ConnectTimeout` and a server-alive
+- [x] 4.1 `cli/remote.py:ssh_opts`: append `BatchMode=yes`, a `ConnectTimeout` and a server-alive
   bound after the inherited options, never before, because ssh takes the first value given for an
   option. `copy_env` carries the same string, so `nix copy` inherits them.
   Verify: `test_an_unreachable_machine_is_refused_without_a_prompt` in `tests/e2e/test_harness.py`
