@@ -516,9 +516,21 @@ exercise, so the planner leaves nothing:
   does not let this library catch** (the other is `abort`). It propagates. The
   row is produced either way; forcing the entry that reads the missing value is
   what raises.
+- **One unguarded read ends the whole table.** `applicable` forces every row of
+  every entry, so an implementation that reaches an absent slot leaves nothing
+  rendered for any entry at all: the row was produced, and no table survives to
+  carry it.
 
 That is the trade this library is making: `or [ ]` cannot be written, so it
 cannot silently succeed.
+
+The one read worth guarding is a slot whose interface declares a `fold` that
+can refuse, because that is the only refusal whose message an author wrote.
+Read it as `if results ? <slot> then … else …` and the fold's own message
+renders. Every other refused read is a wiring row the planner produced before
+any implementation ran — an unwired slot is `slot-unwired` whatever the module
+does next — so those slots are read unguarded, and guarding one would hide a
+wiring mistake behind a fallback.
 
 ### Where a refusal lives
 
@@ -531,6 +543,13 @@ fixed — the fold states the message, the planner states the row's identifier
 
 Two consumers of one refused provider are two rows, one per consuming entry,
 because each consumer is a subject of its own.
+
+Whether that refusal is rendered is the consuming module's decision, never a
+planner behaviour that varies. The row, the undelivered read and the
+inapplicable plan are produced identically either way; only the forcing of the
+absent slot decides whether a table exists to print them. A consumer of a
+refusing fold that reads `results.<slot>` unconditionally ends the evaluation
+with a missing attribute, and the fold's message goes with it.
 
 Nothing else is a channel:
 
