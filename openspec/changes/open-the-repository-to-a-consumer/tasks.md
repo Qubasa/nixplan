@@ -198,8 +198,9 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
 
 ## 10. Verification
 
-- [ ] 10.1 `nix build .#checks.x86_64-linux.planner-tests -L`: green, with the cross-walk empty over
-  this change's four spec files.
+- [x] 10.1 `nix build .#checks.x86_64-linux.planner-tests -L`: green, with the cross-walk empty over
+  this change's four spec files. 353/353 successful, and `coverage.testAScenarioGainsNoTest`
+  reports an empty `unaccounted` with all four files in `accountable`.
 - [ ] 10.2 `nix build .#checks.x86_64-linux.treefmt -L`: green, including vale over the documents
   this change edits.
 - [ ] 10.3 `nix run .#planner-e2e`: green for every folder, with the count recorded here against the
