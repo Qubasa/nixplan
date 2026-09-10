@@ -138,7 +138,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
 
 ## 7. The command a newcomer types
 
-- [ ] 7.1 `cli/planner.py`: the help text states what a target may be, the shape of a plan key for
+- [x] 7.1 `cli/planner.py`: the help text states what a target may be, the shape of a plan key for
   `--only`, that `rollback` takes exactly one `--only`, and where `docs/operator.md` is (design
   D10). Verify `planner --help` and `planner rollback --help` each name every constraint their
   parser enforces.
