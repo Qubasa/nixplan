@@ -84,7 +84,44 @@ let
 
   backend = "systemd";
 
-  fail = message: throw "planner image: ${message}";
+  # Every refusal this reading can make, and the row that reports the same
+  # condition first. A refusal carries its account rather than its account
+  # carrying a fragment of its message, so rewording one moves nothing.
+  # `tests/unit/diagnostics.nix` crosses these against the rows the producing
+  # layers build.
+  accounts = {
+    keyNotPlaced.id = "operator-plan-record-unclassified";
+    digestMalformed = {
+      id = null;
+      because = "`util.shortHash` answers a `sha256-<hex>` value for every input, so no deployment reaches this";
+    };
+    fieldMissing.id = "machine-target-incomplete";
+    entryAbsent = {
+      id = null;
+      because = "the reading enumerates the plan and asks for no key the plan does not carry";
+    };
+    targetNoPlatform.id = "machine-target-incomplete";
+    targetNoServiceManager.id = "machine-target-incomplete";
+    profileUnknown.id = "operator-image-profile-unknown";
+    closureRootUndeclared.id = "closure-path-undeclared";
+    extensionForeignBackend.id = "unit-extension-backend-mismatch";
+    extensionFieldUnknown = {
+      id = null;
+      because = "the field is one an extension declared and the library accepted, and this builder's own directive table is missing it, which is a defect of the builder rather than of the deployment";
+    };
+    extensionValueUnspellable = {
+      id = null;
+      because = "the value passed the extension's own type and this builder renders no directive for its shape, which is again the builder's own table";
+    };
+    entryRealisesNothing.id = "operator-entry-realises-nothing";
+    serviceManagerMismatch.id = "operator-entry-service-manager-mismatch";
+    closureRootOutsideStore.id = "closure-root-outside-store";
+    closureRootIsReference.id = "closure-root-is-delivered";
+    accessDenied.id = "operator-entry-access-denied";
+    unitEnvNewline.id = "unit-env-value-newline";
+  };
+
+  fail = _account: message: throw "planner image: ${message}";
 
   # <instance>:<service>@<machine>, split the way a plan key is read everywhere else.
   parseKey =
@@ -93,7 +130,7 @@ let
       m = match "([^:]+):([^@]+)@(.+)" key;
     in
     if m == null then
-      fail "${quote key} is not a placed entry key of the form `<instance>:<service>@<machine>`"
+      fail accounts.keyNotPlaced "${quote key} is not a placed entry key of the form `<instance>:<service>@<machine>`"
     else
       {
         instance = builtins.elemAt m 0;
@@ -115,7 +152,7 @@ let
       m = match "sha256-([0-9a-f]+)" (shortHash (builtins.toJSON record));
     in
     if m == null then
-      fail "the digest of ${quote record.name} is not a `sha256-<hex>` value"
+      fail accounts.digestMalformed "the digest of ${quote record.name} is not a `sha256-<hex>` value"
     else
       builtins.head m;
 
@@ -124,7 +161,7 @@ let
     if entry ? ${field} then
       entry.${field}
     else
-      fail "entry ${quote key} records no ${quote field}, and it is not inferable from anything else the plan carries";
+      fail accounts.fieldMissing "entry ${quote key} records no ${quote field}, and it is not inferable from anything else the plan carries";
 
   spell =
     value:
@@ -235,6 +272,7 @@ rec {
     timerFileName
     stagingOf
     stagedPath
+    accounts
     ;
 
   # A caller that holds an entry and a stated profile, and may not raise, asks
@@ -290,7 +328,7 @@ rec {
         if plan ? ${key} then
           plan.${key}
         else
-          fail "the plan has no entry ${quote key}; it has ${quoteList (sortStrings (attrNames plan))}";
+          fail accounts.entryAbsent "the plan has no entry ${quote key}; it has ${quoteList (sortStrings (attrNames plan))}";
 
       parts = parseKey key;
       name = nameOf parts;
@@ -304,19 +342,19 @@ rec {
         if target ? system && target.system ? system then
           target.system
         else
-          fail "entry ${quote key} records a `target` with no platform record, so there is no platform to build for";
+          fail accounts.targetNoPlatform "entry ${quote key} records a `target` with no platform record, so there is no platform to build for";
 
       serviceManager =
         if target ? serviceManager && isString target.serviceManager then
           target.serviceManager
         else
-          fail "entry ${quote key} records a `target` with no `serviceManager`";
+          fail accounts.targetNoServiceManager "entry ${quote key} records a `target` with no `serviceManager`";
 
       profileRecord =
         if profiles ? ${profile} then
           profiles.${profile}
         else
-          fail "confinement profile ${quote profile} is not one of ${quoteList profileNames}; the profile is stated rather than inferred";
+          fail accounts.profileUnknown "confinement profile ${quote profile} is not one of ${quoteList profileNames}; the profile is stated rather than inferred";
 
       generated = generatedOf entry;
 
@@ -361,13 +399,13 @@ rec {
           ];
         in
         if missing != [ ] then
-          fail "entry ${quote key} unit ${quote unitName} names ${quote (builtins.head (sortStrings missing))} and the entry's declared closure roots do not contain it"
+          fail accounts.closureRootUndeclared "entry ${quote key} unit ${quote unitName} names ${quote (builtins.head (sortStrings missing))} and the entry's declared closure roots do not contain it"
         else if foreignBackends != [ ] then
-          fail "entry ${quote key} unit ${quote unitName} records extension fields for backend ${quote (builtins.head (sortStrings foreignBackends))}, and this builder renders ${quote backend}"
+          fail accounts.extensionForeignBackend "entry ${quote key} unit ${quote unitName} records extension fields for backend ${quote (builtins.head (sortStrings foreignBackends))}, and this builder renders ${quote backend}"
         else if unknownFields != [ ] then
-          fail "entry ${quote key} unit ${quote unitName} records extension field ${quote (builtins.head (sortStrings unknownFields))}, which this builder has no rendering for"
+          fail accounts.extensionFieldUnknown "entry ${quote key} unit ${quote unitName} records extension field ${quote (builtins.head (sortStrings unknownFields))}, which this builder has no rendering for"
         else if unspellable != [ ] then
-          fail "entry ${quote key} unit ${quote unitName} records extension field ${quote (builtins.head (sortStrings unspellable))} with a value this builder cannot spell as a directive"
+          fail accounts.extensionValueUnspellable "entry ${quote key} unit ${quote unitName} records extension field ${quote (builtins.head (sortStrings unspellable))} with a value this builder cannot spell as a directive"
         else
           {
             inherit unitName references;
@@ -404,23 +442,23 @@ rec {
       );
     in
     if !(isAttrs units) || units == { } then
-      fail "entry ${quote key} records no unit, so there is nothing to attach"
+      fail accounts.entryRealisesNothing "entry ${quote key} records no unit, so there is nothing to attach"
     else if serviceManager != backend then
-      fail "entry ${quote key} is planned for a machine running ${quote serviceManager}, and this builder emits images for ${quote backend}"
+      fail accounts.serviceManagerMismatch "entry ${quote key} is planned for a machine running ${quote serviceManager}, and this builder emits images for ${quote backend}"
     else if rootsOutsideTheStore != [ ] then
-      fail "entry ${quote key} declares closure root ${quote (builtins.head rootsOutsideTheStore)}, which is not a path under the store directory ${quote storeDir} the plan records"
+      fail accounts.closureRootOutsideStore "entry ${quote key} declares closure root ${quote (builtins.head rootsOutsideTheStore)}, which is not a path under the store directory ${quote storeDir} the plan records"
     else if rootsThatAreReferences != [ ] then
-      fail "entry ${quote key} declares closure root ${quote (builtins.head rootsThatAreReferences)}, which the plan records as a reference: its bytes reach the units from the host and never through an image"
+      fail accounts.closureRootIsReference "entry ${quote key} declares closure root ${quote (builtins.head rootsThatAreReferences)}, which the plan records as a reference: its bytes reach the units from the host and never through an image"
     else if denied != [ ] then
       let
         first = builtins.head denied;
       in
-      fail "entry ${quote key} unit ${quote first.unit} needs ${first.access}, and the stated confinement profile ${quote profile} denies it; the profile is not widened on the entry's behalf"
+      fail accounts.accessDenied "entry ${quote key} unit ${quote first.unit} needs ${first.access}, and the stated confinement profile ${quote profile} denies it; the profile is not widened on the entry's behalf"
     else if unprintable != [ ] then
       let
         first = builtins.head unprintable;
       in
-      fail "entry ${quote key} unit ${quote first.unit} sets ${quote first.name} to a value containing a newline, which a unit file has no line to put"
+      fail accounts.unitEnvNewline "entry ${quote key} unit ${quote first.unit} sets ${quote first.name} to a value containing a newline, which a unit file has no line to put"
     else
       {
         inherit

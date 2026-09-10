@@ -32,7 +32,17 @@ let
 
   inherit (planner.util) escapeRegex quote sortStrings;
 
-  fail = message: throw "planner flakelet: ${message}";
+  # Every refusal this reading can make, and the row that reports the same
+  # condition first. The pairing is data the refusal carries, so rewording a
+  # message moves nothing, and `tests/unit/diagnostics.nix` fails for an account
+  # naming a row no producing layer produces.
+  accounts = {
+    nameRefused.id = "operator-entry-name-refused";
+    unitRefused.id = "operator-entry-name-refused";
+    pathNotAssembled.id = "operator-entry-path-not-assembled";
+  };
+
+  fail = _account: message: throw "planner flakelet: ${message}";
 
   # flakelet links a unit into the runtime directory and starts it there, attaching
   # no portable confinement profile, so nothing is denied on the entry's behalf.
@@ -124,6 +134,7 @@ in
     acceptsName
     acceptsUnit
     acceptsHostPath
+    accounts
     ;
 
   inherit (reader) backend;
@@ -141,14 +152,14 @@ in
       shownPaths = sort (a: b: a.path < b.path) (filter (p: !(acceptsHostPath p)) image.hostPaths);
     in
     if !(acceptsName image.name) then
-      fail "entry ${quote key} derives the service name ${quote image.name}, which the endpoint refuses: ${nameRule}"
+      fail accounts.nameRefused "entry ${quote key} derives the service name ${quote image.name}, which the endpoint refuses: ${nameRule}"
     else if refusedUnits != [ ] then
-      fail "entry ${quote key} renders the unit file ${quote (head (sortStrings refusedUnits))}, which the endpoint refuses: ${unitRule image.name}"
+      fail accounts.unitRefused "entry ${quote key} renders the unit file ${quote (head (sortStrings refusedUnits))}, which the endpoint refuses: ${unitRule image.name}"
     else if shownPaths != [ ] then
       let
         first = head shownPaths;
       in
-      fail "entry ${quote key} is shown the host path ${quote first.path} as a ${first.kind} assembled from ${quote first.from}: ${pathRule}"
+      fail accounts.pathNotAssembled "entry ${quote key} is shown the host path ${quote first.path} as a ${first.kind} assembled from ${quote first.from}: ${pathRule}"
     else
       image;
 
