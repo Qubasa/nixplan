@@ -563,10 +563,8 @@ rec {
         pruned {
           key = util.shortHash (builtins.toJSON keyInput);
           inherit
-            closure
             dependsOn
             reads
-            units
             env
             ;
           storeDir = resolved.storeDir;
@@ -580,6 +578,12 @@ rec {
           settings = {
             ${mname} = settingsRecord member;
           };
+        }
+        # Always present, empty or not: a realisation reads both, and an entry
+        # depending on no store path or running no unit is an answer rather than
+        # a fact the plan is missing.
+        // {
+          inherit closure units;
         }
         // (if target == null then { } else { inherit target; })
         // (if pin == null then { } else { inherit pin; });

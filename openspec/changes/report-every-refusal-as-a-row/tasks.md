@@ -29,7 +29,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
 
 ## 2. The plan records what a realisation reads
 
-- [ ] 2.1 `lib/plan.nix`: exempt `closure` and `units` from `pruned` for a placed entry (`:22`,
+- [x] 2.1 `lib/plan.nix`: exempt `closure` and `units` from `pruned` for a placed entry (`:22`,
   `:559-583`), leaving the unplaced entry and the value entry as they are. Verify the plan of the
   example at `docs/README.md:52-125` carries `closure = [ ]` on `hearer:main@host` and `units = { }`
   on `talker:main@host`, and that `nix eval` of both entries through `image/read.nix` no longer
