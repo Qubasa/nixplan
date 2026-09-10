@@ -154,7 +154,7 @@ only the scenarios listed below are new.
 
 ## 8. The record a build publishes
 
-- [ ] 8.1 `operator/read.nix`: `version` and `storeDir` stay where they are and become stated
+- [x] 8.1 `operator/read.nix`: `version` and `storeDir` stay where they are and become stated
   behaviour. Confirm both are read back from the built record rather than from the reading only.
   Verify: `testABuildStatesTheShapeOfItsRecordAndTheStoreItUsed` in `tests/unit/operator.nix`
   asserts both fields of the reading, and that neither depends on an entry being present.

@@ -443,6 +443,37 @@ in
       };
     };
 
+  testABuildStatesTheShapeOfItsRecordAndTheStoreItUsed =
+    let
+      empty = reader.read { plan = { }; };
+      elsewhere = reader.read {
+        plan = { };
+        storeDir = "/elsewhere/store";
+      };
+    in
+    {
+      expr = {
+        version = workedRead.manifest.version;
+        storeDir = workedRead.manifest.storeDir;
+        placingNothing = {
+          entries = attrNames empty.manifest.entries;
+          version = empty.manifest.version;
+          storeDir = empty.manifest.storeDir;
+        };
+        stated = elsewhere.manifest.storeDir;
+      };
+      expected = {
+        version = 1;
+        storeDir = builtins.storeDir;
+        placingNothing = {
+          entries = [ ];
+          version = 1;
+          storeDir = builtins.storeDir;
+        };
+        stated = "/elsewhere/store";
+      };
+    };
+
   testTheManifestNamesEveryValueAMachineReceives =
     let
       reading = workedRead;
