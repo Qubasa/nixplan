@@ -91,7 +91,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   error row naming the key given and the keys the plan carries; a statement that is not a record is
   an error row naming the entry and what was found. Verify `realise."svc:onlyy"` is refused and that
   `realise."svc:only" = "image"` is refused rather than read as the default.
-- [ ] 4.3 `operator/read.nix`: a stated profile outside `imageReader.profileNames` is an error row
+- [x] 4.3 `operator/read.nix`: a stated profile outside `imageReader.profileNames` is an error row
   naming the entry, the profile stated and the profiles that exist - the sentence the row's
   resolution already writes for an absent profile (`:135-142`). Verify `profile = "stricT"` is
   refused by the reading and never reaches `image/read.nix:195-199`.

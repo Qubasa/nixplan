@@ -86,6 +86,8 @@ let
 
   prefixOf = parts: "${parts.instance}:${parts.service}";
 
+  shown = value: if isString value then quote value else "a ${typeOf value}";
+
   # Every field is resolved down the same three steps: the plan key, then the
   # `<instance>:<service>` prefix, then `default`. Resolving per statement rather
   # than per field would leave a reader having to know which fields inherit.
@@ -138,6 +140,7 @@ let
       realiser = if statedRealiser == null then defaultRealiser else statedRealiser;
       known = elem realiser realisers;
       profile = fieldOf steps "profile";
+      inDomain = elem profile imageReader.profileNames;
       record = machineRecordOf plan parts.machine;
       declared = record.address or null;
       address = if declared == "" then null else declared;
@@ -202,6 +205,15 @@ let
                 message = "entry ${quote key} is stated to be realised as an image and its statement carries no ${quote "profile"}";
                 evidence = "a confinement profile is a build input no plan field records, so it is stated rather than chosen by the builder";
                 resolution = "add a `profile` to the `realise` statement of ${quote key}: one of ${quoteList imageReader.profileNames}";
+              }
+            )
+            ++ optional (known && realiser == "image" && profile != null && !inDomain) (
+              planner.error {
+                id = "operator-image-profile-unknown";
+                subject = key;
+                message = "entry ${quote key} is stated to be realised as an image under the confinement profile ${shown profile}, and the profiles the realiser implements are ${quoteList imageReader.profileNames}";
+                evidence = "a confinement profile is a build input no plan field records, so it is stated rather than chosen by the builder";
+                resolution = "state one of ${quoteList imageReader.profileNames} as the `profile` of ${quote key}";
               }
             )
             ++ optional (address == null) (
