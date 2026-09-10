@@ -42,7 +42,7 @@
 - [x] 7.1 Move the four spec paths from `excused` to `accountable` in `tests/unit/coverage.nix`; verify `nix eval --json .#planner.failuresBySuite.coverage` now names the unmapped scenario headings rather than the unclassified files
 - [x] 7.2 Map every `planner/interface-identity` scenario to the `interfaces`, `resolution` and `plan` test names from sections 2 to 6, adding any test the mapping reports missing; verify the coverage suite reports nothing outstanding for that spec
 - [x] 7.3 Map the `planner/typed-edge` scenarios to the tests from section 3, including the two scenarios the delta rewrote; verify the coverage suite reports nothing outstanding for that spec
-- [ ] 7.4 Map the `planner/interface-fold` scenarios to the tests from tasks 2.2 and 2.6 and the `planner/plan-artifact` scenarios to task 5.2; verify `nix eval --json .#planner.failuresBySuite.coverage` is `[]`
+- [x] 7.4 Map the `planner/interface-fold` scenarios to the tests from tasks 2.2 and 2.6 and the `planner/plan-artifact` scenarios to task 5.2; verify `nix eval --json .#planner.failuresBySuite.coverage` is `[]`
 
 ## 8. Documentation
 
