@@ -126,7 +126,7 @@ only the scenarios listed below are new.
   `test_an_image_reports_the_attachment_word_the_machine_printed` in
   `tests/e2e/portable-image/test_portable_image.py`, which asserts the line for an entry the command
   applied is not absence.
-- [ ] 6.3 `cli/report.py:status`: four answers, one line each - absent, no endpoint, unreachable,
+- [x] 6.3 `cli/report.py:status`: four answers, one line each - absent, no endpoint, unreachable,
   and the endpoint's own record - and an entry whose machine declares no address reported as one the
   command will not dial.
   Verify: `test_an_entry_the_endpoint_does_not_register_is_reported_as_absent` in
