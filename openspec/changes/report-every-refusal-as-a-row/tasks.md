@@ -17,7 +17,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   only place that applies `util.oneLine` to a message, an evidence line and a resolution
   (`lib/diagnostics.nix:33-47`). Verify `nix eval .#lib --apply builtins.attrNames` lists the three
   new names and `nix build .#checks.x86_64-linux.planner-tests` is unchanged.
-- [ ] 1.2 `operator/read.nix`: build every row through `planner.error` and `planner.warning` rather
+- [x] 1.2 `operator/read.nix`: build every row through `planner.error` and `planner.warning` rather
   than writing the six fields by hand (`:126-152`, `:164-185`). Verify the rows of
   `tests/unit/operator.nix` are equal field for field to the ones recorded before this task, and
   that a plan key carrying a line break renders as one line in

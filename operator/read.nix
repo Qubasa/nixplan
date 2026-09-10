@@ -124,30 +124,33 @@ let
       units = unitFilesOf name (entry.units or { });
       digest = entry.key;
       rows =
-        optional (!known) {
-          id = "operator-realiser-unknown";
-          subject = key;
-          severity = "error";
-          message = "entry ${quote key} is stated to be realised by ${quote realiser}, and the realisers that exist are ${quoteList realisers}";
-          evidence = "the realisation statement is read by plan key, then by the `<instance>:<service>` prefix, then by `default`";
-          resolution = "state one of ${quoteList realisers} for ${quote key} in the deployment's `realise` argument";
-        }
-        ++ optional (known && realiser == "image" && profile == null) {
-          id = "operator-image-profile-missing";
-          subject = key;
-          severity = "error";
-          message = "entry ${quote key} is stated to be realised as an image and its statement carries no ${quote "profile"}";
-          evidence = "a confinement profile is a build input no plan field records, so it is stated rather than chosen by the builder";
-          resolution = "add a `profile` to the `realise` statement of ${quote key}: one of ${quoteList imageReader.profileNames}";
-        }
-        ++ optional (address == null) {
-          id = "operator-entry-machine-no-address";
-          subject = key;
-          severity = "error";
-          message = "entry ${quote key} is placed on machine ${quote parts.machine}, and the plan's `machine:${parts.machine}` record declares no address";
-          evidence = "an artifact is copied to the address the registry declared, and an entry's own target is never consulted for it";
-          resolution = "declare an `address` for ${quote parts.machine} in the deployment's machine registry";
-        };
+        optional (!known) (
+          planner.error {
+            id = "operator-realiser-unknown";
+            subject = key;
+            message = "entry ${quote key} is stated to be realised by ${quote realiser}, and the realisers that exist are ${quoteList realisers}";
+            evidence = "the realisation statement is read by plan key, then by the `<instance>:<service>` prefix, then by `default`";
+            resolution = "state one of ${quoteList realisers} for ${quote key} in the deployment's `realise` argument";
+          }
+        )
+        ++ optional (known && realiser == "image" && profile == null) (
+          planner.error {
+            id = "operator-image-profile-missing";
+            subject = key;
+            message = "entry ${quote key} is stated to be realised as an image and its statement carries no ${quote "profile"}";
+            evidence = "a confinement profile is a build input no plan field records, so it is stated rather than chosen by the builder";
+            resolution = "add a `profile` to the `realise` statement of ${quote key}: one of ${quoteList imageReader.profileNames}";
+          }
+        )
+        ++ optional (address == null) (
+          planner.error {
+            id = "operator-entry-machine-no-address";
+            subject = key;
+            message = "entry ${quote key} is placed on machine ${quote parts.machine}, and the plan's `machine:${parts.machine}` record declares no address";
+            evidence = "an artifact is copied to the address the registry declared, and an entry's own target is never consulted for it";
+            resolution = "declare an `address` for ${quote parts.machine} in the deployment's machine registry";
+          }
+        );
     };
 
   # `program` is recorded only where the plan records one, so the manifest of a
@@ -179,14 +182,15 @@ let
         let
           keys = sharing name;
         in
-        optional (length keys > 1) {
-          id = "operator-entry-name-collision";
-          subject = head keys;
-          severity = "error";
-          message = "entries ${quoteList keys} all project onto the artifact name ${quote name}";
-          evidence = "an artifact is addressed by the name its plan key projects onto, and one directory cannot hold two entries";
-          resolution = "rename one of the instances, services or machines so that the two keys project onto different names";
-        }
+        optional (length keys > 1) (
+          planner.error {
+            id = "operator-entry-name-collision";
+            subject = head keys;
+            message = "entries ${quoteList keys} all project onto the artifact name ${quote name}";
+            evidence = "an artifact is addressed by the name its plan key projects onto, and one directory cannot hold two entries";
+            resolution = "rename one of the instances, services or machines so that the two keys project onto different names";
+          }
+        )
       ) names
     );
 in
