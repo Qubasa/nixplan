@@ -6,6 +6,66 @@ Commit `c6fcb62` deleted every comment in the tree. The load-bearing ones are ba
 constructs, shortened. This file is the index of the same invariants, so a rule can be found
 without reading the code first.
 
+## Design lineage
+
+Names for what the layers already are, so a reader can look up prior art rather than invent
+vocabulary, and so a known hazard is not re-derived.
+
+- The tree is a compiler. `lib/` is a front end with error recovery, the plan is an input-addressed
+  intermediate representation, `image/`, `flakelet/` and `secrets/` are back ends, and `cli/` is
+  the loader. A row carries the fields a rustc diagnostic carries: identifier, subject, message,
+  note, help.
+- `lib/resolve.nix` is a stratified reference attribute grammar: synthesized attributes (exports,
+  rows), inherited ones (settings, target), reference attributes (a wire naming another instance's
+  node) and a lazy knot at `resolved`. The hazard of that shape is an attribute cycle, and the fix
+  is already under Keys and identity: a key is structural, so it is computed in an earlier stratum
+  than the units. A future field that has to see a downstream unit set reopens it.
+- `lib/diagnostics.nix` is an accumulating validation applicative, and `diag.guard` is the
+  try-catch a host puts around a plugin's own expression.
+- `provides`, `uses`, `exposes` and `wire` are capability routing. Fuchsia's component framework
+  routes the same verbs and validates the same routes before running anything; its aggregate
+  capability is this library's fold, and its weak route is the mutual wire.
+- The domain model is clan-core's inventory: `instances.<n>.roles.<role>.{machines,tags}.settings`,
+  `perInstance` and `perMachine`, `constraints.roles.<role>.{min,max}Machines`, `exports`, and
+  `clan.core.vars.generators` with `share` and `deploy`. A slot's `reach` is their constraint and a
+  generator's `per` is their `share`. What this library adds is a type on the wire, a total table
+  and a plan that is data.
+- An interface's claimed identity is a nominal brand over a structural fingerprint, which is what
+  Cap'n Proto's type ids and WIT's package identifiers are for, and the failure it fixes is the
+  diamond dependency. The fingerprint compares korora type names, so two libraries declaring `url`
+  over different predicates claim one identity. Nominal by name is the trade rather than an
+  oversight: a predicate cannot be hashed.
+- `secrecy` with `plane`, a generator's `deploy` and the image profiles are a two-point
+  information-flow lattice over a capability denial table. One rule is checked at three sites:
+  `export-secret-not-a-reference`, `vars-not-deployed-opened` and `imageReader.denials`. A fourth
+  site is a place to forget it.
+- An entry key is input-addressed hashing, which is what a derivation already is. Written by hand
+  because `mkPlan` realises nothing.
+
+## No solver, no Datalog, no Prolog
+
+Recorded so the question is answered once.
+
+- Nothing here searches. Placement filters by tag, `alloc.ports` records fixed claims only, and a
+  wire is stated and then checked. Adding `placement.pick` or a dynamic port introduces the first
+  search in the tree.
+- Should one arrive, copy PubGrub's incompatibility tracking rather than a SAT or CP solver. A
+  solver answers that the constraints cannot be met; the product here is a sentence naming the
+  declaration to edit, and a minimal unsatisfiable core names no resolution.
+- Datalog would replace six `groupBy` calls - tags, platform elaborations and placements in
+  `lib/resolve.nix`, the two reader indexes in `lib/plan.nix`, unit extensions by backend in
+  `lib/module.nix` - and leave the 83 row constructors, the reading in `lib/module.nix` and every
+  message. Four reasons it cannot be `lib/`: an engine is a process, and `mkPlan` runs inside a
+  pure evaluation a consumer's own flake performs; a relation holds ground terms, while `impl`, a
+  korora predicate and a fold are functions, which is why `identityOf` had to project one out to
+  compare it at all; bottom-up evaluation has no per-node recovery, which `diag.guard` is; and the
+  only recursion in the tree is a generator reading a sibling and the walk in `cli/order.py`.
+  Provenance in Datalog is a proof tree over relation names, not a resolution.
+- Prolog adds unification and backtracking, which is the search this design removed, and trades a
+  deterministic ordered table for first-solution semantics.
+- The part worth borrowing is notation: the delivery set reads as two rules, and a spec may write
+  them as rules.
+
 ## Purity and totality
 
 - `lib/` never raises. Every check returns a diagnostics row, and evaluation stays total: one
@@ -611,3 +671,30 @@ silently unobserved.
 - The external generator's `generate.py` at the pinned revision writes PEP 758 unparenthesized
   `except A, B:`, so it parses under python 3.14 and under nothing older. The pinned nixpkgs'
   `python3` is 3.14, which is the only reason the composition runs at all.
+- An entry realised into nothing carries no artifact path: `operator/read.nix` omits `path` from its
+  record and the command reads the field as optional. Both sides move together, and a record that
+  states `path` as `null` rather than omitting it refuses the whole deployment for every subcommand,
+  because the command's field reader demands a non-empty string. Observed as that refusal before
+  `openspec/changes/hold-every-stated-guarantee` was applied to the tree.
+- The walk in `cli/order.py` rescans the entries still to apply once per entry applied, so ordering
+  costs the square of the fleet, and the cycle path rebuilds a reachability question per candidate.
+  Its eligibility `next(...)` has no default, so a violated invariant ends a run in `StopIteration`
+  rather than in a refusal, and `cli/planner.py` handles `ApplyError` only. Today's single edge
+  sources cannot violate it. `openspec/changes/order-a-cycle-by-its-strong-components`.
+- A fold's refusal is an in-band sentinel: `lib/resolve.nix` reads a returned attrset carrying a
+  `refused` attribute as a refusal, so a fold whose own successful result carries that name cannot
+  succeed. A tagged pair costs one line per fold.
+- `planner apply --only` drops the edge of a provider the selection excludes and prints nothing,
+  while a contradicted cycle edge prints a line. Both are reads the run does not honour.
+  `openspec/changes/order-a-cycle-by-its-strong-components`.
+- Every refusal in `secrets/read.nix` and `secrets/backend.nix` sits above no row and outside the
+  accounting in `tests/unit/diagnostics.nix`, whose `realiserFiles` names two files. A generator
+  declaring no `program`, a file name outside the external grammar and a recipient machine with no
+  address each abort a generation build under an empty table.
+  `openspec/changes/report-a-secrets-refusal-as-a-row`.
+- The deployment record publishes a per-entry identity so a report can compare a machine against a
+  build, and `cli/manifest.py` reads no such field, so `status` cannot tell a current machine from
+  one holding an earlier build. `openspec/changes/answer-whether-a-machine-is-current`.
+- The purity scan in `tests/unit/diagnostics.nix` is substring matching over comment-stripped text,
+  so `.check ` matches inside a string literal and `assert ` misses a call spelled with no space.
+  `ast-grep` is installed and parses.
