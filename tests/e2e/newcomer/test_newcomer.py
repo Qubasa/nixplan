@@ -388,6 +388,36 @@ def test_the_shell_is_entered_from_outside_this_checkout(tmp_path: Path) -> None
     assert str(foreign) in named, named
 
 
+def test_the_help_text_is_read_as_the_only_document() -> None:
+    """A reader with the help and no repository can name a target and restrict a run.
+
+    The help named five subcommands, a target and four options, and nothing in it
+    said what makes a directory a built deployment, what a plan key looks like or
+    that a fuller document exists. A constraint the parser refuses on is stated by
+    the subcommand that enforces it, which is why `rollback` is asked separately.
+    """
+    helped = _out("nix", "run", str(FLAKE), "--", "--help", timeout=PATIENT)
+    for stated in (
+        "manifest.json",
+        "flake reference",
+        ".#my-deployment",
+        "<instance>:<service>@<machine>",
+        "<instance>:vars/<generator>",
+        "docs/operator.md",
+    ):
+        assert stated in helped, helped
+
+    applying = _out("nix", "run", str(FLAKE), "--", "apply", "--help", timeout=PATIENT)
+    assert "built deployment directory" in applying, applying
+    assert "--dry-run" in applying, applying
+    assert "--only KEY" in applying, applying
+    assert "<instance>:<service>@<machine>" in applying, applying
+
+    rolling = _out("nix", "run", str(FLAKE), "--", "rollback", "--help", timeout=PATIENT)
+    assert "exactly one" in rolling, rolling
+    assert "docs/operator.md" in rolling, rolling
+
+
 def _planner(work: Workstation, *argv: str, timeout: float = PATIENT) -> str:
     """Run the operator's command on the workstation and return its stdout.
 

@@ -152,7 +152,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
   file that already holds the other two scenarios of that requirement. Verify
   `nix build .#checks.x86_64-linux.planner-delivery` is green and that letting one dial through
   fails the first test.
-- [ ] 7.4 `tests/e2e/newcomer/test_newcomer.py`: `test_the_help_text_is_read_as_the_only_document`,
+- [x] 7.4 `tests/e2e/newcomer/test_newcomer.py`: `test_the_help_text_is_read_as_the_only_document`,
   the machine layer's test for *The help text is read as the only document*. Verify it fails against
   the help text as it stood before 7.1.
 - [ ] 7.5 `docs/operator.md`: `--dry-run` in the command's synopsis and one paragraph on what it
