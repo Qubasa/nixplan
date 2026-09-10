@@ -209,10 +209,6 @@ let
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "deliver-a-secret-without-exposing-it/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
-    "report-a-secrets-refusal-as-a-row/specs/realiser/secrets-configuration/spec.md" =
-      "an unimplemented change: no task of report-a-secrets-refusal-as-a-row has been done, so nothing in this package claims to satisfy it yet";
-    "report-a-secrets-refusal-as-a-row/specs/tooling/test-layers/spec.md" =
-      "an unimplemented change: no task of report-a-secrets-refusal-as-a-row has been done, so nothing in this package claims to satisfy it yet";
   };
 
   isSpecFile = path: match ".*/spec\\.md" path != null;
