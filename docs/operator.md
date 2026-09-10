@@ -101,9 +101,15 @@ nix build .#planner-e2e-wired-pair-changed  # the second of them
 
 `planner` and `operator` are flake outputs of this repository, and neither is system-specific:
 `lib` is the library, `operator` is the one attribute above, and both take the caller's own `pkgs`.
-A consumer therefore adds one input and wires three arguments, which is the whole flake the
-[README](../README.md) shows: its own `pkgs`, `nixplan.lib` as `planner` and `nixplan.operator` as
-`operator`, handed to a directory that returns deployment builds by name. Then:
+`mkLib` is beside them for a consumer whose own package set should elaborate the platform records
+as well, which [`README.md`](README.md#what-the-library-exports) describes. A consumer therefore
+adds one input and wires three arguments.
+
+The flake that does it is committed rather than described: `tests/e2e/newcomer/template/flake.nix`,
+shown byte for byte by the root [README](../README.md#using-it-from-your-own-flake), which is the
+one document the end-to-end path scan does not read and can therefore hold a file that imports a
+sibling of its own. `tests/unit/layers.nix` compares the two texts, so an output renamed here moves
+that document with it. Then:
 
 ```bash
 nix build .                                          # the link farm above

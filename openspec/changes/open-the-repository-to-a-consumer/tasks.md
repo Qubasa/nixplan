@@ -107,7 +107,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
   `report-every-refusal-as-a-row/specs/planner/plan-artifact/spec.md`. `lib/plan.nix` now writes
   `closure` and `units` over the pruned record rather than through it, so a realiser is never shown
   an entry missing a field it requires.
-- [ ] 5.4 The consumer flake's text and the block `docs/operator.md` shows for a downstream flake
+- [x] 5.4 The consumer flake's text and the block `docs/operator.md` shows for a downstream flake
   are one text, checked the same way as 5.2. Verify a rename of an output breaks the document and
   the test together rather than the test alone.
 

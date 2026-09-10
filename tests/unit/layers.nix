@@ -375,16 +375,30 @@ let
 
   standIns = sorted (concatLists (map standInsIn testFiles));
 
-  # The example a document shows and the deployment a folder holds are one text.
-  # Two files of the deployment are not shown: each imports a sibling by a relative
-  # path, and a path written anywhere in this tree has to resolve from the file that
-  # writes it, which `testAFileNamesAPathThatIsNotThere` holds every document to.
-  exampleDocument = "docs/README.md";
+  # A document and the committed file whose text it shows, byte for byte. A document
+  # under `docs/` cannot show a file that imports a sibling by a relative path: a
+  # path this tree writes has to resolve from the file that writes it, which
+  # `testAFileNamesAPathThatIsNotThere` holds every document under a scanned
+  # directory to. The root document is the one the scan does not read, so it is
+  # where the consumer's flake is shown.
   exampleFolder = "tests/e2e/newcomer/template/deployment";
-  exampleFiles = [
-    "machines.nix"
-    "instances.nix"
-    "modules/hello/greet.nix"
+  shownTexts = [
+    {
+      document = "docs/README.md";
+      file = "tests/e2e/newcomer/template/deployment/machines.nix";
+    }
+    {
+      document = "docs/README.md";
+      file = "tests/e2e/newcomer/template/deployment/instances.nix";
+    }
+    {
+      document = "docs/README.md";
+      file = "tests/e2e/newcomer/template/deployment/modules/hello/greet.nix";
+    }
+    {
+      document = "README.md";
+      file = "tests/e2e/newcomer/template/flake.nix";
+    }
   ];
 
   fencedBlocks =
@@ -411,11 +425,14 @@ let
       (lines text)
     ).blocks;
 
-  shownBlocks = fencedBlocks (readFile (repoRoot + "/${exampleDocument}"));
-
   unshown = sorted (
-    map (rel: "${exampleDocument} shows no block equal to ${exampleFolder}/${rel}") (
-      filter (rel: !(elem (readFile (repoRoot + "/${exampleFolder}/${rel}")) shownBlocks)) exampleFiles
+    map (shown: "${shown.document} shows no block equal to ${shown.file}") (
+      filter (
+        shown:
+        !(elem (readFile (repoRoot + "/${shown.file}")) (
+          fencedBlocks (readFile (repoRoot + "/${shown.document}"))
+        ))
+      ) shownTexts
     )
   );
 in
