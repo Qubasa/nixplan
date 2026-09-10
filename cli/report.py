@@ -1,9 +1,14 @@
 """What the command reports: what a build holds, what a machine holds, and what a
 rollback undid.
 
-A status is what the machine's own endpoint says, and an entry the machine does
-not hold is reported as absent rather than as a failure: asking is not applying,
-and a machine that holds nothing answers the question correctly by saying so.
+A status is what the machine's own endpoint says, and absence is one of its
+answers rather than the report's: an entry the endpoint answers about and does
+not register is absent, a machine whose endpoint cannot be run carries no
+endpoint, a machine that answers nothing is unreachable, and an entry whose
+machine declares no address is one the command will not dial. Printing absence
+for any of the last three would tell an operator the deployment was never
+applied when the truth is that nobody was asked. Each line is printed as it is
+known, because one machine's silence says nothing about another's answer.
 
 A rollback is the endpoint's own. An image entry has no generation to return to,
 so rolling one back is a refusal naming the entry and its realiser rather than a
@@ -14,12 +19,27 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 import remote
 from errors import ApplyError
 from manifest import Deployment, Entry, address_of, image_file, service_name
+
+UNDIALLED = -1
+
+
+@dataclass(frozen=True)
+class Report:
+    """What each entry's machine answered, and the machines that answered nothing."""
+
+    lines: tuple[str, ...]
+    unasked: tuple[str, ...]
+
+
+def _ignore(line: str) -> None:
+    """Drop a line, for a caller that reads the returned report instead."""
 
 
 def describe(deployment: Deployment) -> tuple[str, ...]:
@@ -55,7 +75,8 @@ def status(
     ssh_key: Path | None = None,
     user: str = "root",
     base_env: Mapping[str, str] | None = None,
-) -> tuple[str, ...]:
+    log: Callable[[str], None] = _ignore,
+) -> Report:
     """Return what each machine reports about the entries it was given.
 
     Args:
@@ -65,24 +86,48 @@ def status(
         ssh_key: The private key `--ssh-key` named, if any.
         user: The login user on every machine.
         base_env: The environment to run under, the process's own by default.
+        log: Called with each line as that line is known.
 
     Returns:
-        One line per entry, in plan key order.
+        One line per entry, in plan key order, and the machines the report
+        could not ask.
 
     Raises:
-        ApplyError: If a named key is not an entry of the deployment.
+        ApplyError: If a named key is not an entry of the deployment, or an
+            endpoint answered something that is not its own status.
     """
     environment = os.environ if base_env is None else base_env
     opts = remote.ssh_opts(ssh_key, inherited=environment.get("NIX_SSHOPTS"))
     env = remote.copy_env(environment, opts)
     lines: list[str] = []
+    unasked: set[str] = set()
     for entry in _selected(deployment, only):
-        address = address_of(entry)
-        reported = runner.output(
-            remote.ssh_argv(address, _status_script(entry), opts=opts, user=user), env=env
-        )
-        lines.append(f"{entry.key} {entry.realiser} {_read_status(entry, reported)}")
-    return tuple(lines)
+        answer = _ask(runner, entry, opts=opts, user=user, env=env)
+        line = f"{entry.key} {entry.realiser} {_answered(entry, answer)}"
+        lines.append(line)
+        log(line)
+        if answer.status != 0:
+            unasked.add(entry.machine)
+    return Report(lines=tuple(lines), unasked=tuple(sorted(unasked)))
+
+
+def _ask(
+    runner: remote.Runner, entry: Entry, *, opts: str, user: str, env: dict[str, str]
+) -> remote.Answer:
+    if entry.address is None:
+        return remote.Answer(UNDIALLED, "")
+    argv = remote.ssh_argv(entry.address, _status_script(entry), opts=opts, user=user)
+    return remote.asking(runner, argv, env=env)
+
+
+def _answered(entry: Entry, answer: remote.Answer) -> str:
+    if answer.status == UNDIALLED:
+        return f"not dialled: machine {entry.machine} declares no address"
+    if answer.status == remote.UNREACHABLE:
+        return f"unreachable: {entry.machine} at {entry.address} answered nothing"
+    if answer.status != 0:
+        return f"no endpoint on {entry.machine}: {answer.said}"
+    return _read_status(entry, answer.said)
 
 
 def rollback(

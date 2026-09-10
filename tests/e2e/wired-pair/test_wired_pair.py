@@ -607,16 +607,8 @@ def test_the_command_rolls_one_entry_back(delivered: Run) -> None:
 def test_the_command_reports_what_a_machine_holds(delivered: Run) -> None:
     """`planner status` answers with each machine's own endpoint report.
 
-    The present half is asserted through the command itself: every entry is
-    applied at this point in the ordered phases, and its line has to be what that
-    entry's own machine says about it.
-
-    The absent half cannot be obtained from ``planner status`` here without
-    unapplying an entry the phases after this one still read, so it is obtained
-    from a machine that genuinely registers no such service - the consumer's,
-    asked for the producer's entry - through the command's own script and the
-    command's own reading of what came back. What that proves is the whole claim:
-    the endpoint answers rather than fails, and the command calls it absent.
+    Every entry is applied at this point in the ordered phases, and its line has
+    to be what that entry's own machine says about it.
     """
     entries = [delivered.built.entries[key] for key in KEYS]
     holds = _command(delivered, "status", str(delivered.built.root))
@@ -626,10 +618,22 @@ def test_the_command_reports_what_a_machine_holds(delivered: Run) -> None:
         line = f"{entry.key} {entry.realiser} generation {own['generation']} of {own['locked_url']}"
         assert line in holds, holds
 
+
+def test_an_entry_the_endpoint_does_not_register_is_reported_as_absent(delivered: Run) -> None:
+    """Absence is an endpoint's own answer, so it is read off a machine that answered.
+
+    It cannot be obtained from ``planner status`` here without unapplying an
+    entry the phases after this one still read, so it is obtained from a machine
+    that genuinely registers no such service - the consumer's, asked for the
+    producer's entry - through the command's own script and the command's own
+    reading of what came back. What that proves is the whole claim: the endpoint
+    answers rather than fails, and the command calls it absent.
+    """
     producer = delivered.built.entries[SERVER_KEY]
     elsewhere = delivered.vm(CLIENT_MACHINE).ssh_succeed(
         remote.flakelet_status_script(delivery.service_name(producer.path))
     )
+
     assert json.loads(elsewhere) == [], elsewhere
     assert report._read_status(producer, elsewhere) == "absent"
 

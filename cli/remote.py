@@ -45,6 +45,7 @@ BOUNDS = (
     "-o",
     "ServerAliveCountMax=3",
 )
+UNREACHABLE = 255
 
 
 class Runner(Protocol):
@@ -82,7 +83,47 @@ class Subprocess:
         try:
             return subprocess.run(cmd, env=env, check=True, capture_output=True, text=True)
         except subprocess.CalledProcessError as refused:
-            raise ApplyError(f"{destination(cmd)} {printed(refused)}") from refused
+            raise Refused(destination(cmd), refused.returncode, printed(refused)) from refused
+
+
+class Refused(ApplyError):
+    """A machine refused a step: how it exited, and what it printed."""
+
+    def __init__(self, address: str, status: int, said: str) -> None:
+        told = f": {said}" if said else ""
+        super().__init__(f"{address} refused the step, exiting {status}{told}")
+        self.status = status
+        self.said = said
+
+
+@dataclass(frozen=True)
+class Answer:
+    """What one machine said to one question, and how the question exited."""
+
+    status: int
+    said: str
+
+
+def asking(runner: Runner, argv: list[str], *, env: dict[str, str]) -> Answer:
+    """Ask a machine one question and answer with what came back, however it exited.
+
+    Args:
+        runner: The channel every remote step goes through.
+        argv: The question, as argv.
+        env: The environment it runs under.
+
+    Returns:
+        The exit status and what the machine printed. A question is asked
+        rather than taken as a step, so a machine that refuses it is an answer
+        to read rather than a refusal to raise: the four things that can have
+        happened are told apart by the status.
+    """
+    try:
+        return Answer(0, runner.output(argv, env=env))
+    except Refused as refused:
+        return Answer(refused.status, refused.said)
+    except subprocess.CalledProcessError as refused:
+        return Answer(refused.returncode, printed(refused))
 
 
 @contextlib.contextmanager
@@ -104,17 +145,14 @@ def refusing(subject: str, address: str) -> Iterator[None]:
     try:
         yield
     except subprocess.CalledProcessError as refused:
-        raise ApplyError(f"{subject}: {address} {printed(refused)}") from refused
+        raise Refused(f"{subject}: {address}", refused.returncode, printed(refused)) from refused
     except ApplyError as refused:
         raise ApplyError(f"{subject}: {refused}") from refused
 
 
 def printed(refused: subprocess.CalledProcessError) -> str:
     """Return what a machine said when it refused a step."""
-    said = "\n".join(part.strip() for part in (refused.stderr, refused.stdout) if part)
-    return (
-        f"refused the step: {said}" if said else f"refused the step, exiting {refused.returncode}"
-    )
+    return "\n".join(part.strip() for part in (refused.stderr, refused.stdout) if part)
 
 
 def destination(cmd: Sequence[str]) -> str:

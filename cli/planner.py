@@ -62,15 +62,18 @@ def _apply(args: argparse.Namespace) -> int:
 
 def _status(args: argparse.Namespace) -> int:
     deployment = manifest.read(manifest.resolve(args.target))
-    for line in report.status(
+    answered = report.status(
         deployment,
         remote.Subprocess(),
         only=tuple(args.only),
         ssh_key=Path(args.ssh_key) if args.ssh_key else None,
         user=args.user,
-    ):
-        print(line)
-    return 0
+        log=print,
+    )
+    if not answered.unasked:
+        return 0
+    print(f"planner: {', '.join(answered.unasked)} could not be asked", file=sys.stderr)
+    return 1
 
 
 def _rollback(args: argparse.Namespace) -> int:

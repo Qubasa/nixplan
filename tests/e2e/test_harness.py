@@ -1120,7 +1120,109 @@ def test_an_entry_the_endpoint_recorded_a_failure_for_is_not_reported_as_healthy
 
     reported = report.status(deployment, answering, base_env={})
 
-    assert reported == (
+    assert reported.lines == (
         f"{SERVER_KEY} flakelet generation 2 of path:/nix/store/1x8k?narHash=sha256-4444, "
         f"last error unit site-server-serve.service failed to start",
     )
+    assert reported.unasked == ()
+
+
+class Silent(Recorder):
+    """A recorder whose machines exit ``status`` with ``said`` for the machine in ``at``."""
+
+    def __init__(self, at: str, status: int, said: str) -> None:
+        super().__init__()
+        self.at = at
+        self.status = status
+        self.said = said
+
+    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
+        answered = super().output(cmd, env=env)
+        if self.at in " ".join(cmd):
+            raise subprocess.CalledProcessError(self.status, cmd, output="", stderr=self.said)
+        return answered
+
+
+def _asked(tmp_path: Path, runner: Recorder, **stated: object) -> report.Report:
+    """Ask about a two-machine deployment, with ``stated`` overriding one entry's record."""
+    deployment = _built(
+        tmp_path,
+        plan=PLAN,
+        entries={
+            CLIENT_KEY: {**_stated(CLIENT_KEY, "beta", "10.0.0.11"), **stated},
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+    )
+    return report.status(deployment, runner, base_env={})
+
+
+def test_a_machine_with_no_endpoint_is_not_reported_as_absent(tmp_path: Path) -> None:
+    """An endpoint that cannot be run is a machine to install, not a deployment to apply."""
+    reported = _asked(tmp_path, Silent("10.0.0.11", 127, "flakelet: command not found\n"))
+
+    line = [text for text in reported.lines if text.startswith(CLIENT_KEY)]
+    assert line == [f"{CLIENT_KEY} flakelet no endpoint on beta: flakelet: command not found"]
+    assert reported.unasked == ("beta",)
+
+
+def test_a_machine_that_cannot_be_reached_is_reported_as_unreachable(tmp_path: Path) -> None:
+    """ssh exits 255 for a machine that answered nothing, and nothing is claimed about it."""
+    reported = _asked(tmp_path, Silent("10.0.0.11", 255, "ssh: connect to host: timed out\n"))
+
+    line = [text for text in reported.lines if text.startswith(CLIENT_KEY)]
+    assert line == [f"{CLIENT_KEY} flakelet unreachable: beta at 10.0.0.11 answered nothing"]
+    assert reported.unasked == ("beta",)
+
+
+def test_an_entry_whose_machine_records_no_address_is_not_dialled(tmp_path: Path) -> None:
+    """A machine with no address is not dialled and is not reported unreachable either."""
+    recorder = Recorder()
+
+    reported = _asked(tmp_path, recorder, address=None)
+
+    line = [text for text in reported.lines if text.startswith(CLIENT_KEY)]
+    assert line == [f"{CLIENT_KEY} flakelet not dialled: machine beta declares no address"]
+    assert all("10.0.0.11" not in " ".join(command) for command in recorder.commands)
+
+
+def test_one_unreachable_machine_does_not_hide_the_others(tmp_path: Path) -> None:
+    """A report is printed as it is known, so one dead machine costs one line."""
+    answering = Silent("10.0.0.11", 255, "ssh: connect to host: timed out\n")
+    printed: list[str] = []
+    deployment = _built(
+        tmp_path,
+        plan=PLAN,
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+    )
+
+    reported = report.status(deployment, answering, base_env={}, log=printed.append)
+
+    assert printed == list(reported.lines)
+    assert reported.lines[0].startswith(f"{CLIENT_KEY} flakelet unreachable")
+    assert reported.lines[1] == f"{SERVER_KEY} flakelet absent"
+
+
+def test_a_report_that_could_not_ask_every_machine_exits_non_zero(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every machine answering is a zero exit whatever it answered, silence is not."""
+    root = tmp_path / "built"
+    _built(
+        root,
+        plan=PLAN,
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+    )
+
+    monkeypatch.setattr(remote, "Subprocess", lambda: Recorder())
+    assert planner.main(["status", str(root)]) == 0
+
+    silent = Silent("10.0.0.11", 255, "ssh: connect to host: timed out\n")
+    monkeypatch.setattr(remote, "Subprocess", lambda: silent)
+    assert planner.main(["status", str(root)]) == 1
