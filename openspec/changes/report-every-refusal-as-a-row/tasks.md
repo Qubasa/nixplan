@@ -151,7 +151,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   building a deployment with one error row through a real `nix build` and reading the rows out of
   the result. End-to-end layer, because the claim is about what a derivation produces. Verify the
   test fails against a tree where `operator/default.nix` raises.
-- [ ] 6.6 `tests/e2e/wired-pair/test_wired_pair.py`: add
+- [x] 6.6 `tests/e2e/wired-pair/test_wired_pair.py`: add
   `test_the_endpoint_reports_the_identity_the_build_published`. End-to-end layer, because the claim
   is about what a machine holds. Verify it fails when the record publishes the plan entry digest
   again.

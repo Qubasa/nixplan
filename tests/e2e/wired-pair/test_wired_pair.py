@@ -690,3 +690,22 @@ def test_a_reconcile_leaves_a_hand_activated_entry_alone(delivered: Run) -> None
         vm.ssh_succeed("systemctl restart flakelet-reconcile.service", timeout=120)
         assert _reported(vm, service)["generation"] >= 1
         assert vm.ssh_succeed(f"systemctl is-active {unit}").strip() == "active"
+
+
+def test_the_endpoint_reports_the_identity_the_build_published(delivered: Run) -> None:
+    """A machine's record for an entry carries the identity the build published.
+
+    The point of publishing the artifact's own digest rather than the plan entry
+    key is that the two sides can be compared, so this reads both: the record the
+    build wrote, and what the endpoint says it holds. The phases above applied,
+    re-applied and rolled back, so what each machine holds here is the first
+    build's artifact again, and the identity has to be the one that build
+    published for it.
+    """
+    published = json.loads((delivered.built.root / "manifest.json").read_text())["entries"]
+
+    for key in (SERVER_KEY, CLIENT_KEY):
+        entry = delivered.built.entries[key]
+        record = _reported(delivered.vm(entry.machine), delivery.service_name(entry.path))
+        assert record["settings_hash"] == published[key]["key"], (record, published[key])
+        assert published[key]["key"] != delivered.plan[key]["key"], published[key]
