@@ -88,8 +88,11 @@ not become a plan fact (design.md D2 of this change).
 - **`settings_hash`** is the entry's version digest from `image/read.nix:264-280`, which digests
   what the artifact is made of: name, units, closure, store directory, service manager, host paths
   and platform. It is carried into the generation the endpoint records
-  (`manager.rs:1030-1036`, `generations.rs:14-18`), so what a machine reports about a running
-  artifact is a plan fact.
+  (`manager.rs:1030-1036`, `generations.rs:14-18`), so what the endpoint stores for a running
+  artifact is a plan fact. It is stored and not reported: `flakelet status --json` prints
+  `ServiceStatus` (`manager.rs:86-108`), which carries the generation, the `locked_url` and the
+  unit files of that generation and no digest, which is why `planner status` compares a flakelet
+  entry by those unit files and says so on the line.
 - Deliberately **not the entry's key**: a key moves when a configuration file's content hash
   moves, and that content never enters the artifact, so keying on it would restart a service whose
   bytes are unchanged (`image/read.nix:109-120`).

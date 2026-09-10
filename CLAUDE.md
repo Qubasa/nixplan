@@ -383,6 +383,20 @@ Recorded so the question is answered once.
   each, printed as they are known; a report that could not ask a machine exits non-zero. Only
   `detached` is a detached image: `portablectl is-attached` prints four words for one a machine
   holds.
+- A report also says whether a machine holds what the build published, and the two realisers answer
+  that with two different facts. An image names its identity: the record's `key` is the artifact's
+  version digest, an image's file name carries it and `portablectl list` prints it, so that half is
+  identity equality and the line says `current` or `holds <x>, built <y>`. A flakelet endpoint
+  stores the digest in the generation it keeps and reports it nowhere: `flakelet status --json`
+  prints `ServiceStatus`, whose only artifact-shaped field is the unit files of the active
+  generation, and that half therefore compares those paths against the artifact's own and says
+  `runs this build's units`, never `current`. The record's `key` is read by the command and a record
+  publishing none for a placed entry is refused; do not delete it as unused.
+  `delivery.endpoint_refusal` records what the locked endpoint answers and fails the moment that
+  field set moves, and skips where the source cannot be resolved, because an unreadable signal is
+  not evidence the answer moved.
+- Staleness is a line and never an exit status. A report whose machines all answered exits zero
+  however stale they are: a stale entry is an answer, and changing it is `apply`'s work.
 - The value source is measured under the directories of the value entries the deployment delivers.
   A file under none of them is a claim about no value, and every undeclared file inside one is
   named rather than the first of them.

@@ -528,6 +528,28 @@ def test_cutting_the_wires_far_end_is_visible(delivered: Run) -> None:
     client.wait_until_succeeds(f"systemctl restart {CLIENT_UNIT}", timeout=120)
 
 
+def test_a_report_against_a_build_the_machine_does_not_hold_says_so(delivered: Run) -> None:
+    """The machines hold the first build here, and the second build's report says so.
+
+    The phases after this one deliver the changed entry, so at this point the
+    two builds differ in exactly the way an interrupted apply leaves a fleet:
+    the entry is applied, from another build. The report has to tell that apart
+    from an entry the machine holds and from one it does not hold at all.
+    """
+    entry = delivered.built.entries[SERVER_KEY]
+    changed = delivered.changed.entries[SERVER_KEY]
+    service = delivery.service_name(manifest.artifact_of(entry))
+    own = _reported(delivered.vm(entry.machine), service)
+
+    against = _command(delivered, "status", str(delivered.changed.root), "--only", SERVER_KEY)
+
+    assert _built_units(changed) != _built_units(entry), changed.path
+    assert against == (
+        f"{SERVER_KEY} {entry.realiser} generation {own['generation']} of "
+        f"{own['locked_url']} runs units this build did not produce",
+    ), against
+
+
 def test_an_unchanged_entry_is_a_no_op(delivered: Run) -> None:
     server = delivered.vm(SERVER_MACHINE)
     service = delivery.service_name(delivered.artifact(SERVER_KEY))
@@ -608,11 +630,18 @@ def test_the_command_rolls_one_entry_back(delivered: Run) -> None:
     assert body == delivered.page_text(delivered.artifact(SERVER_KEY)), body
 
 
+def _built_units(entry: manifest.Entry) -> dict[str, str]:
+    """The unit files the build produced for one entry, as its machine reports them."""
+    artifact = manifest.artifact_of(entry)
+    return {unit: str((artifact / "units" / unit).resolve()) for unit in entry.units}
+
+
 def test_the_command_reports_what_a_machine_holds(delivered: Run) -> None:
     """`planner status` answers with each machine's own endpoint report.
 
     Every entry is applied at this point in the ordered phases, and its line has
-    to be what that entry's own machine says about it.
+    to be what that entry's own machine says about it, with the verdict of
+    comparing that answer with the build the report was run against.
     """
     entries = [delivered.built.entries[key] for key in KEYS]
     holds = _command(delivered, "status", str(delivered.built.root))
@@ -621,8 +650,12 @@ def test_the_command_reports_what_a_machine_holds(delivered: Run) -> None:
         own = _reported(
             delivered.vm(entry.machine), delivery.service_name(manifest.artifact_of(entry))
         )
-        line = f"{entry.key} {entry.realiser} generation {own['generation']} of {own['locked_url']}"
+        line = (
+            f"{entry.key} {entry.realiser} generation {own['generation']} of "
+            f"{own['locked_url']} runs this build's units"
+        )
         assert line in holds, holds
+        assert own["units"] == _built_units(entry), own
 
 
 def test_an_entry_the_endpoint_does_not_register_is_reported_as_absent(delivered: Run) -> None:
@@ -648,11 +681,13 @@ def test_an_entry_the_endpoint_does_not_register_is_reported_as_absent(delivered
 
 
 def test_the_identity_a_machine_holds_is_in_its_report_line(delivered: Run) -> None:
-    """The line is the endpoint's own record: the generation and the identity it stores.
+    """The line is the endpoint's own record, and the verdict is over that record.
 
     Read back off the machine and compared with what the command printed, so
     what is asserted is that the report answers with the endpoint's answer
-    rather than with anything the deployment record states.
+    rather than with anything the deployment record states. The endpoint names
+    no identity for the artifact it activated, so the verdict is over the unit
+    files it does name, and the line says which comparison that was.
     """
     entry = delivered.built.entries[SERVER_KEY]
     own = _reported(delivered.vm(entry.machine), delivery.service_name(manifest.artifact_of(entry)))
@@ -660,7 +695,8 @@ def test_the_identity_a_machine_holds_is_in_its_report_line(delivered: Run) -> N
     reported = _command(delivered, "status", str(delivered.built.root), "--only", entry.key)
 
     assert reported == (
-        f"{entry.key} {entry.realiser} generation {own['generation']} of {own['locked_url']}",
+        f"{entry.key} {entry.realiser} generation {own['generation']} of "
+        f"{own['locked_url']} runs this build's units",
     ), reported
     assert own["last_error"] is None, own
 
@@ -730,10 +766,13 @@ def test_the_endpoint_reports_the_identity_the_build_published(delivered: Run) -
     key is that the two sides can be compared, so this reads both. The endpoint
     names the plan key it registered the entry under, and the artifact it holds
     at that path carries the digest, which the endpoint's own status does not
-    report. The phases above applied, re-applied and rolled back, so what each
-    machine holds here is the first build's artifact again.
+    report - which is why the command's own verdict, asserted last, is over the
+    unit files that status does carry rather than over this digest. The phases
+    above applied, re-applied and rolled back, so what each machine holds here
+    is the first build's artifact again.
     """
     published = json.loads((delivered.built.root / "manifest.json").read_text())["entries"]
+    holds = _command(delivered, "status", str(delivered.built.root))
 
     for key in (SERVER_KEY, CLIENT_KEY):
         entry = delivered.built.entries[key]
@@ -743,6 +782,12 @@ def test_the_endpoint_reports_the_identity_the_build_published(delivered: Run) -
         held = json.loads(vm.ssh_succeed(f"cat {manifest.artifact_of(entry)}/meta.json"))
         assert held["settings_hash"] == published[key]["key"], (held, published[key])
         assert published[key]["key"] != delivered.plan[key]["key"], published[key]
+        assert "settings_hash" not in record, record
+        line = [text for text in holds if text.startswith(f"{key} ")]
+        assert line == [
+            f"{key} {entry.realiser} generation {record['generation']} of "
+            f"{record['locked_url']} runs this build's units"
+        ], holds
 
 
 def _apply_however_it_ends(run: Run, *argv: str) -> tuple[int, list[str]]:

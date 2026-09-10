@@ -76,6 +76,10 @@ class Recorder:
         return ""
 
 
+PUBLISHED = "sha256-3333333333333333"
+ANOTHER_BUILD = "sha256-9999999999999999"
+
+
 def _stated(key: str, machine: str, address: str) -> dict[str, Any]:
     """State one placed entry the way a manifest states it."""
     instance, service = key.split("@")[0].split(":")
@@ -86,7 +90,7 @@ def _stated(key: str, machine: str, address: str) -> dict[str, Any]:
         "machine": machine,
         "address": address,
         "units": [f"{instance}-{service}-serve.service"],
-        "key": "sha256-3333333333333333",
+        "key": PUBLISHED,
     }
 
 
@@ -141,6 +145,15 @@ def _built(
         artifact.mkdir(parents=True)
         instance, service = key.split("@")[0].split(":")
         (artifact / "meta.json").write_text(json.dumps({"name": f"{instance}-{service}"}))
+        # Each unit file is a link of its own, because that is what a machine's
+        # endpoint reports for the generation it runs: the path of the file, not
+        # the path of the artifact holding it.
+        for unit in stated.get("units", []):
+            (root / "units").mkdir(parents=True, exist_ok=True)
+            file = root / "units" / unit
+            file.write_text(f"[Unit]\nDescription={unit}\n")
+            (artifact / "units").mkdir(parents=True, exist_ok=True)
+            (artifact / "units" / unit).symlink_to(file)
         link = root / stated["path"]
         link.parent.mkdir(parents=True, exist_ok=True)
         link.symlink_to(artifact)
@@ -1417,17 +1430,6 @@ def test_a_command_needs_the_artifact_an_entry_does_not_have(tmp_path: Path) -> 
     assert recorder.commands == []
 
 
-HELD = json.dumps(
-    [
-        {
-            "generation": 2,
-            "locked_url": "path:/nix/store/1x8k?narHash=sha256-4444",
-            "last_error": "unit site-server-serve.service failed to start",
-        }
-    ]
-)
-
-
 def test_an_entry_the_endpoint_recorded_a_failure_for_is_not_reported_as_healthy(
     tmp_path: Path,
 ) -> None:
@@ -1437,13 +1439,17 @@ def test_an_entry_the_endpoint_recorded_a_failure_for_is_not_reported_as_healthy
         plan=PLAN,
         entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
     )
-    answering = Answering("flakelet status", HELD)
+    entry = deployment.entries[SERVER_KEY]
+    failed = "unit site-server-serve.service failed to start"
+    answering = Answering(
+        "flakelet status", _endpoint(entry, _ran(entry), generation=2, last_error=failed)
+    )
 
     reported = report.status(deployment, answering, base_env={})
 
     assert reported.lines == (
-        f"{SERVER_KEY} flakelet generation 2 of path:/nix/store/1x8k?narHash=sha256-4444, "
-        f"last error unit site-server-serve.service failed to start",
+        f"{SERVER_KEY} flakelet generation 2 of plan:{SERVER_KEY} runs this build's units, "
+        f"last error {failed}",
     )
     assert reported.unasked == ()
 
@@ -1547,6 +1553,250 @@ def test_a_report_that_could_not_ask_every_machine_exits_non_zero(
     silent = Silent("10.0.0.11", 255, "ssh: connect to host: timed out\n")
     monkeypatch.setattr(remote, "Subprocess", lambda: silent)
     assert planner.main(["status", str(root)]) == 1
+
+
+IMAGE_NAME = "site-server-alpha"
+
+
+def _ran(entry: manifest.Entry) -> dict[str, str]:
+    """The unit files the harness wrote for one entry, as its machine reports them."""
+    artifact = manifest.artifact_of(entry)
+    return {unit: str((artifact / "units" / unit).readlink()) for unit in entry.units}
+
+
+def _endpoint(entry: manifest.Entry, units: dict[str, str], **fields: object) -> str:
+    """One entry's record, as `flakelet status --json` prints it."""
+    return json.dumps(
+        [
+            {
+                "name": entry.key,
+                "generation": 1,
+                "locked_url": f"plan:{entry.key}",
+                "units": units,
+                "last_error": None,
+                **fields,
+            }
+        ]
+    )
+
+
+def _holding(image: str, *, asked: str, state: str) -> str:
+    """What a machine answers about one image: its state, then what it holds."""
+    listed = f"{image} directory no Thu 2026-09-10 Thu 2026-09-10 74.2M {state}"
+    return f"{asked}\n{remote.LISTING}\n{listed}\n"
+
+
+def _image(root: Path, digest: str) -> manifest.Deployment:
+    """A deployment placing one image entry, published under ``digest``."""
+    deployment = _built(
+        root,
+        plan=PLAN,
+        entries={
+            SERVER_KEY: {
+                **_stated(SERVER_KEY, "alpha", "10.0.0.10"),
+                "realiser": "image",
+                "key": digest,
+            }
+        },
+    )
+    artifact = manifest.artifact_of(deployment.entries[SERVER_KEY])
+    (artifact / "attachment.json").write_text(json.dumps({"image": f"{IMAGE_NAME}_{digest}.raw"}))
+    return deployment
+
+
+def test_an_endpoint_that_reports_no_identity_is_compared_by_what_it_does_report(
+    tmp_path: Path,
+) -> None:
+    """The endpoint names no identity, so the line answers over the files it does name."""
+    deployment = _built(
+        tmp_path,
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+    )
+    entry = deployment.entries[SERVER_KEY]
+    ran = _ran(entry)
+    older = {unit: f"{path}-of-an-older-build" for unit, path in ran.items()}
+
+    holds = report.status(deployment, Answering("flakelet status", _endpoint(entry, ran)))
+    moved = report.status(deployment, Answering("flakelet status", _endpoint(entry, older)))
+
+    said = f"{SERVER_KEY} flakelet generation 1 of plan:{SERVER_KEY}"
+    assert holds.lines == (f"{said} runs this build's units",)
+    assert moved.lines == (f"{said} runs units this build did not produce",)
+    assert (holds.unasked, moved.unasked) == ((), ())
+
+
+def test_an_endpoint_that_reports_nothing_to_compare_is_not_reported_as_current(
+    tmp_path: Path,
+) -> None:
+    """An answer carrying no unit file is compared with nothing, and says so."""
+    deployment = _built(
+        tmp_path,
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+    )
+    entry = deployment.entries[SERVER_KEY]
+
+    reported = report.status(deployment, Answering("flakelet status", _endpoint(entry, {})))
+
+    assert reported.lines == (
+        f"{SERVER_KEY} flakelet generation 1 of plan:{SERVER_KEY} reports nothing to compare",
+    )
+    assert "current" not in reported.lines[0]
+
+
+def test_a_machine_holding_this_build_is_reported_as_current(tmp_path: Path) -> None:
+    """The identity the machine holds is the identity the record published."""
+    deployment = _image(tmp_path, PUBLISHED)
+    answering = Answering(
+        "portablectl", _holding(f"{IMAGE_NAME}_{PUBLISHED}", asked="running", state="running")
+    )
+
+    reported = report.status(deployment, answering)
+
+    assert reported.lines == (f"{SERVER_KEY} image running current",)
+    assert reported.unasked == ()
+
+
+def test_an_attached_image_of_this_build_is_reported_as_current(tmp_path: Path) -> None:
+    """The verdict is beside the word the machine's own tool printed, not instead of it."""
+    deployment = _image(tmp_path, PUBLISHED)
+    answering = Answering(
+        "portablectl",
+        _holding(f"{IMAGE_NAME}_{PUBLISHED}", asked="attached-runtime", state="attached-runtime"),
+    )
+
+    reported = report.status(deployment, answering)
+
+    assert reported.lines == (f"{SERVER_KEY} image attached-runtime current",)
+
+
+def test_a_machine_holding_an_older_build_is_reported_with_both_identities(
+    tmp_path: Path,
+) -> None:
+    """Both identities are on the line, and neither reads as an entry nobody holds."""
+    deployment = _image(tmp_path, PUBLISHED)
+    answering = Answering(
+        "portablectl",
+        _holding(f"{IMAGE_NAME}_{ANOTHER_BUILD}", asked="detached", state="running"),
+    )
+
+    reported = report.status(deployment, answering)
+
+    assert reported.lines == (
+        f"{SERVER_KEY} image running holds {ANOTHER_BUILD}, built {PUBLISHED}",
+    )
+    assert "absent" not in reported.lines[0]
+
+
+def test_an_attached_image_from_an_earlier_build_is_not_reported_as_current(
+    tmp_path: Path,
+) -> None:
+    """An earlier build's image is attached, which is two facts and not one."""
+    deployment = _image(tmp_path, PUBLISHED)
+    answering = Answering(
+        "portablectl",
+        _holding(f"{IMAGE_NAME}_{ANOTHER_BUILD}", asked="detached", state="attached"),
+    )
+
+    reported = report.status(deployment, answering)
+
+    assert reported.lines == (
+        f"{SERVER_KEY} image attached holds {ANOTHER_BUILD}, built {PUBLISHED}",
+    )
+    assert "current" not in reported.lines[0]
+
+
+def test_a_listing_the_command_cannot_read_is_reported_as_the_machines_own_answer(
+    tmp_path: Path,
+) -> None:
+    """A listing naming no image of this entry leaves the line what the machine said."""
+    deployment = _image(tmp_path, PUBLISHED)
+    answering = Answering("portablectl", "running\n")
+
+    reported = report.status(deployment, answering)
+
+    assert reported.lines == (f"{SERVER_KEY} image running",)
+
+
+class Fleet(Recorder):
+    """A recorder answering each machine with the endpoint record ``said`` names."""
+
+    def __init__(self, said: dict[str, str]) -> None:
+        super().__init__()
+        self.said = said
+
+    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
+        answered = super().output(cmd, env=env)
+        for address, said in self.said.items():
+            if address in " ".join(cmd):
+                return said
+        return answered
+
+
+def test_a_fleet_part_way_through_an_apply_reports_both_answers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """One machine applied from this build, one not, and the run still exits zero."""
+    root = tmp_path / "built"
+    deployment = _built(
+        root,
+        plan=PLAN,
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+    )
+    applied = deployment.entries[SERVER_KEY]
+    behind = deployment.entries[CLIENT_KEY]
+    stale = {unit: f"{path}-of-an-older-build" for unit, path in _ran(behind).items()}
+    fleet = Fleet(
+        {
+            "10.0.0.10": _endpoint(applied, _ran(applied)),
+            "10.0.0.11": _endpoint(behind, stale),
+        }
+    )
+    monkeypatch.setattr(remote, "Subprocess", lambda: fleet)
+
+    assert planner.main(["status", str(root)]) == 0
+
+    printed = capsys.readouterr().out.splitlines()
+    assert printed == [
+        f"{CLIENT_KEY} flakelet generation 1 of plan:{CLIENT_KEY} "
+        f"runs units this build did not produce",
+        f"{SERVER_KEY} flakelet generation 1 of plan:{SERVER_KEY} runs this build's units",
+    ]
+
+
+def test_a_record_publishing_no_identity_is_refused(tmp_path: Path) -> None:
+    """A record with no published identity is one the command cannot read."""
+    root = tmp_path / "built"
+    stated = _stated(SERVER_KEY, "alpha", "10.0.0.10")
+    del stated["key"]
+
+    with pytest.raises(errors.ApplyError) as raised:
+        _built(root, plan=PLAN, entries={SERVER_KEY: stated})
+
+    message = str(raised.value)
+    assert SERVER_KEY in message
+    assert "key" in message
+
+
+def test_the_pinned_endpoints_answer_still_carries_no_identity() -> None:
+    """The weaker comparison is a fact about one revision of somebody else's tool.
+
+    It is compared rather than trusted, and an unresolvable source is not
+    evidence that it moved: a build sandbox reaches no network, so this skips
+    there and answers in a shell.
+    """
+    source = delivery.endpoint_source()
+    if source is None:
+        pytest.skip("the locked flakelet source is not resolvable here")
+
+    assert delivery.endpoint_refusal(source) is None, delivery.endpoint_refusal(source)
+    assert "settings_hash" not in delivery.ENDPOINT_REPORTS
 
 
 def _row(severity: str) -> dict[str, str]:

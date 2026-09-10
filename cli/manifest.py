@@ -68,6 +68,10 @@ class Entry:
     An entry that declares no unit is realised into nothing, which the planner
     accepts, so the build publishes its record with no path at all. The absence
     is the record, not a null the reading has to refuse.
+
+    ``digest`` is the identity the build published for the artifact, which is
+    the identity a machine's own endpoint stores for it, so a report compares
+    the two rather than recomputing either.
     """
 
     key: str
@@ -77,6 +81,7 @@ class Entry:
     machine: str
     address: str | None
     units: tuple[str, ...]
+    digest: str
 
 
 @dataclass(frozen=True)
@@ -307,6 +312,27 @@ def service_name(entry: Entry) -> str:
     return name
 
 
+def unit_files(entry: Entry) -> dict[str, str]:
+    """Return the store path of each unit file one flakelet artifact carries.
+
+    The artifact is a farm of links, so a unit file is a store path of its own
+    and it is the path the endpoint records for the generation it runs. That is
+    what makes the two comparable: the machine reports the paths it activated
+    and this reports the paths the build produced.
+
+    Args:
+        entry: A placed entry realised as a flakelet artifact.
+
+    Returns:
+        Each unit file the entry declares, by name, resolved to its own path.
+
+    Raises:
+        ApplyError: If the entry has no artifact.
+    """
+    artifact = artifact_of(entry)
+    return {unit: str((artifact / "units" / unit).resolve()) for unit in entry.units}
+
+
 def image_file(entry: Entry) -> str:
     """Return the image an image artifact carries, as `attachment.json` names it.
 
@@ -362,6 +388,7 @@ def _entry(root: Path, key: str, record: Mapping[str, Any]) -> Entry:
         machine=_text(record, "machine", of=key),
         address=address or None,
         units=_texts(record, "units", of=key),
+        digest=_text(record, "key", of=key),
     )
 
 

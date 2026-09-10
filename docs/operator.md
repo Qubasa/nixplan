@@ -194,7 +194,7 @@ Per placed entry:
 | `machine` | the machine the plan placed the entry on |
 | `address` | the address that machine's registry record declares, and `null` where it declares none. An address is read by the step that dials a machine and by no step that builds one, so the absence is recorded rather than the field omitted, and the build produces every artifact |
 | `units` | the unit file names the entry declares, sorted, with the timer of a scheduled unit beside its service |
-| `key` | the artifact's own identity digest, which is what the machine's endpoint stores for it as `settings_hash`. A report can therefore compare what a machine holds against what a build holds. The plan entry key stays in `plan.json`, which travels beside this file: it moves when any fact of the entry moves, including the machine's address, and no byte of the artifact need have changed |
+| `key` | the artifact's own identity digest, which is what the machine's endpoint stores for it as `settings_hash` and what an image's file name carries. The command reads it and compares it against what the machine answers, so a record publishing none for a placed entry is refused. The plan entry key stays in `plan.json`, which travels beside this file: it moves when any fact of the entry moves, including the machine's address, and no byte of the artifact need have changed |
 
 Per value entry:
 
@@ -385,9 +385,9 @@ reports and nothing else. What a machine currently holds is not a question a dry
 answer:
 
 ```
-issuer:api@alpha flakelet generation 1 of path:/nix/store/6y1...-source?narHash=sha256-Xy0...
-probe:client@beta flakelet generation 1 of path:/nix/store/6y1...-source?narHash=sha256-Zq4...
-watch:file@alpha image running
+issuer:api@alpha flakelet generation 1 of plan:issuer:api@alpha runs this build's units
+probe:client@beta flakelet generation 1 of plan:probe:client@beta runs units this build did not produce
+watch:file@alpha image running current
 ```
 
 Four answers are kept apart, because each one needs something different done about it:
@@ -405,9 +405,32 @@ entries were never applied. An entry whose machine declares no address is report
 command will not dial, naming the machine, rather than dialled and reported unreachable. An entry
 whose last activation the endpoint recorded as failed carries that error on its line.
 
+An answered line then says whether the machine holds what this build published. Two machines answer
+that question with two different facts, so there are two vocabularies and neither borrows the
+other's word:
+
+| The clause | What it compared |
+| --- | --- |
+| `current` | the identity the machine names is the `key` the record published for that entry |
+| `holds <identity>, built <identity>` | it names another one: the machine is on an older build, and both are printed |
+| `runs this build's units` | the endpoint names no identity, and the unit files it runs are the artifact's |
+| `runs units this build did not produce` | the same comparison, disagreeing |
+| `reports nothing to compare` | the endpoint named neither, so nothing was compared |
+
+An image names what it holds, because the image's file name carries the digest and
+`portablectl list` prints it. A flakelet endpoint stores that digest in the generation it keeps and
+reports the unit files instead, which are files of the artifact the build produced, so the
+comparison is the narrower one and the words say so. It does not see an edit that moves the
+closure, a host path, the service manager or the platform without moving a byte of any unit text -
+in that case the machine really does run this build's units, and `current` would be the false
+sentence rather than the missing one.
+
 Each line is printed as it is known rather than after the last machine, so one machine's silence
 costs one line and hides nobody else's answer. The command exits non-zero when any machine could
-not be asked, and zero when every machine answered, whatever the answers were.
+not be asked, and zero when every machine answered, whatever the answers were - a stale fleet is a
+fleet that answered, and what to do about it is `apply`'s work. An apply that stopped half way is
+therefore readable: the entries the run reached say they run this build and the ones it did not
+reach say they do not.
 
 **`rollback`** takes exactly one `--only`, prints `rollback <key> on <user>@<address>` and then the
 endpoint's own report. An image entry carries no generation to return to, so rolling one back is
@@ -492,6 +515,11 @@ What the cluster then holds is a partial application. The machines the walk had 
 the new artifact and run it, and every machine after the break holds what the previous run left. No
 single machine is half applied, because each step is one ssh invocation that either completed on
 that machine or did not.
+
+Which side of that boundary a machine is on is what `status` now answers. Each line says whether
+the machine holds what this build published, so the entries the run reached and the entries it did
+not are told apart by reading the report rather than by remembering how far it got. The exit status
+is unchanged: a fleet part way through an apply is a fleet that answered.
 
 The recovery is another `apply` of the same build and the same `--values` directory, not an undo and
 not a resume of a recorded prefix. Undoing needs a generation that moves a whole run as one, and no

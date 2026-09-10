@@ -20,16 +20,49 @@ from __future__ import annotations
 import functools
 import json
 import os
+import re
 import shutil
+import subprocess
 import tempfile
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
+import runner
+
 MACHINE_PREFIX = "machine:"
 # The prefix flakelet reports a planned entry's identity under. Must stay equal to
 # the one written in flakelet/read.nix.
 LOCKED_URL_PREFIX = "plan:"
+
+STATUS_FILE = "flakelet-core/src/manager.rs"
+STATUS_STRUCT = "ServiceStatus"
+STATUS_FIELD = re.compile(r"^\s*pub (\w+):", re.MULTILINE)
+DECISION = "openspec/changes/answer-whether-a-machine-is-current/design.md"
+# What `flakelet status --json` answers with at the locked revision. No field of
+# it is the identity the endpoint stores for the artifact, which is why the
+# report compares a flakelet entry by the unit files instead.
+ENDPOINT_REPORTS = (
+    "name",
+    "flake",
+    "origin",
+    "generation",
+    "units",
+    "locked_url",
+    "pin",
+    "override_flake",
+    "degraded",
+    "held",
+    "disabled",
+    "last_error",
+    "updating",
+    "failed_units",
+    "unit_states",
+    "missing_providers",
+    "state",
+    "export_blockers",
+    "changed",
+)
 
 
 class DeliveryError(RuntimeError):
@@ -122,6 +155,113 @@ def address_of(plan: dict[str, Any], key: str) -> str:
 def locked_url(key: str) -> str:
     """Return the identity the endpoint reports for a planned entry's artifact."""
     return f"{LOCKED_URL_PREFIX}{key}"
+
+
+def pinned_endpoint() -> str | None:
+    """Return the flakelet reference this repository's lock pins, or ``None``.
+
+    Read from the lock rather than written out, so that bumping the input is
+    what re-runs the comparison below: a recorded revision beside the lock's own
+    would keep answering for the revision nobody runs any more.
+    """
+    lock = Path(__file__).resolve().parents[2] / "flake.lock"
+    try:
+        locked = json.loads(lock.read_text())["nodes"]["flakelet"]["locked"]
+    except (OSError, KeyError, json.JSONDecodeError):
+        return None
+    owner, repo, rev = locked.get("owner"), locked.get("repo"), locked.get("rev")
+    if not (owner and repo and rev):
+        return None
+    return f"github:{owner}/{repo}/{rev}"
+
+
+def endpoint_source(reference: str | None = None) -> Path | None:
+    """Return the source of the pinned endpoint, or ``None`` where it is unresolvable.
+
+    Args:
+        reference: The flake reference to fetch. Defaults to the locked one.
+
+    Returns:
+        The store path the reference resolves to. A build sandbox reaches no
+        network and a checkout may hold no lock, and neither is evidence about
+        what the endpoint reports, so both answer ``None`` and the caller skips.
+    """
+    resolved = reference or pinned_endpoint()
+    if resolved is None:
+        return None
+    argv = ["nix", "flake", "prefetch", "--json", resolved]
+    try:
+        fetched = subprocess.run(argv, capture_output=True, text=True, check=False)
+    except OSError:
+        return None
+    if fetched.returncode != 0:
+        return None
+    try:
+        return Path(json.loads(fetched.stdout)["storePath"])
+    except (KeyError, ValueError):
+        return None
+
+
+def endpoint_reports(source: Path) -> tuple[str, ...] | None:
+    """Return the fields the endpoint's status answer carries, or ``None``.
+
+    Args:
+        source: The endpoint's own source.
+
+    Returns:
+        The field names of the struct `flakelet status --json` serialises, in
+        the order the source declares them, or ``None`` where that struct is
+        not there to read: a source this cannot parse says nothing about what
+        the tool answers.
+    """
+    try:
+        text = (source / STATUS_FILE).read_text()
+    except OSError:
+        return None
+    body = text.partition(f"pub struct {STATUS_STRUCT} {{")[2].partition("\n}")[0]
+    return tuple(found.group(1) for found in STATUS_FIELD.finditer(body)) or None
+
+
+def endpoint_refusal(source: Path | None) -> str | None:
+    """Return the banner naming a moved status answer, or ``None``.
+
+    The report compares a flakelet entry by the unit files the endpoint reports
+    because that answer carries no identity of the artifact. That is a fact
+    about one revision of somebody else's tool, so it is compared rather than
+    trusted, and an answer that gained the identity makes the weaker comparison
+    obsolete rather than wrong.
+
+    Args:
+        source: The endpoint's source, or ``None`` where it was unresolvable.
+
+    Returns:
+        The refusal to print and fail on, or ``None``. An unreadable signal is
+        not evidence the answer moved, so both an unresolved source and an
+        unparseable one answer ``None``.
+    """
+    if source is None:
+        return None
+    found = endpoint_reports(source)
+    if found is None or found == ENDPOINT_REPORTS:
+        return None
+    gained = sorted(set(found) - set(ENDPOINT_REPORTS))
+    lost = sorted(set(ENDPOINT_REPORTS) - set(found))
+    return runner.banner(
+        "THE FLAKELET STATUS ANSWER HAS MOVED",
+        [
+            f"gained: {', '.join(gained) or 'nothing'}",
+            f"lost: {', '.join(lost) or 'nothing'}",
+            f"resolved: {pinned_endpoint()}",
+            "",
+            f"{STATUS_STRUCT} in {STATUS_FILE} is what `flakelet status --json` prints.",
+            "The report compares a flakelet entry by the unit files that answer",
+            "carries, because it carries no identity of the artifact:",
+            f"{DECISION}.",
+            "",
+            "If the answer now names the identity, compare that instead and rewrite",
+            "that decision, cli/report.py's `_running` and this recorded field set.",
+        ],
+    )
 
 
 def service_name(artifact: str | Path) -> str:

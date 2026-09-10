@@ -47,6 +47,7 @@ BOUNDS = (
 )
 UNREACHABLE = 255
 MISSING = (126, 127)
+LISTING = "images"
 
 
 class Runner(Protocol):
@@ -321,8 +322,53 @@ def flakelet_status_script(name: str) -> str:
 
 
 def image_status_script(image: Path) -> str:
-    """Return what the machine's own tool says about holding one image attached."""
-    return f"portablectl is-attached {shlex.quote(str(image))}"
+    """Return what the machine's own tool says about one image and what it holds.
+
+    Two facts, one question: the state of the image the caller names, and the
+    images the machine holds, whose names carry the identity of the build each
+    came from. A machine that was never given this image answers nothing about
+    it, which is why that half may fail and the exit status is the listing's:
+    a machine carrying no tool exits `MISSING` and a machine whose service
+    manager answers nothing exits non-zero, and both are answers about the
+    machine rather than about the entry.
+    """
+    return (
+        f"portablectl is-attached {shlex.quote(str(image))} || true; "
+        f"printf '%s\\n' {LISTING}; portablectl list --no-legend"
+    )
+
+
+@dataclass(frozen=True)
+class Attachment:
+    """What a machine answered about one image, and the images it listed."""
+
+    state: str
+    listed: tuple[tuple[str, str], ...]
+
+
+def attachment_of(reported: str) -> Attachment:
+    """Read one machine's answer to `image_status_script`.
+
+    Args:
+        reported: What the machine printed.
+
+    Returns:
+        The word the tool printed for the image it was asked about, empty
+        where it printed none, and each listed image with the state the
+        listing gives it. A row the listing writes differently from the tool
+        this was written against is dropped rather than guessed at, so an
+        answer this cannot read carries no image and the caller reports what
+        the machine said instead of a comparison.
+    """
+    lines = reported.splitlines()
+    mark = lines.index(LISTING) if LISTING in lines else len(lines)
+    said = [line for line in lines[:mark] if line.strip()]
+    rows = tuple(
+        (columns[0], columns[-1])
+        for columns in (line.split() for line in lines[mark + 1 :])
+        if len(columns) > 1
+    )
+    return Attachment(state=said[0].strip() if said else "", listed=rows)
 
 
 def rollback_script(name: str) -> str:
