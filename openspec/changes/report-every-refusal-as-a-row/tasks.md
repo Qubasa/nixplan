@@ -183,7 +183,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
 - [x] 8.1 `docs/diagnostics.md`: the layering rule, the three kinds of fact and the layer that
   reports each, and the sentence that a realiser's raise is what a direct caller receives. Verify
   every identifier it names exists in the tree.
-- [ ] 8.2 `docs/operator.md`: what a build of an inapplicable deployment produces and where its rows
+- [x] 8.2 `docs/operator.md`: what a build of an inapplicable deployment produces and where its rows
   are read from, the statement's field-by-field resolution, the statement-level refusals, the address
   warning, and the identity the record publishes. Verify every command in it runs as written.
 - [ ] 8.3 `CLAUDE.md`: replace the claim under Realisers that every refusal there is a condition

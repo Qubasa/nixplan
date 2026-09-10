@@ -179,13 +179,13 @@ Per placed entry:
 
 | Field | What it is |
 | --- | --- |
-| `path` | the artifact, relative to the build root. A consumer resolves it: the build is a farm of symlinks, and the path an activation names on the machine has to be the path the copy put there |
+| `path` | the artifact, relative to the build root, and `null` for an entry the reading realises into nothing. A consumer resolves it: the build is a farm of symlinks, and the path an activation names on the machine has to be the path the copy put there |
 | `realiser` | `flakelet` or `image`, as the statement said |
 | `profile` | the confinement profile of an image entry, `null` for a flakelet one |
 | `machine` | the machine the plan placed the entry on |
-| `address` | the address that machine's registry record declares |
+| `address` | the address that machine's registry record declares, and `null` where it declares none. An address is read by the step that dials a machine and by no step that builds one, so the absence is recorded rather than the field omitted, and the build produces every artifact |
 | `units` | the unit file names the entry declares, sorted, with the timer of a scheduled unit beside its service |
-| `key` | the entry's own identity digest, the `key` the plan records for it |
+| `key` | the artifact's own identity digest, which is what the machine's endpoint stores for it as `settings_hash`. A report can therefore compare what a machine holds against what a build holds. The plan entry key stays in `plan.json`, which travels beside this file: it moves when any fact of the entry moves, including the machine's address, and no byte of the artifact need have changed |
 
 Per value entry:
 
@@ -218,6 +218,10 @@ realise = {
 };
 ```
 
+Every field is resolved down those same three steps, so an entry naming its own realiser and no
+profile takes the profile of the `default` statement, and no reader has to know which fields
+inherit.
+
 `flakelet` is the default because it is the realiser that needs no further fact: `flakelet.artifact`
 takes the plan and the key and nothing else. A statement that names an entry and no realiser still
 takes the default one, because what such a statement carries is the fact the default cannot. An
@@ -225,14 +229,31 @@ image needs a confinement profile, which no plan field records, so an `image` st
 `profile` is refused rather than defaulted. A realiser name nothing implements is refused naming the
 two that exist.
 
-Every refusal is an error row, and `operator/default.nix` raises on the table:
+The reading answers the whole statement, and it answers the statement crossed with the entry it is
+about. Each of these is a row it produces, and every realiser refusal below one of them is
+therefore reached only by a caller that never asked the reading:
 
 | Row | What it means | The fix |
 | --- | --- | --- |
 | `operator-entry-name-collision` | two plan keys project onto one artifact name | rename one of the instances, services or machines |
 | `operator-realiser-unknown` | the statement names a realiser other than `flakelet` or `image` | state one of those two for that key |
 | `operator-image-profile-missing` | an `image` statement carries no `profile` | add one: `default`, `nonetwork`, `strict` or `trusted` |
-| `operator-entry-machine-no-address` | the entry's machine record declares no address | declare an `address` for that machine in the registry |
+| `operator-image-profile-unknown` | the profile stated is not one of those four | state one that exists |
+| `operator-statement-names-nothing` | a statement key names neither a plan key nor a prefix of one | fix the key, or delete the statement |
+| `operator-statement-not-a-record` | a statement is a bare value rather than a record | write `{ realiser = <realiser>; }` |
+| `operator-plan-record-unclassified` | a plan record is none of the three shapes the reading knows | teach the reading the shape, or stop emitting the record |
+| `operator-entry-realises-nothing` | the statement names an entry that declares no unit | remove it from `realise`, or declare a unit |
+| `operator-entry-path-not-assembled` | the stated realiser runs no step that could assemble a host path the entry is shown | state `image`, or stop declaring the configuration file |
+| `operator-entry-service-manager-mismatch` | the entry's machine runs another service manager | place it on a machine the realiser emits for |
+| `operator-entry-name-refused` | the stated realiser's endpoint refuses a name the entry derives | rename the instance or the service |
+| `operator-entry-access-denied` | a unit needs an access the stated profile denies | state a profile that allows it, or stop needing it |
+| `operator-entry-machine-no-address` (warning) | the entry's machine record declares no address | declare an `address` before applying that entry |
+
+A record carrying `delivery` is a generated value, one carrying `placement` is a service entry, and
+one carrying neither is a machine record. Nothing is classified by the text of a key: `machine` is a
+legal instance name and `vars/x` a legal member name. A placed entry that declares no unit is
+realised into nothing - it is named in `manifest.json` with its machine and a `null` artifact, and
+only a statement naming it is a refusal.
 
 ## Why the build layer raises
 
@@ -242,9 +263,19 @@ entry does not record. `operator/` raises for a third reason: a deployment the p
 called inapplicable.
 
 `mkPlan` already answers `applicable`, and `render` already prints the table. `operator/read.nix`
-adds its own rows to that table, and `operator/default.nix` raises with the rendered result as the
-message when any row is an error, before a single artifact is realised. A table carrying warnings
-and no error builds: a warning that stopped a build would be an error.
+adds its own rows to that table, and `operator/default.nix` realises no entry of a deployment whose
+table carries an error. The build itself still runs: the tree holds `plan.json`,
+`diagnostics.json` and `diagnostics.txt` whatever the table says, because a table nobody can read
+is of no use to the deployment it describes. What it holds no artifact of is any entry of an
+inapplicable deployment, and a caller asking for one through `passthru.entries.<key>` is refused
+with the rendered table. Applicability is read from the rows: the tree carries no marker of its
+own. A table carrying warnings and no error builds every entry the reading realises: a warning that
+stopped a build would be an error.
+
+```bash
+built=$(nix build .#planner-e2e-wired-pair --no-link --print-out-paths)
+jq -r '.[] | "\(.severity) \(.id) \(.subject)"' "$built/diagnostics.json"
+```
 
 The split inside the directory is the realisers' own. `operator/read.nix` is the whole reading -
 which entries are placed, which realiser and profile each is stated to use, the name each key
