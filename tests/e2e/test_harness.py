@@ -366,6 +366,105 @@ def test_an_entry_named_on_the_command_line_is_not_in_the_plan(tmp_path: Path) -
     assert recorder.commands == []
 
 
+class Reporting(Recorder):
+    """A recorder that answers an activation the way the endpoint answers one."""
+
+    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
+        self.commands.append(cmd)
+        return "started site-server-serve.service"
+
+
+def test_a_run_is_asked_what_it_would_do(tmp_path: Path) -> None:
+    """The steps a dry run prints are the steps the same run prints when it acts.
+
+    The one difference is what a machine said, which a dry run never asked for:
+    a reported line is indented and every step line is not, so the two logs are
+    comparable line by line and are compared that way here.
+    """
+    deployment = _built(
+        tmp_path / "built",
+        plan={**PLAN, CLIENT_KEY: {"reads": {"site": {"entry": SERVER_KEY}}}},
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+        values={SESSION_VALUE: {"delivery": ["alpha", "beta"], "files": TOKEN}},
+    )
+    source = _source(tmp_path / "values", {f"{SESSION_VALUE}/token": "s3cret"})
+
+    asked = Reporting()
+    printed: list[str] = []
+    would = apply.apply(
+        deployment, asked, source=source, dry_run=True, base_env={}, log=printed.append
+    )
+
+    assert asked.commands == []
+    assert list(would) == printed
+    assert [line for line in would if line.startswith("value ")]
+    assert _activated(would) == [SERVER_KEY, CLIENT_KEY]
+
+    taken = Reporting()
+    did = apply.apply(deployment, taken, source=source, base_env={})
+
+    assert taken.commands != []
+    assert [line for line in did if not line.startswith("  ")] == list(would)
+    assert [line for line in did if line.startswith("  ")] == [
+        "  started site-server-serve.service"
+    ] * 2
+
+
+def test_a_dry_run_of_a_deployment_the_planner_refuses(tmp_path: Path) -> None:
+    """Asked what it would do, it refuses with the message it refuses with.
+
+    A dry run is the prefix of a real run, so every refusal made from the plan,
+    the record and the value source is made, no step is printed, and the two
+    messages are one message rather than two that have to be kept in step.
+    """
+    table = "slot-reads-nothing  check:client@beta  no provider exports site\n"
+    refused = _built(
+        tmp_path / "refused",
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+        rows=[
+            {
+                "id": "slot-reads-nothing",
+                "subject": CLIENT_KEY,
+                "severity": "error",
+                "message": "no provider exports site",
+                "evidence": "",
+                "resolution": "",
+            }
+        ],
+        table=table,
+    )
+    applicable = _built(
+        tmp_path / "applicable",
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+        values={SESSION_VALUE: {"delivery": [], "files": TOKEN}},
+    )
+    recorder = Recorder()
+    printed: list[str] = []
+
+    for deployment, only in ((refused, ()), (applicable, ("site:server@gamma",))):
+        with pytest.raises(errors.ApplyError) as asked:
+            apply.apply(
+                deployment,
+                recorder,
+                only=only,
+                dry_run=True,
+                base_env={},
+                log=printed.append,
+            )
+        with pytest.raises(errors.ApplyError) as acted:
+            apply.apply(deployment, recorder, only=only, base_env={})
+
+        assert str(asked.value) == str(acted.value)
+
+    assert printed == []
+    assert recorder.commands == []
+
+
 def test_a_source_directory_is_not_a_target(tmp_path: Path) -> None:
     """A folder that holds a deployment is refused, not handed to nix as a flake.
 

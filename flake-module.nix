@@ -4,8 +4,9 @@ let
   # flake's default.nix warns instead.
   korora = import "${inputs.korora}/types.nix";
   systems = inputs.nixpkgs.lib.systems;
+  platformSource = inputs.nixpkgs.rev;
   folder = ./fixtures/minimal-typed-edge;
-  planner = import ./lib { inherit korora systems; };
+  planner = import ./lib { inherit korora systems platformSource; };
   worked = planner.mkPlan (import ./tests/unit/worked.nix { inherit planner folder; }).args;
   changesRoot = ./openspec/changes;
   imageSource = ./image;
@@ -16,6 +17,7 @@ let
     inherit
       korora
       systems
+      platformSource
       folder
       changesRoot
       ;
@@ -33,6 +35,18 @@ in
 {
   flake.lib = planner;
 
+  # The library elaborated against a caller's own platform definitions. `flake.lib`
+  # is the pin this flake carries, applied and recorded, and this is the way out of
+  # it: a consumer following another package set hands its own `lib.systems` here
+  # and states the identity beside it, so one package set decides every entry key
+  # instead of two.
+  flake.mkLib =
+    {
+      systems,
+      platformSource ? null,
+    }:
+    import ./lib { inherit korora systems platformSource; };
+
   # The deployment build, published for a consumer that is not this repository.
   # `flake.lib` alone leaves a caller able to plan and unable to build, and the
   # only other reach is a path inside this flake's source, which is not an
@@ -40,7 +54,9 @@ in
   # system-independent output like the library beside it.
   flake.operator = import ./operator { korora = inputs.korora; };
 
-  flake.planner = {
+  # The suites, their failures and the worked plan, under a name no application and
+  # no package uses. `planner` is the command.
+  flake.debug = {
     inherit worked suites;
     rendered = planner.render worked.diagnostics;
     failures = import ./tests/report.nix suites;
@@ -59,6 +75,7 @@ in
         import ${./tests} {
           korora = import ${inputs.korora}/types.nix;
           systems = (import ${inputs.nixpkgs}/lib).systems;
+          platformSource = "${platformSource}";
           folder = ${folder};
           libSource = ${./lib};
           imageSource = ${./image};
@@ -168,8 +185,8 @@ in
       e2eArtifactPaths = {
         PLANNER_E2E_GUEST_IMAGE = "${e2eGuest}/nixos.qcow2";
         PLANNER_E2E_SSH_KEY = "${e2eGuest.sshPrivateKey}";
-        PLANNER_CLI = pkgs.lib.getExe config.packages.planner-cli;
-        PLANNER_CLI_SRC = "${config.packages.planner-cli-src}";
+        PLANNER_CLI = pkgs.lib.getExe config.packages.planner;
+        PLANNER_CLI_SRC = "${config.packages.planner-src}";
       };
 
       envNameOf = folder: pkgs.lib.toUpper (builtins.replaceStrings [ "-" ] [ "_" ] folder);
@@ -204,7 +221,18 @@ in
           pkgs.nix
         ];
         text = ''
-          root="$(git rev-parse --show-toplevel)"
+          # Every path this prints is a path in the working tree, so a working tree
+          # of this repository is what it needs. `git rev-parse --show-toplevel`
+          # answers about the caller's own directory, and continuing on its answer
+          # printed `export PLANNER_E2E=/tests/e2e` from anywhere else.
+          if ! root="$(git rev-parse --show-toplevel 2> /dev/null)"; then
+            echo "planner-e2e-env: $PWD is in no git checkout, and this prints the paths of one: run it from a checkout of nixplan" >&2
+            exit 1
+          fi
+          if ! cmp -s "$root/flake.nix" ${./flake.nix}; then
+            echo "planner-e2e-env: $root is not a checkout of nixplan, and this prints that checkout's own paths: its flake.nix is not the one this command was built from" >&2
+            exit 1
+          fi
           cat "$(nix build --no-link --print-out-paths "$root#planner-e2e-env-paths")"
           printf 'export PLANNER_E2E_FLAKE=%q\n' "$root"
           ${pkgs.lib.concatStrings (

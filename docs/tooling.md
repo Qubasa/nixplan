@@ -7,14 +7,27 @@ resolves rookery at run time and boots virtual machines.
 ## Look at the worked deployment
 
 ```bash
-nix eval --json .#planner.worked.plan | jq keys      # the eleven entries
-nix eval --json .#planner.worked.diagnostics | jq    # the rows, as records
-nix eval --raw  .#planner.rendered                   # the rows, rendered
-nix eval --json .#planner.worked.applicable          # false: one row is an error
+nix eval --json .#debug.worked.plan | jq keys      # the eleven entries
+nix eval --json .#debug.worked.diagnostics | jq    # the rows, as records
+nix eval --raw  .#debug.rendered                   # the rows, rendered
+nix eval --json .#debug.worked.applicable          # false: one row is an error
 ```
 
-`.#lib` is the library itself, for a caller that wants `mkPlan` from another
-flake.
+## What this flake publishes
+
+Four outputs are system-independent, because each one takes the caller's own
+package set rather than choosing one:
+
+| Output | What it is |
+| --- | --- |
+| `lib` | the library, elaborated against the nixpkgs this flake pins |
+| `mkLib { systems, platformSource ? null }` | the same library against a caller's own platform definitions, which decides every entry key |
+| `operator` | `mkDeployment`, the whole deployment built - see [operator.md](operator.md) |
+| `debug` | the worked fixture, the suites and their failures, for reading a value while iterating |
+
+`lib` and `mkLib` are the two answers to one question and a consumer picks one;
+`debug` is this repository's own and no consumer needs it. The per-system
+attributes are `packages`, `apps` and `checks`, each tabled further down.
 
 ## The two layers
 
@@ -56,10 +69,10 @@ Faster, while iterating - the same suites evaluated directly, with no derivation
 in the way:
 
 ```bash
-nix eval --json .#planner.failures                    # [] on a green tree
-nix eval --json .#planner.failuresBySuite             # suite -> its failing test names
-nix eval --json .#planner.suites.plan.testThePlanSerialises | jq   # expr vs expected
-nix eval --json .#planner.suites --apply 'builtins.mapAttrs (_: builtins.attrNames)'
+nix eval --json .#debug.failures                    # [] on a green tree
+nix eval --json .#debug.failuresBySuite             # suite -> its failing test names
+nix eval --json .#debug.suites.plan.testThePlanSerialises | jq   # expr vs expected
+nix eval --json .#debug.suites --apply 'builtins.mapAttrs (_: builtins.attrNames)'
 ```
 
 `git add` a new file before evaluating: the flake does not see an untracked
@@ -71,32 +84,33 @@ The suites, and how many tests each holds:
 | --- | --- | --- |
 | `interfaces` | 13 | interface identity by value, export atoms, the omission rule |
 | `composition` | 21 | roots, members, the settings namespace, defaults and fixed |
-| `resolution` | 27 | wiring, arity, secrecy, placement, keyset equality |
-| `diagnostics` | 18 | totality, ordering, severity, rendering, and the scan that finds no raising call under `lib/` |
-| `plan` | 22 | keys, planes, absences, dependencies, serialisation, the golden fixture |
+| `resolution` | 30 | wiring, arity, secrecy, placement, keyset equality |
+| `diagnostics` | 22 | totality, ordering, severity, rendering, and the scan that finds no raising call under `lib/` |
+| `plan` | 26 | keys, planes, absences, dependencies, serialisation, the golden fixture |
 | `postgres` | 10 | one provider instance and two consumers, planned |
 | `exclusions` | 16 | one deployment per excluded construct, each refused |
 | `vars` | 24 | a generated value's cardinality, its delivery set, its entry and the program that produces it |
 | `units` | 31 | the portable unit vocabulary, per field |
 | `platform` | 19 | a machine's target, elaborated |
-| `closure` | 23 | what a unit may name and what it must declare |
+| `closure` | 25 | what a unit may name and what it must declare |
 | `image` | 28 | the portable-service-image realiser's reading of an entry |
 | `flakelet` | 14 | the flakelet realiser's reading: enablement, identity, the two name refusals |
-| `operator` | 11 | the deployment build's reading: the artifact name, `manifest.json`, the realiser statement, its four refusals |
+| `operator` | 29 | the deployment build's reading: the artifact name, `manifest.json`, the realiser statement, its refusals |
 | `secrets` | 12 | the secrets realiser's reading: a plan as a generator configuration, the name projection, the rendered deploy step |
+| `consumer` | 2 | what this flake publishes: the recorded platform identity, and a plan keyed by a caller's own nixpkgs |
 | `perf` | 6 | the synthetic fleet is deterministic and realises nothing |
-| `layers` | 14 | the shape of the test tree itself |
+| `layers` | 17 | the shape of the test tree itself, the root document and the one shell |
 | `coverage` | 8 | every specification heading is a test, an omission or an alias |
 
 That column is a value, not a tally kept by hand:
 
 ```bash
-nix eval --json '.#planner.suites' \
+nix eval --json '.#debug.suites' \
   --apply 'builtins.mapAttrs (_: s: builtins.length (builtins.attrNames s))'
 ```
 
-Seventeen suites, counted as the keys of `suites` in `tests/default.nix`, and
-276 tests, counted as the test attributes of the files under `tests/unit/`. That
+Nineteen suites, counted as the keys of `suites` in `tests/default.nix`, and
+353 tests, counted as the test attributes of the files under `tests/unit/`. That
 attrset is the only registration point: a suite file nothing there imports is a
 file nothing runs, and the key names are what the coverage cross-walk reads. A
 suite that asserts a directory's reading takes it as an argument threaded from
@@ -112,7 +126,7 @@ Two machines and the network between them are devices a build sandbox does not
 have, so this layer is an app rather than a check:
 
 ```bash
-ROOKERY_FLAKE=/path/to/rookery nix run .#planner-e2e                 # four folders
+ROOKERY_FLAKE=/path/to/rookery nix run .#planner-e2e                 # five folders
 ROOKERY_FLAKE=/path/to/rookery nix run .#planner-e2e portable-image  # one folder
 ```
 
@@ -120,13 +134,13 @@ See [cluster.md](cluster.md) for the host it needs, the five folders, what a run
 observes and how to drive `pytest` by hand against the working tree.
 
 The pure half of that layer needs no machine and is a check like any other:
-`nix build .#checks.x86_64-linux.planner-delivery -L`, 29 tests over
+`nix build .#checks.x86_64-linux.planner-delivery -L`, 54 tests over
 `tests/e2e/test_harness.py`. Most of them are the command's rather than the
 harness's now - the order `apply` walks, the refusals it makes before it dials -
 because the harness hands the command a recorder in place of a process table and
 reads the argv it produced. The check exports `PYTHONPATH` naming `cli/`, since
 that is where those modules live. `nix develop` carries the same `pytest`, so
-`PYTHONPATH=cli pytest -q tests/e2e/test_harness.py` runs the same 29 against
+`PYTHONPATH=cli pytest -q tests/e2e/test_harness.py` runs the same 54 against
 the working tree.
 
 ## Mapping a specification scenario to a test
@@ -169,7 +183,7 @@ smaller check.
 To add a scenario:
 
 1. Add it to a spec under `openspec/changes/`.
-2. `nix eval --json .#planner.failuresBySuite.coverage` now names
+2. `nix eval --json .#debug.failuresBySuite.coverage` now names
    `testAScenarioGainsNoTest`, and the failure prints the two names the heading
    requires along with any existing name that shares a long prefix with them -
    which is what a rewording leaves behind.
@@ -181,12 +195,12 @@ To add a scenario:
 
 `fixtures/minimal-typed-edge/plan/backup.json` is the produced plan,
 committed. `testTheGoldenPlanMatches` in `tests/unit/plan.nix` compares it with
-`.#planner.worked.plan` field by field, and reports the attribute paths that
+`.#debug.worked.plan` field by field, and reports the attribute paths that
 differ rather than two documents. Every field participates, because the fixture
 carries nothing the planner did not write.
 
 ```bash
-nix eval --json .#planner.worked.plan | jq -S . \
+nix eval --json .#debug.worked.plan | jq -S . \
   > fixtures/minimal-typed-edge/plan/backup.json
 ```
 
@@ -299,9 +313,6 @@ folders as modules of the `tests/e2e` directory is what gets them checked at
 all. That list is read rather than written: `builtins.readDir` over `tests/e2e`
 answers it, and a folder is therefore checked by existing.
 
-Note that `nix fmt` also runs prose linters over the
-repository's markdown and currently fails on files this library does not own.
-
 The command carries its own flake module, `cli/flake-module.nix`, imported by
 `flake.nix` beside `flake-module.nix` and `devshells.nix`. The root module is
 where the suites, the performance harness and the end-to-end layer are
@@ -329,8 +340,8 @@ Everything the flake exposes, so a reader can tell what runs where:
 
 | `nix build .#packages.x86_64-linux.<name>` | Subject |
 | --- | --- |
-| `planner-cli` | the command itself, as `result/bin/planner` |
-| `planner-cli-src` | its source root, which `test_harness.py` imports the pure half from |
+| `planner` | the command itself, as `result/bin/planner` |
+| `planner-src` | its source root, which `test_harness.py` imports the pure half from |
 | `planner-e2e-wired-pair` | one folder's deployment, built: the plan, `manifest.json`, the diagnostics and one artifact per placed entry |
 | `planner-e2e-wired-pair-changed` | the second build of that same folder, which differs in the file it serves |
 | `planner-e2e-portable-image` | that folder's deployment: two images, one of them for a machine this host is not |

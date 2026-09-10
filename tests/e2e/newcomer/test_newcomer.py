@@ -150,6 +150,35 @@ def _reported(line: str) -> Reported:
     )
 
 
+def _host(
+    *argv: str, timeout: float = BRIEF, cwd: Path | None = None
+) -> subprocess.CompletedProcess[str]:
+    """Run a command on this host and return what it did.
+
+    Args:
+        argv: The command and its arguments.
+        timeout: Seconds to allow.
+        cwd: The directory to run it in, or this process's own.
+
+    Returns:
+        The finished process, stdout and stderr captured.
+
+    Raises:
+        RuntimeError: If it refused, carrying its own message.
+    """
+    done = subprocess.run(
+        argv, capture_output=True, text=True, check=False, timeout=timeout, cwd=cwd
+    )
+    if done.returncode != 0:
+        raise RuntimeError(f"{shlex.join(argv)} failed:\n{done.stderr.strip()}")
+    return done
+
+
+def _out(*argv: str, timeout: float = BRIEF) -> str:
+    """The stdout of a command this host ran, which is the usual thing wanted."""
+    return _host(*argv, timeout=timeout).stdout
+
+
 def _source_of(flake: Path) -> str:
     """The store path this checkout's tracked content resolves to.
 
@@ -163,19 +192,230 @@ def _source_of(flake: Path) -> str:
 
     Returns:
         The store path of its tracked content.
-
-    Raises:
-        RuntimeError: If nix refused, carrying its own message.
     """
-    done = subprocess.run(
-        ["nix", "flake", "metadata", "--json", str(flake)],
-        capture_output=True,
-        text=True,
-        check=False,
+    return str(json.loads(_out("nix", "flake", "metadata", "--json", str(flake)))["path"])
+
+
+def test_the_flake_names_its_outputs() -> None:
+    """The command that lists a flake's outputs answers for every system claimed.
+
+    The listing walks the three doubles this flake writes out, which is what
+    taking the list from an input naming a fourth the package set removed cost:
+    the walk died in a release note before it printed one output. The route ends
+    at something a reader can type next, so the flake with no attribute named
+    runs the command and the command's own help names its subcommands.
+    """
+    shown = json.loads(_out("nix", "flake", "show", "--json", str(FLAKE)))
+    claimed = ["aarch64-darwin", "aarch64-linux", "x86_64-linux"]
+
+    assert sorted(shown["apps"]) == claimed, sorted(shown["apps"])
+    assert sorted(shown["packages"]) == claimed, sorted(shown["packages"])
+    for system in claimed:
+        assert "planner" in shown["apps"][system], shown["apps"][system]
+        assert "default" in shown["apps"][system], shown["apps"][system]
+        assert "planner" in shown["packages"][system], sorted(shown["packages"][system])
+
+    helped = _out("nix", "run", str(FLAKE), "--", "--help", timeout=PATIENT)
+    for subcommand in ("plan", "build", "apply", "status", "rollback"):
+        assert f"    {subcommand}" in helped, helped
+
+
+def test_a_consumer_reads_the_build_off_an_output() -> None:
+    """Planning and building are both output names, and neither is a source path.
+
+    Both sit outside the per-system attributes, because the build takes the
+    caller's own package set: a consumer on one double building for another reads
+    one name rather than one name per double.
+    """
+    shown = json.loads(_out("nix", "flake", "show", "--json", str(FLAKE)))
+    assert "lib" in shown, sorted(shown)
+    assert "operator" in shown, sorted(shown)
+
+    library = json.loads(
+        _out("nix", "eval", "--json", f"{FLAKE}#lib", "--apply", "builtins.attrNames")
     )
-    if done.returncode != 0:
-        raise RuntimeError(f"nix flake metadata {flake} failed:\n{done.stderr.strip()}")
-    return str(json.loads(done.stdout)["path"])
+    assert {"interface", "registry", "render", "service", "platform"} <= set(library), library
+
+    build = json.loads(
+        _out("nix", "eval", "--json", f"{FLAKE}#operator", "--apply", "builtins.attrNames")
+    )
+    assert "mkDeployment" in build, build
+    assert (
+        _out(
+            "nix",
+            "eval",
+            f"{FLAKE}#operator",
+            "--apply",
+            "built: builtins.isFunction built.mkDeployment",
+        ).strip()
+        == "true"
+    )
+
+
+def test_one_published_name_answers_two_different_things() -> None:
+    """The name the root advertises answers with the program, whoever asks.
+
+    `nix build` reads the packages and then the flake's own top-level attributes,
+    so a development attrset published as `planner` answered it with `found a
+    set` while `nix run` answered with the command. The name is the program's.
+    """
+    built = Path(
+        _out(
+            "nix",
+            "build",
+            "--no-link",
+            "--print-out-paths",
+            f"{FLAKE}#planner",
+            timeout=PATIENT,
+        )
+        .strip()
+        .splitlines()[-1]
+    )
+    assert (built / "bin" / "planner").is_file(), built
+
+    shown = json.loads(_out("nix", "flake", "show", "--json", str(FLAKE)))
+    assert "planner" not in shown, sorted(shown)
+
+
+def test_the_test_results_are_reachable_under_a_name_of_their_own() -> None:
+    """The suites, their failures and the worked plan are read off one name.
+
+    That name is nobody else's: no application and no package answers for it, so
+    the command and the development values cannot be confused for each other.
+    """
+    failures = json.loads(_out("nix", "eval", "--json", f"{FLAKE}#debug.failures", timeout=PATIENT))
+    assert failures == [], failures
+
+    suites = json.loads(
+        _out(
+            "nix",
+            "eval",
+            "--json",
+            f"{FLAKE}#debug.suites",
+            "--apply",
+            "builtins.attrNames",
+            timeout=PATIENT,
+        )
+    )
+    assert "plan" in suites, suites
+
+    entries = json.loads(
+        _out(
+            "nix",
+            "eval",
+            "--json",
+            f"{FLAKE}#debug.worked.plan",
+            "--apply",
+            "builtins.attrNames",
+            timeout=PATIENT,
+        )
+    )
+    assert entries, entries
+
+    shown = json.loads(_out("nix", "flake", "show", "--json", str(FLAKE)))
+    assert "debug" in shown, sorted(shown)
+    for system in sorted(shown["apps"]):
+        assert "debug" not in shown["apps"][system], shown["apps"][system]
+        assert "debug" not in shown["packages"][system], sorted(shown["packages"][system])
+
+
+def test_the_shell_carries_the_command_its_documentation_is_about() -> None:
+    """The one shell carries every command a document tells a reader to run in it.
+
+    `docs/operator.md` is a document about a command the one shell of this
+    repository did not carry, so a reader following it typed `nix run .#planner
+    --` at every step. `planner-e2e-env` and `pytest` are the other two a
+    document names inside the shell.
+    """
+    for command in ("planner", "planner-e2e-env", "pytest"):
+        found = _out(
+            "nix",
+            "develop",
+            str(FLAKE),
+            "-c",
+            "bash",
+            "-c",
+            f"command -v {command}",
+            timeout=PATIENT,
+        )
+        assert found.strip(), command
+
+    helped = _out("nix", "develop", str(FLAKE), "-c", "planner", "--help", timeout=PATIENT)
+    for subcommand in ("plan", "build", "apply", "status", "rollback"):
+        assert f"    {subcommand}" in helped, helped
+
+
+def test_the_shell_is_entered_from_outside_this_checkout(tmp_path: Path) -> None:
+    """A shell of this checkout is a shell of this checkout from anywhere.
+
+    The hook asked `git rev-parse --show-toplevel` about the caller's own
+    directory, so entering it from an unrelated repository put that repository's
+    directories on `PYTHONPATH` and entering it from no repository at all
+    exported `/tests/e2e:/cli`. Both were silent.
+    """
+    foreign = tmp_path / "elsewhere"
+    foreign.mkdir()
+    (foreign / "flake.nix").write_text("{ outputs = _: { }; }\n")
+    _host("git", "init", "-q", str(foreign))
+
+    for where in (foreign, tmp_path):
+        entered = _host(
+            "nix",
+            "develop",
+            str(FLAKE),
+            "-c",
+            "bash",
+            "-c",
+            'printf %s "$PYTHONPATH"',
+            timeout=PATIENT,
+            cwd=where,
+        )
+        configured = entered.stdout.split(os.pathsep)
+        assert not [path for path in configured if path.startswith(str(tmp_path))], configured
+        assert any(path.startswith("/nix/store") for path in configured), configured
+        assert str(FLAKE) not in entered.stdout, entered.stdout
+        assert "planner:" in entered.stderr, entered.stderr
+
+    named = _host(
+        "nix",
+        "develop",
+        str(FLAKE),
+        "-c",
+        "true",
+        timeout=PATIENT,
+        cwd=foreign,
+    ).stderr
+    assert str(foreign) in named, named
+
+
+def test_the_help_text_is_read_as_the_only_document() -> None:
+    """A reader with the help and no repository can name a target and restrict a run.
+
+    The help named five subcommands, a target and four options, and nothing in it
+    said what makes a directory a built deployment, what a plan key looks like or
+    that a fuller document exists. A constraint the parser refuses on is stated by
+    the subcommand that enforces it, which is why `rollback` is asked separately.
+    """
+    helped = _out("nix", "run", str(FLAKE), "--", "--help", timeout=PATIENT)
+    for stated in (
+        "manifest.json",
+        "flake reference",
+        ".#my-deployment",
+        "<instance>:<service>@<machine>",
+        "<instance>:vars/<generator>",
+        "docs/operator.md",
+    ):
+        assert stated in helped, helped
+
+    applying = _out("nix", "run", str(FLAKE), "--", "apply", "--help", timeout=PATIENT)
+    assert "built deployment directory" in applying, applying
+    assert "--dry-run" in applying, applying
+    assert "--only KEY" in applying, applying
+    assert "<instance>:<service>@<machine>" in applying, applying
+
+    rolling = _out("nix", "run", str(FLAKE), "--", "rollback", "--help", timeout=PATIENT)
+    assert "exactly one" in rolling, rolling
+    assert "docs/operator.md" in rolling, rolling
 
 
 def _planner(work: Workstation, *argv: str, timeout: float = PATIENT) -> str:
@@ -302,6 +542,24 @@ def test_the_template_names_the_published_flake(workstation: Workstation) -> Non
     assert nodes["nixpkgs"]["locked"]["type"] == "github", nodes["nixpkgs"]["locked"]
 
 
+def test_a_consumer_is_asked_for_an_input_only_this_flake_pins(workstation: Workstation) -> None:
+    """A reader declares this repository and a package set, and nothing further.
+
+    korora is what the documented call used to ask for: a source pin with no
+    flake of its own, whose revision has to be the one the library was built
+    against or the types compare unequal. The published library arrives applied
+    to it, so it reaches the lock as an input of this repository and never as one
+    a reader was asked to name.
+    """
+    locked = json.loads(workstation.vm.ssh_succeed(f"cat {CONSUMER}/flake.lock", timeout=BRIEF))
+    nodes = locked["nodes"]
+    asked = nodes["root"]["inputs"]
+
+    assert sorted(asked) == ["nixpkgs", "nixplan"], sorted(asked)
+    assert asked["nixpkgs"] == ["nixplan", "nixpkgs"], asked["nixpkgs"]
+    assert "korora" in nodes["nixplan"]["inputs"], nodes["nixplan"]["inputs"]
+
+
 def test_the_machine_builds_the_deployment_it_was_handed(
     booted: Any, workstation: Workstation, built: tuple[str, dict[str, Reported]]
 ) -> None:
@@ -328,6 +586,31 @@ def test_the_machine_builds_the_deployment_it_was_handed(
         f"nix-store --check-validity {root} && echo held", timeout=BRIEF
     )
     assert held.strip() == "held", held
+
+
+def test_the_documented_smallest_example_is_built(
+    workstation: Workstation, built: tuple[str, dict[str, Reported]]
+) -> None:
+    """The example `docs/README.md` shows is a deployment that realises.
+
+    A document could hold an unbuildable example because nothing built it, and
+    what it ran into was a refusal no row named: an entry recorded no closure and
+    the realiser required one. The plan now records both whether or not either
+    holds anything, so the table is empty and every placed entry has an artifact.
+    """
+    root, entries = built
+    vm = workstation.vm
+
+    rows = json.loads(vm.ssh_succeed(f"cat {root}/diagnostics.json", timeout=BRIEF))
+    assert rows == [], rows
+
+    plan = json.loads(vm.ssh_succeed(f"cat {root}/plan.json", timeout=BRIEF))
+    for key, entry in entries.items():
+        placed = plan[key]
+        assert placed["closure"], placed
+        assert sorted(placed["units"]) == ["say"], placed
+        held = vm.ssh_succeed(f"ls {entry.path}/units", timeout=BRIEF).split()
+        assert held == [UNIT], held
 
 
 def test_one_apply_reaches_both_machines(

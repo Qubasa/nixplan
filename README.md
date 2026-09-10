@@ -39,30 +39,46 @@ openspec/  the change records this repository was built from
 ## Using it from your own flake
 
 Two outputs are the whole interface: `lib`, the planner, and `operator`, the build over
-a plan. Neither is system-specific, because both take your own `pkgs`, and a consumer
-wires them once:
+a plan. Neither is system-specific, because both take your own `pkgs`. `mkLib` is beside
+them for a consumer who wants their own package set to elaborate the platform records too.
+
+This is not an illustration of that wiring: it is `tests/e2e/newcomer/template/flake.nix`,
+byte for byte, and a machine of `tests/e2e/newcomer/` locks it against this checkout, builds
+the deployment it names and applies it to two other machines.
 
 ```nix
 {
+  description = "two machines and one greeting";
+
+  # The published flake, written the way a reader outside this repository writes
+  # it. A run of this folder locks the template against the checkout under test
+  # instead, with `nix flake lock --override-input`, so this line is never edited
+  # and never fetched: the lock records the substitution and the test reads it.
   inputs.nixplan.url = "github:Qubasa/nixplan";
 
+  # One nixpkgs, the one the library is built against. A second pin here would
+  # evaluate the deployment against packages the library never saw.
+  inputs.nixpkgs.follows = "nixplan/nixpkgs";
+
   outputs =
-    { nixplan, nixpkgs, ... }:
+    { nixpkgs, nixplan, ... }:
+    let
+      system = "x86_64-linux";
+      pkgs = nixpkgs.legacyPackages.${system};
+    in
     {
-      packages.x86_64-linux.default =
-        (import ./deployment {
-          pkgs = nixpkgs.legacyPackages.x86_64-linux;
-          planner = nixplan.lib;
-          operator = nixplan.operator;
-        }).default;
+      packages.${system}.default = import ./deployment {
+        inherit pkgs;
+        planner = nixplan.lib;
+        operator = nixplan.operator;
+      };
     };
 }
 ```
 
-`tests/e2e/newcomer/` is that flake, run as a test. Its `template/` holds the wiring
-above and a deployment of two machines; a run copies the template onto a third machine,
-which locks it against this checkout, builds it there and applies it to the other two.
-[docs/operator.md](docs/operator.md) walks it end to end.
+The `template/` directory beside that file holds the deployment: one service, two machines,
+and a tag that places it on both. [docs/README.md](docs/README.md) shows it and
+[docs/operator.md](docs/operator.md) walks the build and the apply end to end.
 
 ## Commands
 
@@ -75,4 +91,7 @@ which locks it against this checkout, builds it there and applies it to the othe
 | `nix develop` | the one shell, with the interpreter the machine layer runs under |
 
 The machine layer needs real VMs, so it is an app rather than a check:
-`nix run .#planner-e2e` boots the guests and runs all five folders.
+`nix run .#planner-e2e` boots the guests and runs all five folders. It resolves **rookery**
+(`git+ssh://git@github.com/Qubasa/rookery`) at run time, and that repository is private and is
+not published here: a reader without access to it cannot run that command, and every folder of
+the machine layer skips itself saying so. Everything above needs nothing but this checkout.

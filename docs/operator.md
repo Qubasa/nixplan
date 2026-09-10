@@ -40,7 +40,7 @@ operator.mkDeployment {
 | Argument | What it is |
 | --- | --- |
 | `pkgs` | the package set the artifacts are built with |
-| `planner` | the library value, `import "${nixplan}/lib" { inherit korora systems; }` |
+| `planner` | the library value, `nixplan.lib`, or `nixplan.mkLib { ... }` for a caller's own platform definitions |
 | `args` | the deployment, exactly as [`README.md`](README.md#mkplan) documents it for `mkPlan` |
 | `realise` | how each entry is realised, optional, `{ default.realiser = "flakelet"; }` by default |
 
@@ -60,7 +60,7 @@ The result is a link farm:
 A Nix caller reads the same four answers off `passthru` without a build: `plan`, `manifest`,
 `diagnostics` and `entries`, the last being the derivation of each placed entry keyed by plan key.
 
-Something has to supply `pkgs`, `planner` and `operator` itself. The four end-to-end folders here
+Something has to supply `pkgs`, `planner` and `operator` itself. The five end-to-end folders here
 are the worked examples, and each is a function of exactly those three. Shortened, with the folder's
 own `interfaces/default.nix`, `instances.nix` and `machines.nix` imported beside it as `interfaces`,
 `deployment` and `registry`:
@@ -101,9 +101,18 @@ nix build .#planner-e2e-wired-pair-changed  # the second of them
 
 `planner` and `operator` are flake outputs of this repository, and neither is system-specific:
 `lib` is the library, `operator` is the one attribute above, and both take the caller's own `pkgs`.
-A consumer therefore adds one input and wires three arguments, which is the whole flake the
-[README](../README.md) shows: its own `pkgs`, `nixplan.lib` as `planner` and `nixplan.operator` as
-`operator`, handed to a directory that returns deployment builds by name. Then:
+`mkLib` is beside them for a consumer whose own package set should elaborate the platform records
+as well, which [`tooling.md`](tooling.md#what-this-flake-publishes) tables. The choice decides
+every entry key: a platform record is a field of every placed entry and the key is a digest over
+it, so `lib` keys a plan against the nixpkgs this flake pins and `mkLib { systems = ...; }` keys
+the same deployment against the caller's. One of the two is the answer, never both at once. A
+consumer therefore adds one input and wires three arguments.
+
+The flake that does it is committed rather than described: `tests/e2e/newcomer/template/flake.nix`,
+shown byte for byte by the root [README](../README.md#using-it-from-your-own-flake), which is the
+one document the end-to-end path scan does not read and can therefore hold a file that imports a
+sibling of its own. `tests/unit/layers.nix` compares the two texts, so an output renamed here moves
+that document with it. Then:
 
 ```bash
 nix build .                                          # the link farm above
@@ -289,7 +298,7 @@ artifact. The bytes are what [`cluster.md`](cluster.md) is for.
 ```
 planner plan     <target>
 planner build    <target>
-planner apply    <target> [--values DIR] [--only KEY]... [--ssh-key PATH] [--user USER]
+planner apply    <target> [--dry-run] [--values DIR] [--only KEY]... [--ssh-key PATH] [--user USER]
 planner status   <target> [--only KEY]... [--ssh-key PATH] [--user USER]
 planner rollback <target> --only KEY [--ssh-key PATH] [--user USER]
 ```
@@ -308,7 +317,7 @@ Build the command, or run it out of the flake:
 
 ```bash
 nix run .#planner -- --help                             # the five subcommands
-nix build .#planner-cli                                 # result/bin/planner
+nix build .#planner                                     # result/bin/planner
 nix run .#planner -- build .#planner-e2e-secret-delivery
 ```
 
@@ -350,6 +359,26 @@ activate <plan key> (<realiser>) on <user>@<address>
 The first line appears only for an edge a cycle forced the walk to contradict. A flakelet entry is
 activated by the machine's own endpoint, `flakelet activate <name> <artifact>`; an image entry is
 attached by the script the artifact itself carries, `bin/attach`.
+
+**`apply --dry-run`** asks what a run would do. It makes every refusal a real run makes - the
+planner's own table, a restriction naming an entry the plan does not carry, a value source that is
+short of a declared file or carries a file nobody declared - and then prints the value writes, the
+copies and the activations it would perform, in the order it would perform them, and contacts no
+machine. What it does not print is the only thing missing: the indented lines are a machine's own
+report, and asking for one is a dial. This is the observed output of a dry run of the deployment
+`tests/e2e/newcomer/` builds, whose two machines this host cannot reach:
+
+```
+copy greeter:greet@alpha /nix/store/ld5...-flakelet-greeter-greet -> root@10.0.0.11
+activate greeter:greet@alpha (flakelet) on root@10.0.0.11
+copy greeter:greet@beta /nix/store/izw...-flakelet-greeter-greet -> root@10.0.0.12
+activate greeter:greet@beta (flakelet) on root@10.0.0.12
+```
+
+The note that nothing was contacted goes to stderr, so the two runs stay comparable line by line on
+stdout: `diff <(planner apply --dry-run <target>) <(planner apply <target>)` is the machine's own
+reports and nothing else. What a machine currently holds is not a question a dry run answers, and
+`status` is where it is asked.
 
 **`status`** prints one line per entry, and asks rather than applies. A line is the machine's own
 answer:
@@ -526,7 +555,7 @@ directory, a flake reference and a value source, and what a deployment is it lea
 documents applies the same build.
 
 The command's flake wiring is `cli/flake-module.nix`, imported by `flake.nix` beside the root
-module and `devshells.nix`. It owns `packages.planner-cli`, `apps.planner` and
-`packages.planner-cli-src`, the source root the harness imports the command's pure half from. The
+module and `devshells.nix`. It owns `packages.planner`, `apps.planner` and
+`packages.planner-src`, the source root the harness imports the command's pure half from. The
 root module reads `PLANNER_CLI` and `PLANNER_CLI_SRC` off those two package attributes rather than
 constructing either, so a rename cannot leave the app and the test environment disagreeing.

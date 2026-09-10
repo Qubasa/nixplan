@@ -3,7 +3,7 @@
 # package an operator installs does not belong in that file: deleting the command
 # is deleting this directory and one import line in flake.nix.
 #
-# `planner-cli-src` is the same source root the wrapper runs, published so the
+# `planner-src` is the same source root the wrapper runs, published so the
 # harness can import the command's pure half and assert its ordering and its
 # refusals with no machine. The root module reads both attributes off this one
 # rather than constructing either, so a rename cannot leave the app and the
@@ -17,7 +17,7 @@
         fileset = pkgs.lib.fileset.fileFilter (file: file.hasExt "py") ./.;
       };
 
-      src = pkgs.runCommandLocal "planner-cli-src" { } "cp -r ${source} $out";
+      src = pkgs.runCommandLocal "planner-src" { } "cp -r ${source} $out";
 
       cli = pkgs.writeShellApplication {
         name = "planner";
@@ -31,8 +31,11 @@
       };
     in
     {
-      packages.planner-cli = cli;
-      packages.planner-cli-src = src;
+      # The command is `planner` in every namespace that answers for it: a reader
+      # who types `nix build .#planner` and one who types `nix run .#planner` are
+      # asking for the same program.
+      packages.planner = cli;
+      packages.planner-src = src;
 
       apps.planner = {
         type = "app";

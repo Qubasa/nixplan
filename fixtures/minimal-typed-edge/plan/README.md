@@ -6,7 +6,7 @@ in it is a field the planner produced, so it is compared with `==` in evaluation
 by `tests/unit/plan.nix` and regenerated with one command:
 
 ```bash
-nix eval --json .#planner.worked.plan | jq -S . > fixtures/minimal-typed-edge/plan/backup.json
+nix eval --json .#debug.worked.plan | jq -S . > fixtures/minimal-typed-edge/plan/backup.json
 ```
 
 Regeneration is never automatic. It is a command a reader runs and a diff a

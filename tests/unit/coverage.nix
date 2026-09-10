@@ -164,6 +164,9 @@ let
     "identify-interfaces-by-declared-id/specs/planner/interface-fold/spec.md"
     "identify-interfaces-by-declared-id/specs/planner/typed-edge/spec.md"
     "identify-interfaces-by-declared-id/specs/planner/plan-artifact/spec.md"
+    "open-the-repository-to-a-consumer/specs/operator/apply-command/spec.md"
+    "open-the-repository-to-a-consumer/specs/tooling/consumer-surface/spec.md"
+    "open-the-repository-to-a-consumer/specs/tooling/repository-shape/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -179,12 +182,6 @@ let
       "an unimplemented change: no task of declare-service-state has been done, so nothing in this package claims to satisfy it yet";
     "declare-service-state/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of declare-service-state has been done, so nothing in this package claims to satisfy it yet";
-    "open-the-repository-to-a-consumer/specs/operator/apply-command/spec.md" =
-      "an unimplemented change: `--dry-run` does not exist, so nothing in this package claims to satisfy it yet";
-    "open-the-repository-to-a-consumer/specs/tooling/consumer-surface/spec.md" =
-      "a change landed in part: `flake.operator`, `apps.default` and the written-out system list are in, and the rest - the debug attrset's rename, the shell, the help text and the smallest example building - is not, so the file is not answerable as a whole yet";
-    "open-the-repository-to-a-consumer/specs/tooling/repository-shape/spec.md" =
-      "an unimplemented change: no task of open-the-repository-to-a-consumer's shell and help-text phases has been done, so nothing in this package claims to satisfy it yet";
     "make-an-apply-observable/specs/delivery/real-cluster/spec.md" =
       "an unimplemented change: no task of make-an-apply-observable has been done, so nothing in this package claims to satisfy it yet";
     "make-an-apply-observable/specs/operator/apply-command/spec.md" =
