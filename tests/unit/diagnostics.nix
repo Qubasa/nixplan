@@ -2,6 +2,8 @@
   planner,
   support,
   libSource,
+  operatorSource,
+  imageSource,
 }:
 let
   inherit (builtins)
@@ -35,6 +37,45 @@ let
     rendered: filter (l: substring 0 4 l == "  ! ") (filter isString (split "\n" rendered));
 
   renderedBlocks = rendered: filter isString (split "\n\n" rendered);
+
+  operatorReader = import (operatorSource + "/read.nix") {
+    inherit planner;
+    imageReader = import (imageSource + "/read.nix") { inherit planner; };
+  };
+
+  operatorFiles = filter (rel: hasInfix ".nix" rel) (support.filesUnder operatorSource);
+
+  handWrittenRows = builtins.concatLists (
+    map (
+      rel:
+      let
+        code = filter (line: !isComment line) (
+          support.lines (builtins.readFile (operatorSource + "/${rel}"))
+        );
+      in
+      map (_: rel) (filter (line: hasInfix "severity = " line) code)
+    ) operatorFiles
+  );
+
+  brokenMember = "ma\nin";
+
+  brokenPlan = {
+    "machine:one" = {
+      address = "one.example:22";
+      tags = [ ];
+      system = "x86_64-linux";
+      serviceManager = "systemd";
+    };
+    "svc:${brokenMember}@one" = {
+      key = "sha256-0000000000000000";
+      units.only.command = "/bin/true";
+    };
+  };
+
+  brokenRead = operatorReader.read {
+    plan = brokenPlan;
+    realise.default.realiser = "podman";
+  };
 
   identity = planner.interface {
     name = "identity";
@@ -792,6 +833,57 @@ in
         namesWhatWasForced = true;
         carriesTheModulesOwnText = false;
         applicable = false;
+      };
+    };
+
+  testARowIsBuiltOutsideTheLibrary =
+    let
+      outside = builtins.head (filter (r: r.id == "operator-realiser-unknown") brokenRead.rows);
+      inside = builtins.head oneBad.diagnostics;
+      fields = [
+        "evidence"
+        "id"
+        "message"
+        "resolution"
+        "severity"
+        "subject"
+      ];
+    in
+    {
+      expr = {
+        outsideFields = attrNames outside;
+        libraryFields = attrNames inside;
+        severity = outside.severity;
+        rowsWrittenByHand = handWrittenRows;
+        readSomeSource = operatorFiles != [ ];
+      };
+      expected = {
+        outsideFields = fields;
+        libraryFields = fields;
+        severity = "error";
+        rowsWrittenByHand = [ ];
+        readSomeSource = true;
+      };
+    };
+
+  testAMemberNameCarriesALineBreak =
+    let
+      row = builtins.head (filter (r: r.id == "operator-realiser-unknown") brokenRead.rows);
+    in
+    {
+      expr = {
+        messageLines = length (support.lines row.message);
+        evidenceLines = length (support.lines row.evidence);
+        resolutionLines = length (support.lines row.resolution);
+        namesTheMember = hasInfix "svc:ma in@one" row.message;
+        memberCarriedABreak = length (support.lines brokenMember) == 2;
+      };
+      expected = {
+        messageLines = 1;
+        evidenceLines = 1;
+        resolutionLines = 1;
+        namesTheMember = true;
+        memberCarriedABreak = true;
       };
     };
 }

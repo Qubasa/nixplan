@@ -22,7 +22,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   `tests/unit/operator.nix` are equal field for field to the ones recorded before this task, and
   that a plan key carrying a line break renders as one line in
   `planner.render`.
-- [ ] 1.3 `tests/unit/diagnostics.nix`: add `testARowIsBuiltOutsideTheLibrary` (scenario "A row is
+- [x] 1.3 `tests/unit/diagnostics.nix`: add `testARowIsBuiltOutsideTheLibrary` (scenario "A row is
   built outside the library") and `testAMemberNameCarriesALineBreak` (scenario "A member name
   carries a line break"). Both unit layer. Verify each fails when `operator/read.nix` writes a row
   literal again.

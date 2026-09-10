@@ -22,7 +22,15 @@ let
     interfaces = import ./unit/interfaces.nix { inherit planner support; };
     composition = import ./unit/composition.nix { inherit planner support; };
     resolution = import ./unit/resolution.nix { inherit planner support; };
-    diagnostics = import ./unit/diagnostics.nix { inherit planner support libSource; };
+    diagnostics = import ./unit/diagnostics.nix {
+      inherit
+        planner
+        support
+        libSource
+        operatorSource
+        imageSource
+        ;
+    };
     plan = import ./unit/plan.nix { inherit planner support folder; };
     postgres = import ./unit/postgres.nix { inherit planner support; };
     perf = import ./unit/perf.nix { inherit planner support; };
