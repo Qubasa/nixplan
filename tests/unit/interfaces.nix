@@ -283,6 +283,7 @@ in
     expected = [
       "exports"
       "fold"
+      "id"
       "name"
     ];
   };

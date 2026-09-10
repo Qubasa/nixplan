@@ -44,15 +44,22 @@ rec {
 
   # The whole constructor. No registration and no side table: an interface nobody
   # upstreamed is an interface. A `fold` is the policy for combining the set a
-  # set-valued read collects, and it is optional in every position.
+  # set-valued read collects, and an `id` is a claim of identity two authors can
+  # both write. Both are optional in every position.
   interface =
     {
       name,
       exports,
       fold ? null,
+      id ? null,
     }:
     {
-      inherit name exports fold;
+      inherit
+        name
+        exports
+        fold
+        id
+        ;
     };
 
   foldOf = iface: iface.fold or null;
