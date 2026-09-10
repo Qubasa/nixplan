@@ -539,4 +539,84 @@ in
         identity = null;
       };
     };
+
+  testAnUnqualifiedClaim =
+    let
+      unqualified = planner.interface {
+        name = "identity";
+        exports.publicKey = publicString;
+        id = "identity";
+      };
+      result = wired {
+        reads = unqualified;
+        interfaces."interfaces/default.nix".identity = unqualified;
+      };
+      row = builtins.head (rowsById "interface-id-unnamespaced" result);
+    in
+    {
+      expr = {
+        rows = countById "interface-id-unnamespaced" result;
+        inherit (row) subject severity;
+        namesTheId = hasInfix "`identity`" row.message;
+        statesTheSharedNamespace = hasInfix "shared with every other author" row.evidence;
+        resolvesToAQualifiedForm = hasInfix "`<domain or repository>/identity`" row.resolution;
+        identifies = planner.identityOf unqualified;
+        inherit (result) applicable;
+        stillResolves = result.plan."reader:only@one".reads.far.delivered;
+      };
+      expected = {
+        rows = 1;
+        subject = "interfaces/default.nix";
+        severity = "warning";
+        namesTheId = true;
+        statesTheSharedNamespace = true;
+        resolvesToAQualifiedForm = true;
+        identifies = {
+          id = "identity";
+          exports.publicKey = {
+            type = "string";
+            secrecy = "public";
+          };
+          fold = null;
+        };
+        applicable = true;
+        stillResolves = true;
+      };
+    };
+
+  testAQualifiedClaimIsNotReported =
+    let
+      dotted = planner.interface {
+        name = "identity";
+        exports.publicKey = publicString;
+        id = "example.com-identity";
+      };
+      slashed = planner.interface {
+        name = "identity";
+        exports.publicKey = publicString;
+        id = "example/identity";
+      };
+      result = scenario {
+        interfaceValues = { inherit dotted slashed; };
+        instances = { };
+      };
+    in
+    {
+      expr = {
+        unnamespaced = countById "interface-id-unnamespaced" result;
+        malformed = countById "interface-id-malformed" result;
+        identified = [
+          (planner.identityOf dotted).id
+          (planner.identityOf slashed).id
+        ];
+      };
+      expected = {
+        unnamespaced = 0;
+        malformed = 0;
+        identified = [
+          "example.com-identity"
+          "example/identity"
+        ];
+      };
+    };
 }

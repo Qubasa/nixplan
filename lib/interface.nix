@@ -275,6 +275,15 @@ rec {
         evidence = "a fold's name is part of the identity a claim carries and a bare function supplies none, so this claim cannot be compared with another author's; this interface is identified by its value instead";
         resolution = "write ${util.quote "fold = planner.fold \"<name>\" (set: …);"} in ${subject}, or delete the ${util.quote "id"}";
       }
+    )
+    ++ util.optional (isName id && match ".*[./].*" id == null) (
+      diag.warning {
+        inherit subject;
+        id = "interface-id-unnamespaced";
+        message = "interface ${label reg iface} claims the identity ${util.quote id}, which names no namespace";
+        evidence = "a claim is made in a namespace shared with every other author, so an unqualified one collides silently with a stranger's claim of the same word";
+        resolution = "claim ${util.quote "<domain or repository>/${id}"} in ${subject}, or leave it unqualified and accept the collision";
+      }
     );
 
   isInterface = v: isAttrs v && v ? name && v ? exports && isAttrs v.exports;
