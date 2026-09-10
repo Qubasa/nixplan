@@ -193,7 +193,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   identity; and record that `row`, `error` and `warning` are exported and that a row producer outside
   the library uses them. Verify the file passes vale under
   `nix build .#checks.x86_64-linux.treefmt`.
-- [ ] 8.4 Registration: the five spec paths of this change in `accountable` in
+- [x] 8.4 Registration: the five spec paths of this change in `accountable` in
   `tests/unit/coverage.nix`. Verify the coverage cross-walk reports an empty difference over them.
 
 ## 9. Verification
