@@ -146,7 +146,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   `testTheManifestNamesEveryEntryThePlanPlaced` and `testADeploymentWhoseDiagnosticsCarryAnError`
   against the restated requirements. All unit layer. Verify the rewritten address assertion asserts a
   warning where it asserted an error.
-- [ ] 6.5 `tests/e2e/newcomer/`: add the test named by the scenario "Both halves of the table are
+- [x] 6.5 `tests/e2e/newcomer/`: add the test named by the scenario "Both halves of the table are
   reachable for a refused deployment" to the folder `open-the-repository-to-a-consumer` owns,
   building a deployment with one error row through a real `nix build` and reading the rows out of
   the result. End-to-end layer, because the claim is about what a derivation produces. Verify the

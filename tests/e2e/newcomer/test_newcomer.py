@@ -93,6 +93,11 @@ REALISER = "flakelet"
 # writable directory of its own, because a flake nix locks is a flake nix writes a
 # lock into, and a store path is read-only.
 CONSUMER = "/root/consumer"
+
+# The same template with one mistake in it, and the mistake: a closure root that
+# is not a path under the store the plan is read against.
+REFUSED = "/root/refused"
+OUTSIDE = "/opt/vendor/greeter"
 GUEST_KEY = "/root/id_ed25519"
 TEMPLATE = "tests/e2e/newcomer/template"
 
@@ -368,3 +373,54 @@ def test_the_workstation_asks_both_machines_what_they_hold(
         key = f"{ENTRY}@{name}"
         expected = f"{key} {REALISER} generation 1 of {delivery.locked_url(key)}"
         assert expected in reported, reported
+
+
+@pytest.fixture(scope="session")
+def refused(workstation: Workstation) -> str:
+    """A copy of the consumer whose deployment carries one error row, built.
+
+    The mutation is a closure root outside the store directory, which the planner
+    reports and no realiser is reached for. The build is a real ``nix build`` on
+    the machine, because the claim is about what the derivation produces.
+    """
+    vm = workstation.vm
+    vm.ssh_succeed(
+        f"rm -rf {REFUSED} && cp -r {CONSUMER} {REFUSED} && chmod -R u+w {REFUSED} && "
+        f"sed -i 's|closure = \\[ greeter \\];|closure = [ greeter \"{OUTSIDE}\" ];|' "
+        f"{REFUSED}/deployment/modules/hello/greet.nix",
+        timeout=BRIEF,
+    )
+    built = vm.ssh_succeed(
+        f"cd {REFUSED} && nix build --no-link --print-out-paths .#default",
+        timeout=PATIENT,
+    )
+    return built.strip().splitlines()[-1]
+
+
+def test_both_halves_of_the_table_are_reachable_for_a_refused_deployment(
+    workstation: Workstation, refused: str
+) -> None:
+    """An inapplicable deployment builds its plan and both halves of its table.
+
+    A tool reads the rows out of `diagnostics.json`, a person reads
+    `diagnostics.txt`, and neither exists if the build raises instead. No entry
+    is realised, and nothing in the tree says so other than the rows themselves.
+    """
+    vm = workstation.vm
+    held = sorted(vm.ssh_succeed(f"ls {refused}", timeout=BRIEF).split())
+    assert held == ["diagnostics.json", "diagnostics.txt", "manifest.json", "plan.json"], held
+
+    rows = json.loads(vm.ssh_succeed(f"cat {refused}/diagnostics.json", timeout=BRIEF))
+    errors = [row for row in rows if row["severity"] == "error"]
+    assert [row["id"] for row in errors] == ["closure-root-outside-store"], rows
+    assert OUTSIDE in errors[0]["message"], errors
+
+    rendered = vm.ssh_succeed(f"cat {refused}/diagnostics.txt", timeout=BRIEF)
+    assert errors[0]["message"] in rendered, rendered
+
+    plan = json.loads(vm.ssh_succeed(f"cat {refused}/plan.json", timeout=BRIEF))
+    assert [key for key in plan if key.startswith(ENTRY)] == [
+        f"{ENTRY}@{name}" for name in TARGETS
+    ], sorted(plan)
+
+    assert vm.ssh(f"test -e {refused}/entries", timeout=BRIEF).returncode != 0
