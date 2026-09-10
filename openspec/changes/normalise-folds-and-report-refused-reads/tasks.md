@@ -65,4 +65,4 @@
   17061 and the two are not comparable with `diff`. What holds the golden is
   `testTheFoldersRowsAreProduced` in `tests/unit/plan.nix`, which parses the committed rows off
   the renderer's layout and compares them with the produced ones. It passes in task 6.1's run.
-- [ ] 6.4 Run `nix fmt` and confirm the only changes are formatting of the markdown this change touched, and that `fixtures/**` is untouched
+- [x] 6.4 Run `nix fmt` and confirm the only changes are formatting of the markdown this change touched, and that `fixtures/**` is untouched. `nix fmt` after the last edit changes nothing, and `checks.x86_64-linux.treefmt` builds green over 141 files with the vale wrapper printing no alert. The six files this change touched are `CLAUDE.md`, `docs/authoring.md`, `docs/diagnostics.md`, `tests/unit/coverage.nix`, `tests/unit/resolution.nix` and this file; `git diff 6a4a060 -- fixtures` is empty.
