@@ -187,7 +187,7 @@ def holds_attached(
         answered = runner.output(remote.ssh_argv(address, script, opts=opts, user=user), env=env)
     except (ApplyError, subprocess.CalledProcessError):
         return False
-    return answered.strip() not in ("", "detached")
+    return remote.attachment_of(answered).state not in ("", "detached")
 
 
 def _ignore(line: str) -> None:

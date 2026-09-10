@@ -654,7 +654,9 @@ def test_the_workstation_asks_both_machines_what_they_hold(
 
     for name in TARGETS:
         key = f"{ENTRY}@{name}"
-        expected = f"{key} {REALISER} generation 1 of {delivery.locked_url(key)}"
+        expected = (
+            f"{key} {REALISER} generation 1 of {delivery.locked_url(key)} runs this build's units"
+        )
         assert expected in reported, reported
 
 

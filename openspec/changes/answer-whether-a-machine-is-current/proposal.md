@@ -7,9 +7,13 @@ the report never compares.
 `:492` writes it into the deployment record as that entry's `key`. `report-every-refusal-as-a-row`
 states why: "The identity a build publishes for a placed entry SHALL be the identity the machine's own
 endpoint records for the artifact of that entry, so that a report can compare what a machine holds
-against what a build holds", and the endpoint does record it - `flakelet/read.nix:170` puts the same
+against what a build holds", and each endpoint does record it - `flakelet/read.nix:170` puts the same
 digest in the artifact's `settings_hash`, and an image's file name carries it
-(`image/read.nix:512`).
+(`image/read.nix:512`). Recording it and reporting it are two things: the image's own file name is
+what the machine names back, while `flakelet status --json` prints `ServiceStatus`
+(`flakelet-core/src/manager.rs:86-108` at the locked revision) and keeps the digest in the
+generation it stores. What that answer does carry is the unit files of the generation it runs,
+which are files of the artifact the build produced.
 
 Then the command drops it. `cli/manifest.py:347-366` builds an `Entry` from `path`, `realiser`,
 `profile`, `machine`, `address` and `units`, and reads no `key`. `cli/report.py:216-233` renders
@@ -30,24 +34,30 @@ Two more places state the comparison as a settled fact. `docs/operator.md:197` d
 as "the artifact's own identity digest, which is what the machine's endpoint stores for it as
 `settings_hash`. A report can therefore compare what a machine holds against what a build holds",
 and `docs/flakelet.md:88-92` records that the digest is carried into the generation the endpoint
-keeps, so it is in the JSON `cli/report.py:221` already parses and then reads two fields out of.
-`tests/e2e/wired-pair/test_wired_pair.py:739-741` performs the comparison by hand, against the
-artifact's `meta.json` read over ssh, which is evidence that the identities line up and that the
-command is the only thing not doing it.
+keeps. `tests/e2e/wired-pair/test_wired_pair.py:739-741` performs the comparison by hand, against
+the artifact's `meta.json` read over ssh, which is evidence that the identities line up and that
+the command is the only thing not doing it.
 
-The identity is already computed, already published, already stored on the machine, already carried
-in the answer the command parses, and already required to be comparable. The only missing step is the
-comparison.
+What that hand comparison reaches for is also what the endpoint's answer withholds, and this change
+found it out rather than assuming it: the digest is stored and not reported, so a flakelet entry is
+compared by the unit files the answer does carry, in words that say so. An image is compared by its
+identity, because the machine names it.
+
+Everything needed is already computed, already published, already on the machine, and already
+required to be comparable. The missing step is the comparison.
 
 ## What Changes
 
 - **A report line says whether the machine is current.** For each entry asked about, the report
-  states whether the identity the endpoint holds is the identity this build published for that entry,
-  and where it is not, prints both.
+  states whether what the machine holds is what this build published: by identity where the machine
+  names one, printing both where they differ, and by the files of the artifact where it does not.
 - **The comparison identity is read from the deployment record, never recomputed.** The command reads
   the published identity out of the record, so a report cannot disagree with the build it was run
   against. A record carrying no published identity for a placed entry is refused as a record the
   command cannot read, the way a record of another version already is.
+- **A weaker comparison says that it is one.** Where an endpoint names no identity the line says
+  whether the machine runs this build's units rather than saying `current`, and where it names
+  nothing comparable the line says so.
 - **An image is compared by the artifact the machine holds.** An image's identity is in the name of
   the image the machine has attached, so an attached image from an older build is reported as an older
   build rather than as attached.
@@ -72,7 +82,10 @@ comparison.
   name rather than only the attachment state.
 - `cli/remote.py`: the image status script reports which image is attached, not only that one is.
 - `tests/e2e/test_harness.py`: the four existing answers gain the comparison, over a fake endpoint
-  answer carrying a matching and a non-matching identity.
-- `tests/e2e/wired-pair` and `tests/e2e/portable-image`: a report after an apply says current, and a
-  report after a second build of an edited deployment says the machine holds the older identity.
+  answer carrying matching unit files, differing ones and none, and over a listing carrying a
+  matching identity and an older one; plus the guard on the locked endpoint's own answer.
+- `tests/e2e/delivery.py`: what the locked endpoint reports is recorded and compared, so the weaker
+  comparison cannot outlive the reason for it.
+- `tests/e2e/wired-pair` and `tests/e2e/portable-image`: a report after an apply says the machine
+  runs this build, and a report after a second build of an edited deployment says it does not.
 - `docs/operator.md`: the report's vocabulary and the worked example.

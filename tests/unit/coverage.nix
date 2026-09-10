@@ -179,6 +179,7 @@ let
     "hold-every-stated-guarantee/specs/tooling/test-layers/spec.md"
     "hold-every-stated-guarantee/specs/tooling/repository-shape/spec.md"
     "order-a-cycle-by-its-strong-components/specs/operator/apply-command/spec.md"
+    "answer-whether-a-machine-is-current/specs/operator/machine-report/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -188,8 +189,6 @@ let
       "collect slots are an excluded construct in this implementation: lib/excluded.nix carries the `collect family` row, and tests/unit/exclusions.nix asserts every deployment naming one is refused";
     "add-scenario-test-harness/specs/tooling/scenario-suite/spec.md" =
       "removed by this change's own delta: the committed scenario corpus it specifies no longer exists, and tooling/test-layers replaces it";
-    "answer-whether-a-machine-is-current/specs/operator/machine-report/spec.md" =
-      "an unimplemented change: no task of answer-whether-a-machine-is-current has been done, so nothing in this package claims to satisfy it yet";
     "declare-service-state/specs/planner/plan-artifact/spec.md" =
       "an unimplemented change: no task of declare-service-state has been done, so nothing in this package claims to satisfy it yet";
     "declare-service-state/specs/planner/state-declaration/spec.md" =

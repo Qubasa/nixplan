@@ -319,19 +319,25 @@ def test_an_image_reports_the_attachment_word_the_machine_printed(attached: Run)
 
     The attachment started the units, so the word this machine gives is
     `running` rather than the plainest one the tool has. A report comparing
-    against the plainest word would call an entry it just applied absent.
+    against the plainest word would call an entry it just applied absent. The
+    verdict is beside that word rather than instead of it: the machine names
+    the identity it holds in the name of the image it has attached, and this
+    machine holds the one this build published.
     """
     printed = attached.vm.ssh_succeed(
         f"portablectl is-attached {shlex.quote(attached.raw(CONFINED_KEY))}"
     ).strip()
+    published = json.loads((BUILT / "manifest.json").read_text())["entries"][CONFINED_KEY]["key"]
 
     reported = attached.cluster.run(
         [str(CLI), "status", str(BUILT), "--only", CONFINED_KEY],
         env=delivery.command_env(dict(os.environ), attached.key),
     ).stdout.splitlines()
 
-    assert reported == [f"{CONFINED_KEY} image {printed}"], reported
+    assert reported == [f"{CONFINED_KEY} image {printed} current"], reported
     assert "absent" not in reported[0], reported
+    held = attached.attachment(CONFINED_KEY)["image"]
+    assert held.endswith(f"_{published}.raw"), (held, published)
 
 
 def test_the_image_is_attached_by_the_script_the_artifact_carries(attached: Run) -> None:
