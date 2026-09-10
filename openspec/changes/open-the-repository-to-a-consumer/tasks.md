@@ -98,12 +98,15 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
   evaluating layer's test for that scenario, comparing the fenced block of the document against the
   folder's files and naming both on a difference. Verify it is red against a one-character edit to
   either side.
-- [ ] 5.3 `tests/e2e/newcomer/test_newcomer.py`: `test_the_documented_smallest_example_is_built`,
+- [x] 5.3 `tests/e2e/newcomer/test_newcomer.py`: `test_the_documented_smallest_example_is_built`,
   the machine layer's test for the second scenario of *The example a document shows is the example
   a test builds*. It asserts the build produced an artifact for the placed entry and that no
   realiser refused a fact the plan reported no row about. Verify it is red until
   `report-every-refusal-as-a-row` lands the `pruned` fix, and record here which of its requirements
-  turned it green (design D7).
+  turned it green (design D7). Green: *A placed entry records what a realisation reads*, of
+  `report-every-refusal-as-a-row/specs/planner/plan-artifact/spec.md`. `lib/plan.nix` now writes
+  `closure` and `units` over the pruned record rather than through it, so a realiser is never shown
+  an entry missing a field it requires.
 - [ ] 5.4 The consumer flake's text and the block `docs/operator.md` shows for a downstream flake
   are one text, checked the same way as 5.2. Verify a rename of an output breaks the document and
   the test together rather than the test alone.

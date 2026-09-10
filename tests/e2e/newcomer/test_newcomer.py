@@ -481,6 +481,31 @@ def test_the_machine_builds_the_deployment_it_was_handed(
     assert held.strip() == "held", held
 
 
+def test_the_documented_smallest_example_is_built(
+    workstation: Workstation, built: tuple[str, dict[str, Reported]]
+) -> None:
+    """The example `docs/README.md` shows is a deployment that realises.
+
+    A document could hold an unbuildable example because nothing built it, and
+    what it ran into was a refusal no row named: an entry recorded no closure and
+    the realiser required one. The plan now records both whether or not either
+    holds anything, so the table is empty and every placed entry has an artifact.
+    """
+    root, entries = built
+    vm = workstation.vm
+
+    rows = json.loads(vm.ssh_succeed(f"cat {root}/diagnostics.json", timeout=BRIEF))
+    assert rows == [], rows
+
+    plan = json.loads(vm.ssh_succeed(f"cat {root}/plan.json", timeout=BRIEF))
+    for key, entry in entries.items():
+        placed = plan[key]
+        assert placed["closure"], placed
+        assert sorted(placed["units"]) == ["say"], placed
+        held = vm.ssh_succeed(f"ls {root}/{entry.path}/units", timeout=BRIEF).split()
+        assert held == [UNIT], held
+
+
 def test_one_apply_reaches_both_machines(
     booted: Any, built: tuple[str, dict[str, Reported]], applied: tuple[str, ...]
 ) -> None:
