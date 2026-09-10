@@ -171,6 +171,16 @@ let
       fold = planner.fold name apply;
     };
 
+  claiming =
+    args:
+    planner.interface (
+      {
+        name = "identity";
+        id = "example.com/identity";
+      }
+      // args
+    );
+
   folderRegistry = iface: registry // { "interfaces/folded.nix".folded = iface; };
 
   providerOf = iface: _: {
@@ -1534,6 +1544,60 @@ in
         statesTheConsequence = true;
         unfolded = "provider:only@one,provider:only@two";
         delivered = true;
+      };
+    };
+
+  # Only the provider's interface is attributed, so the registry pass sees one
+  # claim and the row can only have come from the wire.
+  testOneClaimAndTwoExportKeysets =
+    let
+      mine = claiming {
+        exports = {
+          publicKey = publicString;
+          hostName = publicString;
+        };
+      };
+      theirs = claiming { exports.publicKey = publicString; };
+      result = edge {
+        consumerModule = consumer {
+          interface = mine;
+          reads = [ "publicKey" ];
+        };
+        providerModule = providerOf theirs;
+        interfaces."interfaces/theirs.nix".identity = theirs;
+      };
+      row = builtins.head (rowsById "interface-id-conflict" result);
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        inherit (row) subject severity;
+        namesTheId = hasInfix "`example.com/identity`" row.message;
+        namesTheAttributedFile = hasInfix "interfaces/theirs.nix" row.message;
+        namesTheDifference = hasInfix "the first declares `hostName` and the second does not" row.evidence;
+        delivered = result.plan."consumer:only@one".reads.far.delivered;
+        receivedSlots = result.plan."consumer:only@one".units.only.env.SLOTS;
+        everyOtherEntry = builtins.attrNames result.plan;
+        applicable = result.applicable;
+      };
+      expected = {
+        ids = [
+          "interface-id-conflict"
+          "interface-mismatch"
+        ];
+        subject = "interface:identity";
+        severity = "error";
+        namesTheId = true;
+        namesTheAttributedFile = true;
+        namesTheDifference = true;
+        delivered = false;
+        receivedSlots = "";
+        everyOtherEntry = [
+          "consumer:only@one"
+          "machine:one"
+          "provider:only@one"
+        ];
+        applicable = false;
       };
     };
 }

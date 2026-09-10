@@ -928,6 +928,14 @@ in
           # so a wire inside one evaluation costs what it costs today.
           claimsMatch = slotClaim != null && slotClaim == capabilityClaim;
 
+          # One conflict is one row wherever it was seen, so the wire builds the
+          # same row the registry pass does and `dedup` keeps one.
+          claimsConflict =
+            slotClaim != null
+            && capabilityClaim != null
+            && slotClaim.id == capabilityClaim.id
+            && slotClaim != capabilityClaim;
+
           interfaceMatches =
             capability != null
             && slot.interface != null
@@ -1059,6 +1067,9 @@ in
                   evidence = "instance ${util.quote target} exposes ${util.quoteList targetInstance.exposedNames} and its root provides ${util.quoteList (attrNames targetInstance.rootProvides)}";
                   resolution = "wire one of ${util.quoteList targetInstance.exposedNames} in ${deploymentFile}";
                 }
+            )
+            ++ util.optional claimsConflict (
+              interface.conflictRow reg slot.interface capability.interface
             )
             ++ util.optional (capability != null && slot.interface != null && !interfaceMatches) (
               diag.error {
