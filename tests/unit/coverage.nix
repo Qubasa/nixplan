@@ -182,14 +182,6 @@ let
       "an unimplemented change: no task of declare-service-state has been done, so nothing in this package claims to satisfy it yet";
     "declare-service-state/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of declare-service-state has been done, so nothing in this package claims to satisfy it yet";
-    "make-an-apply-observable/specs/delivery/real-cluster/spec.md" =
-      "an unimplemented change: no task of make-an-apply-observable has been done, so nothing in this package claims to satisfy it yet";
-    "make-an-apply-observable/specs/operator/apply-command/spec.md" =
-      "an unimplemented change: no task of make-an-apply-observable has been done, so nothing in this package claims to satisfy it yet";
-    "make-an-apply-observable/specs/operator/deployment-build/spec.md" =
-      "an unimplemented change: no task of make-an-apply-observable has been done, so nothing in this package claims to satisfy it yet";
-    "make-an-apply-observable/specs/operator/machine-report/spec.md" =
-      "an unimplemented change: no task of make-an-apply-observable has been done, so nothing in this package claims to satisfy it yet";
     "deliver-a-secret-without-exposing-it/specs/delivery/real-cluster/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "deliver-a-secret-without-exposing-it/specs/operator/apply-command/spec.md" =
@@ -211,6 +203,7 @@ let
     filter (path: !(elem path accountable) && !(excused ? ${path})) discovered
   );
   vanished = sort (a: b: a < b) (filter (path: !(elem path discovered)) accountable);
+  doubled = sort (a: b: a < b) (filter (path: excused ? ${path}) accountable);
 
   scenarioOf =
     line:
@@ -523,12 +516,13 @@ in
 
   testEverySpecificationIsClassified = {
     expr = {
-      inherit unclassified vanished;
+      inherit unclassified vanished doubled;
       unreadable = filter (path: !(pathExists (changesRoot + "/${path}"))) accountable;
     };
     expected = {
       unclassified = [ ];
       vanished = [ ];
+      doubled = [ ];
       unreadable = [ ];
     };
   };
