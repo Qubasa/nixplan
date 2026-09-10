@@ -54,5 +54,5 @@
   and verify `nix build .#checks.x86_64-linux.treefmt` passes
 - [x] 5.2 Update `CLAUDE.md`'s statement of the walk so it names the components rather than the
   reachability test, and verify the literal assertions in `tests/unit/layers.nix` still hold
-- [ ] 5.3 Run the wired-pair end-to-end folder and verify the applied order and the report are
-  unchanged for that deployment
+- [x] 5.3 Run the wired-pair end-to-end folder and verify the applied order and the report are
+  unchanged for that deployment: `nix run .#planner-e2e -- wired-pair`, 37 passed

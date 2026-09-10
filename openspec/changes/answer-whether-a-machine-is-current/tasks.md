@@ -1,9 +1,14 @@
 ## 1. Record what a report says today
 
 - [ ] 1.1 Apply the wired-pair deployment, run `planner status` against it and record the lines, so
-  the added clause can be compared against the current text rather than against a description
+  the added clause can be compared against the current text rather than against a description. Not
+  done, and no longer doable: the comparison it exists to enable is made in
+  `tests/e2e/test_harness.py`, where every new scenario is run against the pre-change command and
+  fails, which is the stronger evidence
 - [ ] 1.2 Edit one entry of that deployment, build it again without applying, run `status` against
-  the new build and record that the line is indistinguishable from the line in 1.1
+  the new build and record that the line is indistinguishable from the line in 1.1. Superseded the
+  same way, by `test_a_report_against_a_build_the_machine_does_not_hold_says_so` in
+  `tests/e2e/wired-pair`
 - [x] 1.3 Read what the endpoint answers for that entry and record whether it carries the identity,
   so the flakelet comparison is written against an observed answer: `flakelet status --json` prints
   `ServiceStatus` (`flakelet-core/src/manager.rs:86-108`, `flakelet/src/main.rs:766-782` at the
@@ -42,14 +47,16 @@
   identity and an earlier one; verify each fails against the pre-change reader
 - [x] 4.2 Add the refusal scenario for a record publishing no identity, and verify it names the entry
   and the field
-- [ ] 4.3 Add to `tests/e2e/wired-pair` a report after an apply that asserts the machine runs this
+- [x] 4.3 Add to `tests/e2e/wired-pair` a report after an apply that asserts the machine runs this
   build's units, and a report after building an edited deployment that asserts it does not; verify
   the second fails before the change
 - [x] 4.4 Add to `tests/e2e/portable-image` a report asserting the attached image's identity, and
   verify the attachment state is still reported
 - [x] 4.5 Verify a report whose machines all answered exits zero even when every entry is stale
-- [ ] 4.6 Replace the hand comparison in `tests/e2e/wired-pair/test_wired_pair.py:739-741` with an
-  assertion on the command's own verdict, and verify the folder still proves the identities line up
+- [x] 4.6 Extend the hand comparison in `tests/e2e/wired-pair/test_wired_pair.py` with an assertion
+  on the command's own verdict, and verify the folder still proves the identities line up. Extended
+  rather than replaced: that comparison is the only test of `The endpoint reports the identity the
+  build published`, and the endpoint reports no identity, so the verdict cannot stand in for it
 - [x] 4.7 Register every new scenario in `tests/unit/coverage.nix`, and verify
   `nix build .#checks.x86_64-linux.planner-tests` reports no unmapped scenario
 - [x] 4.8 Guard the reason for the weaker comparison: compare the locked endpoint's own status
