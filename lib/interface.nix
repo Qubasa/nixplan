@@ -78,7 +78,12 @@ rec {
 
   foldApply = f: if isNamedFold f then f.apply else f;
 
-  secrecyOf = atom: atom.secrecy or "public";
+  secrecyOf = atom: if isAttrs atom then atom.secrecy or "public" else "public";
+
+  # The korora type an atom carries, or null where it carries none. Every reader
+  # of an atom goes through this, so an export declaring no type is a row rather
+  # than a missing attribute at the site that used it.
+  atomTypeOf = atom: if isAttrs atom && isType (atom.type or null) then atom.type else null;
 
   exportNames = iface: attrNames iface.exports;
 
@@ -200,29 +205,40 @@ rec {
 
       atomRowsFor =
         ename: atom:
-        typedFieldRows {
-          inherit subject;
-          what = "export atom ${iface.name}.${ename}";
-          carrier = "an export in this subset";
-          shape = "an atom";
-          spelling = "an atom is ${util.quote "{ type, secrecy ? \"public\" }"}";
-          allowed = atomKeys;
-          field = atom;
-          ids = {
-            excluded = "export-atom-excluded-key";
-            unknown = "export-atom-unknown-key";
-            missingType = "export-atom-missing-type";
-          };
-        }
-        ++ util.optional (!elem (secrecyOf atom) secrecies) (
-          diag.error {
+        if !isAttrs atom then
+          [
+            (diag.error {
+              inherit subject;
+              id = "export-atom-missing-type";
+              message = "export atom ${iface.name}.${ename} is a value of type ${builtins.typeOf atom} rather than an atom, so it declares no type";
+              evidence = "an atom is ${util.quote "{ type, secrecy ? \"public\" }"} and `type` must be a korora type";
+              resolution = "give export atom ${iface.name}.${ename} a type from the attribute set the planner hands ${subject}";
+            })
+          ]
+        else
+          typedFieldRows {
             inherit subject;
-            id = "export-atom-secrecy-domain";
-            message = "export atom ${iface.name}.${ename} declares secrecy ${util.quote (toString (secrecyOf atom))}, and secrecy takes ${util.quoteList secrecies}";
-            evidence = "an omitted secrecy means `public`";
-            resolution = "write one of ${util.quoteList secrecies} in ${subject}, or omit the key";
+            what = "export atom ${iface.name}.${ename}";
+            carrier = "an export in this subset";
+            shape = "an atom";
+            spelling = "an atom is ${util.quote "{ type, secrecy ? \"public\" }"}";
+            allowed = atomKeys;
+            field = atom;
+            ids = {
+              excluded = "export-atom-excluded-key";
+              unknown = "export-atom-unknown-key";
+              missingType = "export-atom-missing-type";
+            };
           }
-        );
+          ++ util.optional (!elem (secrecyOf atom) secrecies) (
+            diag.error {
+              inherit subject;
+              id = "export-atom-secrecy-domain";
+              message = "export atom ${iface.name}.${ename} declares secrecy ${util.quote (toString (secrecyOf atom))}, and secrecy takes ${util.quoteList secrecies}";
+              evidence = "an omitted secrecy means `public`";
+              resolution = "write one of ${util.quoteList secrecies} in ${subject}, or omit the key";
+            }
+          );
     in
     util.concatMapAttrsToList atomRowsFor iface.exports;
 
@@ -374,18 +390,31 @@ rec {
 
   isInterface = v: isAttrs v && v ? name && v ? exports && isAttrs v.exports;
 
+  # Attribution supplies the file a row names and decides nothing else, so the
+  # walk is every interface the deployment reaches together with every one the
+  # `interfaces` argument lists. An interface listed and never reached still
+  # earns its rows; an interface reached and never listed earns them too, with
+  # no file to name.
+  entriesFor =
+    reg: reached:
+    let
+      listed = builtins.filter (r: isInterface r.value) reg;
+      known = iface: builtins.any (r: r.value == iface) listed;
+    in
+    listed
+    ++ map (iface: {
+      file = null;
+      attr = iface.name;
+      value = iface;
+    }) (builtins.filter (iface: !(known iface)) (util.distinct reached));
+
   registryRows =
-    reg:
-    builtins.concatLists (
-      map (
-        r:
-        if isInterface r.value then
-          atomRows reg r.value ++ foldRows reg r.value ++ idRows reg r.value
-        else
-          [ ]
-      ) reg
-    )
-    ++ conflictRows reg;
+    reg: reached:
+    let
+      walked = entriesFor reg reached;
+    in
+    builtins.concatLists (map (r: atomRows reg r.value ++ foldRows reg r.value ++ idRows reg r.value) walked)
+    ++ conflictRows walked;
 
   unitExtension =
     {

@@ -157,10 +157,111 @@ let
     };
   };
 
+  # A generator declaring no files, planned rather than written out: the plan is
+  # what the planner produces, and the pruned copy beside it is the plan a reader
+  # written before `files` was always recorded would be handed.
+  fileless = planOf {
+    instances.holder = {
+      module = soleRoot {
+        module = _: {
+          vars.app = { };
+          impl = simple;
+        };
+      };
+      placement.every.only.machines = [ "one" ];
+    };
+  };
+
+  filelessValue = "holder:vars/app@one";
+
+  without =
+    plan: key: field:
+    plan // { ${key} = builtins.removeAttrs plan.${key} [ field ]; };
+
   rowsById = id: reading: filter (r: r.id == id) reading.rows;
   idsOf = reading: sorted (map (r: r.id) reading.rows);
 in
 {
+  testAValueEntryRecordsNoFiles =
+    let
+      recorded = fileless.plan.${filelessValue};
+      pruned = without fileless.plan filelessValue "files";
+      reading = reader.read { plan = pruned; };
+      row = builtins.head (rowsById "operator-plan-field-missing" reading);
+    in
+    {
+      expr = {
+        # The planner records the empty set rather than pruning it away.
+        plannerRecordsIt = recorded ? files;
+        plannerRecordsItEmpty = recorded.files;
+        rows = idsOf reading;
+        subject = row.subject;
+        namesTheField = hasInfix "`files`" row.message;
+        # The rest of the plan is still read.
+        entries = attrNames reading.manifest.entries;
+        values = attrNames reading.manifest.values;
+        files = reading.manifest.values.${filelessValue}.files;
+        # The table names the value entry itself: a value key is a plan key, so
+        # it survives the subject discipline whole.
+        tableSubjects = map (r: r.subject) reading.diagnostics;
+      };
+      expected = {
+        plannerRecordsIt = true;
+        plannerRecordsItEmpty = { };
+        rows = [ "operator-plan-field-missing" ];
+        subject = filelessValue;
+        namesTheField = true;
+        entries = [ "holder:only@one" ];
+        values = [ filelessValue ];
+        files = { };
+        tableSubjects = [ filelessValue ];
+      };
+    };
+
+  testAFieldThePlanOmitsIsNeededByTheReading =
+    let
+      key = "issuer:vars/session@alpha";
+      plan = {
+        "machine:alpha" = {
+          address = "alpha.example";
+          tags = [ ];
+        };
+        ${key} = {
+          delivery = [ "alpha" ];
+          deliveryDerivedFrom = [ ];
+          files.token = {
+            path = "/run/vars/issuer/session/token";
+          };
+        };
+      };
+      reading = reader.read { inherit plan; };
+      row = builtins.head (rowsById "operator-plan-field-missing" reading);
+    in
+    {
+      expr = {
+        rows = idsOf reading;
+        namesTheEntry = row.subject;
+        namesTheField = hasInfix "`secrecy`" row.message;
+        namesWhere = hasInfix "`token`" row.message;
+        severity = row.severity;
+        # A table, not an evaluation error, and the record is still published.
+        table = builtins.length reading.diagnostics;
+        recorded = reading.manifest.values.${key}.files.token;
+      };
+      expected = {
+        rows = [ "operator-plan-field-missing" ];
+        namesTheEntry = key;
+        namesTheField = true;
+        namesWhere = true;
+        severity = "error";
+        table = 1;
+        recorded = {
+          path = "/run/vars/issuer/session/token";
+          secrecy = "";
+        };
+      };
+    };
+
   testTwoDeploymentsAreBuiltByOneFunction =
     let
       first = readOf { } one;
@@ -661,25 +762,35 @@ in
       };
     };
 
+  # The plan a planner produces no longer carries this key: a member named
+  # `vars/x` is a `name-carries-key-separator` row, because a service entry
+  # under it is a value entry's key. The record is moved onto that key by hand
+  # here, because the claim is about the reading classifying a record by what it
+  # records rather than by the text of its key.
   testAMemberIsNamedInsideTheValueNamespace =
     let
       result = planOf {
         instances.svc = {
-          module = root { members."vars/x".module = _: { impl = simple; }; };
-          placement.every."vars/x".machines = [ "one" ];
+          module = root { members.x.module = _: { impl = simple; }; };
+          placement.every.x.machines = [ "one" ];
         };
+      };
+      plan = removeAttrs result.plan [ "svc:x@one" ] // {
+        "svc:vars/x@one" = result.plan."svc:x@one";
       };
       # Stated as an image because `svc-vars/x` is a service name flakelet's own
       # endpoint refuses, which is a row of its own and not this scenario's.
-      reading = readOf {
-        default = {
+      reading = reader.read {
+        inherit plan;
+        realise.default = {
           realiser = "image";
           profile = "trusted";
         };
-      } result;
+      };
     in
     {
       expr = {
+        planRows = map (r: r.id) result.diagnostics;
         entries = attrNames reading.entries;
         values = attrNames reading.values;
         service = reading.entries."svc:vars/x@one".service;
@@ -687,6 +798,7 @@ in
         read = (builtins.tryEval (builtins.deepSeq reading.manifest reading.manifest)).success;
       };
       expected = {
+        planRows = [ ];
         entries = [ "svc:vars/x@one" ];
         values = [ ];
         service = "vars/x";
@@ -759,7 +871,7 @@ in
       expr = {
         recorded = attrNames silent.manifest.entries;
         machine = silent.manifest.entries.${oneKey}.machine;
-        artifact = silent.manifest.entries.${oneKey}.path;
+        artifact = silent.manifest.entries.${oneKey} ? path;
         rows = idsOf silent;
         refused = silent.refused;
         askedRows = idsOf asked;
@@ -769,7 +881,7 @@ in
       expected = {
         recorded = [ oneKey ];
         machine = "one";
-        artifact = null;
+        artifact = false;
         rows = [ ];
         refused = false;
         askedRows = [ "operator-entry-realises-nothing" ];

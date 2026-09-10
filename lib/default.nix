@@ -125,7 +125,7 @@ in
 
       emitted = plan.entries resolved;
 
-      atomRows = interface.registryRows reg;
+      atomRows = interface.registryRows reg resolved.interfaces;
 
       diagnostics = diag.mkTable (atomRows ++ resolved.rows ++ emitted.rows);
     in

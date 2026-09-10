@@ -493,14 +493,28 @@ rec {
         ++ util.concatMapAttrsToList (fileRows gen) (g.files or { });
     in
     {
+      # A generator's name enters the key of its own value entry, so a name
+      # carrying a key separator is refused here and the generator declares no
+      # value: nothing downstream builds a key from it.
       generators = builtins.mapAttrs (gen: g: {
         files = g.files or { };
         per = if elem (perOf g) cardinalities then perOf g else "placement";
         deploy = if builtins.isBool (deployOf g) then deployOf g else true;
         reads = if inCycle gen then [ ] else util.sortStrings (declaredReadsOf g);
         program = programOf g;
-      }) vars;
-      rows = util.concatMapAttrsToList genRows vars;
+      }) (util.filterAttrs (gen: _: !(util.carriesKeySeparator gen)) vars);
+      rows =
+        util.concatMapAttrsToList genRows vars
+        ++ map (
+          gen:
+          diag.error {
+            inherit subject;
+            id = "name-carries-key-separator";
+            message = "generator ${util.quote gen} of ${module} is named with a character a plan key's structure uses, and a name a plan key is built from carries none of ${util.quoteList util.keySeparators}";
+            evidence = "a generated value's key is `<instance>:vars/<generator>@<machine>`, so a name carrying one of them produces a key that takes apart into parts nothing declared";
+            resolution = "rename the generator in ${subject} to a name carrying none of ${util.quoteList util.keySeparators}";
+          }
+        ) (filter util.carriesKeySeparator (attrNames vars));
     };
 
   # The planner records a pin and resolves nothing, so this guards hand-written

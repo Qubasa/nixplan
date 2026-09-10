@@ -53,6 +53,81 @@ let
   ];
 
   safe = diag.guard;
+
+  # The half of a declaration a deployment writes, read with the shape it has to
+  # have. The module half routes every read through a check that rows, and this
+  # is that check for the other half: an absent key the reading needs and a value
+  # of the wrong kind are each a row and a fallback, so one malformed declaration
+  # is reported and the rest of the deployment is still read. `builtins.tryEval`
+  # catches neither an abort nor a missing attribute, so a bare read here would
+  # end the evaluation instead of filling a row.
+  shapes = {
+    root = {
+      what = "a module function or a record";
+      is = v: builtins.isFunction v || builtins.isAttrs v;
+    };
+    record = {
+      what = "a record";
+      is = builtins.isAttrs;
+    };
+    names = {
+      what = "a list of names";
+      is = v: builtins.isList v && all builtins.isString v;
+    };
+    name = {
+      what = "a name";
+      is = builtins.isString;
+    };
+  };
+
+  shownValue = v: if builtins.isString v then util.quote v else "a value of type ${builtins.typeOf v}";
+
+  declaredField =
+    {
+      subject,
+      file,
+      where,
+      record,
+      field,
+      shape,
+      fallback,
+      required ? false,
+    }:
+    let
+      present = record ? ${field};
+      wrong = present && !(shape.is record.${field});
+    in
+    {
+      value = if present && !wrong then record.${field} else fallback;
+      rows =
+        if wrong then
+          [
+            (diag.error {
+              inherit subject;
+              id = "declaration-field-malformed";
+              message = "${where} declares ${util.quote field} as ${shownValue record.${field}}, and the reading needs ${shape.what}";
+              evidence = "the half of a declaration a deployment writes is read with the tolerance the half a module writes is read with, so a value of the wrong kind is a row and the rest of the deployment is still read";
+              resolution = "write ${shape.what} for ${util.quote field} in ${file}, or omit the key";
+            })
+          ]
+        else if !present && required then
+          [
+            (diag.error {
+              inherit subject;
+              id = "declaration-field-missing";
+              message = "${where} declares no ${util.quote field}, and the reading needs ${shape.what} there";
+              evidence = "a key the reading needs is not one it can default, so its absence is reported rather than read as an empty value";
+              resolution = "write `${field} = …;` for ${where} in ${file}";
+            })
+          ]
+        else
+          [ ];
+    };
+
+  # The root of an instance that declares none: it owns no member and provides
+  # nothing, so the rest of the deployment reads it as an instance with no
+  # services rather than as an evaluation that ended.
+  emptyRoot = _: { };
 in
 {
   resolve =
@@ -77,13 +152,97 @@ in
 
       leafFileOf = iname: mname: sources.leaves.${iname}.${mname} or null;
 
+      # A name is held to the grammar the key it enters can carry, in the reading
+      # of each and before any key is built from it. The thing named is then left
+      # out of everything a key is derived from, so no delivery set and no entry
+      # key can name something the deployment never declared.
+      fileSubject = file: if diag.isValidSubject file then file else deploymentFile;
+
+      nameRow =
+        {
+          file,
+          what,
+          named,
+        }:
+        diag.error {
+          subject = fileSubject file;
+          id = "name-carries-key-separator";
+          message = "${what} is named ${util.quote named}, and a name a plan key is built from carries none of ${util.quoteList util.keySeparators}";
+          evidence = "a plan key is `<instance>:<member>@<machine>` and a generated value's is `<instance>:vars/<generator>@<machine>`, so a name carrying one of them produces a key that takes apart into parts nothing declared, or a service entry under a value entry's key";
+          resolution = "rename ${util.quote named} in ${file} to a name carrying none of ${util.quoteList util.keySeparators}";
+        };
+
+      badMachineNames = filter util.carriesKeySeparator machineNames;
+      badInstanceNames = filter util.carriesKeySeparator instanceNames;
+
+      placeable = machine: machines ? ${machine} && !(util.carriesKeySeparator machine);
+
+      nameRows =
+        map (
+          name:
+          nameRow {
+            file = machinesFile;
+            what = "a machine of the registry";
+            named = name;
+          }
+        ) badMachineNames
+        ++ map (
+          name:
+          nameRow {
+            file = deploymentFile;
+            what = "an instance of the deployment";
+            named = name;
+          }
+        ) badInstanceNames
+        ++ concatLists (
+          util.mapAttrsToList (
+            iname: inst:
+            map (
+              name:
+              nameRow {
+                file = moduleFileOf iname;
+                what = "a member of the root of instance ${util.quote iname}";
+                named = name;
+              }
+            ) inst.badMemberNames
+          ) resolved.instances
+        );
+
+      # Every field of the machine registry, read once with its shape. A machine
+      # is the deployment's own declaration, so a value of the wrong kind is a
+      # row here rather than a type error deep inside an elaboration.
+      machineFieldOf =
+        name: field: shape: fallback:
+        declaredField {
+          subject = machinesFile;
+          file = machinesFile;
+          where = "machine ${util.quote name}";
+          record = machines.${name};
+          inherit field shape fallback;
+        };
+
+      machineFields = mapAttrs (name: _: {
+        address = machineFieldOf name "address" shapes.name null;
+        tags = machineFieldOf name "tags" shapes.names [ ];
+        system = machineFieldOf name "system" shapes.name null;
+        serviceManager = machineFieldOf name "serviceManager" shapes.name null;
+        microarchitecture = machineFieldOf name "microarchitecture" shapes.name null;
+      }) machines;
+
+      machineFieldRows = concatLists (
+        util.mapAttrsToList (_: fields: concatLists (util.mapAttrsToList (_: f: f.rows) fields)) machineFields
+      );
+
       # Machines by tag, indexed once for the whole deployment, so a selector asks
       # for a tag instead of scanning the registry per member per tag.
       machinesByTag = builtins.groupBy (p: p.tag) (
         concatLists (
           util.mapAttrsToList (
-            machine: decl:
-            map (tag: { inherit tag machine; }) (if builtins.isList (decl.tags or [ ]) then decl.tags else [ ])
+            machine: _:
+            if placeable machine then
+              map (tag: { inherit tag machine; }) machineFields.${machine}.tags.value
+            else
+              [ ]
           ) machines
         )
       );
@@ -93,9 +252,14 @@ in
       # One elaboration per distinct system and microarchitecture rather than one
       # per machine. The elaboration is nixpkgs' own and raises on a system string
       # it cannot parse, so it is forced inside a guard like a module's own value.
-      targeted = util.filterAttrs (_: decl: decl ? system && builtins.isString decl.system) machines;
+      targeted = util.filterAttrs (name: _: machineFields.${name}.system.value != null) machines;
 
-      microOf = decl: if decl ? microarchitecture then toString decl.microarchitecture else "";
+      microOf =
+        name:
+        let
+          declared = machineFields.${name}.microarchitecture.value;
+        in
+        if declared == null then "" else declared;
 
       platformGuards = mapAttrs (
         system: names:
@@ -111,11 +275,16 @@ in
                 microarchitecture = if micro == "" then null else micro;
               };
             };
-          }) (util.uniqueStrings (map (m: microOf machines.${m}) names))
+          }) (util.uniqueStrings (map microOf names))
         )
-      ) (builtins.groupBy (m: machines.${m}.system) (attrNames targeted));
+      ) (builtins.groupBy (m: machineFields.${m}.system.value) (attrNames targeted));
 
-      platformOf = decl: platformGuards.${decl.system}.${microOf decl}.value;
+      platformOf =
+        name:
+        let
+          system = machineFields.${name}.system.value;
+        in
+        if system == null then null else platformGuards.${system}.${microOf name}.value;
 
       platformRows = concatLists (
         util.mapAttrsToList (
@@ -170,7 +339,8 @@ in
             resolution = "declare ${util.quoteList incomplete.missing} for ${util.quote incomplete.name} in ${machinesFile}";
           }
         ) incompleteMachines
-        ++ platformRows;
+        ++ platformRows
+        ++ machineFieldRows;
 
       incompleteMachines = filter (m: m.missing != [ ]) (
         map (name: {
@@ -182,14 +352,22 @@ in
       placementsOn = machine: map (p: p.entry) (placementsByMachine.${machine} or [ ]);
 
       machineRecords = mapAttrs (
-        _: decl:
+        name: _:
+        let
+          fields = machineFields.${name};
+        in
         {
-          address = decl.address or null;
-          tags = util.sortStrings (decl.tags or [ ]);
-          system = decl.system or null;
-          serviceManager = decl.serviceManager or null;
+          address = fields.address.value;
+          tags = util.sortStrings fields.tags.value;
+          system = fields.system.value;
+          serviceManager = fields.serviceManager.value;
         }
-        // (if decl ? microarchitecture then { inherit (decl) microarchitecture; } else { })
+        // (
+          if fields.microarchitecture.value == null then
+            { }
+          else
+            { microarchitecture = fields.microarchitecture.value; }
+        )
       ) machines;
 
       # The target a placement was planned for. The address sits inside it because
@@ -199,22 +377,76 @@ in
       targetOf =
         machine:
         let
-          decl = machines.${machine} or { };
-          hasSystem = decl ? system && platformOf decl != null;
+          fields = machineFields.${machine} or null;
+          platformRecord = if fields == null then null else platformOf machine;
+          serviceManager = if fields == null then null else fields.serviceManager.value;
+          address = if fields == null then null else fields.address.value;
         in
-        if !hasSystem && !(decl ? serviceManager) then
+        if platformRecord == null && serviceManager == null then
           null
         else
-          (if hasSystem then { system = platformOf decl; } else { })
-          // (if decl ? serviceManager then { inherit (decl) serviceManager; } else { })
-          // (if decl ? address then { inherit (decl) address; } else { });
+          (if platformRecord == null then { } else { system = platformRecord; })
+          // (if serviceManager == null then { } else { inherit serviceManager; })
+          // (if address == null then { } else { inherit address; });
 
       targets = mapAttrs (name: _: targetOf name) machines;
+
+      # The placement table of each instance, read once with its shape: the
+      # instance's own rows and every member's selector come off one reading.
+      placementOf = mapAttrs (
+        iname: idecl:
+        let
+          subject = "${iname}:instance";
+          placement = declaredField {
+            inherit subject;
+            file = deploymentFile;
+            where = "instance ${util.quote iname}";
+            record = idecl;
+            field = "placement";
+            shape = shapes.record;
+            fallback = { };
+          };
+          every = declaredField {
+            inherit subject;
+            file = deploymentFile;
+            where = "the placement of instance ${util.quote iname}";
+            record = placement.value;
+            field = "every";
+            shape = shapes.record;
+            fallback = { };
+          };
+        in
+        {
+          placement = placement.value;
+          every = every.value;
+          rows = placement.rows ++ every.rows;
+        }
+      ) instances;
 
       mkInstance =
         iname: idecl:
         let
-          root = compose.mkRoot idecl.module (
+          instanceField =
+            field: shape: fallback: required:
+            declaredField {
+              subject = "${iname}:instance";
+              file = deploymentFile;
+              where = "instance ${util.quote iname}";
+              record = idecl;
+              inherit
+                field
+                shape
+                fallback
+                required
+                ;
+            };
+
+          declaredRoot = instanceField "module" shapes.root emptyRoot true;
+          declaredExposes = instanceField "exposes" shapes.names [ ] false;
+          declaredWire = instanceField "wire" shapes.record { } false;
+          placed = placementOf.${iname};
+
+          root = compose.mkRoot declaredRoot.value (
             {
               name,
               defaults,
@@ -233,14 +465,41 @@ in
             }
           );
           moduleFile = moduleFileOf iname;
-          rootProvides = root.provides or { };
-          members = root.services or { };
+          declaredMembers = root.services or { };
+          badMemberNames = filter util.carriesKeySeparator (attrNames declaredMembers);
+          members = util.filterAttrs (name: _: !(util.carriesKeySeparator name)) declaredMembers;
           memberNames = attrNames members;
-          exposes = idecl.exposes or [ ];
+
+          # A member's identity is the attribute key it is declared under, and
+          # `service`'s name argument is row text. A capability records the name
+          # its member passed, so it is read back to the key here: placement,
+          # settings and every plan key are then one spelling.
+          keyOfDeclaredName = builtins.listToAttrs (
+            map (key: {
+              name = members.${key}.name;
+              value = key;
+            }) memberNames
+          );
+          rootProvides = mapAttrs (
+            _: p: p // { member = keyOfDeclaredName.${p.member} or p.member; }
+          ) (root.provides or { });
+
+          misnamedMembers = filter (key: members.${key}.name != key) memberNames;
+          nameDisagreementRows = map (
+            key:
+            diag.error {
+              inherit subject;
+              id = "member-name-disagrees";
+              message = "the root of instance ${util.quote iname} declares a member under ${util.quote key} that names itself ${util.quote (toString members.${key}.name)}";
+              evidence = "a member has one identity and it is the attribute key: placement, the settings namespace and every plan key are read from it, so a second spelling is a member nothing else can address";
+              resolution = "write `${key} = service ${util.quote key} { … };` in ${moduleFile}, or declare the member under ${util.quote (toString members.${key}.name)}";
+            }
+          ) misnamedMembers;
+          exposes = declaredExposes.value;
           subject = "${iname}:instance";
 
-          placement = idecl.placement or { };
-          every = placement.every or { };
+          placement = placed.placement;
+          every = placed.every;
 
           placementRows =
             map (
@@ -273,7 +532,7 @@ in
             }
           ) (util.subtractList exposes (attrNames rootProvides));
 
-          resolvedMembers = mapAttrs (_mname: member: mkMember iname idecl member) members;
+          resolvedMembers = mapAttrs (mname: member: mkMember iname idecl mname member) members;
 
           generatorOwners = util.concatMapAttrsToList (
             mname: m: map (gen: { inherit gen mname; }) (attrNames m.declaration.vars.generators)
@@ -317,8 +576,13 @@ in
               members = memberNames;
               settings = idecl.settings or { };
             }
+            ++ declaredRoot.rows
+            ++ declaredExposes.rows
+            ++ declaredWire.rows
+            ++ placed.rows
             ++ placementRows
             ++ exposeRows
+            ++ nameDisagreementRows
             ++ collisionRows;
         in
         {
@@ -328,18 +592,20 @@ in
             moduleFile
             rootProvides
             memberNames
+            badMemberNames
             ;
           exposed = util.filterAttrs (n: _: elem n exposes) rootProvides;
           exposedNames = filter (n: rootProvides ? ${n}) exposes;
-          wire = idecl.wire or { };
+          wire = declaredWire.value;
           rows = instanceRows;
           members = resolvedMembers;
         };
 
+      # `mname` is the attribute key the member is declared under, which is its
+      # identity: `service`'s own name argument is row text and nothing reads it.
       mkMember =
-        iname: idecl: member:
+        iname: idecl: mname: member:
         let
-          mname = member.name;
           subject = "${iname}:${mname}";
           leafFile = leafFileOf iname mname;
           moduleSubject = if leafFile != null then leafFile else subject;
@@ -374,13 +640,35 @@ in
             }
           ) declaration.provides;
 
-          every = (idecl.placement or { }).every or { };
-          selector = every.${mname} or null;
-          named = if selector == null then [ ] else selector.machines or [ ];
-          tags = if selector == null then [ ] else selector.tags or [ ];
+          every = placementOf.${iname}.every;
+          selectorRead = declaredField {
+            inherit subject;
+            file = deploymentFile;
+            where = "the placement of ${util.quote mname} in instance ${util.quote iname}";
+            record = every;
+            field = mname;
+            shape = shapes.record;
+            fallback = { };
+          };
+          selector = if every ? ${mname} then selectorRead.value else null;
+          selectorField =
+            field:
+            declaredField {
+              inherit subject;
+              file = deploymentFile;
+              where = "the placement of ${util.quote mname} in instance ${util.quote iname}";
+              record = selectorRead.value;
+              inherit field;
+              shape = shapes.names;
+              fallback = [ ];
+            };
+          namedField = selectorField "machines";
+          taggedField = selectorField "tags";
+          named = namedField.value;
+          tags = taggedField.value;
           unknownMachines = filter (m: !(machines ? ${m})) named;
           placements = util.uniqueStrings (
-            filter (m: machines ? ${m}) (named ++ concatLists (map tagged tags))
+            filter placeable (named ++ concatLists (map tagged tags))
           );
 
           placementRecord = {
@@ -390,7 +678,10 @@ in
           // (if tags == [ ] then { } else { inherit tags; });
 
           placementRows =
-            (
+            selectorRead.rows
+            ++ namedField.rows
+            ++ taggedField.rows
+            ++ (
               if selector == null then
                 [ ]
               else
@@ -432,11 +723,11 @@ in
                 inherit subject;
                 id = "placement-platform-mismatch";
                 message = "${deploymentFile} places ${util.quote "${iname}:${mname}"} on ${util.quote m}, which runs ${
-                  util.quote (toString machines.${m}.system)
+                  util.quote (toString machineFields.${m}.system.value)
                 } and the module declares ${util.quoteList declaration.platforms}";
                 evidence = "a module states the platforms it runs on and the machine registry states what a machine runs, and the two are crossed after placement is decided rather than believed from either side";
                 resolution = "place ${util.quote mname} on a machine running one of ${util.quoteList declaration.platforms} in ${deploymentFile}, or declare ${
-                  util.quote (toString machines.${m}.system)
+                  util.quote (toString machineFields.${m}.system.value)
                 } in ${moduleSubject}";
               }
             ) mismatchedPlacements;
@@ -448,11 +739,31 @@ in
             if declaration.platforms == [ ] then
               [ ]
             else
-              filter (m: machines.${m} ? system && !elem machines.${m}.system declaration.platforms) placements;
+              filter (
+                m:
+                machineFields.${m}.system.value != null
+                && !elem machineFields.${m}.system.value declaration.platforms
+              ) placements;
 
           alloc = {
             ports = mapAttrs (_: claim: claim.fixed) declaration.claims.ports;
           };
+
+          instanceWire = resolved.instances.${iname}.wire;
+
+          wireOf =
+            slotName:
+            declaredField {
+              inherit subject;
+              file = deploymentFile;
+              where = "the wire of instance ${util.quote iname}";
+              record = instanceWire;
+              field = slotName;
+              shape = shapes.record;
+              fallback = null;
+            };
+
+          wires = mapAttrs (slotName: _: wireOf slotName) declaration.uses;
 
           edges = mapAttrs (
             slotName: slot:
@@ -463,7 +774,7 @@ in
                 slotName
                 slot
                 ;
-              wire = (idecl.wire or { }).${slotName} or null;
+              wire = if instanceWire ? ${slotName} then wires.${slotName}.value else null;
             }
           ) declaration.uses;
 
@@ -496,6 +807,7 @@ in
             ++ settings.rows
             ++ declaration.rows
             ++ placementRows
+            ++ util.concatMapAttrsToList (_: w: w.rows) wires
             ++ util.concatMapAttrsToList (_: edge: edge.rows) edges;
         in
         {
@@ -794,11 +1106,15 @@ in
             ename:
             let
               atom = iface.exports.${ename};
+              atomType = interface.atomTypeOf atom;
               secrecy = interface.secrecyOf atom;
               value = raw.${ename};
               fromVars = util.isVarsFile value;
               absent = value == null || (fromVars && !value.present);
-              typeError = if absent then null else atom.type.verify value;
+              # An export whose atom carries no korora type is a row of the
+              # interface itself, and the value it publishes is left untyped
+              # here rather than verified against a type that is not one.
+              typeError = if absent || atomType == null then null else atomType.verify value;
             in
             {
               inherit
@@ -835,7 +1151,7 @@ in
                     subject = entryKey;
                     id = "export-type-mismatch";
                     message = "${entryKey} publishes ${util.quote "${cap}.${ename}"} with a value that fails its atom's type";
-                    evidence = "${facts.label} declares ${ename} as ${util.quote atom.type.name}, and korora reports: ${toString typeError}";
+                    evidence = "${facts.label} declares ${ename} as ${util.quote atomType.name}, and korora reports: ${toString typeError}";
                     resolution = "publish a value of that type in ${publishingFile}, or change the atom on the interface";
                   }
                 )
@@ -1010,14 +1326,16 @@ in
 
           # The one channel through which a module refuses another module's value:
           # a fold states why, and the planner decides the row's id, subject and
-          # severity. A raise cannot carry text, so a refusal is a returned value.
-          refusal =
-            if foldApplies && !foldRaised && builtins.isAttrs folded.value && folded.value ? refused then
-              toString folded.value.refused
-            else
-              null;
+          # severity. A raise cannot carry text, so a refusal is a returned value,
+          # and the channel accepts only text: a refusal the planner cannot render
+          # is a row of its own rather than a coercion or an empty message.
+          refuses =
+            foldApplies && !foldRaised && builtins.isAttrs folded.value && folded.value ? refused;
+          stated = if refuses then folded.value.refused else null;
+          refusalIsText = builtins.isString stated && stated != "";
+          refusal = if refuses && refusalIsText then stated else null;
 
-          delivered = deliverable && !foldRaised && refusal == null;
+          delivered = deliverable && !foldRaised && !refuses;
 
           # The plan records the set the read collected; the fold decides only what
           # the consuming implementation receives.
@@ -1139,6 +1457,17 @@ in
                 }, and the fold states the message while the planner states this row's identifier, subject and severity";
                 resolution = "act on the message above in the module or the deployment it names, or wire ${util.quote slotName} of ${util.quote subject} to a capability whose values the fold accepts";
               }
+            )
+            ++ util.optional (refuses && !refusalIsText) (
+              diag.error {
+                inherit subject;
+                id = "interface-fold-refusal-malformed";
+                message = "the fold of ${ifaceLabel} refused slot ${util.quote slotName} of ${util.quote subject} with ${
+                  if builtins.isString stated then "an empty string" else shownValue stated
+                } rather than with a reason";
+                evidence = "a refusal travels to the table as the row's whole message, so the channel accepts text and nothing else: a value of another kind would be coerced and an empty one would print a row with nothing in it";
+                resolution = "return `{ refused = \"<why>\"; }` from the fold of ${ifaceLabel}, with the sentence an operator should read";
+              }
             );
         in
         {
@@ -1149,7 +1478,14 @@ in
             ;
           reach = slot.reach;
           reads = slot.reads;
-          wire = if wire == null || isMemberCut then null else { inherit (wire) instance provides; };
+          wire =
+            if wire == null || isMemberCut then
+              null
+            else
+              {
+                instance = target;
+                provides = capName;
+              };
           capability = if capability == null then null else capability.capability;
           providerMember = if capability == null then null else capability.member;
           providerInstance = target;
@@ -1207,6 +1543,25 @@ in
         ++ filter (iface: iface != null) (map (slot: slot.interface) declaredSlots)
       );
 
+      # Which interfaces the deployment reaches: every slot's and every
+      # capability's. Attribution is never a registry, so an interface absent
+      # from the `interfaces` argument still earns every row it can earn.
+      reachedInterfaces = util.distinct (
+        filter interface.isInterface (
+          map (slot: slot.interface) declaredSlots
+          ++ concatLists (
+            util.mapAttrsToList (
+              _: inst:
+              concatLists (
+                util.mapAttrsToList (
+                  _: member: util.mapAttrsToList (_: cap: cap.interface) member.declaration.provides
+                ) inst.members
+              )
+            ) resolved.instances
+          )
+        )
+      );
+
       foldRows = map (
         iface:
         let
@@ -1222,12 +1577,16 @@ in
       ) (filter (iface: !(appliedSomewhere iface)) foldDeclared);
 
       resolved = {
-        instances = mapAttrs mkInstance instances;
+        instances = mapAttrs mkInstance (
+          util.filterAttrs (name: _: !(util.carriesKeySeparator name)) instances
+        );
         machines = machineRecords;
+        interfaces = reachedInterfaces;
         usedMachines = selectedMachines;
         inherit storeDir;
         rows =
           machineRows
+          ++ nameRows
           ++ foldRows
           ++ util.concatMapAttrsToList (
             _: inst:

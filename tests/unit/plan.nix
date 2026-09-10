@@ -12,6 +12,7 @@ let
     attrNames
     concatLists
     concatStringsSep
+    elem
     elemAt
     filter
     fromJSON
@@ -36,7 +37,9 @@ let
     messageById
     planOf
     publicString
+    root
     rowIds
+    rowsById
     secretFile
     severityById
     soleRoot
@@ -1361,6 +1364,249 @@ in
         keys = true;
         entryKeys = true;
         theClaimLanded = "example.com/pub";
+      };
+    };
+
+  # A machine carrying the separator produced a delivery set naming `ta`, a
+  # machine nothing declared, because the set is derived by splitting the key.
+  testAMachineNameCarriesTheKeySeparator =
+    let
+      result = planOf {
+        machines = {
+          one = {
+            address = "one.example:22";
+            tags = [ "everywhere" ];
+            system = "x86_64-linux";
+            serviceManager = "systemd";
+          };
+          "be@ta" = {
+            address = "beta.example:22";
+            tags = [ "everywhere" ];
+            system = "x86_64-linux";
+            serviceManager = "systemd";
+          };
+        };
+        instances = {
+          issuer = (placedOn [ "one" ] (soleRoot {
+            module = _: {
+              vars.session = {
+                per = "instance";
+                files."token".secrecy = "secret";
+              };
+              provides.thing.interface = identity;
+              impl =
+                { vars, ... }:
+                {
+                  provides.thing.exports.publicKey = "ssh-ed25519 AAAA";
+                  provides.thing.exports.privateKey = vars.session."token";
+                  units.only.command = "/bin/true";
+                };
+            };
+            provides = [ "thing" ];
+          })) // { exposes = [ "thing" ]; };
+          consumer = (placedOn [ "be@ta" ] (soleRoot {
+            module = _: {
+              uses.slot = {
+                interface = identity;
+                reads = [ "privateKey" ];
+              };
+              impl =
+                { results, ... }:
+                {
+                  units.only = {
+                    command = "/bin/true";
+                    env.KEYFILE = results.slot.privateKey.path;
+                  };
+                };
+            };
+          })) // {
+            wire.slot = {
+              instance = "issuer";
+              provides = "thing";
+            };
+          };
+        };
+        varsState."issuer:vars/session"."token".present = true;
+      };
+      value = result.plan."issuer:vars/session";
+    in
+    {
+      expr = {
+        namesTheMachine = subjectsById "name-carries-key-separator" result;
+        message = messageById "name-carries-key-separator" result;
+        keysNamingIt = filter (k: hasInfix "be@ta" k || hasInfix "@ta" k) (attrNames result.plan);
+        delivery = value.delivery;
+      };
+      expected = {
+        namesTheMachine = [ "deployment/machines.nix" ];
+        message = "a machine of the registry is named `be@ta`, and a name a plan key is built from carries none of `/`, `@`, `:`";
+        keysNamingIt = [ ];
+        delivery = [ "one" ];
+      };
+    };
+
+  # Every name a key is built from, in the reading that owns it: an instance and
+  # a member in the resolver, a generator in the module reading.
+  testAnInstanceOrMemberNameCarriesTheKeySeparator =
+    let
+      result = planOf {
+        instances = {
+          "a:b" = placedOn [ "one" ] (soleRoot { module = quiet; });
+          ok = {
+            module = root { members."x@y" = { module = quiet; }; };
+            placement.every."x@y".machines = [ "one" ];
+          };
+          gen = placedOn [ "one" ] (soleRoot {
+            module = _: {
+              vars."g/h".per = "instance";
+              impl = _: { units.only.command = "/bin/true"; };
+            };
+          });
+        };
+      };
+      messages = map (r: r.message) (rowsById "name-carries-key-separator" result);
+    in
+    {
+      expr = {
+        rows = countById "name-carries-key-separator" result;
+        named = map (
+          m: hasInfix "`a:b`" m || hasInfix "`x@y`" m || hasInfix "`g/h`" m
+        ) messages;
+        keysNamingThem = filter (
+          k: hasInfix "a:b" k || hasInfix "x@y" k || hasInfix "g/h" k
+        ) (attrNames result.plan);
+      };
+      expected = {
+        rows = 3;
+        named = [
+          true
+          true
+          true
+        ];
+        keysNamingThem = [ ];
+      };
+    };
+
+  # The guard is the three characters the key's structure spends, and no more:
+  # hyphens, digits and underscores are inside the grammar, and the `vars/` a
+  # value key carries is the planner's own text rather than a declared name.
+  testAWellFormedNameIsUnaffected =
+    let
+      declaredMachines = attrNames support.worked.args.machines;
+      declaredInstances = attrNames support.worked.args.instances;
+      firstColon = key: let m = match "([^:@]+):.*" key; in if m == null then null else elemAt m 0;
+      lastAt = key: let m = match ".*@([^@]+)" key; in if m == null then null else elemAt m 0;
+      entryKeys = filter (k: firstColon k != "machine") (attrNames workedPlan);
+    in
+    {
+      expr = {
+        rows = countById "name-carries-key-separator" worked;
+        everyInstanceIsDeclared = all (k: elem (firstColon k) declaredInstances) entryKeys;
+        everyMachineIsDeclared = all (m: elem m declaredMachines) (
+          filter (m: m != null) (map lastAt entryKeys)
+        );
+        theValueNamespaceIsStillSpelled = filter (k: hasInfix ":vars/" k) entryKeys != [ ];
+      };
+      expected = {
+        rows = 0;
+        everyInstanceIsDeclared = true;
+        everyMachineIsDeclared = true;
+        theValueNamespaceIsStillSpelled = true;
+      };
+    };
+
+  testAMemberIsDeclaredUnderAKeyOtherThanItsOwnName =
+    let
+      result = planOf {
+        instances.svc = {
+          module =
+            { service, ... }:
+            {
+              services.pg = service "postgres" { module = quiet; };
+            };
+          placement.every.pg.machines = [ "one" ];
+        };
+      };
+      row = builtins.head (rowsById "member-name-disagrees" result);
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        namesBoth = [
+          (hasInfix "`pg`" row.message)
+          (hasInfix "`postgres`" row.message)
+        ];
+        keys = attrNames result.plan;
+        readTheWholePlan = (builtins.tryEval (builtins.deepSeq result.plan true)).success;
+      };
+      expected = {
+        rows = [ "member-name-disagrees" ];
+        namesBoth = [
+          true
+          true
+        ];
+        keys = [
+          "machine:one"
+          "svc:pg@one"
+        ];
+        readTheWholePlan = true;
+      };
+    };
+
+  testAGeneratorDeclaresNoFiles =
+    let
+      result = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = _: {
+            vars.token.per = "instance";
+            impl = _: { units.only.command = "/bin/true"; };
+          };
+        });
+      };
+      value = result.plan."svc:vars/token";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        recorded = value ? files;
+        files = value.files;
+      };
+      expected = {
+        rows = [ ];
+        recorded = true;
+        files = { };
+      };
+    };
+
+  testAnEntryRecordsAnEmptyCollectionAReaderDependsOn =
+    let
+      result = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = _: {
+            impl = _: {
+              units.only.command = "/bin/true";
+            };
+          };
+        });
+      };
+      entry = result.plan."svc:only@one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        recorded = [
+          (entry ? closure)
+          (entry ? units)
+        ];
+        closure = entry.closure;
+      };
+      expected = {
+        rows = [ ];
+        recorded = [
+          true
+          true
+        ];
+        closure = [ ];
       };
     };
 }

@@ -58,6 +58,29 @@ rec {
 
   optional = cond: value: if cond then [ value ] else [ ];
 
+  # Order-preserving, by value equality. `uniqueStrings` is the keyed form for
+  # strings; this is the one for values a key cannot be built from.
+  distinct =
+    values:
+    builtins.foldl' (
+      seen: value: if builtins.any (v: v == value) seen then seen else seen ++ [ value ]
+    ) [ ] values;
+
+  # The characters a plan key's own structure spends. A key is
+  # `<instance>:<member>@<machine>` and a generated value's is
+  # `<instance>:vars/<generator>@<machine>`, read by taking the first `:`, the
+  # last `@` and the `vars/` prefix, so a name carrying one of them produces a
+  # key that takes apart into parts nothing declared - or, for `/`, a service
+  # entry whose key is a value entry's. The rule is these three rather than an
+  # allowlist, which would refuse names existing deployments legitimately use.
+  keySeparators = [
+    "/"
+    "@"
+    ":"
+  ];
+
+  carriesKeySeparator = name: isString name && match ".*[@:/].*" name != null;
+
   sortStrings = sort (a: b: a < b);
 
   subtractList = xs: ys: filter (x: !elem x ys) xs;

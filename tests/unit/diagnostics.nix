@@ -485,8 +485,333 @@ let
     "first"
     "second"
   ];
+
+  # The deployment's own half, one malformed value at a time. Each is a value a
+  # deployment can write and the reading has to answer for.
+  malformed =
+    write:
+    planOf {
+      instances = {
+        good = placedOn "one" (soleRoot { module = quiet; });
+        bad = write;
+      };
+    };
+
+  # An interface whose exports are not atoms, imported by two modules and listed
+  # by no deployment: the rows it earns are the rows a listed one earns.
+  untyped = {
+    name = "untyped";
+    exports = {
+      typeless = { };
+      notAnAtom = 5;
+    };
+  };
+
+  untypedProvider = _: {
+    provides.thing.interface = untyped;
+    impl = _: {
+      provides.thing.exports = {
+        typeless = "x";
+        notAnAtom = "y";
+      };
+      units.only.command = "/bin/true";
+    };
+  };
+
+  untypedPlan = planOf {
+    instances.vault = exposedOn [ "one" ] (soleRoot {
+      module = untypedProvider;
+      provides = [ "thing" ];
+    });
+  };
+
+  # A fold whose refusal is not a sentence. Both spellings the channel refuses:
+  # a value of another kind, and one carrying nothing.
+  refusingWith =
+    stated:
+    planner.interface {
+      name = "pub";
+      exports.publicKey = publicString;
+      fold = _: { refused = stated; };
+    };
+
+  refusedWith =
+    stated:
+    let
+      iface = refusingWith stated;
+    in
+    planOf {
+      instances = {
+        vault = exposedOn [ "one" ] (soleRoot {
+          module = _: {
+            provides.thing.interface = iface;
+            impl = _: {
+              provides.thing.exports.publicKey = "ssh-ed25519 AAAA";
+              units.only.command = "/bin/true";
+            };
+          };
+          provides = [ "thing" ];
+        });
+        reader = wiredTo "one" "vault" (soleRoot {
+          module = _: {
+            uses.slot = {
+              interface = iface;
+              reach = "all";
+              reads = [ "publicKey" ];
+            };
+            impl = _: { units.only.command = "/bin/true"; };
+          };
+        });
+      };
+    };
+
+  # An interface two modules import, claiming an identity the library refuses,
+  # and one whose fold is not a function. The deployment lists neither.
+  badlyIdentified = planner.interface {
+    name = "claimer";
+    id = 7;
+    exports.publicKey = publicString;
+  };
+
+  badlyFolded = planner.interface {
+    name = "folder";
+    exports.publicKey = publicString;
+    fold = "not a function";
+  };
+
+  unattributed =
+    iface:
+    planOf {
+      instances = {
+        vault = exposedOn [ "one" ] (soleRoot {
+          module = _: {
+            provides.thing.interface = iface;
+            impl = _: {
+              provides.thing.exports.publicKey = "ssh-ed25519 AAAA";
+              units.only.command = "/bin/true";
+            };
+          };
+          provides = [ "thing" ];
+        });
+        reader = wiredTo "one" "vault" (soleRoot {
+          module = _: {
+            uses.slot = {
+              interface = iface;
+              reads = [ "publicKey" ];
+            };
+            impl = _: { units.only.command = "/bin/true"; };
+          };
+        });
+      };
+    };
 in
 {
+  testAnInstanceNamesNoModule =
+    let
+      result = malformed { placement.every.only.machines = [ "one" ]; };
+    in
+    {
+      expr = {
+        rows = ids result;
+        namesTheInstance = subjectsById "declaration-field-missing" result;
+        namesTheField = hasInfix "`module`" (messageById "declaration-field-missing" result);
+        # Every other instance is still planned.
+        planned = attrNames result.plan;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [
+          "declaration-field-missing"
+          "placement-unknown-member"
+        ];
+        namesTheInstance = [ "bad:instance" ];
+        namesTheField = true;
+        planned = [
+          "good:only@one"
+          "machine:one"
+        ];
+        applicable = false;
+      };
+    };
+
+  testADeclarationCarriesTheWrongType =
+    let
+      wired = module: (placedOn "one" module) // { wire = "not a record"; };
+      cases = {
+        wire = malformed (wired (soleRoot { module = quiet; }));
+        exposes = (placedOn "one" (soleRoot { module = quiet; })) // { exposes = "thing"; };
+        machines = {
+          module = soleRoot { module = quiet; };
+          placement.every.only.machines = "one";
+        };
+      };
+      registry = planner.mkPlan {
+        machines.one = {
+          address = "one.example:22";
+          tags = "everywhere";
+          system = 64;
+          serviceManager = "systemd";
+        };
+        instances.good = placedOn "one" (soleRoot { module = quiet; });
+      };
+      fieldsOf =
+        result:
+        sortStrings (
+          map (r: r.message) (filter (r: r.id == "declaration-field-malformed") result.diagnostics)
+        );
+    in
+    {
+      expr = {
+        wire = fieldsOf cases.wire;
+        exposes = fieldsOf (malformed cases.exposes);
+        machines = fieldsOf (malformed cases.machines);
+        registry = fieldsOf registry;
+        # A table and a plan, both, for every one of them.
+        stillPlans = all (r: r.plan != { }) [
+          cases.wire
+          (malformed cases.exposes)
+          (malformed cases.machines)
+          registry
+        ];
+      };
+      expected = {
+        wire = [
+          "instance `bad` declares `wire` as `not a record`, and the reading needs a record"
+        ];
+        exposes = [
+          "instance `bad` declares `exposes` as `thing`, and the reading needs a list of names"
+        ];
+        machines = [
+          "the placement of `only` in instance `bad` declares `machines` as `one`, and the reading needs a list of names"
+        ];
+        registry = [
+          "machine `one` declares `system` as a value of type int, and the reading needs a name"
+          "machine `one` declares `tags` as `everywhere`, and the reading needs a list of names"
+        ];
+        stillPlans = true;
+      };
+    };
+
+  testAPublishedExportDeclaresNoAtom = {
+    expr = {
+      rows = ids untypedPlan;
+      namesTheExport = any (
+        r: r.id == "export-atom-missing-type" && hasInfix "untyped.typeless" r.message
+      ) untypedPlan.diagnostics;
+      # The interface is listed nowhere, so the row names it rather than a file.
+      subjects = uniqueStrings (subjectsById "export-atom-missing-type" untypedPlan);
+      applicable = untypedPlan.applicable;
+    };
+    expected = {
+      rows = [ "export-atom-missing-type" ];
+      namesTheExport = true;
+      subjects = [ "interface:untyped" ];
+      applicable = false;
+    };
+  };
+
+  testAnExportsAtomIsNotAnAtom = {
+    expr = {
+      namesTheExport = any (
+        r:
+        r.id == "export-atom-missing-type"
+        && hasInfix "untyped.notAnAtom" r.message
+        && hasInfix "rather than an atom" r.message
+      ) untypedPlan.diagnostics;
+      count = countById "export-atom-missing-type" untypedPlan;
+    };
+    expected = {
+      namesTheExport = true;
+      count = 2;
+    };
+  };
+
+  testARefusalIsNotText =
+    let
+      result = refusedWith { why = "no"; };
+      row = builtins.head (filter (r: r.id == "interface-fold-refusal-malformed") result.diagnostics);
+    in
+    {
+      expr = {
+        rows = ids result;
+        subject = row.subject;
+        namesTheSlot = hasInfix "`slot`" row.message;
+        namesTheInterface = hasInfix "`pub`" row.message;
+        namesWhatItWas = hasInfix "a value of type set" row.message;
+        severity = row.severity;
+        theSlotIsUndelivered = result.plan."reader:only@one".reads.slot.delivered;
+      };
+      expected = {
+        rows = [ "interface-fold-refusal-malformed" ];
+        subject = "reader:only";
+        namesTheSlot = true;
+        namesTheInterface = true;
+        namesWhatItWas = true;
+        severity = "error";
+        theSlotIsUndelivered = false;
+      };
+    };
+
+  testARefusalCarriesNoReason =
+    let
+      result = refusedWith "";
+      row = builtins.head (filter (r: r.id == "interface-fold-refusal-malformed") result.diagnostics);
+    in
+    {
+      expr = {
+        rows = ids result;
+        subject = row.subject;
+        namesTheSlot = hasInfix "`slot`" row.message;
+        namesTheInterface = hasInfix "`pub`" row.message;
+        # Not a row rendered with an empty message.
+        message = row.message;
+        emptyMessages = filter (r: r.message == "") result.diagnostics;
+      };
+      expected = {
+        rows = [ "interface-fold-refusal-malformed" ];
+        subject = "reader:only";
+        namesTheSlot = true;
+        namesTheInterface = true;
+        message = row.message;
+        emptyMessages = [ ];
+      };
+    };
+
+  testAnUnattributedInterfaceDeclaresAMalformedIdentity =
+    let
+      result = unattributed badlyIdentified;
+    in
+    {
+      expr = {
+        rows = ids result;
+        subjects = uniqueStrings (subjectsById "interface-id-malformed" result);
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ "interface-id-malformed" ];
+        subjects = [ "interface:claimer" ];
+        applicable = false;
+      };
+    };
+
+  testAnUnattributedInterfaceDeclaresAFoldThatIsNotAFunction =
+    let
+      result = unattributed badlyFolded;
+    in
+    {
+      expr = {
+        rows = ids result;
+        subjects = uniqueStrings (subjectsById "interface-fold-not-a-function" result);
+      };
+      expected = {
+        rows = [
+          "interface-fold-not-a-function"
+          "interface-fold-unapplied"
+        ];
+        subjects = [ "interface:folder" ];
+      };
+    };
+
   testADeploymentWithOneBadInstance = {
     expr = {
       planKeys = attrNames oneBad.plan;

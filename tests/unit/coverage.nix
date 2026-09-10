@@ -167,6 +167,10 @@ let
     "open-the-repository-to-a-consumer/specs/operator/apply-command/spec.md"
     "open-the-repository-to-a-consumer/specs/tooling/consumer-surface/spec.md"
     "open-the-repository-to-a-consumer/specs/tooling/repository-shape/spec.md"
+    "hold-every-stated-guarantee/specs/operator/apply-command/spec.md"
+    "hold-every-stated-guarantee/specs/operator/deployment-build/spec.md"
+    "hold-every-stated-guarantee/specs/planner/diagnostics/spec.md"
+    "hold-every-stated-guarantee/specs/planner/plan-artifact/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -176,6 +180,8 @@ let
       "collect slots are an excluded construct in this implementation: lib/excluded.nix carries the `collect family` row, and tests/unit/exclusions.nix asserts every deployment naming one is refused";
     "add-scenario-test-harness/specs/tooling/scenario-suite/spec.md" =
       "removed by this change's own delta: the committed scenario corpus it specifies no longer exists, and tooling/test-layers replaces it";
+    "answer-whether-a-machine-is-current/specs/operator/machine-report/spec.md" =
+      "an unimplemented change: no task of answer-whether-a-machine-is-current has been done, so nothing in this package claims to satisfy it yet";
     "declare-service-state/specs/planner/plan-artifact/spec.md" =
       "an unimplemented change: no task of declare-service-state has been done, so nothing in this package claims to satisfy it yet";
     "declare-service-state/specs/planner/state-declaration/spec.md" =
@@ -194,20 +200,18 @@ let
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "deliver-a-secret-without-exposing-it/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-stated-guarantee/specs/operator/apply-command/spec.md" =
-      "an unimplemented change: no task of hold-every-stated-guarantee has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-stated-guarantee/specs/operator/deployment-build/spec.md" =
-      "an unimplemented change: no task of hold-every-stated-guarantee has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-stated-guarantee/specs/planner/diagnostics/spec.md" =
-      "an unimplemented change: no task of hold-every-stated-guarantee has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-stated-guarantee/specs/planner/plan-artifact/spec.md" =
-      "an unimplemented change: no task of hold-every-stated-guarantee has been done, so nothing in this package claims to satisfy it yet";
     "hold-every-stated-guarantee/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of hold-every-stated-guarantee has been done, so nothing in this package claims to satisfy it yet";
     "hold-every-stated-guarantee/specs/tooling/repository-shape/spec.md" =
       "an unimplemented change: no task of hold-every-stated-guarantee has been done, so nothing in this package claims to satisfy it yet";
     "hold-every-stated-guarantee/specs/tooling/test-layers/spec.md" =
       "an unimplemented change: no task of hold-every-stated-guarantee has been done, so nothing in this package claims to satisfy it yet";
+    "order-a-cycle-by-its-strong-components/specs/operator/apply-command/spec.md" =
+      "an unimplemented change: no task of order-a-cycle-by-its-strong-components has been done, so nothing in this package claims to satisfy it yet";
+    "report-a-secrets-refusal-as-a-row/specs/realiser/secrets-configuration/spec.md" =
+      "an unimplemented change: no task of report-a-secrets-refusal-as-a-row has been done, so nothing in this package claims to satisfy it yet";
+    "report-a-secrets-refusal-as-a-row/specs/tooling/test-layers/spec.md" =
+      "an unimplemented change: no task of report-a-secrets-refusal-as-a-row has been done, so nothing in this package claims to satisfy it yet";
   };
 
   isSpecFile = path: match ".*/spec\\.md" path != null;

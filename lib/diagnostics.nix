@@ -19,8 +19,11 @@ let
 
   # A subject is a plan key, a path relative to the deployment root, or an issue
   # identifier. An absolute path is refused, because a rendered table would then
-  # differ between two checkouts.
-  isPlanKey = s: match "[0-9A-Za-z_.-]+:[0-9A-Za-z_.-]+(@[0-9A-Za-z_.-]+)?" s != null;
+  # differ between two checkouts. The `/` a plan key may carry is the structural
+  # one of `<instance>:vars/<generator>`, which is why it is admitted only after
+  # the instance and never at the front.
+  isPlanKey =
+    s: match "[0-9A-Za-z_.-]+:[0-9A-Za-z_.-]+(/[0-9A-Za-z_.-]+)*(@[0-9A-Za-z_.-]+)?" s != null;
   isIssueId = s: match "universe-[0-9a-z]+" s != null;
   isPathSubject = s: match "[0-9A-Za-z_./-]+\\.nix" s != null && util.isRelativePath s;
 in
