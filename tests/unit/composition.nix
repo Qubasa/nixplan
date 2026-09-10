@@ -12,6 +12,7 @@ let
     rowsById
     severityById
     soleRoot
+    subjectsById
     ;
 
   inherit (builtins)
@@ -181,6 +182,73 @@ let
     machines = "deployment/machines.nix";
     modules.i = "borg-repo/default.nix";
   };
+
+  # The probe from the proposal: a slot that exists only when a knob says so.
+  cutLeaf =
+    { settings, ... }:
+    {
+      uses =
+        if settings.offsite then
+          {
+            repo = {
+              interface = repository;
+              reads = [ "url" ];
+            };
+          }
+        else
+          { };
+      impl =
+        { results, ... }:
+        {
+          units.main = {
+            command = "/bin/run";
+            env.REPO = if results ? repo then results.repo.url else "";
+          };
+        };
+    };
+
+  portFromSetting =
+    { settings, ... }:
+    {
+      claims.ports.ssh = {
+        proto = "tcp";
+        count = 1;
+        fixed = settings.port;
+      };
+      impl =
+        { alloc, ... }:
+        {
+          units.main.command = "/bin/sshd -p ${toString alloc.ports.ssh}";
+        };
+    };
+
+  cutFiles = bothFiles // {
+    modules.i = "borg-push/default.nix";
+    leaves.i.only = "borg-push/leaf.nix";
+  };
+
+  cut =
+    {
+      defaults,
+      settings ? { },
+      instances ? { },
+      wire ? { },
+    }:
+    planOf {
+      sources = cutFiles;
+      instances = {
+        i = {
+          inherit settings;
+          module = soleRoot {
+            inherit defaults;
+            module = cutLeaf;
+          };
+          placement.every.only.machines = [ "one" ];
+        }
+        // (if wire == { } then { } else { inherit wire; });
+      }
+      // instances;
+    };
 in
 {
   testADeploymentOverwritesADefault =
@@ -796,6 +864,193 @@ in
         namesModuleFile = true;
         published = [ "builtin" ];
         applicable = false;
+      };
+    };
+
+  testAKnobRemovesASlot =
+    let
+      result = cut {
+        defaults.offsite = true;
+        settings.only.offsite = false;
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        severity = severityById "slot-set-settings-derived" result;
+        subjects = subjectsById "slot-set-settings-derived" result;
+        namesMember = hasInfix "`only`" (messageById "slot-set-settings-derived" result);
+        namesSlot = hasInfix "`repo`" (messageById "slot-set-settings-derived" result);
+        statesTheTrigger = hasInfix "a module publishing a composition whose coherent cuts an operator wants" (
+          evidenceById "slot-set-settings-derived" result
+        );
+        namesTheAlternative = hasInfix "branch on the setting inside `impl`" (
+          support.resolutionById "slot-set-settings-derived" result
+        );
+        asksForNothing = result.plan."i:only@one" ? reads;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ "slot-set-settings-derived" ];
+        severity = "warning";
+        subjects = [ "borg-push/leaf.nix" ];
+        namesMember = true;
+        namesSlot = true;
+        statesTheTrigger = true;
+        namesTheAlternative = true;
+        asksForNothing = false;
+        applicable = true;
+      };
+    };
+
+  testAKnobAddsASlot =
+    let
+      result = cut {
+        defaults.offsite = false;
+        settings.only.offsite = true;
+        wire.repo = {
+          instance = "vault";
+          provides = "repo";
+        };
+        instances.vault = {
+          module = soleRoot {
+            module = twoCapProvider;
+            provides = [
+              "identity"
+              "repo"
+            ];
+          };
+          exposes = [ "repo" ];
+          placement.every.only.machines = [ "two" ];
+        };
+      };
+      entry = result.plan."i:only@one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        severity = severityById "slot-set-settings-derived" result;
+        namesSlot = hasInfix "`repo`" (messageById "slot-set-settings-derived" result);
+        delivered = entry.reads.repo.delivered;
+        received = entry.units.main.env.REPO;
+        readBy = result.plan."vault:only@two".provides.repo.exports.url.readBy;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ "slot-set-settings-derived" ];
+        severity = "warning";
+        namesSlot = true;
+        delivered = true;
+        received = "ssh://borg@vault.example:22/srv/borg";
+        readBy = [ "i:only@one" ];
+        applicable = true;
+      };
+    };
+
+  testAMemberNobodyConfiguredIsNotReported =
+    let
+      unconfigured = cut { defaults.offsite = false; };
+      fixedInstead = planOf {
+        sources = cutFiles;
+        instances.i = {
+          module = soleRoot {
+            module = cutLeaf;
+            fixed.offsite = false;
+          };
+          placement.every.only.machines = [ "one" ];
+        };
+      };
+    in
+    {
+      expr = {
+        fromItsOwnDefaults = rowIds unconfigured;
+        fromItsOwnFixedValues = rowIds fixedInstead;
+        theSlotSetIsUnobserved = unconfigured.plan."i:only@one".units.main.env.REPO;
+      };
+      expected = {
+        fromItsOwnDefaults = [ ];
+        fromItsOwnFixedValues = [ ];
+        theSlotSetIsUnobserved = "";
+      };
+    };
+
+  testAClaimDerivedFromASettingValueIsNotAShapeDifference =
+    let
+      result = planOf {
+        sources = cutFiles;
+        instances.i = {
+          module = soleRoot {
+            module = portFromSetting;
+            defaults.port = 22;
+          };
+          settings.only.port = 2222;
+          placement.every.only.machines = [ "one" ];
+        };
+      };
+      entry = result.plan."i:only@one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        allocated = entry.alloc.ports.ssh;
+        received = entry.units.main.command;
+        source = entry.settings.only.port.source;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ ];
+        allocated = 2222;
+        received = "/bin/sshd -p 2222";
+        source = "deployment";
+        applicable = true;
+      };
+    };
+
+  testACapabilitySetDerivedFromSettingsIsNotReportedHere =
+    let
+      result = planOf {
+        instances = {
+          pg = {
+            module = forwardingRoot {
+              module = perDatabaseLeaf;
+              defaults.databases = [ "billing" ];
+            };
+            settings.main.databases = [
+              "billing"
+              "analytics"
+            ];
+            exposes = [
+              "billing"
+              "analytics"
+            ];
+            placement.every.main.machines = [ "one" ];
+          };
+          app = {
+            module = soleRoot { module = databaseReader; };
+            wire.db = {
+              instance = "pg";
+              provides = "analytics";
+            };
+            placement.every.only.machines = [ "two" ];
+          };
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        published = attrNames result.plan."pg:main@one".provides;
+        theAddedOneIsNamable = result.plan."app:only@two".env.DATABASE_URL;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ ];
+        published = [
+          "analytics"
+          "billing"
+        ];
+        theAddedOneIsNamable = "postgresql:///analytics";
+        applicable = true;
       };
     };
 }

@@ -106,14 +106,14 @@ let
       providerModule ? provider,
       providerMachines ? [ "one" ],
       varsState ? { },
+      interfaces ? registry,
       wire ? {
         instance = "provider";
         provides = "identity";
       },
     }:
     planOf {
-      inherit sources varsState;
-      interfaces = registry;
+      inherit sources varsState interfaces;
       instances = {
         consumer = {
           module = soleRoot { module = consumerModule; };
@@ -144,6 +144,72 @@ let
         placement.every.only.machines = [ "one" ];
         exposes = [ "identity" ];
       };
+    };
+
+  # A fold is a fact about the interface, so a test binds one interface value and
+  # hands it to both halves: identity is the value, never the name.
+  joined =
+    set:
+    builtins.concatStringsSep " " (
+      map (key: "${key}=${set.${key}.publicKey}") (builtins.attrNames set)
+    );
+
+  folding =
+    fold:
+    planner.interface {
+      name = "identity";
+      exports.publicKey = publicString;
+      inherit fold;
+    };
+
+  folderRegistry = iface: registry // { "interfaces/folded.nix".folded = iface; };
+
+  providerOf = iface: _: {
+    provides.identity.interface = iface;
+    impl = _: {
+      provides.identity.exports.publicKey = "ssh-ed25519 AAAA";
+      units.only.command = "/bin/true";
+    };
+  };
+
+  # The folded value is what the consumer received, so it is recorded verbatim
+  # rather than walked: not walking it is the point of the fold.
+  folds =
+    {
+      iface,
+      reach ? "all",
+      reads ? [ "publicKey" ],
+    }:
+    _: {
+      uses.far = {
+        interface = iface;
+        inherit reach reads;
+      };
+      impl =
+        { results, ... }:
+        {
+          units.only = {
+            command = "/bin/true";
+            env = {
+              SLOTS = builtins.concatStringsSep "," (builtins.attrNames results);
+              FAR = if results ? far then results.far else "";
+            };
+          };
+        };
+    };
+
+  reading =
+    {
+      iface,
+      reach ? "all",
+      reads ? [ "publicKey" ],
+      providerMachines ? [ "one" ],
+    }:
+    edge {
+      inherit providerMachines;
+      interfaces = folderRegistry iface;
+      providerModule = providerOf iface;
+      consumerModule = folds { inherit iface reach reads; };
     };
 
   worked = support.workedResult;
@@ -746,6 +812,390 @@ in
         theProducers = "one.example:22";
         itsOwn = false;
         rows = [ ];
+      };
+    };
+
+  testAFoldReplacesTheProviderKeyedSet =
+    let
+      iface = folding joined;
+      result = reading { inherit iface; };
+      read = result.plan."consumer:only@one".reads.far;
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        received = result.plan."consumer:only@one".units.only.env.FAR;
+        entryKeys = builtins.attrNames read.entries;
+        entry = read.entries."provider:only@one";
+      };
+      expected = {
+        ids = [ "set-read-in-key" ];
+        received = "provider:only@one=ssh-ed25519 AAAA";
+        entryKeys = [ "provider:only@one" ];
+        entry.publicKey = "ssh-ed25519 AAAA";
+      };
+    };
+
+  testAnInterfaceWithoutAFoldIsUnchanged =
+    let
+      result = edge {
+        consumerModule = consumer {
+          reach = "all";
+          reads = [ "publicKey" ];
+        };
+      };
+      read = result.plan."consumer:only@one".reads.far;
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        receivedNames = result.plan."consumer:only@one".units.only.env.FAR;
+        entries = read.entries;
+      };
+      expected = {
+        ids = [ "set-read-in-key" ];
+        receivedNames = "provider:only@one";
+        entries."provider:only@one".publicKey = "ssh-ed25519 AAAA";
+      };
+    };
+
+  testASingleValuedReadDoesNotApplyAFold =
+    let
+      iface = folding joined;
+      result = edge {
+        interfaces = folderRegistry iface;
+        providerModule = providerOf iface;
+        consumerModule = consumer {
+          interface = iface;
+          reach = "one";
+          reads = [ "publicKey" ];
+        };
+      };
+      read = result.plan."consumer:only@one".reads.far;
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        receivedNames = result.plan."consumer:only@one".units.only.env.FAR;
+        values = read.values;
+        entry = read.entry;
+      };
+      expected = {
+        ids = [ "interface-fold-unapplied" ];
+        receivedNames = "publicKey";
+        values.publicKey = "ssh-ed25519 AAAA";
+        entry = "provider:only@one";
+      };
+    };
+
+  testAFoldSeesNoExportTheSlotDidNotRead =
+    let
+      iface = planner.interface {
+        name = "identity";
+        exports = {
+          publicKey = publicString;
+          comment = publicString;
+        };
+        fold =
+          set:
+          builtins.concatStringsSep "," (
+            builtins.concatLists (map (key: builtins.attrNames set.${key}) (builtins.attrNames set))
+          );
+      };
+      both = _: {
+        provides.identity.interface = iface;
+        impl = _: {
+          provides.identity.exports = {
+            publicKey = "ssh-ed25519 AAAA";
+            comment = "a comment";
+          };
+          units.only.command = "/bin/true";
+        };
+      };
+      result = edge {
+        interfaces = folderRegistry iface;
+        providerModule = both;
+        consumerModule = folds {
+          inherit iface;
+          reads = [ "publicKey" ];
+        };
+      };
+      read = result.plan."consumer:only@one".reads.far;
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        theFoldSaw = result.plan."consumer:only@one".units.only.env.FAR;
+        absentRatherThanNull = read.entries."provider:only@one" ? comment;
+      };
+      expected = {
+        ids = [ "set-read-in-key" ];
+        theFoldSaw = "publicKey";
+        absentRatherThanNull = false;
+      };
+    };
+
+  testAFoldDoesNotWidenADeliverySet =
+    let
+      exports.key = {
+        type = planner.korora.secretRef;
+        secrecy = "secret";
+      };
+      plain = planner.interface {
+        name = "held-identity";
+        inherit exports;
+      };
+      folded = planner.interface {
+        name = "held-identity";
+        inherit exports;
+        fold = set: builtins.concatStringsSep "," (builtins.attrNames set);
+      };
+      holder = iface: _: {
+        vars.app.files."key".secrecy = "secret";
+        provides.identity.interface = iface;
+        impl =
+          { vars, ... }:
+          {
+            provides.identity.exports.key = vars.app."key";
+            units.only.env.KEYFILE = vars.app."key".path;
+            units.only.command = "/bin/true";
+          };
+      };
+      run =
+        iface:
+        planOf {
+          inherit sources;
+          interfaces."interfaces/folded.nix".held = iface;
+          varsState."holder:vars/app@one"."key".present = true;
+          instances = {
+            holder = {
+              module = soleRoot {
+                module = holder iface;
+                provides = [ "identity" ];
+              };
+              placement.every.only.machines = [ "one" ];
+              exposes = [ "identity" ];
+            };
+            consumer = {
+              module = soleRoot {
+                module = folds {
+                  inherit iface;
+                  reads = [ "key" ];
+                };
+              };
+              placement.every.only.machines = [ "two" ];
+              wire.far = {
+                instance = "holder";
+                provides = "identity";
+              };
+            };
+          };
+        };
+      unfolded = run plain;
+      applied = run folded;
+      value = applied.plan."holder:vars/app@one";
+      baseline = unfolded.plan."holder:vars/app@one";
+    in
+    {
+      expr = {
+        delivery = value.delivery;
+        reasons = value.deliveryDerivedFrom;
+        sameAsUnfolded =
+          value.delivery == baseline.delivery && value.deliveryDerivedFrom == baseline.deliveryDerivedFrom;
+        theFoldRan = applied.plan."consumer:only@two".units.only.env.FAR;
+      };
+      expected = {
+        delivery = [
+          "one"
+          "two"
+        ];
+        reasons = [
+          "consumer:only@two named key in uses.far.reads"
+          "holder:only@one owns it"
+        ];
+        sameAsUnfolded = true;
+        theFoldRan = "holder:only@one";
+      };
+    };
+
+  testTheFoldsInputIsKeyedByProviderEntry =
+    let
+      iface = folding (set: builtins.concatStringsSep "," (builtins.attrNames set));
+      run = reading {
+        inherit iface;
+        providerMachines = [
+          "one"
+          "two"
+        ];
+      };
+      again = reading {
+        inherit iface;
+        providerMachines = [
+          "one"
+          "two"
+        ];
+      };
+    in
+    {
+      expr = {
+        keys = run.plan."consumer:only@one".units.only.env.FAR;
+        stable = run.plan == again.plan;
+      };
+      expected = {
+        keys = "provider:only@one,provider:only@two";
+        stable = true;
+      };
+    };
+
+  testAFoldRaises =
+    let
+      iface = folding (
+        set: throw "two providers export ${toString (builtins.length (builtins.attrNames set))} of one key"
+      );
+      result = reading { inherit iface; };
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        subjects = subjectsById "interface-fold-raised" result;
+        severity = severityById "interface-fold-raised" result;
+        namesTheInterface = hasInfix "identity" (messageById "interface-fold-raised" result);
+        namesTheSlot = hasInfix "`far`" (messageById "interface-fold-raised" result);
+        applicable = result.applicable;
+        theProviderIsStillPlanned =
+          result.plan."provider:only@one".provides.identity.exports.publicKey.value;
+      };
+      expected = {
+        ids = [ "interface-fold-raised" ];
+        subjects = [ "consumer:only" ];
+        severity = "error";
+        namesTheInterface = true;
+        namesTheSlot = true;
+        applicable = false;
+        theProviderIsStillPlanned = "ssh-ed25519 AAAA";
+      };
+    };
+
+  testARefusedFoldLeavesTheSlotAbsent =
+    let
+      iface = folding (_: throw "no");
+      result = reading { inherit iface; };
+      read = result.plan."consumer:only@one".reads.far;
+    in
+    {
+      expr = {
+        receivedSlots = result.plan."consumer:only@one".units.only.env.SLOTS;
+        delivered = read.delivered;
+        noEntries = read ? entries;
+        readKeys = builtins.attrNames read;
+      };
+      expected = {
+        receivedSlots = "";
+        delivered = false;
+        noEntries = false;
+        readKeys = [
+          "delivered"
+          "reach"
+          "reads"
+          "wire"
+        ];
+      };
+    };
+
+  testAFoldNobodyReaches =
+    let
+      iface = folding joined;
+      result = edge {
+        interfaces = folderRegistry iface;
+        providerModule = providerOf iface;
+        consumerModule = consumer {
+          interface = iface;
+          reach = "one";
+          reads = [ "publicKey" ];
+        };
+      };
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        subjects = subjectsById "interface-fold-unapplied" result;
+        severity = severityById "interface-fold-unapplied" result;
+        namesTheInterface = hasInfix "identity" (messageById "interface-fold-unapplied" result);
+        applicable = result.applicable;
+      };
+      expected = {
+        ids = [ "interface-fold-unapplied" ];
+        subjects = [ "interfaces/folded.nix" ];
+        severity = "warning";
+        namesTheInterface = true;
+        applicable = true;
+      };
+    };
+
+  testAFoldAppliedAtLeastOnce =
+    let
+      iface = folding joined;
+      twoSlots = _: {
+        uses = {
+          far = {
+            interface = iface;
+            reach = "all";
+            reads = [ "publicKey" ];
+          };
+          near = {
+            interface = iface;
+            reach = "one";
+            reads = [ "publicKey" ];
+          };
+        };
+        impl =
+          { results, ... }:
+          {
+            units.only = {
+              command = "/bin/true";
+              env.FAR = results.far;
+            };
+          };
+      };
+      result = planOf {
+        inherit sources;
+        interfaces = folderRegistry iface;
+        instances = {
+          provider = {
+            module = soleRoot {
+              module = providerOf iface;
+              provides = [ "identity" ];
+            };
+            placement.every.only.machines = [ "one" ];
+            exposes = [ "identity" ];
+          };
+          consumer = {
+            module = soleRoot { module = twoSlots; };
+            placement.every.only.machines = [ "one" ];
+            wire = {
+              far = {
+                instance = "provider";
+                provides = "identity";
+              };
+              near = {
+                instance = "provider";
+                provides = "identity";
+              };
+            };
+          };
+        };
+      };
+    in
+    {
+      expr = {
+        unapplied = countById "interface-fold-unapplied" result;
+        ids = rowIds result;
+        theSetReadWasFolded = result.plan."consumer:only@one".units.only.env.FAR;
+      };
+      expected = {
+        unapplied = 0;
+        ids = [ "set-read-in-key" ];
+        theSetReadWasFolded = "provider:only@one=ssh-ed25519 AAAA";
       };
     };
 }

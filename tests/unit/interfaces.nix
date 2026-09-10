@@ -282,9 +282,41 @@ in
     );
     expected = [
       "exports"
+      "fold"
       "name"
     ];
   };
+
+  testADeclaredFoldIsNotAFunction =
+    let
+      notAFunction = planner.interface {
+        name = "identity";
+        exports.publicKey = publicString;
+        fold = "union";
+      };
+      result = scenario {
+        interfaceValues.identity = notAFunction;
+        instances = { };
+      };
+      row = builtins.head (rowsById "interface-fold-not-a-function" result);
+    in
+    {
+      expr = {
+        rows = countById "interface-fold-not-a-function" result;
+        inherit (row) subject severity;
+        namesInterface = hasInfix "identity" row.message;
+        statesWhatAFoldIsAppliedTo = hasInfix "keyed by provider entry key" row.evidence;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = 1;
+        subject = "interfaces/default.nix";
+        severity = "error";
+        namesInterface = true;
+        statesWhatAFoldIsAppliedTo = true;
+        applicable = false;
+      };
+    };
 
   testTwoInterfacesShareAName =
     let

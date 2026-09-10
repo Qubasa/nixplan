@@ -235,6 +235,65 @@ let
       )
     ) libraryFiles
   );
+
+  # A fold that refuses: it states why, and the planner decides the row's
+  # identifier, its subject and its severity.
+  refusing = planner.interface {
+    name = "pub";
+    exports.publicKey = publicString;
+    fold = set: {
+      refused = "the set names ${toString (length (attrNames set))} provider and none of them is authoritative";
+    };
+  };
+
+  refusingProvider = _: {
+    provides.thing.interface = refusing;
+    impl = _: {
+      provides.thing.exports.publicKey = "ssh-ed25519 AAAA";
+      units.only.command = "/bin/true";
+    };
+  };
+
+  setReader = _: {
+    uses.slot = {
+      interface = refusing;
+      reach = "all";
+      reads = [ "publicKey" ];
+    };
+    impl =
+      { results, ... }:
+      {
+        units.only = {
+          command = "/bin/true";
+          env.SLOTS = builtins.concatStringsSep "," (attrNames results);
+        };
+      };
+  };
+
+  refusedFold =
+    readers:
+    planOf {
+      interfaces."interfaces/folded.nix".refusing = refusing;
+      instances = {
+        vault = exposedOn [ "one" ] (soleRoot {
+          module = refusingProvider;
+          provides = [ "thing" ];
+        });
+      }
+      // builtins.listToAttrs (
+        map (name: {
+          inherit name;
+          value = wiredTo "one" "vault" (soleRoot {
+            module = setReader;
+          });
+        }) readers
+      );
+    };
+
+  twoRefusedFolds = refusedFold [
+    "first"
+    "second"
+  ];
 in
 {
   testADeploymentWithOneBadInstance = {
@@ -587,4 +646,152 @@ in
       readAtLeastOneFile = true;
     };
   };
+
+  testAModuleDeclaresASeverity =
+    let
+      result = planOf {
+        instances.tagging = placedOn "one" (soleRoot {
+          module = _: {
+            provides.thing = {
+              interface = pub;
+              severity = "warning";
+            };
+            impl = _: {
+              units.only.command = "/bin/true";
+            };
+          };
+          provides = [ "thing" ];
+        });
+        sources.leaves.tagging.only = "modules/tagging.nix";
+      };
+    in
+    {
+      expr = {
+        rows = ids result;
+        readAndDiscarded = countById "module-declared-severity" result;
+        itsOwnSeverity = severityById "module-declared-severity" result;
+        namesTheModule = hasInfix "modules/tagging.nix" (messageById "module-declared-severity" result);
+        theOtherRowKeepsThePlannersSeverity = severityById "provider-export-missing" result;
+      };
+      expected = {
+        rows = [
+          "module-declared-severity"
+          "provider-export-missing"
+        ];
+        readAndDiscarded = 1;
+        itsOwnSeverity = "warning";
+        namesTheModule = true;
+        theOtherRowKeepsThePlannersSeverity = "error";
+      };
+    };
+
+  testAnImplementationReturnsARefusalsField =
+    let
+      result = planOf {
+        instances.refusing = placedOn "one" (soleRoot {
+          module = _: {
+            impl = _: {
+              units.only.command = "/bin/true";
+              refusals = [ "the far end is wrong" ];
+            };
+          };
+        });
+        sources.leaves.refusing.only = "modules/refusing.nix";
+      };
+    in
+    {
+      expr = {
+        rows = ids result;
+        severity = severityById "implementation-unknown-key" result;
+        namesTheKey = hasInfix "`refusals`" (messageById "implementation-unknown-key" result);
+        namesTheFold = hasInfix "belongs in the fold of the interface that carries it" (
+          support.resolutionById "implementation-unknown-key" result
+        );
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ "implementation-unknown-key" ];
+        severity = "error";
+        namesTheKey = true;
+        namesTheFold = true;
+        applicable = false;
+      };
+    };
+
+  testAFoldRefusesAProvider =
+    let
+      result = refusedFold [ "reader" ];
+      row = builtins.head (support.rowsById "interface-fold-refused" result);
+    in
+    {
+      expr = {
+        rows = ids result;
+        inherit (row) subject severity message;
+        namesTheEntries = hasInfix "`vault:only@one`" row.evidence;
+        theSlotIsUndelivered = result.plan."reader:only@one".units.only.env.SLOTS;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ "interface-fold-refused" ];
+        subject = "reader:only";
+        severity = "error";
+        message = "the set names 1 provider and none of them is authoritative";
+        namesTheEntries = true;
+        theSlotIsUndelivered = "";
+        applicable = false;
+      };
+    };
+
+  testOneBadProviderReadByTwoConsumers =
+    let
+      result = twoRefusedFolds;
+      rows = support.rowsById "interface-fold-refused" result;
+    in
+    {
+      expr = {
+        rows = length rows;
+        subjects = sortStrings (map (r: r.subject) rows);
+        messages = uniqueStrings (map (r: r.message) rows);
+        neitherWasDropped = all (r: r.severity == "error") rows;
+      };
+      expected = {
+        rows = 2;
+        subjects = [
+          "first:only"
+          "second:only"
+        ];
+        messages = [ "the set names 1 provider and none of them is authoritative" ];
+        neitherWasDropped = true;
+      };
+    };
+
+  testAModuleRaisesOutsideAFold =
+    let
+      result = planOf {
+        instances.broken = placedOn "one" (soleRoot {
+          module = _: {
+            impl = _: {
+              units.only.command = throw "unknown module 'pam_unix'. Provide a `package` field";
+            };
+          };
+        });
+        sources.leaves.broken.only = "modules/broken.nix";
+      };
+    in
+    {
+      expr = {
+        rows = ids result;
+        severity = severityById "module-raised" result;
+        namesWhatWasForced = hasInfix "broken:only@one" (messageById "module-raised" result);
+        carriesTheModulesOwnText = hasInfix "pam_unix" (messageById "module-raised" result);
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ "module-raised" ];
+        severity = "error";
+        namesWhatWasForced = true;
+        carriesTheModulesOwnText = false;
+        applicable = false;
+      };
+    };
 }
