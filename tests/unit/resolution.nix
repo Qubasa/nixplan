@@ -1203,6 +1203,99 @@ in
       };
     };
 
+  testTwoConsumersOfOneFoldReceiveOneValue =
+    let
+      iface = folding (
+        set:
+        map (key: {
+          entry = key;
+          inherit (set.${key}) publicKey;
+        }) (builtins.attrNames set)
+      );
+      authorizedKeys =
+        records: builtins.concatStringsSep "\n" (map (r: "# ${r.entry}\n${r.publicKey}") records);
+      knownHosts = records: builtins.concatStringsSep "," (map (r: "${r.entry}=${r.publicKey}") records);
+      rendering = render: _: {
+        uses.far = {
+          interface = iface;
+          reach = "all";
+          reads = [ "publicKey" ];
+        };
+        impl =
+          { results, ... }:
+          {
+            units.only = {
+              command = "/bin/true";
+              env = {
+                FOLDED = builtins.toJSON results.far;
+                RENDERED = render results.far;
+              };
+            };
+          };
+      };
+      consuming = module: {
+        module = soleRoot { inherit module; };
+        placement.every.only.machines = [ "one" ];
+        wire.far = {
+          instance = "provider";
+          provides = "identity";
+        };
+      };
+      result = planOf {
+        sources = sources // {
+          modules = sources.modules // {
+            authz = "modules/authz/default.nix";
+            hosts = "modules/hosts/default.nix";
+          };
+          leaves = sources.leaves // {
+            authz.only = "modules/authz/leaf.nix";
+            hosts.only = "modules/hosts/leaf.nix";
+          };
+        };
+        interfaces = folderRegistry iface;
+        instances = {
+          provider = {
+            module = soleRoot {
+              module = providerOf iface;
+              provides = [ "identity" ];
+            };
+            placement.every.only.machines = [
+              "one"
+              "two"
+            ];
+            exposes = [ "identity" ];
+          };
+          authz = consuming (rendering authorizedKeys);
+          hosts = consuming (rendering knownHosts);
+        };
+      };
+      authzUnit = result.plan."authz:only@one".units.only;
+      hostsUnit = result.plan."hosts:only@one".units.only;
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        onePolicyOneValue = authzUnit.env.FOLDED == hostsUnit.env.FOLDED;
+        folded = authzUnit.env.FOLDED;
+        authorized = authzUnit.env.RENDERED;
+        known = hostsUnit.env.RENDERED;
+        twoOutputs = authzUnit.env.RENDERED != hostsUnit.env.RENDERED;
+        applicable = result.applicable;
+      };
+      expected = {
+        ids = [
+          "set-read-in-key"
+          "set-read-in-key"
+        ];
+        onePolicyOneValue = true;
+        folded = ''[{"entry":"provider:only@one","publicKey":"ssh-ed25519 AAAA"},{"entry":"provider:only@two","publicKey":"ssh-ed25519 AAAA"}]'';
+        authorized = "# provider:only@one\nssh-ed25519 AAAA\n# provider:only@two\nssh-ed25519 AAAA";
+        known = "provider:only@one=ssh-ed25519 AAAA,provider:only@two=ssh-ed25519 AAAA";
+        twoOutputs = true;
+        applicable = true;
+      };
+    };
+
   testAFoldNobodyReaches =
     let
       iface = folding joined;
