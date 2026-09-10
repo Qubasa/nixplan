@@ -518,8 +518,13 @@ let
       ) idBindings
     );
 
+  # A reading above `lib/` is a producer here where it builds a row of its own.
+  # `image/read.nix` and `flakelet/read.nix` name identifiers they do not
+  # produce, which is what `refusalAccounting` crosses; this walk is about what
+  # the document owes a reader.
   producingFiles = map (rel: libSource + "/${rel}") libraryFiles ++ [
     (operatorSource + "/read.nix")
+    (secretsSource + "/read.nix")
   ];
 
   producedIds = sortStrings (
@@ -1780,7 +1785,7 @@ in
   testADocumentTabulatesARowTheTreeCannotProduce = {
     expr = {
       unproduced = map (
-        id: "docs/diagnostics.md tabulates `${id}`, which nothing under lib/ or operator/ writes"
+        id: "docs/diagnostics.md tabulates `${id}`, which no reading of this tree writes"
       ) unproducedRows;
       constructs = documentedConstructs;
     };
