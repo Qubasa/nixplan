@@ -91,4 +91,7 @@ and a tag that places it on both. [docs/README.md](docs/README.md) shows it and
 | `nix develop` | the one shell, with the interpreter the machine layer runs under |
 
 The machine layer needs real VMs, so it is an app rather than a check:
-`nix run .#planner-e2e` boots the guests and runs all five folders.
+`nix run .#planner-e2e` boots the guests and runs all five folders. It resolves **rookery**
+(`git+ssh://git@github.com/Qubasa/rookery`) at run time, and that repository is private and is
+not published here: a reader without access to it cannot run that command, and every folder of
+the machine layer skips itself saying so. Everything above needs nothing but this checkout.

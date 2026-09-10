@@ -122,7 +122,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
 - [x] 6.2 `flake-module.nix:193`: `planner-e2e-env` refuses when it is not run from a checkout of
   this repository, naming what it needed, instead of continuing with an empty root. Verify running
   it from `/tmp` prints the refusal and exits non-zero.
-- [ ] 6.3 `README.md`: name rookery beside `nix run .#planner-e2e`, and say a reader without access
+- [x] 6.3 `README.md`: name rookery beside `nix run .#planner-e2e`, and say a reader without access
   to it cannot run that command. Verify `testTheRootDoesNotSayWhatTheRepositoryIs` passes with
   `rookery` added to its needle list.
 - [ ] 6.4 `tests/unit/layers.nix`:
