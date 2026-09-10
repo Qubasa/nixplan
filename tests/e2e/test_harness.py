@@ -25,8 +25,8 @@ import pytest
 import apply
 import delivery
 import errors
-import manifest
 import generation
+import manifest
 import runner
 
 SERVER_ENTRY = "site:server"
@@ -37,6 +37,7 @@ SESSION_VALUE = "issuer:vars/session"
 CA_VALUE = "issuer:vars/ca"
 
 TOKEN = {"token": {"path": "/run/vars/issuer/session/token", "secrecy": "secret"}}
+PROGRAM = "/nix/store/3k9m2x7vqz1n5bpr4jlfg8ys6cwh0d2a-mint-token.drv"
 
 PLAN = {
     "machine:alpha": {"address": "10.0.0.10", "tags": ["cluster"]},
@@ -255,6 +256,62 @@ def test_a_value_source_carries_bytes_the_plan_does_not_name(tmp_path: Path) -> 
         apply.apply(deployment, recorder, source=source, base_env={})
 
     assert "spare" in str(raised.value)
+    assert recorder.commands == []
+
+
+def test_a_generated_value_is_not_asked_of_the_operator(tmp_path: Path) -> None:
+    """A value entry recording a program is the generator's, so no source is wanted."""
+    deployment = _built(
+        tmp_path / "built",
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+        values={SESSION_VALUE: {"delivery": ["alpha"], "files": TOKEN, "program": PROGRAM}},
+    )
+    recorder = Recorder()
+
+    log = apply.apply(deployment, recorder, base_env={})
+
+    assert [line for line in log if line.startswith("value ")] == []
+    assert _activated(log) == [SERVER_KEY]
+
+
+def test_a_value_source_holds_the_bytes_of_a_generated_value(tmp_path: Path) -> None:
+    """Bytes the generator owns are refused where they are, not reported as undeclared."""
+    deployment = _built(
+        tmp_path / "built",
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+        values={SESSION_VALUE: {"delivery": ["alpha"], "files": TOKEN, "program": PROGRAM}},
+    )
+    source = _source(tmp_path / "values", {f"{SESSION_VALUE}/token": "s3cret"})
+    recorder = Recorder()
+
+    with pytest.raises(errors.ApplyError) as raised:
+        apply.apply(deployment, recorder, source=source, base_env={})
+
+    message = str(raised.value)
+    assert f"{SESSION_VALUE}/token" in message
+    assert PROGRAM in message
+    assert "the generator's" in message
+    assert "declares" not in message
+    assert recorder.commands == []
+
+
+def test_a_value_the_operator_owns_still_needs_a_source(tmp_path: Path) -> None:
+    """The same entry recording no program is the operator's, and a run with none is refused."""
+    deployment = _built(
+        tmp_path / "built",
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+        values={SESSION_VALUE: {"delivery": ["alpha"], "files": TOKEN}},
+    )
+    recorder = Recorder()
+
+    with pytest.raises(errors.ApplyError) as raised:
+        apply.apply(deployment, recorder, base_env={})
+
+    assert SESSION_VALUE in str(raised.value)
+    assert "no value source was named" in str(raised.value)
     assert recorder.commands == []
 
 

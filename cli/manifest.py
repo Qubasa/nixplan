@@ -45,10 +45,15 @@ class ValueFile:
 
 @dataclass(frozen=True)
 class Value:
-    """A generated value entry: the machines that receive it and its files."""
+    """A generated value entry: the machines that receive it and its files.
+
+    A `program` is the generator the plan recorded, and its presence says the
+    bytes are that program's rather than the operator's.
+    """
 
     key: str
     delivery: tuple[str, ...]
+    program: str | None
     files: tuple[ValueFile, ...]
 
 
@@ -257,9 +262,13 @@ def _entry(root: Path, key: str, record: Mapping[str, Any]) -> Entry:
 
 def _value(key: str, record: Mapping[str, Any]) -> Value:
     files = _mapping(record.get("files", {}), of=f"the files of {key}")
+    program = record.get("program")
+    if program is not None and not isinstance(program, str):
+        raise ApplyError(f"{key} records program as {program!r}, which is not a store path")
     return Value(
         key=key,
         delivery=_texts(record, "delivery", of=key),
+        program=program,
         files=tuple(_file(key, name, file) for name, file in sorted(files.items())),
     )
 
