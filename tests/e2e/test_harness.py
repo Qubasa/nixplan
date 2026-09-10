@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import pytest
 
@@ -812,3 +812,23 @@ def test_a_record_carrying_an_entry_with_no_address_is_read(tmp_path: Path) -> N
     assert SERVER_KEY in message
     assert "alpha" in message
     assert recorder.commands == []
+
+
+def test_a_target_that_was_collected_is_named_as_collected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A path a collector removed is a build that is gone, not a reference that fails."""
+
+    def dialled(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("nix was asked to build a path that is not there")
+
+    monkeypatch.setattr(subprocess, "run", dialled)
+    collected = f"{manifest.store_dir()}/3k9m2x7vqz1n5bpr4jlfg8ys6cwh0d2a-deployment"
+
+    with pytest.raises(errors.ApplyError) as raised:
+        manifest.resolve(collected)
+
+    message = str(raised.value)
+    assert collected in message
+    assert "collected" in message
+    assert "don't know how to build" not in message

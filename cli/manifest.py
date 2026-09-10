@@ -121,14 +121,20 @@ def resolve(target: str) -> Path:
         The directory the deployment was built into.
 
     Raises:
-        ApplyError: If the target is a directory that is neither, if the
-            reference does not build, or if it builds something that is not a
-            deployment. A build's message carries its own stderr, which is where
-            the rendered diagnostics table appears.
+        ApplyError: If the target is a directory that is neither, if it names a
+            store path that is no longer there, if the reference does not
+            build, or if it builds something that is not a deployment. A
+            build's message carries its own stderr, which is where the rendered
+            diagnostics table appears.
     """
     named = Path(target)
     if (named / MANIFEST).is_file():
         return named
+    if "#" not in target and named.is_relative_to(store_dir()) and not named.exists():
+        raise ApplyError(
+            f"{target} is not there any more: the build it names was collected, so build the "
+            f"reference that produced it again"
+        )
     # A directory carrying neither file cannot be read and cannot be built. Left
     # to nix it becomes a flake reference, and the answer is then about commit
     # hashes rather than about the deployment that was meant.

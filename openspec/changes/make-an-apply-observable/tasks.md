@@ -33,7 +33,7 @@ only the scenarios listed below are new.
   that dials resolves the address and refuses there.
   Verify: `test_a_record_carrying_an_entry_with_no_address_is_read` in `tests/e2e/test_harness.py`:
   the read succeeds and an apply of that entry refuses naming the entry and the machine.
-- [ ] 1.4 `cli/manifest.py:resolve`: a target that names a path under the store directory and does
+- [x] 1.4 `cli/manifest.py:resolve`: a target that names a path under the store directory and does
   not exist is refused as a collected build, naming the path and the reference to build again,
   before `nix build` is invoked. Nothing else about resolution changes, and no garbage-collection
   root is taken (design D10).
