@@ -146,8 +146,8 @@ discipline and deduplication applied).
 | `export-type-mismatch` | a published value fails its atom's type |
 | `export-secret-not-a-reference` | an export declared `secret` publishes something other than a generated file, so its bytes would be in the plan rather than its path |
 | `slot-reads-undeployed-value` | a `reads` entry names a secret export backed by a `deploy = false` generator, so the path it names resolves to nothing at run time |
-| `interface-fold-raised` | the interface's `fold` raised while combining the set the slot collected; the slot is then absent from `results` |
-| `interface-fold-refused` | the interface's `fold` returned `{ refused = "<why>"; }`; the fold states the message and the planner states the identifier, the consuming entry as subject and the severity |
+| `interface-fold-raised` | the interface's `fold` raised while combining the set the slot collected; the slot is then absent from `results`, and the row renders only where no implementation forces that slot |
+| `interface-fold-refused` | the interface's `fold` returned `{ refused = "<why>"; }`; the fold states the message and the planner states the identifier, the consuming entry as subject and the severity. The slot is absent from `results`, so a consumer reading it under `results ? <slot>` renders the row and one reading it unconditionally ends the evaluation of the whole table with a missing attribute |
 | `module-raised` | a module's own code raised a catchable error; its value is recorded as not computed and the rest of the plan is still produced |
 
 ### The plan itself
