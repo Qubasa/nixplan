@@ -208,11 +208,20 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
   `newcomer` had egress and its walk was observed rather than reported as unobservable. The count
   before this change was 66 at `2a5191c`; the nine added are all `newcomer`'s, which grew from six
   tests to fifteen.
-- [ ] 10.4 Prove the new assertions can fail: point the consumer flake at a stale store path and
-  confirm only the equality test fails; drop `apps.default` and confirm only the discovery test
-  fails; add a path interpolation to the newcomer deployment and confirm the unit-layer scan and the
-  equality test both fail; remove `planner` from the shell and confirm only the shell test fails.
-  Revert each and confirm the tree is byte-identical to before the mutation.
+- [x] 10.4 Four mutations, each reverted and each leaving `git status` empty and
+  `.#debug.failures` `[ ]` afterwards:
+  - a stale store path as the template's `nixplan` input: `layers` reports
+    `testTheExampleADocumentShowsIsTheExampleAFolderHolds` and nothing else.
+  - `apps.default` dropped: 2 failed and 5 errors, not the one test this task expected. The walk
+    itself types the bare form - `nix run path:<source> -- build` - so the discovery test and every
+    test that runs the command fail together. The expectation was written before the folder ran the
+    command that way, and the assertion is still the one that names the missing output.
+  - a path written into the newcomer deployment: three tests, not two -
+    `testAFileNamesAPathThatIsNotThere`, `testTheExampleADocumentShowsIsTheExampleAFolderHolds` and
+    `testAReaderOpensAnEndToEndDirectory`, the last because a folder may name no sibling by path
+    either.
+  - `planner` removed from the one shell: 1 failed, 14 passed, the failure being
+    `test_the_shell_carries_the_command_its_documentation_is_about`.
 - [ ] 10.5 Walk the route by hand, in a clean directory outside this checkout, using only the
   committed documents: write the flake, build the deployment, apply it. Record here every step that
   needed a fact no document states.
