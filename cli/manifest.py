@@ -19,6 +19,7 @@ carry one, and a directory can.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -32,6 +33,9 @@ PLAN = "plan.json"
 TABLE = "diagnostics.txt"
 ROWS = "diagnostics.json"
 MACHINE_PREFIX = "machine:"
+VERSION = 1
+STORE_VARIABLE = "NIX_STORE_DIR"
+DEFAULT_STORE = "/nix/store"
 
 
 @dataclass(frozen=True)
@@ -97,6 +101,16 @@ class Deployment:
         return tuple(row for row in self.diagnostics if row.severity == "error")
 
 
+def store_dir() -> str:
+    """Return the store directory this command runs against.
+
+    Returns:
+        The store nix itself resolves a path in: `NIX_STORE_DIR` where the
+        caller set it, and the default store otherwise.
+    """
+    return os.environ.get(STORE_VARIABLE) or DEFAULT_STORE
+
+
 def resolve(target: str) -> Path:
     """Resolve a target to the built deployment directory it names.
 
@@ -156,10 +170,13 @@ def read(root: Path) -> Deployment:
         deployment carrying no diagnostics file carries no row.
 
     Raises:
-        ApplyError: If a file is absent or unreadable, or if the manifest states
-            an entry without a field the command needs, naming both.
+        ApplyError: If a file is absent or unreadable, if the record states a
+            version this command does not implement or a store it does not run
+            against, or if the manifest states an entry without a field the
+            command needs, naming both.
     """
     interface = _load(root / MANIFEST)
+    _shape(root / MANIFEST, interface)
     plan = _load(root / PLAN)
     entries = {
         key: _entry(root, key, _mapping(record, of=f"manifest entry {key}"))
@@ -243,6 +260,18 @@ def image_file(entry: Entry) -> str:
     if not isinstance(image, str) or not image:
         raise ApplyError(f"{entry.key}: {entry.path}/attachment.json names no image")
     return image
+
+
+def _shape(path: Path, interface: Mapping[str, Any]) -> None:
+    version = interface.get("version")
+    if version != VERSION:
+        raise ApplyError(
+            f"{path} states version {version!r}, and this command implements version {VERSION}"
+        )
+    stated = interface.get("storeDir")
+    running = store_dir()
+    if stated != running:
+        raise ApplyError(f"{path} names store {stated!r}, and this command runs against {running}")
 
 
 def _entry(root: Path, key: str, record: Mapping[str, Any]) -> Entry:

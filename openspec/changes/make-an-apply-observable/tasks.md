@@ -14,7 +14,7 @@ only the scenarios listed below are new.
 
 ## 1. Reading a deployment record
 
-- [ ] 1.1 `cli/manifest.py`: read `version` and `storeDir`. A version other than the one the command
+- [x] 1.1 `cli/manifest.py`: read `version` and `storeDir`. A version other than the one the command
   implements is an `ApplyError` naming both; a `storeDir` other than the store the command runs
   against is an `ApplyError` naming both. Both are read before any entry, so a record of another
   shape is refused before its fields are interpreted.

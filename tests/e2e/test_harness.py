@@ -743,3 +743,39 @@ def test_the_external_contract_cannot_be_read(tmp_path: Path) -> None:
     assert generation.contract_refusal(tmp_path / "nothing-was-resolved") is None
     (tmp_path / "no-schema").mkdir()
     assert generation.contract_refusal(tmp_path / "no-schema") is None
+
+
+def _record(root: Path, record: dict[str, Any]) -> Path:
+    """Write a deployment record verbatim, for the reading to accept or refuse."""
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "plan.json").write_text(json.dumps(PLAN))
+    (root / "manifest.json").write_text(json.dumps(record))
+    return root
+
+
+def test_a_record_states_a_version_the_command_does_not_implement(tmp_path: Path) -> None:
+    """A record of another shape is refused before any entry of it is interpreted."""
+    root = _record(tmp_path, {"version": 2, "storeDir": manifest.store_dir(), "entries": {}})
+    recorder = Recorder()
+
+    with pytest.raises(errors.ApplyError) as raised:
+        apply.apply(manifest.read(root), recorder, base_env={})
+
+    message = str(raised.value)
+    assert "version 2" in message
+    assert f"version {manifest.VERSION}" in message
+    assert recorder.commands == []
+
+
+def test_a_record_names_a_store_the_command_does_not_run_against(tmp_path: Path) -> None:
+    """Artifact paths of another store are paths this command cannot copy."""
+    root = _record(tmp_path, {"version": 1, "storeDir": "/gnu/store", "entries": {}})
+    recorder = Recorder()
+
+    with pytest.raises(errors.ApplyError) as raised:
+        apply.apply(manifest.read(root), recorder, base_env={})
+
+    message = str(raised.value)
+    assert "/gnu/store" in message
+    assert manifest.store_dir() in message
+    assert recorder.commands == []
