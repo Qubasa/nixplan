@@ -150,6 +150,25 @@ def _reported(line: str) -> Reported:
     )
 
 
+def _host(*argv: str, timeout: float = BRIEF) -> str:
+    """Run a command on this host and return its stdout.
+
+    Args:
+        argv: The command and its arguments.
+        timeout: Seconds to allow.
+
+    Returns:
+        The command's stdout.
+
+    Raises:
+        RuntimeError: If it refused, carrying its own message.
+    """
+    done = subprocess.run(argv, capture_output=True, text=True, check=False, timeout=timeout)
+    if done.returncode != 0:
+        raise RuntimeError(f"{shlex.join(argv)} failed:\n{done.stderr.strip()}")
+    return done.stdout
+
+
 def _source_of(flake: Path) -> str:
     """The store path this checkout's tracked content resolves to.
 
@@ -163,19 +182,64 @@ def _source_of(flake: Path) -> str:
 
     Returns:
         The store path of its tracked content.
-
-    Raises:
-        RuntimeError: If nix refused, carrying its own message.
     """
-    done = subprocess.run(
-        ["nix", "flake", "metadata", "--json", str(flake)],
-        capture_output=True,
-        text=True,
-        check=False,
+    return str(json.loads(_host("nix", "flake", "metadata", "--json", str(flake)))["path"])
+
+
+def test_the_flake_names_its_outputs() -> None:
+    """The command that lists a flake's outputs answers for every system claimed.
+
+    The listing walks the three doubles this flake writes out, which is what
+    taking the list from an input naming a fourth the package set removed cost:
+    the walk died in a release note before it printed one output. The route ends
+    at something a reader can type next, so the flake with no attribute named
+    runs the command and the command's own help names its subcommands.
+    """
+    shown = json.loads(_host("nix", "flake", "show", "--json", str(FLAKE)))
+    claimed = ["aarch64-darwin", "aarch64-linux", "x86_64-linux"]
+
+    assert sorted(shown["apps"]) == claimed, sorted(shown["apps"])
+    assert sorted(shown["packages"]) == claimed, sorted(shown["packages"])
+    for system in claimed:
+        assert "planner" in shown["apps"][system], shown["apps"][system]
+        assert "default" in shown["apps"][system], shown["apps"][system]
+        assert "planner-cli" in shown["packages"][system], sorted(shown["packages"][system])
+
+    helped = _host("nix", "run", str(FLAKE), "--", "--help", timeout=PATIENT)
+    for subcommand in ("plan", "build", "apply", "status", "rollback"):
+        assert f"    {subcommand}" in helped, helped
+
+
+def test_a_consumer_reads_the_build_off_an_output() -> None:
+    """Planning and building are both output names, and neither is a source path.
+
+    Both sit outside the per-system attributes, because the build takes the
+    caller's own package set: a consumer on one double building for another reads
+    one name rather than one name per double.
+    """
+    shown = json.loads(_host("nix", "flake", "show", "--json", str(FLAKE)))
+    assert "lib" in shown, sorted(shown)
+    assert "operator" in shown, sorted(shown)
+
+    library = json.loads(
+        _host("nix", "eval", "--json", f"{FLAKE}#lib", "--apply", "builtins.attrNames")
     )
-    if done.returncode != 0:
-        raise RuntimeError(f"nix flake metadata {flake} failed:\n{done.stderr.strip()}")
-    return str(json.loads(done.stdout)["path"])
+    assert {"interface", "registry", "render", "service", "platform"} <= set(library), library
+
+    build = json.loads(
+        _host("nix", "eval", "--json", f"{FLAKE}#operator", "--apply", "builtins.attrNames")
+    )
+    assert "mkDeployment" in build, build
+    assert (
+        _host(
+            "nix",
+            "eval",
+            f"{FLAKE}#operator",
+            "--apply",
+            "built: builtins.isFunction built.mkDeployment",
+        ).strip()
+        == "true"
+    )
 
 
 def _planner(work: Workstation, *argv: str, timeout: float = PATIENT) -> str:
