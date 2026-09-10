@@ -74,7 +74,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
   `tests/e2e/guest.nix`: the image carries `nix-command`, `flakes` and room for a build, with an
   assertion naming the folder that needs them. Verify `nix build .#planner-e2e-guest` is green and
   that removing the experimental features fails the assertion.
-- [ ] 4.3 `tests/e2e/newcomer/test_newcomer.py`: three machines through the folder's own cluster
+- [x] 4.3 `tests/e2e/newcomer/test_newcomer.py`: three machines through the folder's own cluster
   stage; the workstation handed the source and the credential with one `nix copy`; the template
   copied and locked with `--override-input`; then
   `test_the_template_names_the_published_flake`,
