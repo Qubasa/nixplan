@@ -28,9 +28,10 @@ from pathlib import Path
 
 import remote
 from errors import ApplyError
-from manifest import Deployment, Entry, address_of, image_file, service_name
+from manifest import Deployment, Entry, address_of, artifact_of, image_file, service_name
 
 UNDIALLED = -1
+UNREALISED = -2
 
 
 @dataclass(frozen=True)
@@ -61,7 +62,7 @@ def describe(deployment: Deployment) -> tuple[str, ...]:
     """
     lines = [
         f"{entry.key} {entry.realiser} {entry.machine} {entry.address or 'unaddressed'} "
-        f"{entry.path} "
+        f"{entry.path or 'no artifact'} "
         f"[{' '.join(entry.units)}]"
         for entry in _entries(deployment)
     ]
@@ -113,7 +114,7 @@ def status(
         line = f"{entry.key} {entry.realiser} {_answered(entry, answer)}"
         lines.append(line)
         log(line)
-        if not _the_endpoint_answered(answer):
+        if answer.status != UNREALISED and not _the_endpoint_answered(answer):
             unasked.add(entry.machine)
     return Report(lines=tuple(lines), unasked=tuple(sorted(unasked)))
 
@@ -121,6 +122,8 @@ def status(
 def _ask(
     runner: remote.Runner, entry: Entry, *, opts: str, user: str, env: dict[str, str]
 ) -> remote.Answer:
+    if entry.path is None:
+        return remote.Answer(UNREALISED, "")
     if entry.address is None:
         return remote.Answer(UNDIALLED, "")
     argv = remote.ssh_argv(entry.address, _status_script(entry), opts=opts, user=user)
@@ -129,10 +132,12 @@ def _ask(
 
 def _the_endpoint_answered(answer: remote.Answer) -> bool:
     """Whether this answer came from the machine's own endpoint at all."""
-    return answer.status not in (UNDIALLED, remote.UNREACHABLE, *remote.MISSING)
+    return answer.status not in (UNDIALLED, UNREALISED, remote.UNREACHABLE, *remote.MISSING)
 
 
 def _answered(entry: Entry, answer: remote.Answer) -> str:
+    if answer.status == UNREALISED:
+        return "realises nothing: the entry declares no unit, so no machine holds anything for it"
     if answer.status == UNDIALLED:
         return f"not dialled: machine {entry.machine} declares no address"
     if answer.status == remote.UNREACHABLE:
@@ -152,6 +157,7 @@ def rollback(
     ssh_key: Path | None = None,
     user: str = "root",
     base_env: Mapping[str, str] | None = None,
+    log: Callable[[str], None] = _ignore,
 ) -> tuple[str, ...]:
     """Roll one entry back and return what its machine reported.
 
@@ -162,6 +168,7 @@ def rollback(
         ssh_key: The private key `--ssh-key` named, if any.
         user: The login user on the machine.
         base_env: The environment to run under, the process's own by default.
+        log: Called with each line as that line is known.
 
     Returns:
         The step line and the endpoint's own report, line by line.
@@ -180,22 +187,29 @@ def rollback(
     opts = remote.ssh_opts(ssh_key, inherited=environment.get("NIX_SSHOPTS"))
     env = remote.copy_env(environment, opts)
     address = address_of(entry)
-    step = f"rollback {entry.key} on {user}@{address}"
-    with remote.refusing(step, address):
+    lines: list[str] = []
+
+    def record(line: str) -> None:
+        lines.append(line)
+        log(line)
+
+    with remote.taking(f"rollback {entry.key} on {user}@{address}", address, record):
         reported = runner.output(
             remote.ssh_argv(
                 address, remote.rollback_script(service_name(entry)), opts=opts, user=user
             ),
             env=env,
         )
-    return (step, *reported.splitlines())
+    for line in reported.splitlines():
+        record(line)
+    return tuple(lines)
 
 
 def _status_script(entry: Entry) -> str:
     if entry.realiser == "flakelet":
         return remote.flakelet_status_script(service_name(entry))
     if entry.realiser == "image":
-        return remote.image_status_script(entry.path / image_file(entry))
+        return remote.image_status_script(artifact_of(entry) / image_file(entry))
     raise ApplyError(f"{entry.key} states realiser {entry.realiser}, which the command cannot ask")
 
 

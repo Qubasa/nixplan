@@ -135,6 +135,8 @@ def _built(
     # a farm of links into the store, and what the command copies and activates
     # is what a link resolves to.
     for key, stated in entries.items():
+        if "path" not in stated:
+            continue
         artifact = root / "artifacts" / Path(stated["path"]).name
         artifact.mkdir(parents=True)
         instance, service = key.split("@")[0].split(":")
@@ -221,6 +223,97 @@ def test_two_entries_each_read_the_others_capability(tmp_path: Path) -> None:
     assert len(against) == 1
     assert SERVER_KEY in against[0]
     assert CLIENT_KEY in against[0]
+
+
+HUB_KEY = "aggregate:hub@alpha"
+UNAPPLIED_KEY = "spare:agent@beta"
+
+
+def _set_read(*providers: str) -> dict[str, Any]:
+    """State one `reach = "all"` read the way the plan records it, keyed by provider."""
+    return {
+        "reach": "all",
+        "delivered": True,
+        "entries": {provider: {"url": provider} for provider in providers},
+    }
+
+
+def test_an_entry_reading_a_set_of_providers_follows_all_of_them(tmp_path: Path) -> None:
+    """A set-valued read names its providers keyed by plan key, and each one is an edge."""
+    plan = {
+        **PLAN,
+        HUB_KEY: {"reads": {"agents": _set_read(SERVER_KEY, CLIENT_KEY, UNAPPLIED_KEY)}},
+    }
+    deployment = _built(
+        tmp_path,
+        plan=plan,
+        entries={
+            HUB_KEY: _stated(HUB_KEY, "alpha", "10.0.0.10"),
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+        },
+    )
+
+    log = apply.apply(deployment, Recorder(), base_env={})
+
+    activated = _activated(log)
+    # The consumer sorts below both providers, so the order is the read's and not
+    # the key sort's, and the provider this run does not apply contributes nothing.
+    assert activated[-1] == HUB_KEY
+    assert sorted(activated[:2]) == [CLIENT_KEY, SERVER_KEY]
+    assert [line for line in log if line.startswith("ordered against ")] == []
+
+
+def test_a_mutual_pair_is_reported_however_each_side_reads_the_other(tmp_path: Path) -> None:
+    """One side reading the other as a set is the same cycle, and it is reported."""
+    plan = {
+        **PLAN,
+        SERVER_KEY: {"reads": {"clients": _set_read(CLIENT_KEY)}},
+        CLIENT_KEY: {"reads": {"site": {"entry": SERVER_KEY, "delivered": True}}},
+    }
+    deployment = _built(
+        tmp_path,
+        plan=plan,
+        entries={
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+        },
+    )
+
+    log = apply.apply(deployment, Recorder(), base_env={})
+
+    assert sorted(_activated(log)) == [CLIENT_KEY, SERVER_KEY]
+    against = [line for line in log if line.startswith("ordered against ")]
+    assert len(against) == 1
+    assert SERVER_KEY in against[0]
+    assert CLIENT_KEY in against[0]
+
+
+def test_a_resolved_read_recorded_in_an_unknown_shape_is_refused(tmp_path: Path) -> None:
+    """A delivered read naming its providers in neither shape is a refusal, not zero edges."""
+    plan = {
+        **PLAN,
+        CLIENT_KEY: {
+            "reads": {"site": {"reach": "all", "delivered": True, "providers": [SERVER_KEY]}}
+        },
+    }
+    deployment = _built(
+        tmp_path,
+        plan=plan,
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+    )
+    recorder = Recorder()
+
+    with pytest.raises(errors.ApplyError) as raised:
+        apply.apply(deployment, recorder, base_env={})
+
+    message = str(raised.value)
+    assert CLIENT_KEY in message
+    assert "site" in message
+    assert recorder.commands == []
 
 
 def test_a_value_the_plan_names_has_no_bytes_in_the_source(tmp_path: Path) -> None:
@@ -1117,6 +1210,25 @@ def test_the_run_stops_at_the_step_that_broke(tmp_path: Path) -> None:
     assert all("10.0.0.11" not in " ".join(command) for command in failing.commands)
 
 
+def test_a_step_the_machine_refuses_is_named_by_the_run_that_took_it(tmp_path: Path) -> None:
+    """Every subcommand announces its step first, the rollback path included."""
+    deployment = _built(
+        tmp_path,
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+    )
+    printed: list[str] = []
+
+    with pytest.raises(errors.ApplyError) as raised:
+        report.rollback(deployment, Failing("10.0.0.10"), SERVER_KEY, log=printed.append)
+
+    assert printed[0] == f"rollback {SERVER_KEY} on root@10.0.0.10"
+    assert printed[-1].startswith("failed ")
+    assert "10.0.0.10" in str(raised.value)
+    assert REFUSED in str(raised.value)
+    assert "Traceback" not in str(raised.value)
+
+
 def _restricted(tmp_path: Path, only: tuple[str, ...]) -> Recorder:
     """Apply a two-machine deployment restricted to ``only`` and return the recorder."""
     deployment = _built(
@@ -1183,7 +1295,7 @@ def test_an_image_the_machine_already_holds_attached_is_not_attached_twice(
             SERVER_KEY: {**_stated(SERVER_KEY, "alpha", "10.0.0.10"), "realiser": "image"},
         },
     )
-    image = deployment.entries[SERVER_KEY].path
+    image = manifest.artifact_of(deployment.entries[SERVER_KEY])
     (image / "attachment.json").write_text(json.dumps({"image": "site-server.raw"}))
     recorder = Answering("portablectl is-attached", "running\n")
 
@@ -1193,6 +1305,90 @@ def test_an_image_the_machine_already_holds_attached_is_not_attached_twice(
     assert all(f"{image}/bin/attach" not in command for command in dialled)
     assert f"attached {SERVER_KEY} already on root@10.0.0.10" in log
     assert _activated(log) == [CLIENT_KEY]
+
+
+def test_an_artifact_the_run_needs_later_is_missing(tmp_path: Path) -> None:
+    """An artifact the second machine needs is resolved before the first is dialled."""
+    deployment = _built(
+        tmp_path,
+        plan=PLAN,
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            SERVER_KEY: {**_stated(SERVER_KEY, "alpha", "10.0.0.10"), "realiser": "image"},
+        },
+    )
+    artifact = manifest.artifact_of(deployment.entries[SERVER_KEY])
+    (artifact / "attachment.json").write_text(json.dumps({}))
+    recorder = Recorder()
+
+    with pytest.raises(errors.ApplyError) as raised:
+        apply.apply(deployment, recorder, base_env={})
+
+    assert SERVER_KEY in str(raised.value)
+    assert "names no image" in str(raised.value)
+    assert recorder.commands == []
+
+
+def test_a_file_inside_the_build_is_malformed(tmp_path: Path) -> None:
+    """A file the command reads is refused by name, never as the reader's own error."""
+    root = tmp_path / "built"
+    _built(root, plan=PLAN, entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")})
+    (root / "diagnostics.json").write_text("{not json at all")
+
+    with pytest.raises(errors.ApplyError) as raised:
+        manifest.read(root)
+
+    message = str(raised.value)
+    assert str(root / "diagnostics.json") in message
+    assert "not readable as JSON" in message
+
+
+def _publishes_only(tmp_path: Path) -> manifest.Deployment:
+    """A deployment placing one entry that publishes an export and runs nothing."""
+    stated = _stated(CLIENT_KEY, "beta", "10.0.0.11")
+    del stated["path"]
+    return _built(
+        tmp_path,
+        plan=PLAN,
+        entries={
+            CLIENT_KEY: {**stated, "units": []},
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+    )
+
+
+def test_an_entry_declares_no_unit(tmp_path: Path) -> None:
+    """The record of an entry realised into nothing is one every command reads."""
+    deployment = _publishes_only(tmp_path)
+    recorder = Recorder()
+
+    assert deployment.entries[CLIENT_KEY].path is None
+    assert any(CLIENT_KEY in line for line in report.describe(deployment))
+
+    log = apply.apply(deployment, recorder, base_env={})
+
+    # The entry that realises nothing takes no step, and the one beside it is applied.
+    assert _activated(log) == [SERVER_KEY]
+    assert all("10.0.0.11" not in " ".join(command) for command in recorder.commands)
+
+    answered = report.status(deployment, Recorder())
+    assert answered.unasked == ()
+    assert any(line.startswith(f"{CLIENT_KEY} flakelet realises nothing") for line in answered.lines)
+
+
+def test_a_command_needs_the_artifact_an_entry_does_not_have(tmp_path: Path) -> None:
+    """A step that wants the artifact refuses naming that entry and no other."""
+    deployment = _publishes_only(tmp_path)
+    recorder = Recorder()
+
+    with pytest.raises(errors.ApplyError) as raised:
+        report.rollback(deployment, recorder, CLIENT_KEY)
+
+    message = str(raised.value)
+    assert CLIENT_KEY in message
+    assert "declares no unit" in message
+    assert SERVER_KEY not in message
+    assert recorder.commands == []
 
 
 HELD = json.dumps(

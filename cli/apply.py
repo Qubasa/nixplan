@@ -13,10 +13,9 @@ what was built.
 
 from __future__ import annotations
 
-import contextlib
 import os
 import subprocess
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -30,6 +29,7 @@ from manifest import (
     Value,
     ValueFile,
     address_of,
+    artifact_of,
     image_file,
     machine_address,
     service_name,
@@ -142,9 +142,9 @@ def activation(entry: Entry) -> str:
         ApplyError: If the entry states a realiser this command cannot activate.
     """
     if entry.realiser == "flakelet":
-        return remote.activate_script(service_name(entry), entry.path)
+        return remote.activate_script(service_name(entry), artifact_of(entry))
     if entry.realiser == "image":
-        return remote.attach_script(entry.path)
+        return remote.attach_script(artifact_of(entry))
     raise ApplyError(
         f"{entry.key} states realiser {entry.realiser}, and the command activates "
         f"flakelet and image"
@@ -156,6 +156,7 @@ def holds_attached(
     entry: Entry,
     address: str,
     *,
+    image: str,
     opts: str,
     user: str,
     env: dict[str, str],
@@ -170,6 +171,7 @@ def holds_attached(
         runner: The channel every remote step goes through.
         entry: The placed entry, realised as an image.
         address: The machine's address.
+        image: The image the artifact carries, resolved before the first dial.
         opts: The ssh options of this invocation.
         user: The login user on the machine.
         env: The environment a remote step runs under.
@@ -180,7 +182,7 @@ def holds_attached(
         failed is no evidence that the image is there, and the artifact's own
         script is what decides.
     """
-    script = remote.image_status_script(entry.path / image_file(entry))
+    script = remote.image_status_script(artifact_of(entry) / image)
     try:
         answered = runner.output(remote.ssh_argv(address, script, opts=opts, user=user), env=env)
     except (ApplyError, subprocess.CalledProcessError):
@@ -190,32 +192,6 @@ def holds_attached(
 
 def _ignore(line: str) -> None:
     """Drop a step line, for a caller that reads the returned log instead."""
-
-
-@contextlib.contextmanager
-def _taking(step: str, address: str, record: Callable[[str], None]) -> Iterator[None]:
-    """Announce one step, take it, and name the failure if the machine refuses.
-
-    Args:
-        step: The line naming the step, printed before the step is attempted.
-        address: The machine it is taken against.
-        record: Where a line goes.
-
-    Yields:
-        Nothing. The step is taken inside the context.
-
-    Raises:
-        ApplyError: If the machine refused, so that nothing after it is
-            attempted. The last step line a run printed is then the step that
-            was running when it ended, and the failure line follows it.
-    """
-    record(step)
-    try:
-        with remote.refusing(step, address):
-            yield
-    except ApplyError as refused:
-        record(f"failed {refused}")
-        raise
 
 
 @dataclass(frozen=True)
@@ -278,8 +254,17 @@ def apply(
     values.check(deployment, source, reached)
     planned = writes(deployment, source, reached)
     walked = order.walk(deployment.plan, keys)
-    scripts = {key: activation(deployment.entries[key]) for key in walked.order}
-    addresses = {key: address_of(deployment.entries[key]) for key in walked.order}
+    # An entry that declares no unit is realised into nothing, which the planner
+    # accepts: there is no artifact to copy and no unit to activate, so the run
+    # takes no step against its machine and refuses nothing on its account.
+    taken = tuple(key for key in walked.order if deployment.entries[key].path is not None)
+    scripts = {key: activation(deployment.entries[key]) for key in taken}
+    addresses = {key: address_of(deployment.entries[key]) for key in taken}
+    images = {
+        key: image_file(deployment.entries[key])
+        for key in taken
+        if deployment.entries[key].realiser == "image"
+    }
 
     opts = remote.ssh_opts(ssh_key, inherited=environment.get("NIX_SSHOPTS"))
     env = remote.copy_env(environment, opts)
@@ -296,7 +281,7 @@ def apply(
         step = (
             f"value {write.value.key} {write.file.name} -> {user}@{write.address}:{write.file.path}"
         )
-        with _taking(step, write.address, record):
+        with remote.taking(step, write.address, record):
             channel.run(
                 remote.ssh_argv(
                     write.address,
@@ -307,17 +292,19 @@ def apply(
                 env=env,
             )
 
-    for key in walked.order:
+    for key in taken:
         entry = deployment.entries[key]
         address = addresses[key]
-        with _taking(f"copy {key} {entry.path} -> {user}@{address}", address, record):
-            channel.run(remote.copy_argv(entry.path, address, user=user), env=env)
+        artifact = artifact_of(entry)
+        with remote.taking(f"copy {key} {artifact} -> {user}@{address}", address, record):
+            channel.run(remote.copy_argv(artifact, address, user=user), env=env)
         if entry.realiser == "image" and holds_attached(
-            channel, entry, address, opts=opts, user=user, env=env
+            channel, entry, address, image=images[key], opts=opts, user=user, env=env
         ):
             record(f"attached {key} already on {user}@{address}")
             continue
-        with _taking(f"activate {key} ({entry.realiser}) on {user}@{address}", address, record):
+        step = f"activate {key} ({entry.realiser}) on {user}@{address}"
+        with remote.taking(step, address, record):
             reported = channel.output(
                 remote.ssh_argv(address, scripts[key], opts=opts, user=user), env=env
             )

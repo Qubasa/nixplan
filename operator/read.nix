@@ -310,6 +310,48 @@ let
         );
     };
 
+  # The plan omits a field whose value carries nothing, so a reading that indexes
+  # one says what it did not find rather than ending the evaluation. `tryEval`
+  # catches neither an abort nor a missing attribute, so a bare read here would
+  # show an evaluation error where the table belongs.
+  fieldRow =
+    { key, field, at }:
+    planner.error {
+      id = "operator-plan-field-missing";
+      subject = key;
+      message = "the plan record ${quote key} carries no ${quote field}${at}, and the reading of it needs one";
+      evidence = "a field the plan prunes because its value was empty is an absence a reader cannot tell from a field the entry never had";
+      resolution = "record ${quote field} on ${quote key} whether or not it carries anything, the way `delivery` and `files` are recorded";
+    };
+
+  planned =
+    key: at: record: field: fallback:
+    if record ? ${field} then
+      {
+        value = record.${field};
+        rows = [ ];
+      }
+    else
+      {
+        value = fallback;
+        rows = [ (fieldRow { inherit key field at; }) ];
+      };
+
+  readFile =
+    key: name: file:
+    let
+      at = " on file ${quote name}";
+      path = planned key at file "path" "";
+      secrecy = planned key at file "secrecy" "";
+    in
+    {
+      value = {
+        path = path.value;
+        secrecy = secrecy.value;
+      };
+      rows = path.rows ++ secrecy.rows;
+    };
+
   # `program` is recorded only where the plan records one, so the manifest of a
   # deployment whose values are the operator's own is the bytes it always was.
   # The command reads it to know whose bytes a value's are: a value naming a
@@ -319,11 +361,16 @@ let
     plan: key:
     let
       entry = plan.${key};
+      delivery = planned key "" entry "delivery" [ ];
+      files = planned key "" entry "files" { };
+      read = mapAttrs (readFile key) files.value;
     in
     {
       inherit key;
-      inherit (entry) delivery;
-      files = mapAttrs (_: file: { inherit (file) path secrecy; }) entry.files;
+      delivery = delivery.value;
+      files = mapAttrs (_: f: f.value) read;
+      rows =
+        delivery.rows ++ files.rows ++ concatLists (planner.util.mapAttrsToList (_: f: f.rows) read);
     }
     // (if entry.program or null == null then { } else { inherit (entry) program; });
 
@@ -420,6 +467,7 @@ in
 
       rows =
         concatLists (map (key: entries.${key}.rows) placedKeys)
+        ++ concatLists (map (key: values.${key}.rows) valueKeys)
         ++ shapeRows
         ++ statementRows
         ++ collisionRows entries;
@@ -431,17 +479,23 @@ in
       manifest = {
         version = 1;
         inherit storeDir;
-        entries = mapAttrs (_: entry: {
-          path = entry.artifact;
-          inherit (entry)
-            realiser
-            profile
-            machine
-            address
-            units
-            ;
-          key = entry.digest;
-        }) entries;
+        entries = mapAttrs (
+          _: entry:
+          {
+            inherit (entry)
+              realiser
+              profile
+              machine
+              address
+              units
+              ;
+            key = entry.digest;
+          }
+          # An entry that declares no unit is realised into nothing, so its
+          # record carries no path at all. A null path is a value the reading
+          # side has to refuse; an absent one is the absence it means.
+          // (if entry.artifact == null then { } else { path = entry.artifact; })
+        ) entries;
         values = mapAttrs (
           _: value:
           {

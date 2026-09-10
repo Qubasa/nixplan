@@ -63,10 +63,15 @@ class Value:
 
 @dataclass(frozen=True)
 class Entry:
-    """A placed entry, with the artifact built for it and where it goes."""
+    """A placed entry, with the artifact built for it and where it goes.
+
+    An entry that declares no unit is realised into nothing, which the planner
+    accepts, so the build publishes its record with no path at all. The absence
+    is the record, not a null the reading has to refuse.
+    """
 
     key: str
-    path: Path
+    path: Path | None
     realiser: str
     profile: str | None
     machine: str
@@ -261,6 +266,27 @@ def machine_address(deployment: Deployment, machine: str, *, of: str) -> str:
     return address
 
 
+def artifact_of(entry: Entry) -> Path:
+    """Return the artifact one placed entry was built into.
+
+    Args:
+        entry: The placed entry.
+
+    Returns:
+        The store path the build's link for that entry resolves to.
+
+    Raises:
+        ApplyError: If the entry declares no unit, so the build published no
+            artifact for it. The refusal names that entry and no other.
+    """
+    if entry.path is None:
+        raise ApplyError(
+            f"{entry.key} declares no unit, so the build published no artifact for it and this "
+            f"step has nothing to take"
+        )
+    return entry.path
+
+
 def service_name(entry: Entry) -> str:
     """Return the service name a flakelet artifact declares in its `meta.json`.
 
@@ -271,12 +297,13 @@ def service_name(entry: Entry) -> str:
         The name the endpoint registers the entry under.
 
     Raises:
-        ApplyError: If the artifact declares no name.
+        ApplyError: If the artifact declares no name, or the entry has none.
     """
-    meta = _load(entry.path / "meta.json")
+    artifact = artifact_of(entry)
+    meta = _load(artifact / "meta.json")
     name = meta.get("name")
     if not isinstance(name, str) or not name:
-        raise ApplyError(f"{entry.key}: {entry.path}/meta.json declares no service name")
+        raise ApplyError(f"{entry.key}: {artifact}/meta.json declares no service name")
     return name
 
 
@@ -292,10 +319,11 @@ def image_file(entry: Entry) -> str:
     Raises:
         ApplyError: If the attachment names no image.
     """
-    attachment = _load(entry.path / "attachment.json")
+    artifact = artifact_of(entry)
+    attachment = _load(artifact / "attachment.json")
     image = attachment.get("image")
     if not isinstance(image, str) or not image:
-        raise ApplyError(f"{entry.key}: {entry.path}/attachment.json names no image")
+        raise ApplyError(f"{entry.key}: {artifact}/attachment.json names no image")
     return image
 
 
@@ -323,9 +351,12 @@ def _entry(root: Path, key: str, record: Mapping[str, Any]) -> Entry:
     address = record.get("address")
     if address is not None and not isinstance(address, str):
         raise ApplyError(f"{key} records address as {address!r}, which is not an address")
+    stated = record.get("path")
+    if stated is not None and not isinstance(stated, str):
+        raise ApplyError(f"{key} records path as {stated!r}, which is not a path in the build")
     return Entry(
         key=key,
-        path=(root / _text(record, "path", of=key)).resolve(),
+        path=None if stated is None else (root / stated).resolve(),
         realiser=_text(record, "realiser", of=key),
         profile=profile,
         machine=_text(record, "machine", of=key),
@@ -359,7 +390,7 @@ def _file(key: str, name: str, file: Any) -> ValueFile:
 def _rows(path: Path) -> tuple[Diagnostic, ...]:
     if not path.is_file():
         return ()
-    rows = json.loads(path.read_text())
+    rows = _decoded(path)
     if not isinstance(rows, list):
         raise ApplyError(f"{path} is not a list of diagnostics rows")
     return tuple(
@@ -374,14 +405,18 @@ def _rows(path: Path) -> tuple[Diagnostic, ...]:
     )
 
 
-def _load(path: Path) -> Mapping[str, Any]:
+def _decoded(path: Path) -> Any:
+    """Return what one file inside the build decodes to, or refuse naming it."""
     try:
-        decoded = json.loads(path.read_text())
+        return json.loads(path.read_text())
     except OSError as absent:
         raise ApplyError(f"{path} cannot be read: {absent}") from absent
     except json.JSONDecodeError as malformed:
         raise ApplyError(f"{path} is not readable as JSON: {malformed}") from malformed
-    return _mapping(decoded, of=str(path))
+
+
+def _load(path: Path) -> Mapping[str, Any]:
+    return _mapping(_decoded(path), of=str(path))
 
 
 def _mapping(value: Any, *, of: str) -> Mapping[str, Any]:

@@ -28,7 +28,7 @@ import base64
 import contextlib
 import shlex
 import subprocess
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Protocol
@@ -149,6 +149,35 @@ def refusing(subject: str, address: str) -> Iterator[None]:
         raise Refused(f"{subject}: {address}", refused.returncode, printed(refused)) from refused
     except ApplyError as refused:
         raise ApplyError(f"{subject}: {refused}") from refused
+
+
+@contextlib.contextmanager
+def taking(step: str, address: str, record: Callable[[str], None]) -> Iterator[None]:
+    """Announce one step, take it, and name the failure if the machine refuses.
+
+    Every subcommand that takes a step against a machine goes through this, so
+    the last step line a run printed names the step that was running when the
+    run ended, whichever subcommand took it.
+
+    Args:
+        step: The line naming the step, printed before the step is attempted.
+        address: The machine it is taken against.
+        record: Where a line goes.
+
+    Yields:
+        Nothing. The step is taken inside the context.
+
+    Raises:
+        ApplyError: If the machine refused, so that nothing after it is
+            attempted. The failure line follows the step line.
+    """
+    record(step)
+    try:
+        with refusing(step, address):
+            yield
+    except ApplyError as refused:
+        record(f"failed {refused}")
+        raise
 
 
 def printed(refused: subprocess.CalledProcessError) -> str:

@@ -85,14 +85,14 @@ def _rollback(args: argparse.Namespace) -> int:
     deployment = manifest.read(manifest.resolve(args.target))
     if len(args.only) != 1:
         raise ApplyError("rollback takes exactly one --only, the entry to roll back")
-    for line in report.rollback(
+    report.rollback(
         deployment,
         remote.Subprocess(),
         args.only[0],
         ssh_key=Path(args.ssh_key) if args.ssh_key else None,
         user=args.user,
-    ):
-        print(line)
+        log=print,
+    )
     return 0
 
 

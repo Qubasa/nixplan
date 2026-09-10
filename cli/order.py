@@ -1,10 +1,15 @@
 """The order the command applies placed entries in.
 
-The edges are the reads the plan resolved: `plan.<consumer>.reads.<slot>.entry`
-names the provider's own plan key, and that is the only relation that says one
-entry has to be activated before another. `dependsOn` is not it: a consumer's
-`dependsOn` carries `machine:<name>@<hash>`, which is key provenance rather than
-order.
+The edges are the reads the plan resolved. A read of one entry records the
+provider's own plan key at `plan.<consumer>.reads.<slot>.entry`; a read of every
+entry that provides the capability records them as `entries`, keyed by plan key.
+Both are the same relation and both are ordered against. `dependsOn` is not it:
+a consumer's `dependsOn` carries `machine:<name>@<hash>`, which is key
+provenance rather than order.
+
+A delivered read recorded in neither shape is a refusal rather than zero edges:
+an unrecognised shape that contributed nothing silently is what let every
+set-valued read go unordered.
 
 Ties break by plan key sort order, so one deployment always walks one way. Two
 instances wiring each other is a legal deployment, and its activation graph
@@ -21,6 +26,8 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
+
+from errors import ApplyError
 
 
 @dataclass(frozen=True)
@@ -119,6 +126,10 @@ def edges(plan: Mapping[str, Any], keys: Iterable[str]) -> tuple[tuple[str, str]
 
     Returns:
         The edges, sorted by consumer then provider.
+
+    Raises:
+        ApplyError: If a delivered read is recorded in a shape this walk does
+            not recognise, naming the consumer and the slot.
     """
     placed = set(keys)
     found: set[tuple[str, str]] = set()
@@ -127,8 +138,39 @@ def edges(plan: Mapping[str, Any], keys: Iterable[str]) -> tuple[tuple[str, str]
         reads = entry.get("reads") if isinstance(entry, dict) else None
         if not isinstance(reads, dict):
             continue
-        for slot in reads.values():
-            provider = slot.get("entry") if isinstance(slot, dict) else None
-            if isinstance(provider, str) and provider in placed and provider != consumer:
-                found.add((provider, consumer))
+        for name in sorted(reads):
+            for provider in _providers(reads[name], consumer, name):
+                if provider in placed and provider != consumer:
+                    found.add((provider, consumer))
     return tuple(sorted(found, key=lambda edge: (edge[1], edge[0])))
+
+
+def _providers(slot: Any, consumer: str, name: str) -> tuple[str, ...]:
+    """Return the plan keys one resolved read names as providers.
+
+    Args:
+        slot: The read record, `plan.<consumer>.reads.<name>`.
+        consumer: The entry that declared the read, for the refusal.
+        name: The slot's name, for the refusal.
+
+    Returns:
+        The provider keys, empty for a read the planner did not deliver.
+
+    Raises:
+        ApplyError: If the read was delivered and records its providers in
+            neither shape the plan uses.
+    """
+    if not isinstance(slot, dict):
+        return ()
+    one = slot.get("entry")
+    if isinstance(one, str):
+        return (one,)
+    every = slot.get("entries")
+    if isinstance(every, dict) and all(isinstance(key, str) for key in every):
+        return tuple(sorted(every))
+    if not slot.get("delivered"):
+        return ()
+    raise ApplyError(
+        f"{consumer} reads {name} as a resolved slot recorded in a shape the order "
+        "does not recognise: it names its providers by neither entry nor entries"
+    )
