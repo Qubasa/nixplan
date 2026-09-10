@@ -1,11 +1,13 @@
 # Interfaces, export atoms and the typed extensions a backend adds to the unit
 # vocabulary.
 #
-# An interface is the value an author imported. It is identified by that value and
-# never by a name resolved at composition time, it is validated against no
-# registry, and its name is a label that appears in diagnostic output and nowhere
-# else. Two interfaces in two files may carry one name, and a unit extension is
-# the same construction under the same rule.
+# An interface is the value an author imported. It is identified by that value or
+# by an identity it claims with an `id`, never by a name resolved at composition
+# time, it is validated against no registry, and its name is a label that appears
+# in diagnostic output and nowhere else. Two interfaces in two files may carry one
+# name, and a unit extension is the same construction under the same rule with no
+# claim of its own: it is read from the value an author wrote into `extends` and
+# is never matched against a far end.
 {
   util,
   diag,

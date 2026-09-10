@@ -920,8 +920,18 @@ in
           providerMember = if capability == null then null else targetInstance.members.${capability.member};
           placements = if providerMember == null then [ ] else providerMember.placements;
 
+          slotClaim = if slot.interface == null then null else interface.identityOf slot.interface;
+          capabilityClaim = if capability == null then null else interface.identityOf capability.interface;
+
+          # Both ends must claim, or taking one side's word would capture a far
+          # end that never agreed to be captured. Value equality is tried first,
+          # so a wire inside one evaluation costs what it costs today.
+          claimsMatch = slotClaim != null && slotClaim == capabilityClaim;
+
           interfaceMatches =
-            capability != null && slot.interface != null && slot.interface == capability.interface;
+            capability != null
+            && slot.interface != null
+            && (slot.interface == capability.interface || claimsMatch);
 
           readsAt =
             machine:
