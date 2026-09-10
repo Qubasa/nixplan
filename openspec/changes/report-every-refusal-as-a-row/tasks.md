@@ -12,7 +12,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
 
 ## 1. One constructor for a row
 
-- [ ] 1.1 `lib/default.nix`: export `row`, `error` and `warning` beside `render` and `mkTable`
+- [x] 1.1 `lib/default.nix`: export `row`, `error` and `warning` beside `render` and `mkTable`
   (`lib/default.nix:70-73`). Nothing else about the library changes: the constructor is already the
   only place that applies `util.oneLine` to a message, an evidence line and a resolution
   (`lib/diagnostics.nix:33-47`). Verify `nix eval .#lib --apply builtins.attrNames` lists the three

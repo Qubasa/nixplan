@@ -70,7 +70,13 @@ in
     label
     ;
   inherit (compose) service mkRoot;
-  inherit (diag) render mkTable;
+  inherit (diag)
+    render
+    mkTable
+    row
+    error
+    warning
+    ;
 
   # interfaces maps a declaring file to the interfaces declared in it. It is
   # attribution and never validation: an interface absent from it is still an
