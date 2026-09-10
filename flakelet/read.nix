@@ -5,6 +5,12 @@
 # here. This file adds only what the endpoint imposes and the plan does not say:
 # flakelet's two naming rules, the install section, and the metadata it reads back.
 #
+# The three refusals here raise, and each is a condition the deployment build
+# reports as an error row first: it asks this file's own predicates, because which
+# realiser meets an entry is a fact of the realisation statement and no plan field
+# carries it. A raise here is the answer a caller reaching this file directly
+# receives.
+#
 # reader is an argument so a caller holding the two files as store paths can hand
 # it over instead of relying on their relative positions.
 {

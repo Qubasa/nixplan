@@ -163,7 +163,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   reported, and a refusal about a fact the statement carries belongs to the deployment build. No
   refusal is deleted. Verify the file's raises are unchanged in wording and
   `tests/unit/diagnostics.nix`'s source scan still finds no raising call under `lib/`.
-- [ ] 7.2 `flakelet/read.nix`: the same for the comment at `:1-9`, naming the deployment build as
+- [x] 7.2 `flakelet/read.nix`: the same for the comment at `:1-9`, naming the deployment build as
   the layer that reports the host-path and naming conditions first. Verify no rule is restated and
   the three raises are unchanged.
 - [ ] 7.3 `tests/unit/diagnostics.nix`: add `testARealiserRefusesAConditionNoRowReports`, which
