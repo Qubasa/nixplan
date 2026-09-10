@@ -1246,4 +1246,121 @@ in
         theEntryIsStillRead = [ "say" ];
       };
     };
+
+  testAClaimedInterfaceRecordsItsClaim =
+    let
+      claimed = planner.interface {
+        name = "pub";
+        exports.publicKey = publicString;
+        id = "example.com/pub";
+      };
+      result = planOf {
+        interfaces."interfaces/default.nix".pub = claimed;
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = _: {
+            provides.thing.interface = claimed;
+            impl = _: {
+              provides.thing.exports.publicKey = "ssh-ed25519 AAAA";
+              units.only.command = "/bin/true";
+            };
+          };
+          provides = [ "thing" ];
+        });
+      };
+      record = result.plan."svc:only@one".provides.thing;
+    in
+    {
+      expr = {
+        inherit (record) interface declaringFile interfaceId;
+        recorded = attrNames record;
+      };
+      expected = {
+        interface = "pub";
+        declaringFile = "interfaces/default.nix";
+        interfaceId = "example.com/pub";
+        recorded = [
+          "declaringFile"
+          "exports"
+          "interface"
+          "interfaceId"
+          "keysetEqualsInterface"
+        ];
+      };
+    };
+
+  testAnUnclaimedInterfaceRecordsNoClaim =
+    let
+      publishing = _: {
+        provides.thing.interface = pub;
+        impl = _: {
+          provides.thing.exports.publicKey = "ssh-ed25519 AAAA";
+          units.only.command = "/bin/true";
+        };
+      };
+      result = planOf {
+        interfaces."interfaces/default.nix".pub = pub;
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = publishing;
+          provides = [ "thing" ];
+        });
+      };
+      record = result.plan."svc:only@one".provides.thing;
+    in
+    {
+      expr = {
+        recorded = attrNames record;
+        claimed = record ? interfaceId;
+        fixtureCarriesNone = filter (line: hasInfix "interfaceId" line) (
+          support.lines (readFile (folder + "/plan/backup.json"))
+        );
+      };
+      expected = {
+        recorded = [
+          "declaringFile"
+          "exports"
+          "interface"
+          "keysetEqualsInterface"
+        ];
+        claimed = false;
+        fixtureCarriesNone = [ ];
+      };
+    };
+
+  testAClaimDoesNotReKeyAnEntry =
+    let
+      claimed = planner.interface {
+        name = "pub";
+        exports.publicKey = publicString;
+        id = "example.com/pub";
+      };
+      run =
+        iface:
+        planOf {
+          interfaces."interfaces/default.nix".pub = iface;
+          instances.svc = placedOn [ "one" ] (soleRoot {
+            module = _: {
+              provides.thing.interface = iface;
+              impl = _: {
+                provides.thing.exports.publicKey = "ssh-ed25519 AAAA";
+                units.only.command = "/bin/true";
+              };
+            };
+            provides = [ "thing" ];
+          });
+        };
+      before = run pub;
+      after = run claimed;
+    in
+    {
+      expr = {
+        keys = keysOf after == keysOf before;
+        entryKeys = attrNames after.plan == attrNames before.plan;
+        theClaimLanded = after.plan."svc:only@one".provides.thing.interfaceId;
+      };
+      expected = {
+        keys = true;
+        entryKeys = true;
+        theClaimLanded = "example.com/pub";
+      };
+    };
 }
