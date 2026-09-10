@@ -119,6 +119,6 @@ in
     includes = [ "*.md" ];
   };
 
-  # No vulture and no harper. Vulture's only finding is an interface parameter name in
-  # tests/e2e/delivery.py, and harper flags realiser, flakelet and keyset.
+  # No vulture and no harper. Vulture's only finding is the `cmd` parameter of the
+  # Runner protocol in cli/remote.py, and harper flags realiser, flakelet and keyset.
 }

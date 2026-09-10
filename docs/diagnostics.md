@@ -98,6 +98,7 @@ discipline and deduplication applied).
 | `interface-id-unnamed-fold` | an interface claims an `id` and declares a fold carrying no name; the evidence states that a fold's name is part of an identity and a bare function supplies none, and the resolution names the fold constructor or deleting the `id`. The claim is disregarded |
 | `interface-id-unnamespaced` (warning) | a declared `id` carries neither `.` nor `/`; the evidence states that the namespace is shared with every other author and the resolution names a qualified form. The claim still identifies and the plan stays applicable |
 | `interface-id-conflict` | two interfaces claim one `id` and their identities differ, observed from the `interfaces` map or at a wire and reported once; the row is subjected to the first of the two declaring files by sort order, names the second, and its evidence states what differs — an export one side declares alone, an export's two type names, an export's two secrecies, or two fold names. An edge between them is refused |
+| `interface-fold-refusal-malformed` | an interface's fold refused a set-valued read with something other than a string in `refused`; the row names the fold, the slot and the consuming entry, and states that a refusal is a returned value the planner renders. The slot is left absent |
 
 ### Leaf modules
 
@@ -108,7 +109,8 @@ discipline and deduplication applied).
 | `module-declared-severity` (warning) | a module tried to set a row's severity |
 | `impl-missing` | the module declares no `impl` |
 | `platforms-malformed` | `platforms` is not a list of strings |
-| `slot-interface-missing` / `capability-interface-missing` | a slot or capability declares no interface value |
+| `slot-interface-missing` | a slot declares no interface value |
+| `capability-interface-missing` | a capability declares no interface value; a capability publishes exactly the keyset of the interface it declares, so there is nothing to check without one |
 | `slot-reach-domain` | `reach` is outside `one` / `all` |
 | `slot-reach-local` | `reach = "local"`, which derives from a locality this subset does not declare |
 | `slot-reads-unknown-export` | a `reads` entry the interface does not declare; the evidence lists what it does |
@@ -120,6 +122,8 @@ discipline and deduplication applied).
 | `vars-reads-arity` | a `per = "instance"` generator reads a `per = "placement"` sibling, so the read has no single answer |
 | `vars-reads-cycle` | a generator transitively reads itself; the recorded reads of every generator in the cycle are dropped |
 | `port-claim-not-fixed` | a port claim with no `fixed`; this subset allocates nothing |
+| `vars-program-malformed` | a generator's `program` is not exactly one store path. Omitting the key is no row at all: a program is recorded as a literal string, neither run nor read here |
+| `name-carries-key-separator` | a machine, an instance, a member or a generator is named with `/`, `@` or `:`. A plan key is `<instance>:<member>@<machine>` and a generated value's is `<instance>:vars/<generator>@<machine>`, so such a name produces a key that takes apart into parts nothing declared. The named thing is left out of every key the plan builds |
 
 ### Machines and targets
 
@@ -140,6 +144,7 @@ discipline and deduplication applied).
 | `member-not-placed` | a member matched no machine and no tag, so nothing it declares runs anywhere |
 | `exposes-unknown-capability` | `exposes` names a capability the root does not provide |
 | `slot-set-settings-derived` (warning) | the set of slots a member asks for differs between its resolved settings and its own values, so the module is publishing a cut; the evidence is the condition that would make member cuts a construct of their own |
+| `member-name-disagrees` | a root declares a member under one attribute key and the member names itself another. The key is the identity, since placement, the settings namespace and every plan key are read from it, and the second spelling is a member nothing else can address |
 
 ### Units, extensions and configuration files
 
@@ -151,7 +156,9 @@ discipline and deduplication applied).
 | `unit-reference-unknown` | `after` or `requires` names a unit the module did not declare |
 | `unit-extends-malformed` | `extends` is not a list |
 | `unit-extension-missing` | an `extends` entry's `extension` is not a `planner.unitExtension` value |
-| `unit-extension-missing-type` / `unit-extension-unknown-key` / `unit-extension-excluded-key` | an extension's field declares no `type`, a key outside `{ type }`, or an excluded construct |
+| `unit-extension-missing-type` | an extension's field declares no `type` |
+| `unit-extension-unknown-key` | an extension's field declares a key outside `{ type }` |
+| `unit-extension-excluded-key` | an extension's field declares an excluded construct; the evidence is its trigger |
 | `unit-extension-unknown-field` | `values` assigns a key the extension does not declare |
 | `unit-extension-type-mismatch` | an assigned value fails its field's type |
 | `unit-extension-backend-mismatch` | the extension's `backend` is not the target machine's `serviceManager`; the fields are still recorded under that backend |
@@ -183,7 +190,8 @@ discipline and deduplication applied).
 | `wire-capability-not-exposed` | the root provides it and the instance does not expose it; the row lists what is exposed |
 | `reach-one-placement-count` | `reach = "one"` against a capability with no placement or more than one; the row names the slot and the placements |
 | `reach-all-no-placement` | `reach = "all"` against a capability placed nowhere |
-| `provider-export-missing` / `provider-export-extra` | the published keyset is not the interface's keyset |
+| `provider-export-missing` | the published keyset lacks an export the interface declares |
+| `provider-export-extra` | the entry publishes an export the interface does not declare; the extra export is delivered to nobody |
 | `export-type-mismatch` | a published value fails its atom's type |
 | `export-secret-not-a-reference` | an export declared `secret` publishes something other than a generated file, so its bytes would be in the plan rather than its path |
 | `slot-reads-undeployed-value` | a `reads` entry names a secret export backed by a `deploy = false` generator, so the path it names resolves to nothing at run time |
@@ -200,6 +208,8 @@ discipline and deduplication applied).
 | `vars-not-deployed-opened` | a unit or configuration file of the owning module names the path of a `deploy = false` generator's file |
 | `vars-generator-claimed-twice` | two members of one instance declare the same generator name, which is one address for two values |
 | `diagnostic-subject-invalid` | a row carried a subject that is not a plan key, a deployment-relative path or an issue identifier |
+| `declaration-field-missing` | a field of the deployment's own half - a machine, an instance, a member's placement or a wire - is absent where the reading needs one. A key the reading cannot default is reported rather than read as an empty value |
+| `declaration-field-malformed` | the same field carries a value of the wrong kind. The deployment's half is read with the tolerance the module's half is read with, so the rest of the deployment is still read |
 
 ### Every row the deployment build can produce
 
@@ -222,21 +232,24 @@ caller reads them in the same table as the planner's own.
 | `operator-entry-access-denied` | a unit needs an access the confinement profile the statement produced denies |
 | `operator-entry-name-collision` | two plan keys project onto one artifact name |
 | `operator-entry-machine-no-address` (warning) | the machine record of a placed entry declares no address; an address is read by the step that dials and by no step that builds |
+| `operator-plan-field-missing` | a plan record carries no field the reading of it indexes. The plan prunes a field whose value was empty, and this names the record and the field rather than ending the evaluation |
 
 ## Refusals by subtraction
 
-Seven constructs are deliberately absent. Writing one is **not** an unknown-key
-misspelling row: it is `declaration-excluded-key` or `export-atom-excluded-key`
-whose evidence is *the condition that would bring the construct back*.
+Some constructs are deliberately absent, one line per trigger. Writing one is
+**not** an unknown-key misspelling row: it is `declaration-excluded-key` or
+`export-atom-excluded-key` whose evidence is *the condition that would bring the
+construct back*.
 
 ```
 locality        the first export whose value is a unix socket path or a loopback port
 lifecycle       the first value that is not knowable at evaluation
 pick, strategy  the first service whose machine the operator lets the planner choose
-enable, member wiring   a module publishing a composition whose cuts an operator wants
+dynamicPort     a persisted allocation table, so a port chosen without a claim does not move
+enable, memberWire      a module publishing a composition whose cuts an operator wants
 externals       a non-fleet resource this deployment has to name
-collects, contributes, answers, probes   clanServices/pki, and nothing smaller
-register, frontier, orchestrator         not this change
+collects, contributes, answers            clanServices/pki, and nothing smaller
+probes, register, frontier, orchestrator  not this change
 ```
 
 `planner.excluded` is that table as data (`rows`, and `constructs.<key> = {

@@ -5,12 +5,14 @@
   operatorSource,
   imageSource,
   flakeletSource,
+  repoSource,
 }:
 let
   inherit (builtins)
     all
     any
     attrNames
+    elem
     filter
     isString
     length
@@ -427,6 +429,83 @@ let
     ) libraryFiles
   );
 
+  # Every row identifier the tree writes as a literal, against the table
+  # `docs/diagnostics.md` publishes. The three families are the three ways an
+  # identifier is bound: written at the row, defaulted on a helper's argument,
+  # and named on one of the key-row helpers' `excluded` / `unknown` /
+  # `missingType` fields.
+  idBindings = [
+    "[^A-Za-z]id = \"([a-z0-9-]+)\".*"
+    "[^A-Za-z]id \\? \"([a-z0-9-]+)\".*"
+    ".*(excluded|unknown|missingType) = \"([a-z0-9-]+)\".*"
+  ];
+
+  idsInLine =
+    line:
+    builtins.concatLists (
+      map (
+        pattern:
+        let
+          m = builtins.match ".*${pattern}" line;
+        in
+        if m == null then [ ] else [ (builtins.elemAt m (builtins.length m - 1)) ]
+      ) idBindings
+    );
+
+  producingFiles = map (rel: libSource + "/${rel}") libraryFiles ++ [
+    (operatorSource + "/read.nix")
+  ];
+
+  producedIds = sortStrings (
+    uniqueStrings (
+      builtins.concatLists (
+        map (
+          file:
+          builtins.concatLists (
+            map idsInLine (filter (l: !isComment l) (support.lines (builtins.readFile file)))
+          )
+        ) producingFiles
+      )
+    )
+  );
+
+  documentLines = support.lines (builtins.readFile (repoSource + "/docs/diagnostics.md"));
+
+  documentedIds = sortStrings (
+    uniqueStrings (
+      builtins.concatLists (
+        map (
+          line:
+          let
+            m = builtins.match "\\| `([a-z0-9-]+)`.*" line;
+          in
+          if m == null then [ ] else [ (builtins.head m) ]
+        ) documentLines
+      )
+    )
+  );
+
+  undocumentedRows = filter (id: !elem id documentedIds) producedIds;
+  unproducedRows = filter (id: !elem id producedIds) documentedIds;
+
+  # The subtraction table is the same kind of claim: a comma-separated list of
+  # construct names, then the trigger that would bring them back.
+  documentedConstructs = sortStrings (
+    uniqueStrings (
+      builtins.concatLists (
+        map (
+          line:
+          let
+            m = builtins.match "([a-zA-Z]+(, [a-zA-Z]+)*)  +[a-z].*" line;
+          in
+          if m == null then [ ] else filter isString (split ", " (builtins.head m))
+        ) documentLines
+      )
+    )
+  );
+
+  treeConstructs = sortStrings (attrNames planner.excluded.constructs);
+
   # A fold that refuses: it states why, and the planner decides the row's
   # identifier, its subject and its severity.
   refusing = planner.interface {
@@ -492,7 +571,9 @@ let
     write:
     planOf {
       instances = {
-        good = placedOn "one" (soleRoot { module = quiet; });
+        good = placedOn "one" (soleRoot {
+          module = quiet;
+        });
         bad = write;
       };
     };
@@ -638,8 +719,18 @@ in
     let
       wired = module: (placedOn "one" module) // { wire = "not a record"; };
       cases = {
-        wire = malformed (wired (soleRoot { module = quiet; }));
-        exposes = (placedOn "one" (soleRoot { module = quiet; })) // { exposes = "thing"; };
+        wire = malformed (
+          wired (soleRoot {
+            module = quiet;
+          })
+        );
+        exposes =
+          (placedOn "one" (soleRoot {
+            module = quiet;
+          }))
+          // {
+            exposes = "thing";
+          };
         machines = {
           module = soleRoot { module = quiet; };
           placement.every.only.machines = "one";
@@ -652,7 +743,9 @@ in
           system = 64;
           serviceManager = "systemd";
         };
-        instances.good = placedOn "one" (soleRoot { module = quiet; });
+        instances.good = placedOn "one" (soleRoot {
+          module = quiet;
+        });
       };
       fieldsOf =
         result:
@@ -1466,4 +1559,31 @@ in
         raised = [ ];
       };
     };
+
+  # `docs/diagnostics.md` is a claim about the tree, so the two sides are
+  # compared rather than maintained beside each other. Each side reports the
+  # document with the identifier, because that is what a reader has to edit.
+  testTheLibraryGainsARow = {
+    expr = {
+      undocumented = map (id: "docs/diagnostics.md is missing `${id}`") undocumentedRows;
+      scanned = length producedIds;
+    };
+    expected = {
+      undocumented = [ ];
+      scanned = length documentedIds;
+    };
+  };
+
+  testADocumentTabulatesARowTheTreeCannotProduce = {
+    expr = {
+      unproduced = map (
+        id: "docs/diagnostics.md tabulates `${id}`, which nothing under lib/ or operator/ writes"
+      ) unproducedRows;
+      constructs = documentedConstructs;
+    };
+    expected = {
+      unproduced = [ ];
+      constructs = treeConstructs;
+    };
+  };
 }

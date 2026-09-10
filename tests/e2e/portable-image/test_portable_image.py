@@ -127,7 +127,7 @@ class Run:
 
     def artifact(self, key: str) -> Path:
         """The store path of the artifact the build produced for one plan key."""
-        return self.entry(key).path
+        return manifest.artifact_of(self.entry(key))
 
     def attachment(self, key: str) -> dict[str, Any]:
         loaded = json.loads((self.artifact(key) / "attachment.json").read_text())

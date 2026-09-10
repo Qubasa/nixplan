@@ -1398,7 +1398,8 @@ def test_an_entry_declares_no_unit(tmp_path: Path) -> None:
 
     answered = report.status(deployment, Recorder())
     assert answered.unasked == ()
-    assert any(line.startswith(f"{CLIENT_KEY} flakelet realises nothing") for line in answered.lines)
+    nothing = f"{CLIENT_KEY} flakelet realises nothing"
+    assert any(line.startswith(nothing) for line in answered.lines)
 
 
 def test_a_command_needs_the_artifact_an_entry_does_not_have(tmp_path: Path) -> None:

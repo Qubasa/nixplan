@@ -6,15 +6,19 @@
   changesRoot,
   unitSuites,
   perfSource,
+  repoSource,
 }:
 let
   inherit (builtins)
     attrNames
+    attrValues
     concatLists
     concatStringsSep
     elem
     elemAt
     filter
+    foldl'
+    fromJSON
     genList
     head
     isString
@@ -30,7 +34,7 @@ let
     stringLength
     substring
     ;
-  inherit (support) filesUnder lines;
+  inherit (support) filesUnder hasInfix lines;
 
   lowerLetters = [
     "a"
@@ -173,6 +177,7 @@ let
     "hold-every-stated-guarantee/specs/planner/plan-artifact/spec.md"
     "hold-every-stated-guarantee/specs/realiser/portable-service-image/spec.md"
     "hold-every-stated-guarantee/specs/tooling/test-layers/spec.md"
+    "hold-every-stated-guarantee/specs/tooling/repository-shape/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -202,8 +207,6 @@ let
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "deliver-a-secret-without-exposing-it/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-stated-guarantee/specs/tooling/repository-shape/spec.md" =
-      "an unimplemented change: no task of hold-every-stated-guarantee has been done, so nothing in this package claims to satisfy it yet";
     "order-a-cycle-by-its-strong-components/specs/operator/apply-command/spec.md" =
       "an unimplemented change: no task of order-a-cycle-by-its-strong-components has been done, so nothing in this package claims to satisfy it yet";
     "report-a-secrets-refusal-as-a-row/specs/realiser/secrets-configuration/spec.md" =
@@ -372,8 +375,8 @@ let
     "No test double is involved" = "test_every_participant_is_the_real_one";
     "Nothing else changes with it" = "testAnAddressChanges";
     "An assertion holds for every input" = "testAGeneratorNamesItsProgram";
-    "A claimed property needs another observation" =
-      "testTwoAttributedInterfacesConflictWithNoWire";
+    "A claimed property needs another observation" = "testTwoAttributedInterfacesConflictWithNoWire";
+    "A specification is both accounted for and excused" = "testEverySpecificationIsClassified";
   };
 
   hasTest = title: existing ? ${snakeName title} || existing ? ${camelName title};
@@ -438,6 +441,126 @@ let
   syntheticE2e = {
     testTheWireIsCut = [ "tests/e2e/wired-pair/test_wired_pair.py" ];
   };
+
+  # Every figure `docs/tooling.md` records about this layer, against the tree it
+  # records them about. The table rows and the two prose totals are read out of
+  # the document rather than restated here, so the check is the comparison and
+  # not a second copy of the numbers.
+  toolingLines = lines (readFile (repoSource + "/docs/tooling.md"));
+
+  figureRows = listToAttrs (
+    concatLists (
+      map (
+        line:
+        let
+          m = match "[|] `([a-z0-9-]+)` [|] ([0-9]+) [|].*" line;
+        in
+        if m == null then
+          [ ]
+        else
+          [
+            {
+              name = head m;
+              value = fromJSON (elemAt m 1);
+            }
+          ]
+      ) toolingLines
+    )
+  );
+
+  # The figure is the number immediately before the words, whether or not the
+  # line begins with it and whatever digits a store path or a system name put
+  # earlier on it.
+  proseFigure =
+    words:
+    let
+      hits = concatLists (
+        map (
+          line:
+          let
+            m =
+              let
+                initial = match "([0-9]+)${words}" line;
+              in
+              if initial != null then initial else match ".*[^0-9]([0-9]+)${words}" line;
+          in
+          if m == null then [ ] else [ (fromJSON (head m)) ]
+        ) toolingLines
+      );
+    in
+    if hits == [ ] then null else head hits;
+
+  residueNames = [
+    "omitted"
+    "aliased"
+  ];
+
+  keptKeys =
+    keep: set:
+    listToAttrs (
+      map (name: {
+        inherit name;
+        value = set.${name};
+      }) (filter keep (attrNames set))
+    );
+
+  suiteFigures = keptKeys (name: !(elem name residueNames)) figureRows;
+
+  countedSuites = builtins.mapAttrs (_: tests: length tests) unitSuites;
+
+  harnessTests = length (
+    filter (line: match "def test_.*" line != null) (
+      lines (readFile (repoSource + "/tests/e2e/test_harness.py"))
+    )
+  );
+
+  documentFigures = {
+    perSuite = suiteFigures;
+    total = proseFigure " tests, counted as the test attributes.*";
+    harness = proseFigure " tests over.*";
+    harnessAgain = proseFigure " against.*";
+    residue = keptKeys (name: elem name residueNames) figureRows;
+  };
+
+  treeFigures = {
+    perSuite = countedSuites;
+    total = foldl' (a: b: a + b) 0 (attrValues countedSuites);
+    harness = harnessTests;
+    harnessAgain = harnessTests;
+    residue = {
+      omitted = length omittedTitles;
+      aliased = length aliasedTitles;
+    };
+  };
+
+  # An excuse of the form this repository writes for an unimplemented change
+  # names the change. The excuse expires when that change starts landing, and
+  # the ground it stands on is its own tasks file.
+  excuseNamesChange =
+    reason:
+    let
+      m = match ".*no task of ([a-z0-9-]+) has been done.*" reason;
+    in
+    if m == null then null else head m;
+
+  changeHasLanded =
+    name:
+    let
+      file = changesRoot + "/${name}/tasks.md";
+    in
+    pathExists file && filter (line: hasInfix "- [x]" line) (lines (readFile file)) != [ ];
+
+  staleExcuses = sort (a: b: a < b) (
+    map (path: "excused: ${path} rests on ${excuseNamesChange excused.${path}} being unimplemented") (
+      filter (
+        path:
+        let
+          change = excuseNamesChange excused.${path};
+        in
+        change != null && changeHasLanded change
+      ) (attrNames excused)
+    )
+  );
 in
 {
   testATestNameIsDerivedFromAHeading =
@@ -549,5 +672,27 @@ in
   testAnExcuseOutlivesItsSpecification = {
     expr = stranded;
     expected = [ ];
+  };
+
+  # Both sides are named under the document, so a failure prints the file to
+  # edit beside the two numbers.
+  testASuiteGainsATest = {
+    expr = {
+      "docs/tooling.md" = documentFigures;
+    };
+    expected = {
+      "docs/tooling.md" = treeFigures;
+    };
+  };
+
+  testAnExcuseOutlivesTheStateItDescribes = {
+    expr = {
+      tree = staleExcuses;
+      synthetic = changeHasLanded "hold-every-stated-guarantee";
+    };
+    expected = {
+      tree = [ ];
+      synthetic = true;
+    };
   };
 }

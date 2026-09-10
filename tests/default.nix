@@ -50,6 +50,7 @@ let
         operatorSource
         imageSource
         flakeletSource
+        repoSource
         ;
     };
     plan = import ./unit/plan.nix {
@@ -90,9 +91,13 @@ let
     layers = import ./unit/layers.nix { inherit support repoSource; };
 
     # coverage is handed the names of every suite including its own. Not a cycle:
-    # attribute names are known without forcing the values.
     coverage = import ./unit/coverage.nix {
-      inherit support changesRoot perfSource;
+      inherit
+        support
+        changesRoot
+        perfSource
+        repoSource
+        ;
       unitSuites = unitTestNames;
     };
   };

@@ -154,30 +154,30 @@ at the end, from one measurement.
 
 ## 9. Documents, then one measurement
 
-- [ ] 9.1 Correct `docs/README.md:186,196` on the key shape of `varsState` and on what it can change,
+- [x] 9.1 Correct `docs/README.md:186,196` on the key shape of `varsState` and on what it can change,
       against `lib/resolve.nix:562-563` and the golden plan, and verify the document's fenced examples
       still evaluate to what the surrounding prose says.
-- [ ] 9.2 Correct `docs/plan.md:269-273`, which contradicts itself on whether a plan carries bytes,
+- [x] 9.2 Correct `docs/plan.md:269-273`, which contradicts itself on whether a plan carries bytes,
       and the missing "absent when" note on `files.<file>`; `docs/operator.md:203-204,434`, which
       predate the `program` field; `docs/diagnostics.md`, missing `vars-program-malformed` and
       misstating `probes`'s trigger; `docs/tooling.md`'s stale counts; `docs/flakelet.md`'s four stale
       `image/read.nix` citations; `fixtures/minimal-typed-edge/README.md`'s line count; and
       `treefmt.nix`'s comment attributing vulture's finding to the wrong file. Verify with
       `nix build -L .#checks.x86_64-linux.treefmt`.
-- [ ] 9.3 Cross-check the row table against the tree per design D10: every `id = "…"` under `lib/` has
+- [x] 9.3 Cross-check the row table against the tree per design D10: every `id = "…"` under `lib/` has
       a line in `docs/diagnostics.md` and every line names a row the tree produces. Verify the check
       fails when a row is added without its line.
-- [ ] 9.4 Derive or check the counts a document records rather than writing them by hand, and verify
+- [x] 9.4 Derive or check the counts a document records rather than writing them by hand, and verify
       the check fails when a suite gains a test.
-- [ ] 9.5 Add the excuse-expiry check the `A specification is classified exactly once` heading names -
+- [x] 9.5 Add the excuse-expiry check the `A specification is classified exactly once` heading names -
       an excuse whose ground is that its change is unimplemented, for a change that is implemented -
       and verify it is red for a deliberately stale excuse. The double-listing half of that
       requirement already landed as `testEverySpecificationIsClassified`'s `doubled` field.
-- [ ] 9.6 Add the invariants this change creates to `CLAUDE.md`: an unrecognised resolved read is a
+- [x] 9.6 Add the invariants this change creates to `CLAUDE.md`: an unrecognised resolved read is a
       refusal; `files` is recorded like `delivery`; a name carrying `@`, `:` or `/` is a row; the
       attribute key is a member's identity; interface rows are reached from the modules; a staged file
       is created with its mode. Verify `nix build -L .#checks.x86_64-linux.treefmt` (vale included).
-- [ ] 9.7 Move `specs/tooling/repository-shape/spec.md` to `accountable`, verify `excused` holds no
+- [x] 9.7 Move `specs/tooling/repository-shape/spec.md` to `accountable`, verify `excused` holds no
       path of this change, and verify the coverage suite is `[]`.
 
 ## 10. Verification

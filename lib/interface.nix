@@ -413,7 +413,9 @@ rec {
     let
       walked = entriesFor reg reached;
     in
-    builtins.concatLists (map (r: atomRows reg r.value ++ foldRows reg r.value ++ idRows reg r.value) walked)
+    builtins.concatLists (
+      map (r: atomRows reg r.value ++ foldRows reg r.value ++ idRows reg r.value) walked
+    )
     ++ conflictRows walked;
 
   unitExtension =

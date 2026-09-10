@@ -80,7 +80,8 @@ let
     };
   };
 
-  shownValue = v: if builtins.isString v then util.quote v else "a value of type ${builtins.typeOf v}";
+  shownValue =
+    v: if builtins.isString v then util.quote v else "a value of type ${builtins.typeOf v}";
 
   declaredField =
     {
@@ -230,7 +231,9 @@ in
       }) machines;
 
       machineFieldRows = concatLists (
-        util.mapAttrsToList (_: fields: concatLists (util.mapAttrsToList (_: f: f.rows) fields)) machineFields
+        util.mapAttrsToList (
+          _: fields: concatLists (util.mapAttrsToList (_: f: f.rows) fields)
+        ) machineFields
       );
 
       # Machines by tag, indexed once for the whole deployment, so a selector asks
@@ -480,9 +483,9 @@ in
               value = key;
             }) memberNames
           );
-          rootProvides = mapAttrs (
-            _: p: p // { member = keyOfDeclaredName.${p.member} or p.member; }
-          ) (root.provides or { });
+          rootProvides = mapAttrs (_: p: p // { member = keyOfDeclaredName.${p.member} or p.member; }) (
+            root.provides or { }
+          );
 
           misnamedMembers = filter (key: members.${key}.name != key) memberNames;
           nameDisagreementRows = map (
@@ -490,9 +493,13 @@ in
             diag.error {
               inherit subject;
               id = "member-name-disagrees";
-              message = "the root of instance ${util.quote iname} declares a member under ${util.quote key} that names itself ${util.quote (toString members.${key}.name)}";
+              message = "the root of instance ${util.quote iname} declares a member under ${util.quote key} that names itself ${
+                util.quote (toString members.${key}.name)
+              }";
               evidence = "a member has one identity and it is the attribute key: placement, the settings namespace and every plan key are read from it, so a second spelling is a member nothing else can address";
-              resolution = "write `${key} = service ${util.quote key} { … };` in ${moduleFile}, or declare the member under ${util.quote (toString members.${key}.name)}";
+              resolution = "write `${key} = service ${util.quote key} { … };` in ${moduleFile}, or declare the member under ${
+                util.quote (toString members.${key}.name)
+              }";
             }
           ) misnamedMembers;
           exposes = declaredExposes.value;
@@ -604,7 +611,7 @@ in
       # `mname` is the attribute key the member is declared under, which is its
       # identity: `service`'s own name argument is row text and nothing reads it.
       mkMember =
-        iname: idecl: mname: member:
+        iname: _idecl: mname: member:
         let
           subject = "${iname}:${mname}";
           leafFile = leafFileOf iname mname;
@@ -667,9 +674,7 @@ in
           named = namedField.value;
           tags = taggedField.value;
           unknownMachines = filter (m: !(machines ? ${m})) named;
-          placements = util.uniqueStrings (
-            filter placeable (named ++ concatLists (map tagged tags))
-          );
+          placements = util.uniqueStrings (filter placeable (named ++ concatLists (map tagged tags)));
 
           placementRecord = {
             reason = "every";
@@ -1329,8 +1334,7 @@ in
           # severity. A raise cannot carry text, so a refusal is a returned value,
           # and the channel accepts only text: a refusal the planner cannot render
           # is a row of its own rather than a coercion or an empty message.
-          refuses =
-            foldApplies && !foldRaised && builtins.isAttrs folded.value && folded.value ? refused;
+          refuses = foldApplies && !foldRaised && builtins.isAttrs folded.value && folded.value ? refused;
           stated = if refuses then folded.value.refused else null;
           refusalIsText = builtins.isString stated && stated != "";
           refusal = if refuses && refusalIsText then stated else null;

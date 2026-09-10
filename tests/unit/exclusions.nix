@@ -10,6 +10,9 @@ let
     genList
     isString
     length
+    match
+    readDir
+    readFile
     split
     stringLength
     substring
@@ -175,6 +178,42 @@ let
   ];
 
   coveredRows = uniqueStrings (map (c: excluded.constructs.${c}.row) covered);
+
+  # The README also counts the deployment it introduces. A count is a claim
+  # about the folder beside it, so it is read off the folder rather than
+  # maintained by hand.
+  linesIn = path: filter isString (split "\n" (readFile path));
+
+  lineCount = path: length (linesIn path) - 1;
+
+  isSubstantive = line: match "[[:space:]]*(#.*)?" line == null;
+
+  deploymentFiles = attrNames (readDir "${support.folder}/deployment");
+
+  deploymentCounts =
+    foldl'
+      (
+        acc: file:
+        let
+          path = "${support.folder}/deployment/${file}";
+        in
+        {
+          total = acc.total + lineCount path;
+          substantive = acc.substantive + length (filter isSubstantive (linesIn path));
+        }
+      )
+      {
+        total = 0;
+        substantive = 0;
+      }
+      deploymentFiles;
+
+  readmeFigure =
+    pattern:
+    let
+      hits = filter (m: m != null) (map (line: match pattern line) readmeLines);
+    in
+    if hits == [ ] then null else map (n: builtins.fromJSON n) (builtins.head hits);
 in
 {
   testLocalityIsRefused =
@@ -390,6 +429,22 @@ in
       ];
       constructsWithoutATest = [ ];
       testsWithoutAConstruct = [ ];
+    };
+  };
+
+  # A number in `fixtures/minimal-typed-edge/README.md` about the folder it
+  # documents, against the folder.
+  testAFixtureReadmeCountsItsOwnDeployment = {
+    expr = {
+      "README.md: instances.nix" = readmeFigure ".*[^0-9]([0-9]+) lines:.*";
+      "README.md: deployment/" = readmeFigure ".*at ([0-9]+) lines, of which ([0-9]+) are not comment.*";
+    };
+    expected = {
+      "README.md: instances.nix" = [ (lineCount "${support.folder}/deployment/instances.nix") ];
+      "README.md: deployment/" = [
+        deploymentCounts.total
+        deploymentCounts.substantive
+      ];
     };
   };
 }

@@ -145,7 +145,7 @@ class Run:
 
     def artifact(self, key: str, *, of: manifest.Deployment | None = None) -> Path:
         """The artifact a build produced for one plan key, as its own manifest records it."""
-        return (self.built if of is None else of).entries[key].path
+        return manifest.artifact_of((self.built if of is None else of).entries[key])
 
     def unit_text(self, artifact: Path) -> str:
         units = sorted((artifact / "units").iterdir())
@@ -292,7 +292,7 @@ def test_the_machines_are_not_told_the_answer(run: Run) -> None:
     for key in (SERVER_KEY, CLIENT_KEY):
         entry = run.built.entries[key]
         vm = run.vm(entry.machine)
-        artifact = entry.path
+        artifact = manifest.artifact_of(entry)
         assert vm.ssh(f"nix-store --check-validity {artifact}").returncode != 0
         for unit in sorted((artifact / "units").iterdir()):
             assert vm.ssh(f"nix-store --check-validity {unit.resolve()}").returncode != 0
@@ -395,10 +395,11 @@ def test_a_cut_carries_no_delivery(run: Run) -> None:
 def test_the_machine_holds_what_the_artifact_names(delivered: Run) -> None:
     for key in (SERVER_KEY, CLIENT_KEY):
         entry = delivered.built.entries[key]
+        artifact = manifest.artifact_of(entry)
         vm = delivered.vm(entry.machine)
-        assert vm.ssh_succeed(f"nix-store --check-validity {entry.path} && echo ok").strip() == "ok"
-        named = sorted(set(STORE_PATH.findall(delivered.unit_text(entry.path))))
-        assert named, delivered.unit_text(entry.path)
+        assert vm.ssh_succeed(f"nix-store --check-validity {artifact} && echo ok").strip() == "ok"
+        named = sorted(set(STORE_PATH.findall(delivered.unit_text(artifact))))
+        assert named, delivered.unit_text(artifact)
         for path in named:
             assert vm.ssh_succeed(f"nix-store --check-validity {path} && echo ok").strip() == "ok"
     other = delivered.vm(CLIENT_MACHINE)
@@ -417,14 +418,15 @@ def test_the_artifacts_were_built_by_the_operators_command(delivered: Run) -> No
     applied = delivered.observed["applied"]
     for key in KEYS:
         entry = delivered.built.entries[key]
+        artifact = manifest.artifact_of(entry)
         described = (
-            f"{key} {entry.realiser} {entry.machine} {entry.address} {entry.path} "
+            f"{key} {entry.realiser} {entry.machine} {entry.address} {artifact} "
             f"[{' '.join(entry.units)}]"
         )
         assert described in delivered.build_log, delivered.build_log
-        assert f"copy {key} {entry.path} -> root@{entry.address}" in applied, applied
+        assert f"copy {key} {artifact} -> root@{entry.address}" in applied, applied
         vm = delivered.vm(entry.machine)
-        assert vm.ssh_succeed(f"nix-store --check-validity {entry.path} && echo ok").strip() == "ok"
+        assert vm.ssh_succeed(f"nix-store --check-validity {artifact} && echo ok").strip() == "ok"
 
 
 def test_the_plan_names_the_address(delivered: Run) -> None:
@@ -616,7 +618,9 @@ def test_the_command_reports_what_a_machine_holds(delivered: Run) -> None:
     holds = _command(delivered, "status", str(delivered.built.root))
 
     for entry in entries:
-        own = _reported(delivered.vm(entry.machine), delivery.service_name(entry.path))
+        own = _reported(
+            delivered.vm(entry.machine), delivery.service_name(manifest.artifact_of(entry))
+        )
         line = f"{entry.key} {entry.realiser} generation {own['generation']} of {own['locked_url']}"
         assert line in holds, holds
 
@@ -634,7 +638,7 @@ def test_an_entry_the_endpoint_does_not_register_is_reported_as_absent(delivered
     """
     producer = delivered.built.entries[SERVER_KEY]
     asked = delivered.vm(CLIENT_MACHINE).ssh(
-        remote.flakelet_status_script(delivery.service_name(producer.path))
+        remote.flakelet_status_script(delivery.service_name(manifest.artifact_of(producer)))
     )
 
     assert asked.returncode != 0, asked
@@ -651,7 +655,7 @@ def test_the_identity_a_machine_holds_is_in_its_report_line(delivered: Run) -> N
     rather than with anything the deployment record states.
     """
     entry = delivered.built.entries[SERVER_KEY]
-    own = _reported(delivered.vm(entry.machine), delivery.service_name(entry.path))
+    own = _reported(delivered.vm(entry.machine), delivery.service_name(manifest.artifact_of(entry)))
 
     reported = _command(delivered, "status", str(delivered.built.root), "--only", entry.key)
 
@@ -712,7 +716,7 @@ def test_a_reconcile_leaves_a_hand_activated_entry_alone(delivered: Run) -> None
     for key, unit in ((SERVER_KEY, SERVER_UNIT), (CLIENT_KEY, CLIENT_UNIT)):
         entry = delivered.built.entries[key]
         vm = delivered.vm(entry.machine)
-        service = delivery.service_name(entry.path)
+        service = delivery.service_name(manifest.artifact_of(entry))
         assert json.loads(vm.ssh_succeed("cat /etc/flakelet/config.json")).get("services") == {}
         vm.ssh_succeed("systemctl restart flakelet-reconcile.service", timeout=120)
         assert _reported(vm, service)["generation"] >= 1
@@ -734,9 +738,9 @@ def test_the_endpoint_reports_the_identity_the_build_published(delivered: Run) -
     for key in (SERVER_KEY, CLIENT_KEY):
         entry = delivered.built.entries[key]
         vm = delivered.vm(entry.machine)
-        record = _reported(vm, delivery.service_name(entry.path))
+        record = _reported(vm, delivery.service_name(manifest.artifact_of(entry)))
         assert record["locked_url"] == delivery.locked_url(key), record
-        held = json.loads(vm.ssh_succeed(f"cat {entry.path}/meta.json"))
+        held = json.loads(vm.ssh_succeed(f"cat {manifest.artifact_of(entry)}/meta.json"))
         assert held["settings_hash"] == published[key]["key"], (held, published[key])
         assert published[key]["key"] != delivered.plan[key]["key"], published[key]
 

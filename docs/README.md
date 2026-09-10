@@ -183,8 +183,8 @@ returns
 }
 ```
 
-`interfaces`, `sources` and `varsState` change what rows *say*, never what the
-planner accepts:
+`interfaces` and `sources` change what rows *say*, never what the planner
+accepts. `varsState` changes both:
 
 - **`interfaces`** maps a declaring file to the interfaces declared in it, so a
   row can print `` `ssh-host-identity` (interfaces/default.nix) ``. It is
@@ -193,9 +193,14 @@ planner accepts:
 - **`sources`** is `{ deployment, machines, modules.<instance>,
   leaves.<instance>.<member> }`, each a path *relative to the deployment root*.
   Absolute paths are refused (a row would otherwise differ between checkouts).
-- **`varsState`** is `<machine>.<generator>.<file> = { present, content }`. A
-  file the state does not name has no bytes yet, and reading it produces a
-  `set-entry-absent` row rather than a `null` a consumer could default against.
+- **`varsState`** is `<value entry key>.<file> = { present, content }`, keyed by
+  the plan key of the value itself — `<instance>:vars/<generator>` for a shared
+  value and `<instance>:vars/<generator>@<machine>` for a per-placement one, the
+  same key the plan records it under. One value has one answer about whether it
+  exists, however many machines receive it. A file the state does not name has
+  no bytes yet, and reading it produces a `set-entry-absent` row rather than a
+  `null` a consumer could default against — which is an error row, so a state
+  missing a value a deployment reads makes that deployment inapplicable.
 
 `storeDir` is the one optional argument that changes what the planner *sees*:
 it is the store directory an entry's declared closure roots and mentioned paths

@@ -118,6 +118,7 @@ that read it, and a `per = "instance"` value has no single placement to live in.
 | `deliveryDerivedFrom` | why each machine is in the set, sorted: the owning entry, and for a reader the entry, the slot and the export it declared. Always present, for the same reason |
 | `reads` | the sibling values' entry keys, absent when it reads none |
 | `dependsOn` | the sibling entries it reads, plus its own machine entry when `per = "placement"` |
+| `files` | the file records, keyed by file name. Always present, empty or not, for the reason `delivery` is: a generator declaring no file records an empty set rather than no field |
 | `files.<file>` | `{ path, secrecy, inPlan, deploy }` plus `bytes: "absent"` when the generator has not run |
 | `program` | the store path of the program that produces the files, as the generator declared it. **Absent** where none was declared, and it takes part in the entry's key only where one was, so a plan written before this field existed is keyed as it was. It is the one store path in a plan the closure scan does not hold against a declared closure: a generator runs where the plan is read, never on a machine receiving its output — see [secrets.md](secrets.md) |
 
@@ -267,10 +268,13 @@ own rather than a `plane` string.
 | `target.system` | the platform record the entry was planned for | re-keys every entry placed on that machine |
 
 A generated file records the same distinction from the other side, as
-`vars.<gen>.files.<file>.inPlan`: `"value"` for a public file whose bytes the
-plan carries, `"reference"` for a secret one it names by path. The bytes
-themselves are carried by no entry: what moves them is delivery, and the
-`delivery` list on the value's own entry is the whole statement of where to.
+`vars.<gen>.files.<file>.inPlan`: `"value"` for a public file, whose bytes an
+implementation may interpolate into a unit's environment or a rendered
+configuration file, and `"reference"` for a secret one, which the plan only ever
+names by path. No file record carries bytes either way — it carries the path,
+and `bytes: "absent"` while the generator has not run. What moves a secret's
+bytes is delivery, and the `delivery` list on the value's own entry is the whole
+statement of where to.
 
 A configuration file names its bytes and never carries them. Beside `mode` and
 the `reload` list the module wrote, a computed file carries exactly one

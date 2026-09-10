@@ -28,11 +28,11 @@ reads (`manager.rs:1349-1392`: `units/` is required, `generators/`, `exports.jso
 
 A unit file is `<instance>-<service>-<unit>.service`, and a scheduled unit adds
 `<instance>-<service>-<unit>.timer` beside it. Those names are `image/read.nix`'s
-`unitFileName` and `timerFileName` (`:159-160`) unchanged: they already satisfy the endpoint's
+`unitFileName` and `timerFileName` (`:142-143`) unchanged: they already satisfy the endpoint's
 `validate_name` and `validate_units` (`manager.rs:1301-1326`), which is why this realiser refuses
 a name rather than mapping one.
 
-The unit text is `image/read.nix`'s `renderUnit` (`:394-437`) plus one section:
+The unit text is `image/read.nix`'s `renderUnit` (`:446-491`) plus one section:
 
 ```
 [Unit]
@@ -85,14 +85,14 @@ not become a plan fact (design.md D2 of this change).
 - **`flake_url`** is `plan:<entry key>`. Its only consumer is display and provenance — the same
   spirit as flakelet's own `prebuilt:<name>` default (`Mic92/flakelet/lib/artifact.nix`) — and it
   is what `flakelet status --json` shows as `locked_url` (`manager.rs:379-380`).
-- **`settings_hash`** is the entry's version digest from `image/read.nix:127-135`, which digests
+- **`settings_hash`** is the entry's version digest from `image/read.nix:264-280`, which digests
   what the artifact is made of: name, units, closure, store directory, service manager, host paths
   and platform. It is carried into the generation the endpoint records
   (`manager.rs:1030-1036`, `generations.rs:14-18`), so what a machine reports about a running
   artifact is a plan fact.
 - Deliberately **not the entry's key**: a key moves when a configuration file's content hash
   moves, and that content never enters the artifact, so keying on it would restart a service whose
-  bytes are unchanged (`image/read.nix:122-126`).
+  bytes are unchanged (`image/read.nix:109-120`).
 
 A redelivery therefore decides by that digest rather than by a rebuild.
 `tests/unit/flakelet.nix`'s `testAChangedUnitFieldIsANewGeneration` reads one entry twice for one

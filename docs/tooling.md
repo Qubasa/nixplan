@@ -82,25 +82,25 @@ The suites, and how many tests each holds:
 
 | Suite | Tests | Subject |
 | --- | --- | --- |
-| `interfaces` | 13 | interface identity by value, export atoms, the omission rule |
+| `interfaces` | 26 | interface identity by value, export atoms, the omission rule |
 | `composition` | 21 | roots, members, the settings namespace, defaults and fixed |
-| `resolution` | 30 | wiring, arity, secrecy, placement, keyset equality |
-| `diagnostics` | 22 | totality, ordering, severity, rendering, and the scan that finds no raising call under `lib/` |
-| `plan` | 26 | keys, planes, absences, dependencies, serialisation, the golden fixture |
+| `resolution` | 43 | wiring, arity, secrecy, placement, keyset equality |
+| `diagnostics` | 32 | totality, ordering, severity, rendering, the scan that finds no raising call under `lib/`, and the row table against `docs/diagnostics.md` |
+| `plan` | 35 | keys, planes, absences, dependencies, serialisation, the golden fixture |
 | `postgres` | 10 | one provider instance and two consumers, planned |
-| `exclusions` | 16 | one deployment per excluded construct, each refused |
+| `exclusions` | 17 | one deployment per excluded construct, each refused, and the counts the fixture README records about its own folder |
 | `vars` | 24 | a generated value's cardinality, its delivery set, its entry and the program that produces it |
 | `units` | 31 | the portable unit vocabulary, per field |
 | `platform` | 19 | a machine's target, elaborated |
 | `closure` | 25 | what a unit may name and what it must declare |
 | `image` | 28 | the portable-service-image realiser's reading of an entry |
 | `flakelet` | 14 | the flakelet realiser's reading: enablement, identity, the two name refusals |
-| `operator` | 29 | the deployment build's reading: the artifact name, `manifest.json`, the realiser statement, its refusals |
+| `operator` | 31 | the deployment build's reading: the artifact name, `manifest.json`, the realiser statement, its refusals |
 | `secrets` | 12 | the secrets realiser's reading: a plan as a generator configuration, the name projection, the rendered deploy step |
 | `consumer` | 2 | what this flake publishes: the recorded platform identity, and a plan keyed by a caller's own nixpkgs |
 | `perf` | 6 | the synthetic fleet is deterministic and realises nothing |
 | `layers` | 17 | the shape of the test tree itself, the root document and the one shell |
-| `coverage` | 8 | every specification heading is a test, an omission or an alias |
+| `coverage` | 10 | every specification heading is a test, an omission or an alias, and every figure this document records |
 
 That column is a value, not a tally kept by hand:
 
@@ -110,7 +110,10 @@ nix eval --json '.#debug.suites' \
 ```
 
 Nineteen suites, counted as the keys of `suites` in `tests/default.nix`, and
-353 tests, counted as the test attributes of the files under `tests/unit/`. That
+403 tests, counted as the test attributes of the files under `tests/unit/`. Both
+numbers, and every figure in the table above, are compared against the tree by
+`coverage.testASuiteGainsATest`, so a suite that gains a test fails a check
+naming this document rather than leaving a stale number in it. That
 attrset is the only registration point: a suite file nothing there imports is a
 file nothing runs, and the key names are what the coverage cross-walk reads. A
 suite that asserts a directory's reading takes it as an argument threaded from
@@ -134,13 +137,13 @@ See [cluster.md](cluster.md) for the host it needs, the five folders, what a run
 observes and how to drive `pytest` by hand against the working tree.
 
 The pure half of that layer needs no machine and is a check like any other:
-`nix build .#checks.x86_64-linux.planner-delivery -L`, 54 tests over
+`nix build .#checks.x86_64-linux.planner-delivery -L`, 63 tests over
 `tests/e2e/test_harness.py`. Most of them are the command's rather than the
 harness's now - the order `apply` walks, the refusals it makes before it dials -
 because the harness hands the command a recorder in place of a process table and
 reads the argv it produced. The check exports `PYTHONPATH` naming `cli/`, since
 that is where those modules live. `nix develop` carries the same `pytest`, so
-`PYTHONPATH=cli pytest -q tests/e2e/test_harness.py` runs the same 54 against
+`PYTHONPATH=cli pytest -q tests/e2e/test_harness.py` runs the same 63 against
 the working tree.
 
 ## Mapping a specification scenario to a test
@@ -164,8 +167,8 @@ else:
 
 | List | Entries | What an entry says |
 | --- | --- | --- |
-| `omitted` | 10 | a heading this project deliberately does not observe, mapped to the sentence saying why. Two classes only: a failure `builtins.tryEval` does not catch, so asserting it would end the evaluation that would report it; and a property of running the suite that the suite cannot observe about itself without reading the flake that runs it. An omission for a heading that has since gained a test fails as stale, and an empty reason fails as no reason. |
-| `aliased` | 18 | a heading two capabilities word differently, mapped to the one test that observes it under the other's words. The named test must exist in one of the layers, and an alias for a heading whose own derived name is already a test fails as redundant. |
+| `omitted` | 11 | a heading this project deliberately does not observe, mapped to the sentence saying why. Two classes only: a failure `builtins.tryEval` does not catch, so asserting it would end the evaluation that would report it; and a property of running the suite that the suite cannot observe about itself without reading the flake that runs it. An omission for a heading that has since gained a test fails as stale, and an empty reason fails as no reason. |
+| `aliased` | 21 | a heading two capabilities word differently, mapped to the one test that observes it under the other's words. The named test must exist in one of the layers, and an alias for a heading whose own derived name is already a test fails as redundant. |
 
 A third file's names count as tests that exist without being a third layer:
 `perf/check_test.py`, the budget checker's own `unittest`. It sits beside the

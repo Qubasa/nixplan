@@ -190,7 +190,7 @@ class Run:
         """The unit file of one placed entry, out of the artifact the build made for it."""
         entry = self.deployment.entries[key]
         assert len(entry.units) == 1, entry
-        return (entry.path / "units" / entry.units[0]).read_text()
+        return (manifest.artifact_of(entry) / "units" / entry.units[0]).read_text()
 
     def source_file(self, key: str, name: str) -> Path:
         """The file the run wrote into the value source for one declared file."""
@@ -400,7 +400,8 @@ def test_no_artifact_carries_the_delivered_bytes(applied: Run) -> None:
     assert not held.is_relative_to(run.deployment.root)
     assert not held.is_relative_to(run.store_dir)
     for entry in run.deployment.entries.values():
-        assert not held.is_relative_to(entry.path), entry
+        if entry.path is not None:
+            assert not held.is_relative_to(entry.path), entry
 
     for machine in MACHINES:
         store = run.vm(machine).ssh(f"grep -rl {run.token} /nix/store 2>/dev/null")

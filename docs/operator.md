@@ -202,6 +202,7 @@ Per value entry:
 | --- | --- |
 | `delivery` | the machines that receive the value, which may be empty |
 | `files` | each declared file by name, with the absolute `path` it lands at and its `secrecy` |
+| `program` | the store path of the program that produces those files, as the plan records it. **Absent** where the generator declared none, and it is what tells the command which values it must be handed bytes for |
 
 `storeDir` is the store the artifacts were built in, and `version` is `1`. Nothing here is derived
 from the plan twice: the plan travels beside `manifest.json` and stays the single answer for
@@ -431,9 +432,11 @@ values/
 
 The layout is `<dir>/<entry-key>/<file>`. An entry key carries a `/` of its own, so
 `values/issuer:vars/session/token` is a real nested path and the directory is walked rather than
-split. The required set is the declared files of every value entry whose delivery set is non-empty:
-bytes are needed for a file that will be written, and a value delivered to no machine is written
-nowhere.
+split. The required set is the declared files of every value entry whose delivery set is non-empty
+**and which records no `program`**: bytes are needed for a file that will be written, a value
+delivered to no machine is written nowhere, and a value naming a generator is produced and
+delivered by the external tool rather than read from here. A source holding one of that tool's
+files is refused naming the program.
 
 The source is checked against the plan before anything is dialled. A file the plan declares that
 the source does not hold is refused naming the entry and the file. A file a delivered value's own

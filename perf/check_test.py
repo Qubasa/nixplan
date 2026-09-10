@@ -302,9 +302,7 @@ class CheckerTest(unittest.TestCase):
         self.assertEqual([], self.failures())
         self.assertEqual(2 * len(check.GATED_COUNTERS), report.gated)
         self.assertEqual(report.gated, report.compared)
-        self.assertIn(
-            f"{report.compared} of {report.gated} gated figures compared", self.printed()
-        )
+        self.assertIn(f"{report.compared} of {report.gated} gated figures compared", self.printed())
         self.assertEqual(0, self.exit_code())
 
 

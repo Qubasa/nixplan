@@ -315,7 +315,11 @@ let
   # catches neither an abort nor a missing attribute, so a bare read here would
   # show an evaluation error where the table belongs.
   fieldRow =
-    { key, field, at }:
+    {
+      key,
+      field,
+      at,
+    }:
     planner.error {
       id = "operator-plan-field-missing";
       subject = key;
@@ -369,8 +373,7 @@ let
       inherit key;
       delivery = delivery.value;
       files = mapAttrs (_: f: f.value) read;
-      rows =
-        delivery.rows ++ files.rows ++ concatLists (planner.util.mapAttrsToList (_: f: f.rows) read);
+      rows = delivery.rows ++ files.rows ++ concatLists (planner.util.mapAttrsToList (_: f: f.rows) read);
     }
     // (if entry.program or null == null then { } else { inherit (entry) program; });
 

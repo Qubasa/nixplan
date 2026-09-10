@@ -1387,44 +1387,50 @@ in
           };
         };
         instances = {
-          issuer = (placedOn [ "one" ] (soleRoot {
-            module = _: {
-              vars.session = {
-                per = "instance";
-                files."token".secrecy = "secret";
-              };
-              provides.thing.interface = identity;
-              impl =
-                { vars, ... }:
-                {
-                  provides.thing.exports.publicKey = "ssh-ed25519 AAAA";
-                  provides.thing.exports.privateKey = vars.session."token";
-                  units.only.command = "/bin/true";
+          issuer =
+            (placedOn [ "one" ] (soleRoot {
+              module = _: {
+                vars.session = {
+                  per = "instance";
+                  files."token".secrecy = "secret";
                 };
-            };
-            provides = [ "thing" ];
-          })) // { exposes = [ "thing" ]; };
-          consumer = (placedOn [ "be@ta" ] (soleRoot {
-            module = _: {
-              uses.slot = {
-                interface = identity;
-                reads = [ "privateKey" ];
-              };
-              impl =
-                { results, ... }:
-                {
-                  units.only = {
-                    command = "/bin/true";
-                    env.KEYFILE = results.slot.privateKey.path;
+                provides.thing.interface = identity;
+                impl =
+                  { vars, ... }:
+                  {
+                    provides.thing.exports.publicKey = "ssh-ed25519 AAAA";
+                    provides.thing.exports.privateKey = vars.session."token";
+                    units.only.command = "/bin/true";
                   };
+              };
+              provides = [ "thing" ];
+            }))
+            // {
+              exposes = [ "thing" ];
+            };
+          consumer =
+            (placedOn [ "be@ta" ] (soleRoot {
+              module = _: {
+                uses.slot = {
+                  interface = identity;
+                  reads = [ "privateKey" ];
                 };
+                impl =
+                  { results, ... }:
+                  {
+                    units.only = {
+                      command = "/bin/true";
+                      env.KEYFILE = results.slot.privateKey.path;
+                    };
+                  };
+              };
+            }))
+            // {
+              wire.slot = {
+                instance = "issuer";
+                provides = "thing";
+              };
             };
-          })) // {
-            wire.slot = {
-              instance = "issuer";
-              provides = "thing";
-            };
-          };
         };
         varsState."issuer:vars/session"."token".present = true;
       };
@@ -1451,9 +1457,15 @@ in
     let
       result = planOf {
         instances = {
-          "a:b" = placedOn [ "one" ] (soleRoot { module = quiet; });
+          "a:b" = placedOn [ "one" ] (soleRoot {
+            module = quiet;
+          });
           ok = {
-            module = root { members."x@y" = { module = quiet; }; };
+            module = root {
+              members."x@y" = {
+                module = quiet;
+              };
+            };
             placement.every."x@y".machines = [ "one" ];
           };
           gen = placedOn [ "one" ] (soleRoot {
@@ -1469,12 +1481,10 @@ in
     {
       expr = {
         rows = countById "name-carries-key-separator" result;
-        named = map (
-          m: hasInfix "`a:b`" m || hasInfix "`x@y`" m || hasInfix "`g/h`" m
-        ) messages;
-        keysNamingThem = filter (
-          k: hasInfix "a:b" k || hasInfix "x@y" k || hasInfix "g/h" k
-        ) (attrNames result.plan);
+        named = map (m: hasInfix "`a:b`" m || hasInfix "`x@y`" m || hasInfix "`g/h`" m) messages;
+        keysNamingThem = filter (k: hasInfix "a:b" k || hasInfix "x@y" k || hasInfix "g/h" k) (
+          attrNames result.plan
+        );
       };
       expected = {
         rows = 3;
@@ -1494,8 +1504,18 @@ in
     let
       declaredMachines = attrNames support.worked.args.machines;
       declaredInstances = attrNames support.worked.args.instances;
-      firstColon = key: let m = match "([^:@]+):.*" key; in if m == null then null else elemAt m 0;
-      lastAt = key: let m = match ".*@([^@]+)" key; in if m == null then null else elemAt m 0;
+      firstColon =
+        key:
+        let
+          m = match "([^:@]+):.*" key;
+        in
+        if m == null then null else elemAt m 0;
+      lastAt =
+        key:
+        let
+          m = match ".*@([^@]+)" key;
+        in
+        if m == null then null else elemAt m 0;
       entryKeys = filter (k: firstColon k != "machine") (attrNames workedPlan);
     in
     {
