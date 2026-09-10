@@ -35,7 +35,7 @@
 
 ## 4. Coverage cross-walk closure
 
-- [ ] 4.1 Move `normalise-folds-and-report-refused-reads/specs/planner/interface-fold/spec.md` from `excused` to `accountable` in `tests/unit/coverage.nix`; verify `nix eval --json .#planner.failuresBySuite.coverage` now names unmapped scenario headings rather than an unclassified file
+- [x] 4.1 Move `normalise-folds-and-report-refused-reads/specs/planner/interface-fold/spec.md` from `excused` to `accountable` in `tests/unit/coverage.nix`; verify `nix eval --json .#planner.failuresBySuite.coverage` now names unmapped scenario headings rather than an unclassified file
 - [ ] 4.2 Confirm the five scenarios of the modified requirement resolve: `A fold raises`, `A refused fold leaves the slot absent` and `A declared fold is not a function` to the tests that already carry those titles from `hold-declaration-shape-and-fold-set-reads`, `A guarded consumer still reports a refused fold` to task 2.1, and `An unguarded consumer of a refused fold ends the evaluation` to the `omitted` entry from task 3.1; verify none of the five appears in the coverage suite's `unaccounted`
 - [ ] 4.3 Confirm the two scenarios of the added requirement resolve to tasks 2.2 and 2.3; verify `nix eval --json .#planner.failuresBySuite.coverage` is `{}`
 
