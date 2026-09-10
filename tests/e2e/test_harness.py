@@ -27,6 +27,7 @@ import delivery
 import errors
 import generation
 import manifest
+import order
 import planner
 import remote
 import report
@@ -1133,6 +1134,239 @@ def test_an_entry_off_the_cycle_keeps_its_order(tmp_path: Path) -> None:
     assert _activated(log) == [RELAY_KEY, SERVER_KEY, CLIENT_KEY]
     against = [line for line in log if line.startswith("ordered against ")]
     assert against == [f"ordered against the read of {SERVER_KEY} by {RELAY_KEY}"]
+
+
+def _cycles(log: tuple[str, ...]) -> list[str]:
+    """Return the cycle lines the log shows, in the order it shows them."""
+    return [line for line in log if line.startswith("cycle of ")]
+
+
+def _against(log: tuple[str, ...]) -> list[str]:
+    """Return the contradicted-edge lines the log shows, in the order it shows them."""
+    return [line for line in log if line.startswith("ordered against ")]
+
+
+def test_two_entries_that_read_each_other_are_named_as_one_cycle(tmp_path: Path) -> None:
+    """The pair is named as a cycle above the edge the order contradicted, and both are applied."""
+    plan = {
+        **PLAN,
+        SERVER_KEY: {"reads": {"back": {"entry": CLIENT_KEY}}},
+        CLIENT_KEY: {"reads": {"site": {"entry": SERVER_KEY}}},
+    }
+    deployment = _built(
+        tmp_path,
+        plan=plan,
+        entries={
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+        },
+    )
+
+    log = apply.apply(deployment, Recorder(), base_env={})
+
+    assert _cycles(log) == [f"cycle of {CLIENT_KEY}, {SERVER_KEY}"]
+    assert _against(log) == [f"ordered against the read of {SERVER_KEY} by {CLIENT_KEY}"]
+    assert log.index(_cycles(log)[0]) < log.index(_against(log)[0])
+    assert sorted(_activated(log)) == [CLIENT_KEY, SERVER_KEY]
+
+
+def test_an_entry_reading_into_a_cycle_is_not_contradicted(tmp_path: Path) -> None:
+    """The third entry is named in no cycle, and the read it declared is honoured."""
+    plan = {
+        **PLAN,
+        CLIENT_KEY: {"reads": {"relay": {"entry": RELAY_KEY}}},
+        RELAY_KEY: {"reads": {"site": {"entry": SERVER_KEY}}},
+        SERVER_KEY: {"reads": {"relay": {"entry": RELAY_KEY}}},
+    }
+    deployment = _built(
+        tmp_path,
+        plan=plan,
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            RELAY_KEY: _stated(RELAY_KEY, "alpha", "10.0.0.10"),
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+    )
+
+    log = apply.apply(deployment, Recorder(), base_env={})
+
+    assert _cycles(log) == [f"cycle of {RELAY_KEY}, {SERVER_KEY}"]
+    assert CLIENT_KEY not in _cycles(log)[0]
+    assert _against(log) == [f"ordered against the read of {SERVER_KEY} by {RELAY_KEY}"]
+    activated = _activated(log)
+    assert activated.index(RELAY_KEY) < activated.index(CLIENT_KEY)
+
+
+def test_two_separate_cycles_are_two_reports(tmp_path: Path) -> None:
+    """Two disjoint mutual pairs are two cycles, each naming its own two entries."""
+    plan = {
+        **PLAN,
+        SERVER_KEY: {"reads": {"back": {"entry": CLIENT_KEY}}},
+        CLIENT_KEY: {"reads": {"site": {"entry": SERVER_KEY}}},
+        HUB_KEY: {"reads": {"relay": {"entry": RELAY_KEY}}},
+        RELAY_KEY: {"reads": {"hub": {"entry": HUB_KEY}}},
+    }
+    deployment = _built(
+        tmp_path,
+        plan=plan,
+        entries={
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            HUB_KEY: _stated(HUB_KEY, "alpha", "10.0.0.10"),
+            RELAY_KEY: _stated(RELAY_KEY, "alpha", "10.0.0.10"),
+        },
+    )
+
+    log = apply.apply(deployment, Recorder(), base_env={})
+
+    assert _cycles(log) == [
+        f"cycle of {HUB_KEY}, {RELAY_KEY}",
+        f"cycle of {CLIENT_KEY}, {SERVER_KEY}",
+    ]
+    assert _against(log) == [
+        f"ordered against the read of {RELAY_KEY} by {HUB_KEY}",
+        f"ordered against the read of {SERVER_KEY} by {CLIENT_KEY}",
+    ]
+    assert sorted(_activated(log)) == sorted([CLIENT_KEY, HUB_KEY, RELAY_KEY, SERVER_KEY])
+
+
+class Counted(str):
+    """A plan key that counts every lookup the walk makes of it."""
+
+    lookups = 0
+
+    def __hash__(self) -> int:
+        Counted.lookups += 1
+        return str.__hash__(self)
+
+
+CHAIN = 1000
+
+# Lookups per entry, not seconds: a wall-clock bound in this suite would be flaky
+# by construction. The component walk asks 27 per entry of the chain below; the
+# frontier rescan it replaced asked 1510, because it looked every remaining entry
+# up once per entry applied.
+BUDGET = 300
+
+
+def _chain(size: int, *, mutual: bool = False) -> tuple[dict[str, Any], list[Counted]]:
+    """Return a plan whose reads form a chain of ``size`` entries, and those entries."""
+    keys = [Counted(f"fleet:node{index:04d}@m{index:04d}") for index in range(size)]
+    plan: dict[str, Any] = {
+        keys[index]: {"reads": {"up": {"entry": keys[index - 1]}}} for index in range(1, size)
+    }
+    if mutual:
+        plan[keys[0]] = {"reads": {"down": {"entry": keys[1]}}}
+    return plan, keys
+
+
+def _measured(plan: dict[str, Any], keys: list[Counted]) -> tuple[order.WalkResult, int]:
+    """Walk ``keys`` and return the result beside the lookups the walk made."""
+    Counted.lookups = 0
+    walked = order.walk(plan, keys)
+    return walked, Counted.lookups
+
+
+def test_a_large_deployment_is_ordered_without_a_per_entry_rescan() -> None:
+    """A thousand-entry chain is ordered at a cost bounded per entry rather than by the fleet."""
+    plan, keys = _chain(CHAIN)
+
+    walked, lookups = _measured(plan, keys)
+
+    assert list(walked.order) == keys
+    assert walked.broken == ()
+    assert lookups < BUDGET * CHAIN
+
+
+def test_a_large_deployment_carrying_a_cycle_is_ordered_at_the_same_cost() -> None:
+    """One mutual pair in the same chain costs the same order and reports its own edge."""
+    _, acyclic = _measured(*_chain(CHAIN))
+    plan, keys = _chain(CHAIN, mutual=True)
+
+    walked, lookups = _measured(plan, keys)
+
+    assert list(walked.order) == keys
+    assert walked.cycles == ((keys[0], keys[1]),)
+    assert walked.broken == ((keys[1], keys[0]),)
+    assert lookups < 2 * acyclic
+
+
+def test_no_entry_can_be_ordered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An unorderable state is the command's own refusal, and it dials nothing.
+
+    A condensation is acyclic, so no component computation over a plan reaches
+    the position. The fault is injected where a future edge source would sit: a
+    mutual pair is handed over as two components, which is a condensation that
+    reads itself.
+    """
+    plan = {
+        **PLAN,
+        SERVER_KEY: {"reads": {"back": {"entry": CLIENT_KEY}}},
+        CLIENT_KEY: {"reads": {"site": {"entry": SERVER_KEY}}},
+    }
+    deployment = _built(
+        tmp_path,
+        plan=plan,
+        entries={
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+        },
+    )
+    recorder = Recorder()
+    monkeypatch.setattr(
+        order, "_components", lambda nodes, forward: tuple((node,) for node in nodes)
+    )
+
+    with pytest.raises(errors.ApplyError) as raised:
+        apply.apply(deployment, recorder, base_env={})
+
+    message = str(raised.value)
+    assert SERVER_KEY in message
+    assert CLIENT_KEY in message
+    assert f"{CLIENT_KEY} reads {SERVER_KEY}" in message
+    assert recorder.commands == []
+
+
+def test_a_restricted_run_activates_a_consumer_without_its_provider(tmp_path: Path) -> None:
+    """The read the selection drops is announced before the first dial, and the consumer runs."""
+    plan = {**PLAN, CLIENT_KEY: {"reads": {"site": {"entry": SERVER_KEY}}}}
+    deployment = _built(
+        tmp_path,
+        plan=plan,
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+    )
+    recorder = Recorder()
+
+    log = apply.apply(deployment, recorder, only=(CLIENT_KEY,), base_env={})
+
+    assert log[0] == f"not applying {SERVER_KEY}, which {CLIENT_KEY} reads"
+    assert _activated(log) == [CLIENT_KEY]
+    assert all("10.0.0.10" not in " ".join(command) for command in recorder.commands)
+
+
+def test_a_full_run_announces_nothing_about_unapplied_providers(tmp_path: Path) -> None:
+    """A whole-deployment run reports the edges a cycle contradicted and no other read."""
+    plan = {
+        **PLAN,
+        SERVER_KEY: {"reads": {"back": {"entry": CLIENT_KEY}}},
+        CLIENT_KEY: {"reads": {"site": {"entry": SERVER_KEY}}},
+    }
+    deployment = _built(
+        tmp_path,
+        plan=plan,
+        entries={
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+        },
+    )
+
+    log = apply.apply(deployment, Recorder(), base_env={})
+
+    assert [line for line in log if line.startswith("not applying ")] == []
+    assert _against(log) == [f"ordered against the read of {SERVER_KEY} by {CLIENT_KEY}"]
 
 
 def test_an_unreachable_machine_is_refused_without_a_prompt(tmp_path: Path) -> None:
