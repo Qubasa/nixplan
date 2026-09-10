@@ -64,6 +64,7 @@ let
         support
         flakeletSource
         imageSource
+        operatorSource
         ;
     };
     layers = import ./unit/layers.nix { inherit support repoSource; };

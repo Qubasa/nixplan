@@ -271,16 +271,39 @@ in
         key = "svc:only@nowhere";
         profile = "trusted";
       };
+      incomplete = planOf {
+        machines.bare = {
+          address = "bare.example";
+          tags = [ ];
+        };
+        instances.svc = {
+          module = soleRoot {
+            module = _: {
+              impl = _: {
+                units.only.command = "/bin/true";
+              };
+            };
+          };
+          placement.every.only.machines = [ "bare" ];
+        };
+      };
     in
     {
       expr = {
         unplacedRaises = raises read;
         unknownEntryRaises = raises unknownKey;
         entryFields = attrNames result.plan."svc:only";
+        # The fact the entry does not carry is a row of the planner's first: a
+        # target with no platform and no service manager is reported there, and
+        # the raise below it is what a direct caller of this file receives.
+        theRowAboveTheRaise = support.rowIds incomplete;
+        rowSeverity = support.severityById "machine-target-incomplete" incomplete;
       };
       expected = {
         unplacedRaises = true;
         unknownEntryRaises = true;
+        theRowAboveTheRaise = [ "machine-target-incomplete" ];
+        rowSeverity = "error";
         entryFields = [
           "key"
           "placement"
@@ -543,15 +566,33 @@ in
             env.PEM = value;
           };
         });
+      plannedWith =
+        value:
+        planned { } (_: {
+          closure = [ borgbackup ];
+          units.web = {
+            command = "${borgbackup}/bin/borg serve";
+            env.PEM = value;
+          };
+        });
+      broken = (plannedWith "-----BEGIN-----\nbytes\n-----END-----").result;
+      whole = (plannedWith "-----BEGIN----- bytes -----END-----").result;
     in
     {
       expr = {
         refused = raises (withValue "-----BEGIN-----\nbytes\n-----END-----");
         oneLineOfTheSameBytesBuilds = raises (withValue "-----BEGIN----- bytes -----END-----");
+        # The planner reports the same condition first, and says which variable.
+        theRowAboveTheRaise = support.rowIds broken;
+        namesTheVariable = hasInfix "`PEM`" (support.messageById "unit-env-value-newline" broken);
+        oneLineIsNoRow = support.rowIds whole;
       };
       expected = {
         refused = true;
         oneLineOfTheSameBytesBuilds = false;
+        theRowAboveTheRaise = [ "unit-env-value-newline" ];
+        namesTheVariable = true;
+        oneLineIsNoRow = [ ];
       };
     };
 

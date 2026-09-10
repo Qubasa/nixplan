@@ -172,7 +172,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   `testAnApplicableDeploymentIsRealisedWithoutARaise`, which reads every placed entry of the worked
   fixture under a statement naming the image realiser where a configuration file exists. Both unit
   layer. Verify the first goes red when a `fail` is added to either realiser with no row beside it.
-- [ ] 7.4 `tests/unit/flakelet.nix` and `tests/unit/image.nix`: update the scenarios the two realiser
+- [x] 7.4 `tests/unit/flakelet.nix` and `tests/unit/image.nix`: update the scenarios the two realiser
   deltas restate - `testAnUnusableInstanceName`, `testAUnitNameOutsideTheServicesNamespace`,
   `testAWellFormedEntryIsNotRefused`, `testAnEntryShownAConfigurationFile`,
   `testAFactThePlanDoesNotCarry`, `testAnEnvironmentValueCarriesANewline` - each asserting the row

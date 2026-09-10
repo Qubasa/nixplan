@@ -3,6 +3,7 @@
   support,
   flakeletSource,
   imageSource,
+  operatorSource,
 }:
 let
   inherit (builtins)
@@ -15,10 +16,33 @@ let
   inherit (support) planOf soleRoot;
   inherit (support.worked) borgbackup;
 
+  imageReader = import (imageSource + "/read.nix") { inherit planner; };
+
   reader = import (flakeletSource + "/read.nix") {
     inherit planner;
-    reader = import (imageSource + "/read.nix") { inherit planner; };
+    reader = imageReader;
   };
+
+  # The layer that reports each of this realiser's refusals as a row first.
+  build = import (operatorSource + "/read.nix") {
+    inherit planner imageReader;
+    flakeletReader = reader;
+  };
+
+  rowsAbove =
+    args: implementation:
+    let
+      p = planned args implementation;
+    in
+    builtins.sort (a: b: a < b) (map (r: r.id) (build.read { inherit (p) plan; }).rows);
+
+  messageAbove =
+    args: implementation:
+    let
+      p = planned args implementation;
+      rows = (build.read { inherit (p) plan; }).rows;
+    in
+    if rows == [ ] then "" else (builtins.head rows).message;
 
   planned =
     {
@@ -252,6 +276,10 @@ in
       dotted = raises (readOf { instance = "web.one"; } simple);
       outsideTheSet = raises (readOf { instance = "web+one"; } simple);
       wellFormed = raises (readOf { instance = "web_one-1"; } simple);
+      rowAbove = rowsAbove { instance = "web.one"; } simple;
+      theRowStatesTheSameRule = support.hasInfix reader.nameRule (
+        messageAbove { instance = "web.one"; } simple
+      );
       rule = {
         dot = reader.acceptsName "web.one";
         plus = reader.acceptsName "web+one";
@@ -268,6 +296,8 @@ in
       dotted = true;
       outsideTheSet = true;
       wellFormed = false;
+      rowAbove = [ "operator-entry-name-refused" ];
+      theRowStatesTheSameRule = true;
       rule = {
         dot = false;
         plus = false;
@@ -289,6 +319,10 @@ in
         })
       );
       wellFormedSet = raises (readOf { } withSchedule);
+      rowAbove = rowsAbove { } (_: {
+        closure = [ borgbackup ];
+        units."web@one@two".command = "${borgbackup}/bin/borg serve";
+      });
       rule = {
         theServiceItself = reader.acceptsUnit "svc-only" "svc-only.service";
         prefixed = reader.acceptsUnit "svc-only" "svc-only-web.service";
@@ -301,6 +335,7 @@ in
     expected = {
       twoInstanceMarkers = true;
       wellFormedSet = false;
+      rowAbove = [ "operator-entry-name-refused" ];
       rule = {
         theServiceItself = true;
         prefixed = true;
@@ -317,11 +352,13 @@ in
       simple = raises (readOf { } simple);
       scheduled = raises (readOf { } withSchedule);
       underscored = raises (readOf { instance = "web_one-1"; } simple);
+      noRowAbove = rowsAbove { } simple ++ rowsAbove { instance = "web_one-1"; } simple;
     };
     expected = {
       simple = false;
       scheduled = false;
       underscored = false;
+      noRowAbove = [ ];
     };
   };
 
@@ -379,6 +416,8 @@ in
   testAnEntryShownAConfigurationFile = {
     expr = {
       refused = raises (readOf { } shownAConfigurationFile);
+      rowAbove = rowsAbove { } shownAConfigurationFile;
+      theRowNamesThePath = support.hasInfix "/etc/thing.conf" (messageAbove { } shownAConfigurationFile);
       theImageRealiserShowsIt =
         map (p: p.kind)
           (reader.reader.read {
@@ -389,6 +428,8 @@ in
     };
     expected = {
       refused = true;
+      rowAbove = [ "operator-entry-path-not-assembled" ];
+      theRowNamesThePath = true;
       theImageRealiserShowsIt = [ "configuration-file" ];
     };
   };
