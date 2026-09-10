@@ -103,7 +103,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
 
 ## 5. The reading crosses the statement against the entry
 
-- [ ] 5.1 `flakelet/read.nix`: nothing changes in the rules, and `acceptsName`, `acceptsUnit` and
+- [x] 5.1 `flakelet/read.nix`: nothing changes in the rules, and `acceptsName`, `acceptsUnit` and
   `confinement` are already exported (`:103-111`). `operator/read.nix` imports them the way it
   already imports `../image/read.nix`, and asks rather than restating. Verify no rule text appears
   twice in the tree and `tests/unit/layers.nix` still passes.

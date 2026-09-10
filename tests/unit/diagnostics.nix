@@ -4,6 +4,7 @@
   libSource,
   operatorSource,
   imageSource,
+  flakeletSource,
 }:
 let
   inherit (builtins)
@@ -38,9 +39,15 @@ let
 
   renderedBlocks = rendered: filter isString (split "\n\n" rendered);
 
+  operatorImageReader = import (imageSource + "/read.nix") { inherit planner; };
+
   operatorReader = import (operatorSource + "/read.nix") {
     inherit planner;
-    imageReader = import (imageSource + "/read.nix") { inherit planner; };
+    imageReader = operatorImageReader;
+    flakeletReader = import (flakeletSource + "/read.nix") {
+      inherit planner;
+      reader = operatorImageReader;
+    };
   };
 
   operatorFiles = filter (rel: hasInfix ".nix" rel) (support.filesUnder operatorSource);

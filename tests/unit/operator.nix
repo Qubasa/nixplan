@@ -3,6 +3,7 @@
   support,
   operatorSource,
   imageSource,
+  flakeletSource,
 }:
 let
   inherit (builtins)
@@ -24,9 +25,14 @@ let
   # The image reader arrives as an argument for the reason flakelet's does: this
   # suite holds each directory as its own store path, so a relative import out of
   # one would resolve outside the store.
+  imageReader = import (imageSource + "/read.nix") { inherit planner; };
+
   reader = import (operatorSource + "/read.nix") {
-    inherit planner;
-    imageReader = import (imageSource + "/read.nix") { inherit planner; };
+    inherit planner imageReader;
+    flakeletReader = import (flakeletSource + "/read.nix") {
+      inherit planner;
+      reader = imageReader;
+    };
   };
 
   sorted = builtins.sort (a: b: a < b);

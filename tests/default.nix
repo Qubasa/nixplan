@@ -29,6 +29,7 @@ let
         libSource
         operatorSource
         imageSource
+        flakeletSource
         ;
     };
     plan = import ./unit/plan.nix {
@@ -54,6 +55,7 @@ let
         support
         operatorSource
         imageSource
+        flakeletSource
         ;
     };
     flakelet = import ./unit/flakelet.nix {
