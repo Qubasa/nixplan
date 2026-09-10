@@ -30,6 +30,39 @@ two marks rather than as one error message.
   between checkouts, so it is reduced to its last component and the reduction is
   itself a row (`diagnostic-subject-invalid`) naming the row that carried it.
 
+## Which layer reports a refusal
+
+Three layers hold three kinds of fact, and each kind has exactly one layer that
+can see it whole:
+
+| Fact | Held by | Reported by |
+| --- | --- | --- |
+| the entry's units, closure, target, configuration data and generated files | the plan | `mkPlan`, as a row |
+| the realiser and the confinement profile of an entry | the realisation statement | `operator/read.nix`, as a row |
+| the bytes of an artifact | the derivation | nothing: a build either runs or does not |
+
+A refusal about a fact the plan carries is a row from the planner. A refusal
+about a fact the realisation statement carries is a row from the deployment
+build, which is the only layer handed the statement. A realiser refuses only
+conditions one of those two already reported as an error row, so no path through
+a deployment build reaches a raise without a row having been produced first.
+
+The realisers keep their raises, and a raise is the answer a caller that
+imported `image/read.nix` or `flakelet/read.nix` and called it directly
+receives. `tests/unit/diagnostics.nix` holds that rule to the source: every
+`fail` of either realiser is crossed against the row producers of `lib/` and
+`operator/read.nix`, and a refusal with no row above it fails the suite naming
+it. The deployment build asks each realiser for the rules only it knows -
+`acceptsName`, `acceptsUnit`, `acceptsHostPath`, `confinement` and `backend` of
+`flakelet/read.nix`, `profileNames`, `denials`, `hostPaths` and `versionFor` of
+`image/read.nix` - so one rule has one home and the row and the raise say the
+same thing.
+
+`row`, `error` and `warning` are exported from the library, and every producer
+of a row uses them: they are what applies `util.oneLine` to a message, an
+evidence line and a resolution, so one row is one line whatever a deployment
+interpolated into it.
+
 ## Rendering
 
 `planner.render <table>` is a function of the table alone — it does not read the
@@ -117,6 +150,7 @@ discipline and deduplication applied).
 | `unit-extension-unknown-field` | `values` assigns a key the extension does not declare |
 | `unit-extension-type-mismatch` | an assigned value fails its field's type |
 | `unit-extension-backend-mismatch` | the extension's `backend` is not the target machine's `serviceManager`; the fields are still recorded under that backend |
+| `unit-env-value-newline` | a unit's environment value carries a line break, which a unit file has no line to put |
 | `config-file-mode-missing` | a configuration file declares no `mode` |
 | `config-file-reload-malformed` | `reload` is not a list of this module's unit names |
 | `config-file-render-item` | a `render` item is neither one public literal nor one reference |
@@ -129,6 +163,8 @@ discipline and deduplication applied).
 | `closure-malformed` | `closure` is not a list of strings |
 | `closure-path-undeclared` | the entry mentions a store path no declared root covers; the row names where it was mentioned |
 | `closure-root-unmentioned` (warning) | a declared root nothing in the entry mentions |
+| `closure-root-outside-store` | a declared root that is not a path under the store directory the plan is read against |
+| `closure-root-is-delivered` | a declared root the plan also records as a delivered reference, whose bytes reach the units from the machine rather than from a closure |
 | `pin-underspecified` | a `pin` names no revision or no content hash |
 | `pin-malformed` | a `pin` is not the shape the lock key carries |
 
@@ -159,6 +195,28 @@ discipline and deduplication applied).
 | `vars-not-deployed-opened` | a unit or configuration file of the owning module names the path of a `deploy = false` generator's file |
 | `vars-generator-claimed-twice` | two members of one instance declare the same generator name, which is one address for two values |
 | `diagnostic-subject-invalid` | a row carried a subject that is not a plan key, a deployment-relative path or an issue identifier |
+
+### Every row the deployment build can produce
+
+These are the rows about the realisation statement, and about the statement
+crossed with the entry it is about. They come out of `operator/read.nix`, and a
+caller reads them in the same table as the planner's own.
+
+| id | Raised when |
+| --- | --- |
+| `operator-realiser-unknown` | the statement names a realiser that does not exist |
+| `operator-image-profile-missing` | an image entry's statement carries no `profile` |
+| `operator-image-profile-unknown` | the profile stated is not one the image realiser implements |
+| `operator-statement-names-nothing` | a statement key is neither a plan key the plan carries nor a prefix of one |
+| `operator-statement-not-a-record` | a statement an entry is read by is a bare value rather than a record |
+| `operator-plan-record-unclassified` | a plan record is neither a generated value, a service entry nor a machine record |
+| `operator-entry-realises-nothing` | a statement names an entry that declares no unit, so there is nothing to realise |
+| `operator-entry-path-not-assembled` | the stated realiser runs no step that could assemble a host path the entry is shown |
+| `operator-entry-service-manager-mismatch` | the entry's machine runs one service manager and the stated realiser emits for another |
+| `operator-entry-name-refused` | the endpoint of the stated realiser refuses the service name or a unit file name the entry derives |
+| `operator-entry-access-denied` | a unit needs an access the confinement profile the statement produced denies |
+| `operator-entry-name-collision` | two plan keys project onto one artifact name |
+| `operator-entry-machine-no-address` (warning) | the machine record of a placed entry declares no address; an address is read by the step that dials and by no step that builds |
 
 ## Refusals by subtraction
 

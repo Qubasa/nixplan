@@ -180,7 +180,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
 
 ## 8. Documentation and invariants
 
-- [ ] 8.1 `docs/diagnostics.md`: the layering rule, the three kinds of fact and the layer that
+- [x] 8.1 `docs/diagnostics.md`: the layering rule, the three kinds of fact and the layer that
   reports each, and the sentence that a realiser's raise is what a direct caller receives. Verify
   every identifier it names exists in the tree.
 - [ ] 8.2 `docs/operator.md`: what a build of an inapplicable deployment produces and where its rows
