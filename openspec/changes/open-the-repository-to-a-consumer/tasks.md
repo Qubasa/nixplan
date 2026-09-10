@@ -146,7 +146,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
   makes, prints the value writes, the copies and the activations it would perform in walk order, and
   contacts nothing (design D9). Verify the printed lines of a dry run and of the same run without
   the flag differ in nothing but the machine's own reports, by `diff`.
-- [ ] 7.3 `tests/e2e/test_harness.py`: `test_a_run_is_asked_what_it_would_do` and
+- [x] 7.3 `tests/e2e/test_harness.py`: `test_a_run_is_asked_what_it_would_do` and
   `test_a_dry_run_of_a_deployment_the_planner_refuses`, the machine layer's tests for the two new
   scenarios of *The command refuses before it dials*. They run against a recording namespace, in the
   file that already holds the other two scenarios of that requirement. Verify
