@@ -173,7 +173,7 @@ only the scenarios listed below are new.
 
 ## 10. Registration and documentation
 
-- [ ] 10.1 The four spec files of this change go in `accountable` in `tests/unit/coverage.nix`.
+- [x] 10.1 The four spec files of this change go in `accountable` in `tests/unit/coverage.nix`.
   Verify: the coverage cross-walk reports an empty difference rather than a specification it cannot
   read, and `nix build .#checks.x86_64-linux.planner-tests` is green.
 - [ ] 10.2 `docs/operator.md`: what a broken run leaves, why the recovery is a second apply rather
