@@ -18,6 +18,7 @@ let
     isAttrs
     isFunction
     isString
+    match
     ;
 
   atomKeys = [
@@ -81,6 +82,30 @@ rec {
 
   secretExports =
     iface: builtins.filter (e: secrecyOf iface.exports.${e} == "secret") (exportNames iface);
+
+  isName = s: isString s && match "[^[:space:]]+" s != null;
+
+  # A claim carries no function at any depth, so two interfaces built by two
+  # evaluations of this library compare by ordinary equality. A claim nobody made
+  # and a claim the library refused are both null, and null is equal to no claim.
+  identityOf =
+    iface:
+    let
+      id = iface.id or null;
+      declaredFold = foldOf iface;
+      name = foldName declaredFold;
+    in
+    if !isInterface iface || !isName id || (declaredFold != null && !isName name) then
+      null
+    else
+      {
+        inherit id;
+        exports = builtins.mapAttrs (_: atom: {
+          type = if isType (atom.type or null) then atom.type.name or null else null;
+          secrecy = secrecyOf atom;
+        }) iface.exports;
+        fold = name;
+      };
 
   # An interface's declaring file, found by value in the registry the caller passed
   # to mkPlan. A miss is not an error: the registry exists so a row can print a

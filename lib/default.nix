@@ -64,6 +64,7 @@ in
     fold
     foldName
     foldApply
+    identityOf
     secrecyOf
     exportNames
     atomRows
