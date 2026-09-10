@@ -95,7 +95,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   naming the entry, the profile stated and the profiles that exist - the sentence the row's
   resolution already writes for an absent profile (`:135-142`). Verify `profile = "stricT"` is
   refused by the reading and never reaches `image/read.nix:195-199`.
-- [ ] 4.4 `tests/unit/operator.nix`: rewrite `testAnEntryStatesNoRealiser`, whose `elsewhere` case
+- [x] 4.4 `tests/unit/operator.nix`: rewrite `testAnEntryStatesNoRealiser`, whose `elsewhere` case
   (`:236-256`) records a statement about a key the plan does not carry as intended, and add
   `testAProfileIsInheritedFromTheDefaultStatement`, `testAStatedProfileIsOutsideTheDomain`,
   `testAStatementNamesAnEntryThePlanDoesNotCarry` and `testAStatementIsNotARecord`. All unit layer.

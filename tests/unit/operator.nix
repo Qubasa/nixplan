@@ -723,4 +723,109 @@ in
         namesTheEntry = true;
       };
     };
+
+  testAProfileIsInheritedFromTheDefaultStatement =
+    let
+      reading = readOf {
+        default = {
+          realiser = "image";
+          profile = "strict";
+        };
+        "svc:only".realiser = "image";
+      } one;
+      entry = reading.manifest.entries.${oneKey};
+    in
+    {
+      expr = {
+        realiser = entry.realiser;
+        profile = entry.profile;
+        rows = idsOf reading;
+        refused = reading.refused;
+      };
+      expected = {
+        realiser = "image";
+        profile = "strict";
+        rows = [ ];
+        refused = false;
+      };
+    };
+
+  testAStatedProfileIsOutsideTheDomain =
+    let
+      reading = readOf {
+        "svc:only" = {
+          realiser = "image";
+          profile = "stricT";
+        };
+      } one;
+      row = builtins.head (rowsById "operator-image-profile-unknown" reading);
+    in
+    {
+      expr = {
+        rows = idsOf reading;
+        subject = row.subject;
+        namesTheProfileStated = hasInfix "`stricT`" row.message;
+        namesTheProfilesThatExist = hasInfix "`strict`" row.message && hasInfix "`trusted`" row.message;
+        refused = reading.refused;
+      };
+      expected = {
+        rows = [ "operator-image-profile-unknown" ];
+        subject = oneKey;
+        namesTheProfileStated = true;
+        namesTheProfilesThatExist = true;
+        refused = true;
+      };
+    };
+
+  testAStatementNamesAnEntryThePlanDoesNotCarry =
+    let
+      reading = readOf {
+        "svc:onlyy" = {
+          realiser = "image";
+          profile = "strict";
+        };
+      } one;
+      row = builtins.head (rowsById "operator-statement-names-nothing" reading);
+    in
+    {
+      expr = {
+        rows = idsOf reading;
+        subject = row.subject;
+        namesTheKeysThePlanCarries =
+          hasInfix "`${oneKey}`" row.message && hasInfix "`svc:only`" row.message;
+        realisedUnderTheDefaultInstead = reading.manifest.entries.${oneKey}.realiser;
+        profile = reading.manifest.entries.${oneKey}.profile;
+        refused = reading.refused;
+      };
+      expected = {
+        rows = [ "operator-statement-names-nothing" ];
+        subject = "svc:onlyy";
+        namesTheKeysThePlanCarries = true;
+        realisedUnderTheDefaultInstead = "flakelet";
+        profile = null;
+        refused = true;
+      };
+    };
+
+  testAStatementIsNotARecord =
+    let
+      reading = readOf { "svc:only" = "image"; } one;
+      row = builtins.head (rowsById "operator-statement-not-a-record" reading);
+    in
+    {
+      expr = {
+        rows = idsOf reading;
+        subject = row.subject;
+        namesTheStatement = hasInfix "`svc:only`" row.message;
+        namesWhatWasFound = hasInfix "the string `image`" row.message;
+        refused = reading.refused;
+      };
+      expected = {
+        rows = [ "operator-statement-not-a-record" ];
+        subject = oneKey;
+        namesTheStatement = true;
+        namesWhatWasFound = true;
+        refused = true;
+      };
+    };
 }
