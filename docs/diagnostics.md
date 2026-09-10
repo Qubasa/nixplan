@@ -90,9 +90,14 @@ discipline and deduplication applied).
 | `export-atom-secrecy-domain` | `secrecy` is neither `"public"` nor `"secret"` |
 | `export-atom-excluded-key` | an atom declares `locality` or `lifecycle`; the evidence is the condition that would bring the field back |
 | `export-atom-unknown-key` | any other atom key — a misspelling is a row, not a silence |
-| `interface-mismatch` | a slot's interface and the wired capability's interface are different values; the row prints both declaring files, so two same-named interfaces are distinguishable |
+| `interface-mismatch` | a slot's interface and the wired capability's interface are not one interface; the row prints both declaring files, so two same-named interfaces are distinguishable, and its evidence names the rule that refused the edge: both ends claim an identity and the two claims differ, or the two carry one name and are different values, or they are different values and at most one of them claims an identity |
 | `interface-fold-not-a-function` | an interface declares a `fold` that is not a function; the row's subject is the declaring file and its evidence states what a fold is applied to |
 | `interface-fold-unapplied` (warning) | an interface declares a `fold` and no slot of the deployment reads it with `reach = "all"`, so the policy is never applied |
+| `interface-fold-name-malformed` | a named fold's `name` is not a non-empty string free of whitespace; the subject is the declaring file, the evidence states that a name is the only part of a fold two evaluations can compare, and the resolution names both spellings. The fold is not applied and a set-valued read delivers the provider-keyed set unchanged |
+| `interface-id-malformed` | a declared `id` is not a non-empty string free of whitespace; the subject is the declaring file, the message names what was written, the evidence states that an identity is claimed with a string two authors can both write, and the resolution names the qualified form. The claim is disregarded and the interface is identified by its value |
+| `interface-id-unnamed-fold` | an interface claims an `id` and declares a fold carrying no name; the evidence states that a fold's name is part of an identity and a bare function supplies none, and the resolution names the fold constructor or deleting the `id`. The claim is disregarded |
+| `interface-id-unnamespaced` (warning) | a declared `id` carries neither `.` nor `/`; the evidence states that the namespace is shared with every other author and the resolution names a qualified form. The claim still identifies and the plan stays applicable |
+| `interface-id-conflict` | two interfaces claim one `id` and their identities differ, observed from the `interfaces` map or at a wire and reported once; the row is subjected to the first of the two declaring files by sort order, names the second, and its evidence states what differs — an export one side declares alone, an export's two type names, an export's two secrecies, or two fold names. An edge between them is refused |
 
 ### Leaf modules
 
