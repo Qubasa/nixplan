@@ -49,104 +49,114 @@ generator, and `secrets/backend.nix` renders the step that carries a generated f
 the plan says receive it.
 
 The worked example the library is built against is
-`fixtures/minimal-typed-edge/`. Everything below quotes it, and it is
+`fixtures/minimal-typed-edge/`. The field discussions below quote it, and it is
 evaluated as committed by `tests/unit/worked.nix`.
 
 ## The smallest thing that works
 
+One service, two machines, and a tag that places it on both. This is not a
+transcription of an example: it is the deployment
+`tests/e2e/newcomer/template/deployment/` holds, `nix build
+.#planner-e2e-newcomer` builds it, and the machines of `tests/e2e/newcomer/`
+apply it and read back what each unit wrote. An example that stopped building
+would fail that build.
+
+The registry it is placed against, `machines.nix`:
+
 ```nix
-let
-  planner = import ../lib {
-    korora = import "${korora}/types.nix";
-    systems = nixpkgs.lib.systems;
-  };
-
-  # An interface is a value. Importing it is what identifies it; `name` is only
-  # a label for diagnostic output.
-  greeting = planner.interface {
-    name = "greeting";
-    exports.text = {
-      type = planner.korora.string;
-    };
-  };
-
-  # A leaf module: what it uses, what it provides, and what it runs.
-  speaker = { settings, ... }: {
-    provides.line.interface = greeting;
-    impl = _: {
-      provides.line.exports.text = "hello ${settings.who}";
-    };
-  };
-
-  listener = _: {
-    uses.line = {
-      interface = greeting;
-      reads = [ "text" ];
-    };
-    impl = { results, ... }: {
-      units.say.command = "/bin/echo ${results.line.text}";
-    };
-  };
-
-  # A root composes members and decides which of their capabilities the
-  # deployment may wire to.
-  speakerRoot = { service, ... }: rec {
-    services.main = service "main" {
-      module = speaker;
-      defaults.who = "world";
-    };
-    provides.line = services.main.provides.line;
-  };
-
-  listenerRoot = { service, ... }: {
-    services.main = service "main" { module = listener; };
-  };
-
-  result = planner.mkPlan {
-    machines.host = {
-      address = "host.example";
-      tags = [ ];
+{
+  machines = {
+    alpha = {
+      address = "10.0.0.11";
+      tags = [ "greets" ];
       system = "x86_64-linux";
       serviceManager = "systemd";
     };
 
-    instances.talker = {
-      module = speakerRoot;
-      placement.every.main.machines = [ "host" ];
-      exposes = [ "line" ];
+    beta = {
+      address = "10.0.0.12";
+      tags = [ "greets" ];
+      system = "x86_64-linux";
+      serviceManager = "systemd";
     };
+  };
+}
+```
 
-    instances.hearer = {
-      module = listenerRoot;
-      placement.every.main.machines = [ "host" ];
-      wire.line = {
-        instance = "talker";
-        provides = "line";
+Which instances exist and where they go, `instances.nix`:
+
+```nix
+{ hello }:
+{
+  instances = {
+    greeter = {
+      module = hello.services.default;
+      placement.every.greet = {
+        tags = [ "greets" ];
       };
     };
   };
-in
-result
+}
 ```
 
-`result.plan` carries `talker:main@host`, `hearer:main@host` and
-`machine:host`; `result.diagnostics` is `[ ]`; `result.applicable` is `true`;
-and `plan."hearer:main@host".units.say.command` is `/bin/echo hello world`.
+What the one of them runs, `modules/hello/greet.nix`:
 
-Now break it. Misspell the wire's instance as `talkr` and the resolution still
-produces one error row and `applicable = false`:
+```nix
+{ greeter }:
+
+{ settings, ... }:
+{
+  platforms = [ "x86_64-linux" ];
+
+  # The greeting names the machine the entry was planned for, so the two entries of
+  # one instance are two artifacts rather than one copied twice.
+  impl =
+    { target, ... }:
+    {
+      closure = [ greeter ];
+
+      units.say = {
+        command = "${greeter}/bin/greet";
+        env.GREET_WHO = settings.who;
+        env.GREET_WHERE = target.address;
+        env.GREET_PATH = settings.greetingPath;
+      };
+    };
+}
+```
+
+Two more files hold those three together, and a reader copies the directory
+rather than this page: `modules/hello/default.nix` is the root that names the one
+member, and `default.nix` builds the program the unit runs and hands the whole
+thing to `mkDeployment`, which is [operator.md](operator.md)'s subject.
+
+`result.plan` carries `greeter:greet@alpha`, `greeter:greet@beta`,
+`machine:alpha` and `machine:beta`; `result.diagnostics` is `[ ]`;
+`result.applicable` is `true`; and
+`plan."greeter:greet@alpha".units.say.env.GREET_WHERE` is `10.0.0.11`, the
+address the registry declares for the machine that entry was planned for. The
+two entries of one instance are two artifacts rather than one copied twice,
+because each one carries the address it was planned for.
+
+Now break it. Give the greeter a closure root that is not a path under the store
+the plan is read against, and the plan is still produced, with one error row per
+placed entry and `applicable = false`:
 
 ```
-deployment/instances.nix wires `line` of instance `hearer` to instance `talkr`,
-which the deployment does not declare
+  ! greeter:greet@alpha  greeter:greet@alpha declares the closure root `/opt/vendor/greeter`, which is not a path under the store directory `/nix/store` the plan is read against
+      severity: error
+      evidence: a closure root is a literal path under the store the plan is read against, and a consumer populates a filesystem from those roots
+      resolution: declare a path under `/nix/store` in `closure`, or plan the deployment against the store `/opt/vendor/greeter` belongs to
 ```
 
-Delete the wire entirely and it is `slot-unwired` instead. Either way the read
-delivers nothing, and **`results` in the consumer's `impl` does not contain the
-slot at all** — not `null`, not an empty set, absent. The row is produced
-either way; the module above interpolates `results.line.text` regardless, so
-forcing the entry that reads the missing value raises a missing attribute,
-which propagates — see
+That is the mutation `tests/e2e/newcomer/` builds on a machine: a deployment the
+planner refuses builds its plan and both halves of its table, and no artifact.
+
+This example has no wire: one service that reads nothing is the smallest thing
+that works. Where a read is refused, **`results` in the consuming `impl` does
+not contain the slot at all** — not `null`, not an empty set, absent. The row is
+produced either way, and a module that interpolates the missing value raises a
+missing attribute, which propagates — see
 [authoring.md](authoring.md#when-a-read-is-refused). That is the trade: `or [ ]`
 cannot be written, so it cannot silently succeed.
 

@@ -92,7 +92,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
 
 ## 5. The documented example is the folder
 
-- [ ] 5.1 `docs/README.md`: replace the smallest working example with the newcomer folder's own
+- [x] 5.1 `docs/README.md`: replace the smallest working example with the newcomer folder's own
   deployment text, and say where the deployment is built. Verify the two texts are byte-equal.
 - [ ] 5.2 `tests/unit/layers.nix`: `testTheExampleADocumentShowsIsTheExampleAFolderHolds`, the
   evaluating layer's test for that scenario, comparing the fenced block of the document against the
