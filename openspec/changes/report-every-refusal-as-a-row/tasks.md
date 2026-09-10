@@ -113,7 +113,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   Each names the entry, the fact and the statement that produced it. Verify the worked fixture's
   `vault-repo:server@vault`, which carries a configuration file, is refused under the flakelet
   statement and built under an image statement.
-- [ ] 5.3 `tests/unit/operator.nix`: add `testAConfigurationFileMeetsARealiserWithNoAssembleStep`,
+- [x] 5.3 `tests/unit/operator.nix`: add `testAConfigurationFileMeetsARealiserWithNoAssembleStep`,
   `testAnEntryWithConfigurationDataIsRealisedAsAnImage`,
   `testAnEntryIsStatedForARealiserItsMachineCannotRun`,
   `testANameTheEndpointRefusesIsARowBeforeItIsARaise`,

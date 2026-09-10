@@ -27,12 +27,13 @@ let
   # one would resolve outside the store.
   imageReader = import (imageSource + "/read.nix") { inherit planner; };
 
+  flakeletReader = import (flakeletSource + "/read.nix") {
+    inherit planner;
+    reader = imageReader;
+  };
+
   reader = import (operatorSource + "/read.nix") {
-    inherit planner imageReader;
-    flakeletReader = import (flakeletSource + "/read.nix") {
-      inherit planner;
-      reader = imageReader;
-    };
+    inherit planner imageReader flakeletReader;
   };
 
   sorted = builtins.sort (a: b: a < b);
@@ -853,6 +854,198 @@ in
         subject = oneKey;
         namesTheStatement = true;
         namesWhatWasFound = true;
+        refused = true;
+      };
+    };
+
+  testAConfigurationFileMeetsARealiserWithNoAssembleStep =
+    let
+      reading = reader.read { inherit (worked) plan; };
+      row = builtins.head (rowsById "operator-entry-path-not-assembled" reading);
+    in
+    {
+      expr = {
+        rows = idsOf reading;
+        subject = row.subject;
+        namesThePath = hasInfix "`/srv/borg/.ssh/authorized_keys`" row.message;
+        namesTheRealiser = hasInfix "`flakelet`" row.message;
+        statesTheRealisersOwnRule = hasInfix flakeletReader.pathRule row.message;
+        refused = reading.refused;
+      };
+      expected = {
+        rows = [ "operator-entry-path-not-assembled" ];
+        subject = "vault-repo:server@vault";
+        namesThePath = true;
+        namesTheRealiser = true;
+        statesTheRealisersOwnRule = true;
+        refused = true;
+      };
+    };
+
+  testAnEntryWithConfigurationDataIsRealisedAsAnImage =
+    let
+      reading = workedRead;
+    in
+    {
+      expr = {
+        rows = idsOf reading;
+        refused = reading.refused;
+        realiser = reading.manifest.entries."vault-repo:server@vault".realiser;
+        artifact = reading.entries."vault-repo:server@vault".artifact;
+      };
+      expected = {
+        rows = [ ];
+        refused = false;
+        realiser = "image";
+        artifact = "entries/vault-repo-server-vault";
+      };
+    };
+
+  testAnEntryIsStatedForARealiserItsMachineCannotRun =
+    let
+      result = planner.mkPlan {
+        machines = support.machines // {
+          laptop = support.laptop;
+        };
+        instances.svc = {
+          module = soleRoot { module = _: { impl = simple; }; };
+          placement.every.only.machines = [ "laptop" ];
+        };
+      };
+      reading = readOf { } result;
+      row = builtins.head (rowsById "operator-entry-service-manager-mismatch" reading);
+    in
+    {
+      expr = {
+        rows = idsOf reading;
+        subject = row.subject;
+        namesWhatTheMachineRuns = hasInfix "`launchd`" row.message;
+        namesWhatTheRealiserEmitsFor = hasInfix "`systemd`" row.message;
+        refused = reading.refused;
+      };
+      expected = {
+        rows = [ "operator-entry-service-manager-mismatch" ];
+        subject = "svc:only@laptop";
+        namesWhatTheMachineRuns = true;
+        namesWhatTheRealiserEmitsFor = true;
+        refused = true;
+      };
+    };
+
+  testANameTheEndpointRefusesIsARowBeforeItIsARaise =
+    let
+      result = planOf {
+        instances.svc = {
+          module = root { members."needs.a.dot".module = _: { impl = simple; }; };
+          placement.every."needs.a.dot".machines = [ "one" ];
+        };
+      };
+      reading = readOf { } result;
+      row = builtins.head (rowsById "operator-entry-name-refused" reading);
+      raised = builtins.tryEval (
+        let
+          artifact = flakeletReader.read {
+            inherit (result) plan;
+            key = "svc:needs.a.dot@one";
+          };
+        in
+        builtins.deepSeq artifact artifact
+      );
+    in
+    {
+      expr = {
+        rows = idsOf reading;
+        subject = row.subject;
+        namesTheName = hasInfix "`svc-needs.a.dot`" row.message;
+        statesTheRealisersOwnRule = hasInfix flakeletReader.nameRule row.message;
+        theRealiserRaisesToo = raised.success;
+        refused = reading.refused;
+      };
+      expected = {
+        rows = [ "operator-entry-name-refused" ];
+        subject = "svc:needs.a.dot@one";
+        namesTheName = true;
+        statesTheRealisersOwnRule = true;
+        theRealiserRaisesToo = false;
+        refused = true;
+      };
+    };
+
+  testAUnitNeedingAHostUserMeetsAConfiningProfile =
+    let
+      result = deployment (_: {
+        closure = [ borgbackup ];
+        units.only = {
+          command = "${borgbackup}/bin/borg serve";
+          user = "borg";
+        };
+      });
+      confined = readOf {
+        default = {
+          realiser = "image";
+          profile = "strict";
+        };
+      } result;
+      allowed = readOf {
+        default = {
+          realiser = "image";
+          profile = "trusted";
+        };
+      } result;
+      row = builtins.head (rowsById "operator-entry-access-denied" confined);
+    in
+    {
+      expr = {
+        rows = idsOf confined;
+        subject = row.subject;
+        namesTheUnit = hasInfix "`only`" row.message;
+        namesTheAccess = hasInfix "a static host user" row.message;
+        namesTheProfile = hasInfix "`strict`" row.message;
+        saysItIsNotWidened = hasInfix "not widened on the entry" row.evidence;
+        underATrustedProfile = idsOf allowed;
+      };
+      expected = {
+        rows = [ "operator-entry-access-denied" ];
+        subject = oneKey;
+        namesTheUnit = true;
+        namesTheAccess = true;
+        namesTheProfile = true;
+        saysItIsNotWidened = true;
+        underATrustedProfile = [ ];
+      };
+    };
+
+  testAnEntryOwningARootOnlyFileMeetsAConfiningProfile =
+    let
+      confined = reader.read {
+        inherit (worked) plan;
+        realise = workedRealise // {
+          "nightly:client" = {
+            realiser = "image";
+            profile = "strict";
+          };
+        };
+      };
+      rows = rowsById "operator-entry-access-denied" confined;
+      row = builtins.head rows;
+    in
+    {
+      expr = {
+        rows = sorted (planner.util.uniqueStrings (map (r: r.id) confined.rows));
+        subjects = sorted (planner.util.uniqueStrings (map (r: r.subject) rows));
+        namesTheAccess = hasInfix "a host file only root may read" row.message;
+        namesTheProfile = hasInfix "`strict`" row.message;
+        refused = confined.refused;
+      };
+      expected = {
+        rows = [ "operator-entry-access-denied" ];
+        subjects = [
+          "nightly:client@alpha"
+          "nightly:client@beta"
+          "nightly:client@gamma"
+        ];
+        namesTheAccess = true;
+        namesTheProfile = true;
         refused = true;
       };
     };
