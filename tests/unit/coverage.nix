@@ -159,6 +159,7 @@ let
     "make-an-apply-observable/specs/operator/deployment-build/spec.md"
     "make-an-apply-observable/specs/operator/machine-report/spec.md"
     "make-an-apply-observable/specs/delivery/real-cluster/spec.md"
+    "normalise-folds-and-report-refused-reads/specs/planner/interface-fold/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -174,8 +175,6 @@ let
       "an unimplemented change: no task of declare-service-state has been done, so nothing in this package claims to satisfy it yet";
     "declare-service-state/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of declare-service-state has been done, so nothing in this package claims to satisfy it yet";
-    "normalise-folds-and-report-refused-reads/specs/planner/interface-fold/spec.md" =
-      "an unimplemented change: no task of normalise-folds-and-report-refused-reads has been done, so nothing in this package claims to satisfy it yet";
     "open-the-repository-to-a-consumer/specs/operator/apply-command/spec.md" =
       "an unimplemented change: `--dry-run` does not exist, so nothing in this package claims to satisfy it yet";
     "open-the-repository-to-a-consumer/specs/tooling/consumer-surface/spec.md" =
@@ -330,6 +329,8 @@ let
       "an abort and a missing attribute are what `builtins.tryEval` does not catch, so a test asserting the propagation would abort this suite rather than fail it; `testAModulesOwnCodeRaisesACatchableError` asserts the half that is containable and `docs/diagnostics.md` names the class.";
     "A misspelled capability reference" =
       "the same class: a re-export naming an attribute the member does not provide is a missing attribute, which `builtins.tryEval` does not catch, so the raise cannot be asserted without ending the evaluation that would report it.";
+    "An unguarded consumer of a refused fold ends the evaluation" =
+      "the same class once more: a refused read leaves the slot absent, so an implementation that reads it unconditionally raises a missing attribute, which `builtins.tryEval` does not catch, and a test of the propagation would abort this suite rather than fail it; `testAGuardedConsumerStillReportsARefusedFold` in tests/unit/resolution.nix asserts the half that is containable, and task 3.2 of normalise-folds-and-report-refused-reads records the measurement that stands in for this one.";
     "A developer runs the suite" =
       "the documented command is what evaluates this suite, so a test of it would be the suite asserting that it had been started; the exit status the scenario is about is `nix build .#checks.x86_64-linux.planner-tests`'s own.";
     "A test fails" =

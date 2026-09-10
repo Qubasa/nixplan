@@ -136,6 +136,15 @@ without reading the code first.
   owner is `vars-not-deployed-opened`; a consumer's declared read is `slot-reads-undeployed-value`.
 - A secret export must publish a generated file, never a bare value: `export-secret-not-a-reference`.
   A path in the plan is deliverable; bytes in the plan are a leak.
+- A fold normalises and refuses; rendering bytes is the consumer's. One interface has one fold and
+  any number of consumers, so a fold that returned a file would make a second output format a
+  reason to declare a second interface, which is a policy construct answering a formatting
+  question. A refusal reaches a reader only where no implementation forces the absent slot:
+  `applicable` forces the whole table and a missing attribute is uncatchable, so one consumer
+  reading `results.<slot>` unconditionally leaves the row produced and no table to print it in.
+  That is why a slot whose interface declares a fold that can refuse is read under
+  `results ? <slot>`, and why no other refused read is guarded: an unwired slot is `slot-unwired`
+  before any implementation runs.
 
 ## Platform record
 

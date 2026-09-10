@@ -61,8 +61,8 @@ against, and an interface or an extension field may bind to any of them:
 | `userName` | the account a unit runs as: the POSIX-portable name, never a uid, because the identity a name resolves to is the machine's answer and not the plan's |
 
 **An interface may also declare a `fold`.** A fold is one function of the set a
-set-valued read collects, and it is the interface's own policy for combining
-many providers into the value one consumer receives:
+set-valued read collects, and it is the interface's own policy for the set:
+validate it, refuse it, and hand every consumer one normal shape:
 
 ```nix
 # interfaces/default.nix, continued
@@ -71,11 +71,19 @@ sshHostIdentity = korora.interface {
   exports = { publicKey = { type = korora.string; }; };
   fold =
     set:
-    builtins.concatStringsSep "\n" (
-      builtins.attrValues (
-        builtins.mapAttrs (entry: read: "# ${entry}\n${read.publicKey}") set
-      )
-    );
+    let
+      entries = builtins.attrNames set;
+      blank = builtins.filter (entry: set.${entry}.publicKey == "") entries;
+    in
+    if blank != [ ] then
+      {
+        refused = "no host key published by ${builtins.concatStringsSep ", " blank}";
+      }
+    else
+      map (entry: {
+        inherit entry;
+        inherit (set.${entry}) publicKey;
+      }) entries;
 };
 ```
 
@@ -84,6 +92,7 @@ sshHostIdentity = korora.interface {
 | the fold applies to `reach = "all"` only | a single-valued read hands `results.<slot>` the read values directly, and the fold is not applied |
 | its input is keyed by provider plan entry key | `issuer:api@alpha`, the same keys the plan's `reads.<slot>.entries` names |
 | its input carries the slot's `reads` and nothing else | a fold cannot observe an export the slot did not name, cannot name a secret export a slot may not name, and cannot widen a delivery set |
+| its output is whatever its consumers can use | a fold returns records, and rendering bytes from them is the consuming implementation's, because one interface has one fold and any number of consumers |
 | the planner forces it under a guard | a fold that raises is `interface-fold-raised` and the slot is then **absent** from `results`, the same as any refused read |
 | a fold that is not a function | `interface-fold-not-a-function` against the interface's declaring file, rather than an error at the read |
 | a fold no set-valued read applies | `interface-fold-unapplied`, a warning: a policy nobody applies is a policy nobody is held to |
@@ -184,8 +193,11 @@ impl = { results, ... }: {
 
 The fold above is hand-written in the consuming module, which is what an
 interface declaring no `fold` leaves each consumer to do. When the interface
-declares one, `results.clients` is already the folded value and the consumer
-walks nothing.
+declares one, `results.clients` is the folded value and the consumer renders
+its own file from it. A second interface is for a different policy, never for
+a different output format: two consumers that write the same host keys as an
+`authorized_keys` file and as a `known_hosts` line read one interface and
+render twice.
 
 `reach = "local"` is refused: `local` derives from a locality this subset does
 not declare.
@@ -504,9 +516,21 @@ exercise, so the planner leaves nothing:
   does not let this library catch** (the other is `abort`). It propagates. The
   row is produced either way; forcing the entry that reads the missing value is
   what raises.
+- **One unguarded read ends the whole table.** `applicable` forces every row of
+  every entry, so an implementation that reaches an absent slot leaves nothing
+  rendered for any entry at all: the row was produced, and no table survives to
+  carry it.
 
 That is the trade this library is making: `or [ ]` cannot be written, so it
 cannot silently succeed.
+
+The one read worth guarding is a slot whose interface declares a `fold` that
+can refuse, because that is the only refusal whose message an author wrote.
+Read it as `if results ? <slot> then … else …` and the fold's own message
+renders. Every other refused read is a wiring row the planner produced before
+any implementation ran — an unwired slot is `slot-unwired` whatever the module
+does next — so those slots are read unguarded, and guarding one would hide a
+wiring mistake behind a fallback.
 
 ### Where a refusal lives
 
@@ -519,6 +543,13 @@ fixed — the fold states the message, the planner states the row's identifier
 
 Two consumers of one refused provider are two rows, one per consuming entry,
 because each consumer is a subject of its own.
+
+Whether that refusal is rendered is the consuming module's decision, never a
+planner behaviour that varies. The row, the undelivered read and the
+inapplicable plan are produced identically either way; only the forcing of the
+absent slot decides whether a table exists to print them. A consumer of a
+refusing fold that reads `results.<slot>` unconditionally ends the evaluation
+with a missing attribute, and the fold's message goes with it.
 
 Nothing else is a channel:
 
