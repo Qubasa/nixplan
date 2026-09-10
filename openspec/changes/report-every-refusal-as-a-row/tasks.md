@@ -63,7 +63,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
 
 ## 3. The reading classifies by shape
 
-- [ ] 3.1 `operator/read.nix`: replace `isMachineRecord` (`:49`) and `isValueEntry` (`:51`) with
+- [x] 3.1 `operator/read.nix`: replace `isMachineRecord` (`:49`) and `isValueEntry` (`:51`) with
   tests of the record - a delivery set for a generated value, a placement for a service entry,
   neither for a machine record - and read a key only for the instance, service and machine of a
   placed service entry, split at its last separator. A record matching none of the three shapes is an

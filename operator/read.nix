@@ -46,9 +46,26 @@ let
   # is a refusal rather than a mangling.
   projected = builtins.replaceStrings [ ":" "@" ] [ "-" "-" ];
 
-  isMachineRecord = key: match "machine:.*" key != null;
+  # What a record is, is decided by what it records. `machine` is a legal instance
+  # name and `vars/x` a legal member name, so a classification that read the text
+  # of a key would answer for a deployment the planner accepts.
+  shapeOf =
+    record:
+    if record ? delivery then
+      "value"
+    else if record ? placement then
+      "entry"
+    else if record ? address || record ? tags then
+      "machine"
+    else
+      null;
 
-  isValueEntry = key: match ".*:vars/.*" key != null;
+  machineRecordOf =
+    plan: machine:
+    let
+      record = plan."machine:${machine}" or { };
+    in
+    if shapeOf record == "machine" then record else { };
 
   parseKey =
     key:
@@ -104,7 +121,7 @@ let
       realiser = statement.realiser or stated;
       known = elem realiser realisers;
       profile = statement.profile or null;
-      record = plan."machine:${parts.machine}" or { };
+      record = machineRecordOf plan parts.machine;
       declared = record.address or null;
       address = if declared == "" then null else declared;
       entry = plan.${key};
@@ -212,11 +229,22 @@ in
     let
       keys = sortStrings (attrNames plan);
 
-      placedKeys = filter (
-        key: !(isMachineRecord key) && !(isValueEntry key) && parseKey key != null
-      ) keys;
+      placedKeys = filter (key: shapeOf plan.${key} == "entry" && parseKey key != null) keys;
 
-      valueKeys = filter isValueEntry keys;
+      valueKeys = filter (key: shapeOf plan.${key} == "value") keys;
+
+      unplaceable = filter (key: shapeOf plan.${key} == null) keys;
+
+      shapeRows = map (
+        key:
+        planner.error {
+          id = "operator-plan-record-unclassified";
+          subject = key;
+          message = "the plan record ${quote key} records no ${quote "delivery"}, no ${quote "placement"} and no address, so it is neither a generated value, a service entry nor a machine record";
+          evidence = "a record is classified by what it records and never by the text of its key, so a fourth kind of record is a record this reading cannot place";
+          resolution = "teach the reading the shape of ${quote key}, or stop emitting a record no realiser can be chosen for";
+        }
+      ) unplaceable;
 
       entries = builtins.listToAttrs (
         map (key: {
@@ -232,7 +260,8 @@ in
         }) valueKeys
       );
 
-      rows = concatLists (map (key: entries.${key}.rows) placedKeys) ++ collisionRows entries;
+      rows =
+        concatLists (map (key: entries.${key}.rows) placedKeys) ++ shapeRows ++ collisionRows entries;
 
       table = planner.mkTable (diagnostics ++ rows);
 

@@ -68,6 +68,7 @@ let
     };
     "svc:${brokenMember}@one" = {
       key = "sha256-0000000000000000";
+      placement.reason = "every";
       units.only.command = "/bin/true";
     };
   };
