@@ -192,13 +192,23 @@ only the scenarios listed below are new.
 
 ## 11. Verification
 
-- [ ] 11.1 `nix build .#checks.x86_64-linux.planner-tests -L` and `nix build
-  .#checks.x86_64-linux.planner-delivery -L`: both green, with every new test present.
-- [ ] 11.2 `nix build .#checks.x86_64-linux.treefmt -L`: no change to any file this change touched.
-- [ ] 11.3 `nix run .#planner-e2e`: green for every folder, with the count recorded here against the
-  count before the change.
-- [ ] 11.4 Prove the new assertions can fail: put `record(...)` back after its step and confirm only
-  the step-log cases fail; restore `remaining[0]` and confirm only the cycle case fails; restore
-  `2>/dev/null || printf '[]'` and confirm only the endpoint cases fail; compare an image status
-  against the literal `attached` and confirm only the attachment case fails. Revert each and confirm
-  the tree is byte-identical to before the mutation.
+- [x] 11.1 `nix build .#checks.x86_64-linux.planner-tests -L` and `nix build
+  .#checks.x86_64-linux.planner-delivery -L`: both green, with every new test present
+  (`planner-tests` reports 319/319, including
+  `operator.testABuildStatesTheShapeOfItsRecordAndTheStoreItUsed`, and `planner-delivery` builds).
+- [x] 11.2 `nix build .#checks.x86_64-linux.treefmt -L`: green, no file left unformatted. `mypy`
+  answered `INTERNAL ERROR` once under this check and passed on the rerun, which is the known
+  intermittency `CLAUDE.md` records.
+- [x] 11.3 `nix run .#planner-e2e`: 64 passed in 3m26s, green for every folder, against 58 tests
+  before this change.
+- [x] 11.4 Proved, each mutation reverted and `git status` clean afterwards:
+  - `record(...)` back after its step: only `test_a_step_is_announced_before_it_is_attempted` fails;
+    `test_the_run_stops_at_the_step_that_broke` stays green, because the run still stops there.
+  - `remaining[0]` restored: only `test_an_entry_off_the_cycle_keeps_its_order` fails.
+  - `2>/dev/null || printf '[]'` restored: no harness test moves, because a recorder answers for the
+    script; on machines only
+    `test_an_entry_the_endpoint_does_not_register_is_reported_as_absent` fails (wired-pair, 1 failed
+    34 passed).
+  - an image status compared against the literal `attached`: no harness test moves, and on machines
+    only `test_an_image_reports_the_attachment_word_the_machine_printed` fails (portable-image,
+    1 failed 9 passed).
