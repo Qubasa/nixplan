@@ -203,7 +203,7 @@ def test_the_flake_names_its_outputs() -> None:
     for system in claimed:
         assert "planner" in shown["apps"][system], shown["apps"][system]
         assert "default" in shown["apps"][system], shown["apps"][system]
-        assert "planner-cli" in shown["packages"][system], sorted(shown["packages"][system])
+        assert "planner" in shown["packages"][system], sorted(shown["packages"][system])
 
     helped = _host("nix", "run", str(FLAKE), "--", "--help", timeout=PATIENT)
     for subcommand in ("plan", "build", "apply", "status", "rollback"):

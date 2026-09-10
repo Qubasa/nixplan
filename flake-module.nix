@@ -40,7 +40,9 @@ in
   # system-independent output like the library beside it.
   flake.operator = import ./operator { korora = inputs.korora; };
 
-  flake.planner = {
+  # The suites, their failures and the worked plan, under a name no application and
+  # no package uses. `planner` is the command.
+  flake.debug = {
     inherit worked suites;
     rendered = planner.render worked.diagnostics;
     failures = import ./tests/report.nix suites;
@@ -168,8 +170,8 @@ in
       e2eArtifactPaths = {
         PLANNER_E2E_GUEST_IMAGE = "${e2eGuest}/nixos.qcow2";
         PLANNER_E2E_SSH_KEY = "${e2eGuest.sshPrivateKey}";
-        PLANNER_CLI = pkgs.lib.getExe config.packages.planner-cli;
-        PLANNER_CLI_SRC = "${config.packages.planner-cli-src}";
+        PLANNER_CLI = pkgs.lib.getExe config.packages.planner;
+        PLANNER_CLI_SRC = "${config.packages.planner-src}";
       };
 
       envNameOf = folder: pkgs.lib.toUpper (builtins.replaceStrings [ "-" ] [ "_" ] folder);

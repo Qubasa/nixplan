@@ -329,8 +329,8 @@ Everything the flake exposes, so a reader can tell what runs where:
 
 | `nix build .#packages.x86_64-linux.<name>` | Subject |
 | --- | --- |
-| `planner-cli` | the command itself, as `result/bin/planner` |
-| `planner-cli-src` | its source root, which `test_harness.py` imports the pure half from |
+| `planner` | the command itself, as `result/bin/planner` |
+| `planner-src` | its source root, which `test_harness.py` imports the pure half from |
 | `planner-e2e-wired-pair` | one folder's deployment, built: the plan, `manifest.json`, the diagnostics and one artifact per placed entry |
 | `planner-e2e-wired-pair-changed` | the second build of that same folder, which differs in the file it serves |
 | `planner-e2e-portable-image` | that folder's deployment: two images, one of them for a machine this host is not |

@@ -308,7 +308,7 @@ Build the command, or run it out of the flake:
 
 ```bash
 nix run .#planner -- --help                             # the five subcommands
-nix build .#planner-cli                                 # result/bin/planner
+nix build .#planner                                     # result/bin/planner
 nix run .#planner -- build .#planner-e2e-secret-delivery
 ```
 
@@ -526,7 +526,7 @@ directory, a flake reference and a value source, and what a deployment is it lea
 documents applies the same build.
 
 The command's flake wiring is `cli/flake-module.nix`, imported by `flake.nix` beside the root
-module and `devshells.nix`. It owns `packages.planner-cli`, `apps.planner` and
-`packages.planner-cli-src`, the source root the harness imports the command's pure half from. The
+module and `devshells.nix`. It owns `packages.planner`, `apps.planner` and
+`packages.planner-src`, the source root the harness imports the command's pure half from. The
 root module reads `PLANNER_CLI` and `PLANNER_CLI_SRC` off those two package attributes rather than
 constructing either, so a rename cannot leave the app and the test environment disagreeing.

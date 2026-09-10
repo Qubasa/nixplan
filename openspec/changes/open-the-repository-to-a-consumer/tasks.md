@@ -31,7 +31,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
 
 ## 2. One published name, one thing
 
-- [ ] 2.1 `flake-module.nix`: rename `flake.planner` to `flake.debug`. This overrules the non-goal
+- [x] 2.1 `flake-module.nix`: rename `flake.planner` to `flake.debug`. This overrules the non-goal
   `clean-up-transplant-residue` recorded, which is argued in design D5. Verify
   `nix build .#planner` builds the command's wrapper and `nix eval --json .#debug.failures` answers
   `[]` on a green tree.
