@@ -256,6 +256,7 @@ rec {
     let
       subject = subjectOf reg iface;
       id = iface.id or null;
+      declaredFold = foldOf iface;
     in
     util.optional (id != null && !isName id) (
       diag.error {
@@ -264,6 +265,15 @@ rec {
         message = "interface ${label reg iface} claims the identity ${writtenAs id}, and an identity is claimed with a non-empty string carrying no whitespace";
         evidence = "an identity is claimed with a string two authors can both write, so a claim that is not one identifies nothing; this interface is identified by its value instead";
         resolution = "write ${util.quote "id = \"<namespace>/<name>\";"} in ${subject}, or delete the key";
+      }
+    )
+    ++ util.optional (isName id && declaredFold != null && foldName declaredFold == null) (
+      diag.error {
+        inherit subject;
+        id = "interface-id-unnamed-fold";
+        message = "interface ${label reg iface} claims the identity ${util.quote id} and declares a fold carrying no name";
+        evidence = "a fold's name is part of the identity a claim carries and a bare function supplies none, so this claim cannot be compared with another author's; this interface is identified by its value instead";
+        resolution = "write ${util.quote "fold = planner.fold \"<name>\" (set: …);"} in ${subject}, or delete the ${util.quote "id"}";
       }
     );
 

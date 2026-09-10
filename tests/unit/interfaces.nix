@@ -507,4 +507,36 @@ in
         received = "ssh-ed25519 AAAA";
       };
     };
+
+  testAClaimCarriesAnUnnamedFold =
+    let
+      unnamed = planner.interface {
+        name = "identity";
+        exports.publicKey = publicString;
+        id = "example.com/identity";
+        fold = set: builtins.attrNames set;
+      };
+      result = scenario {
+        interfaceValues.identity = unnamed;
+        instances = { };
+      };
+      row = builtins.head (rowsById "interface-id-unnamed-fold" result);
+    in
+    {
+      expr = {
+        rows = countById "interface-id-unnamed-fold" result;
+        inherit (row) subject severity;
+        namesTheInterface = hasInfix "interfaces/default.nix" row.message;
+        statesAClaimNeedsANamedFold = hasInfix "part of the identity a claim carries" row.evidence;
+        identity = planner.identityOf unnamed;
+      };
+      expected = {
+        rows = 1;
+        subject = "interfaces/default.nix";
+        severity = "error";
+        namesTheInterface = true;
+        statesAClaimNeedsANamedFold = true;
+        identity = null;
+      };
+    };
 }
