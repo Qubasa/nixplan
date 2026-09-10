@@ -79,15 +79,24 @@ Deliberately not a hash of the key. These names are what an operator reads in th
 listing, in a backend's storage layout and in a prompt about deleting something, and a hash makes
 each of those unattributable while hiding the collision the projection exists to refuse.
 
-The reading raises rather than returning a row, as the image and flakelet readings do, and every
-refusal names both sides:
+The reading has two halves and one statement per condition. `rows` answers what a plan would be
+refused for and raises nothing, and `store`, `configuration` and `deliveriesOf` refuse with the
+sentence that row states, so the table and the refusal cannot drift apart. Every one of them names
+both sides:
 
-| Refused | What the refusal names |
-| --- | --- |
-| two keys projecting onto one name | both keys and the one name, because one would overwrite the other's stored bytes |
-| a component carrying `:` | the key, the role of the component and its value: a name joined on that character could not be read back |
-| a component outside `[a-zA-Z0-9_.-]+` | the same, plus the characters the tool admits |
-| an entry recording no `program` | the entry and the field, because the tool runs one program per stored value |
+| Refused | Row | What the refusal names |
+| --- | --- | --- |
+| two keys projecting onto one name | `secrets-name-collision` | both keys and the one name, because one would overwrite the other's stored bytes |
+| a component carrying `:` | `secrets-name-carries-separator` | the key, the role of the component and its value: a name joined on that character could not be read back |
+| a component outside `[a-zA-Z0-9_.-]+` | `secrets-name-outside-grammar` | the same, plus the characters the tool admits |
+| an entry recording no `program` | `secrets-value-no-program` | the entry and the field, because the tool runs one program per stored value |
+| a field of a value the plan does not record | `secrets-value-field-missing` | the entry and the field |
+| a key that is not a generated value's | `secrets-key-not-a-value` | the key and the two forms one takes |
+| a file the tool's grammar does not admit | `secrets-file-name-outside-grammar` | the file, the value and the characters the tool admits |
+| the tool's own `.nixos-secrets-metadata` | `secrets-file-name-reserved` | the file and the value, and that the file is what has to be renamed |
+| a delivery target the plan does not carry | `secrets-delivery-machine-unknown` | the value and the machine |
+| a delivery target with no address | `secrets-delivery-machine-no-address` | the value and the machine, as an error of this reading and a warning of a deployment build |
+| an address or a path no shell word can carry | `secrets-rendered-word-refused` | the value, the offending text and what a rendered word admits |
 
 A file name is not projected, so it keeps the colon the tool admits; the one name it may not carry
 is `.nixos-secrets-metadata`, which the tool keeps for its own record. A value's `reads` become the
@@ -119,6 +128,19 @@ is one boolean, `deploy`, and `path` exists only as a NixOS option a backend set
 configuration passed with `--json` never reaches. The rendered step is therefore the only thing that
 ever states a path, and the path it states is `/run/vars/<instance>/<generator>/<file>`, the one the
 plan fixed. The external side never learns a path and never has to agree about one.
+
+## The table a generation carries
+
+`operator.mkGeneration` builds one table out of the plan's own rows and the reading's, and writes
+both halves of it into the farm beside `secrets.json`, `names.json` and `plan.nix`:
+`diagnostics.json` for a tool and `diagnostics.txt` for a person. Both are there whether or not the
+table holds a row.
+
+A table carrying an error refuses the build with the rendered table, so an operator reads every
+reason at once rather than the one condition a lazy evaluation reached first. A table carrying
+warnings and no error builds every file, because a warning that stopped a build would be an error.
+The generation and the deployment build answer the same way, and the identifier of every row either
+can produce is in [diagnostics.md](diagnostics.md).
 
 ## Provenance
 

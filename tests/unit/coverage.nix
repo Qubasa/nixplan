@@ -180,6 +180,8 @@ let
     "hold-every-stated-guarantee/specs/tooling/repository-shape/spec.md"
     "order-a-cycle-by-its-strong-components/specs/operator/apply-command/spec.md"
     "answer-whether-a-machine-is-current/specs/operator/machine-report/spec.md"
+    "report-a-secrets-refusal-as-a-row/specs/realiser/secrets-configuration/spec.md"
+    "report-a-secrets-refusal-as-a-row/specs/tooling/test-layers/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed

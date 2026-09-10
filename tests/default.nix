@@ -51,6 +51,7 @@ let
         imageSource
         flakeletSource
         repoSource
+        secretsSource
         ;
     };
     plan = import ./unit/plan.nix {
@@ -65,7 +66,16 @@ let
     perf = import ./unit/perf.nix { inherit planner support; };
     exclusions = import ./unit/exclusions.nix { inherit planner support; };
     vars = import ./unit/vars.nix { inherit planner support; };
-    secrets = import ./unit/secrets.nix { inherit planner support secretsSource; };
+    secrets = import ./unit/secrets.nix {
+      inherit
+        planner
+        support
+        secretsSource
+        operatorSource
+        imageSource
+        flakeletSource
+        ;
+    };
     units = import ./unit/units.nix { inherit planner support; };
     platform = import ./unit/platform.nix { inherit planner support systems; };
     closure = import ./unit/closure.nix { inherit planner support; };

@@ -39,6 +39,7 @@ can see it whole:
 | --- | --- | --- |
 | the entry's units, closure, target, configuration data and generated files | the plan | `mkPlan`, as a row |
 | the realiser and the confinement profile of an entry | the realisation statement | `operator/read.nix`, as a row |
+| the external generator's contract: its name grammar, its one program per value, the address a step dials | the contract | `secrets/read.nix`, as a row |
 | the bytes of an artifact | the derivation | nothing: a build either runs or does not |
 
 A refusal about a fact the plan carries is a row from the planner. A refusal
@@ -47,16 +48,19 @@ build, which is the only layer handed the statement. A realiser refuses only
 conditions one of those two already reported as an error row, so no path through
 a deployment build reaches a raise without a row having been produced first.
 
-The realisers keep their raises, and a raise is the answer a caller that
-imported `image/read.nix` or `flakelet/read.nix` and called it directly
-receives. `tests/unit/diagnostics.nix` holds that rule to the source: every
-`fail` of either realiser is crossed against the row producers of `lib/` and
-`operator/read.nix`, and a refusal with no row above it fails the suite naming
-it. The deployment build asks each realiser for the rules only it knows -
-`acceptsName`, `acceptsUnit`, `acceptsHostPath`, `confinement` and `backend` of
-`flakelet/read.nix`, `profileNames`, `denials`, `hostPaths` and `versionFor` of
-`image/read.nix` - and one rule therefore has one home, with the row and the
-raise saying the same thing.
+The realisers keep their raises, and a raise is the answer a caller that imported `image/read.nix`,
+`flakelet/read.nix` or `secrets/read.nix` and called it directly receives. Every refusal of every
+realiser carries the identifier of the row that reports the same condition, or a recorded reason
+why no deployment reaches it, and `tests/unit/diagnostics.nix` crosses that data against the rows
+`lib/`, `operator/read.nix` and the secrets reading produce: a refusal with no row above it fails
+the suite naming it. Which files are examined is read off the realiser sources the suite is handed
+rather than written out, so a realiser is accounted for by existing, and the pairing is the account
+rather than a fragment of a message, so rewording a refusal changes nothing.
+
+A reading asks each realiser for the rules only it knows - `acceptsName`, `acceptsUnit`,
+`acceptsHostPath`, `confinement` and `backend` of `flakelet/read.nix`, `profileNames`, `denials`,
+`hostPaths` and `versionFor` of `image/read.nix`, `unrenderable` and `fail` of `secrets/read.nix` -
+and one rule therefore has one home, with the row and the raise saying the same thing.
 
 `row`, `error` and `warning` are exported from the library, and every producer
 of a row uses them: they are what applies `util.oneLine` to a message, an
@@ -233,6 +237,28 @@ caller reads them in the same table as the planner's own.
 | `operator-entry-name-collision` | two plan keys project onto one artifact name |
 | `operator-entry-machine-no-address` (warning) | the machine record of a placed entry declares no address; an address is read by the step that dials and by no step that builds |
 | `operator-plan-field-missing` | a plan record carries no field the reading of it indexes. The plan prunes a field whose value was empty, and this names the record and the field rather than ending the evaluation |
+
+### Every row the secrets reading can produce
+
+These are the facts the external generator's contract holds and no layer above
+the reading knows. They come out of `secrets/read.nix` when a plan is read as a
+generator configuration, and `operator.mkGeneration` renders them in one table
+with the planner's own. A caller that never reads a plan that way produces none
+of them.
+
+| id | Raised when |
+| --- | --- |
+| `secrets-value-no-program` | a generated value's entry records no `program`, and the contract runs one program per stored value |
+| `secrets-value-field-missing` | a field the contract needs to store or to deliver the value is one the plan does not record |
+| `secrets-key-not-a-value` | a key read as a generated value's is not of the form `<instance>:vars/<generator>` |
+| `secrets-name-carries-separator` | an instance, generator or machine name carries the character the projection joins on |
+| `secrets-name-outside-grammar` | one of those names carries a character the contract's `safe-name` does not admit |
+| `secrets-file-name-outside-grammar` | a generated file's name carries a character the contract does not admit |
+| `secrets-file-name-reserved` | a generated file carries `.nixos-secrets-metadata`, the name the tool keeps for its own provenance record |
+| `secrets-name-collision` | two plan keys project onto one stored name, and one would overwrite the other's bytes |
+| `secrets-delivery-machine-unknown` | a value is delivered to a machine the plan carries no record for |
+| `secrets-delivery-machine-no-address` | a recipient machine's record declares no address; an error here, where a step is rendered, and a warning of a deployment build, where none is |
+| `secrets-rendered-word-refused` | an address or a path the rendered deploy step cannot carry as one shell word |
 
 ## Refusals by subtraction
 

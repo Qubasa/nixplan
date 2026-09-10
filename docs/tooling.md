@@ -85,7 +85,7 @@ The suites, and how many tests each holds:
 | `interfaces` | 26 | interface identity by value, export atoms, the omission rule |
 | `composition` | 21 | roots, members, the settings namespace, defaults and fixed |
 | `resolution` | 43 | wiring, arity, secrecy, placement, keyset equality |
-| `diagnostics` | 32 | totality, ordering, severity, rendering, the scan that finds no raising call under `lib/`, and the row table against `docs/diagnostics.md` |
+| `diagnostics` | 37 | totality, ordering, severity, rendering, the scan that finds no raising call under `lib/`, the row table against `docs/diagnostics.md`, and every realiser refusal against the row producer above it |
 | `plan` | 35 | keys, planes, absences, dependencies, serialisation, the golden fixture |
 | `postgres` | 10 | one provider instance and two consumers, planned |
 | `exclusions` | 17 | one deployment per excluded construct, each refused, and the counts the fixture README records about its own folder |
@@ -96,7 +96,7 @@ The suites, and how many tests each holds:
 | `image` | 28 | the portable-service-image realiser's reading of an entry |
 | `flakelet` | 14 | the flakelet realiser's reading: enablement, identity, the two name refusals |
 | `operator` | 31 | the deployment build's reading: the artifact name, `manifest.json`, the realiser statement, its refusals |
-| `secrets` | 12 | the secrets realiser's reading: a plan as a generator configuration, the name projection, the rendered deploy step |
+| `secrets` | 21 | the secrets realiser's reading: a plan as a generator configuration, the name projection, the rendered deploy step, and the rows it answers a refused plan with |
 | `consumer` | 2 | what this flake publishes: the recorded platform identity, and a plan keyed by a caller's own nixpkgs |
 | `perf` | 6 | the synthetic fleet is deterministic and realises nothing |
 | `layers` | 17 | the shape of the test tree itself, the root document and the one shell |
@@ -110,7 +110,7 @@ nix eval --json '.#debug.suites' \
 ```
 
 Nineteen suites, counted as the keys of `suites` in `tests/default.nix`, and
-403 tests, counted as the test attributes of the files under `tests/unit/`. Both
+417 tests, counted as the test attributes of the files under `tests/unit/`. Both
 numbers, and every figure in the table above, are compared against the tree by
 `coverage.testASuiteGainsATest`, so a suite that gains a test fails a check
 naming this document rather than leaving a stale number in it. That

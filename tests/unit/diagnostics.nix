@@ -6,6 +6,7 @@
   imageSource,
   flakeletSource,
   repoSource,
+  secretsSource,
 }:
 let
   inherit (builtins)
@@ -54,145 +55,210 @@ let
     flakeletReader = operatorFlakeletReader;
   };
 
-  # Every refusal of the two realisers, and the row that reports it first. A
-  # `fail` this table does not account for is what the cross-walk below names.
-  refusalsAccountedFor = [
+  secretsReader = import (secretsSource + "/read.nix") { inherit planner; };
+
+  # A plan carrying one of every condition the secrets reading refuses. The
+  # identifiers its accounts name are crossed against the rows this produces,
+  # so an account naming a row nothing builds is named rather than believed.
+  secretsValue = {
+    key = "sha256-0000000000000000";
+    per = "instance";
+    deploy = true;
+    delivery = [ "one" ];
+    deliveryDerivedFrom = [ "written by hand" ];
+    program = "/nix/store/9dm4x2vqk7z1n5bpr3jlfg8ys6cwh0az-generate.drv";
+    files.token = {
+      path = "/run/vars/hand/token";
+      secrecy = "secret";
+      inPlan = "reference";
+    };
+  };
+
+  secretsCorpus = {
+    "machine:one".address = "one.example:22";
+    "machine:one".tags = [ ];
+    "machine:quiet".tags = [ ];
+    "machine:spaced".address = "10.0.0.11 ";
+    "machine:spaced".tags = [ ];
+
+    # No program, a read of a record that is not a value, and a delivery to a
+    # machine the plan does not carry.
+    "a:vars/plain" = removeAttrs secretsValue [ "program" ] // {
+      delivery = [ "ghost" ];
+      reads = [ "machine:one" ];
+    };
+
+    # No `per`, a file the contract reserves, and a machine with no address.
+    "a:vars/quiet" = removeAttrs secretsValue [ "per" ] // {
+      delivery = [ "quiet" ];
+      files.".nixos-secrets-metadata".path = "/run/vars/hand/meta";
+    };
+
+    # A component the contract's grammar does not admit, a file name outside it,
+    # and an address the rendered step cannot carry as one word.
+    "a:vars/loud name" = secretsValue // {
+      delivery = [ "spaced" ];
+      files."key@id".path = "/run/vars/hand/key";
+    };
+
+    # Two keys projecting onto one name, one of whose components carries the
+    # character the projection joins on.
+    "a:b:vars/c" = secretsValue;
+    "a:vars/b:c" = secretsValue;
+  };
+
+  secretsRowIds = uniqueStrings (map (row: row.id) (secretsReader.rows { plan = secretsCorpus; }));
+
+  # The realisers the accounting covers. Which files of one are examined is read
+  # off the source the suite is handed, so a file is examined by existing and a
+  # fourth realiser by being passed in.
+  realisers = [
     {
-      fragment = "is not a placed entry key";
-      row = "operator-plan-record-unclassified";
+      label = "image";
+      source = imageSource;
+      inherit (operatorImageReader) accounts;
     }
     {
-      fragment = "is not a `sha256-<hex>` value";
-      row = null;
-      because = "`util.shortHash` answers a `sha256-<hex>` value for every input, so no deployment reaches this";
+      label = "flakelet";
+      source = flakeletSource;
+      inherit (operatorFlakeletReader) accounts;
     }
     {
-      fragment = "and it is not inferable from anything else the plan carries";
-      row = "machine-target-incomplete";
-    }
-    {
-      fragment = "the plan has no entry";
-      row = null;
-      because = "the reading enumerates the plan and asks for no key the plan does not carry";
-    }
-    {
-      fragment = "with no platform record";
-      row = "machine-target-incomplete";
-    }
-    {
-      fragment = "records a `target` with no `serviceManager`";
-      row = "machine-target-incomplete";
-    }
-    {
-      fragment = "the profile is stated rather than inferred";
-      row = "operator-image-profile-unknown";
-    }
-    {
-      fragment = "declared closure roots do not contain it";
-      row = "closure-path-undeclared";
-    }
-    {
-      fragment = "records extension fields for backend";
-      row = "unit-extension-backend-mismatch";
-    }
-    {
-      fragment = "which this builder has no rendering for";
-      row = null;
-      because = "the field is one an extension declared and the library accepted, and this builder's own directive table is missing it, which is a defect of the builder rather than of the deployment";
-    }
-    {
-      fragment = "cannot spell as a directive";
-      row = null;
-      because = "the value passed the extension's own type and this builder renders no directive for its shape, which is again the builder's own table";
-    }
-    {
-      fragment = "records no unit, so there is nothing to attach";
-      row = "operator-entry-realises-nothing";
-    }
-    {
-      fragment = "and this builder emits images for";
-      row = "operator-entry-service-manager-mismatch";
-    }
-    {
-      fragment = "which is not a path under the store directory";
-      row = "closure-root-outside-store";
-    }
-    {
-      fragment = "which the plan records as a reference";
-      row = "closure-root-is-delivered";
-    }
-    {
-      fragment = "and the stated confinement profile";
-      row = "operator-entry-access-denied";
-    }
-    {
-      fragment = "to a value containing a newline";
-      row = "unit-env-value-newline";
-    }
-    {
-      fragment = "derives the service name";
-      row = "operator-entry-name-refused";
-    }
-    {
-      fragment = "renders the unit file";
-      row = "operator-entry-name-refused";
-    }
-    {
-      fragment = "is shown the host path";
-      row = "operator-entry-path-not-assembled";
+      label = "secrets";
+      source = secretsSource;
+      inherit (secretsReader) accounts;
     }
   ];
 
-  realiserFiles = [
-    {
-      label = "image/read.nix";
-      source = imageSource + "/read.nix";
-    }
-    {
-      label = "flakelet/read.nix";
-      source = flakeletSource + "/read.nix";
-    }
-  ];
+  realiserFiles = builtins.concatLists (
+    map (
+      realiser:
+      map (rel: {
+        label = "${realiser.label}/${rel}";
+        inherit (realiser) accounts;
+        text = builtins.readFile (realiser.source + "/${rel}");
+      }) (filter (rel: hasInfix ".nix" rel) (support.filesUnder realiser.source))
+    ) realisers
+  );
 
-  refusalsOf =
-    file:
-    map
-      (line: {
-        inherit (file) label;
-        inherit line;
-      })
-      (
-        filter (line: hasInfix "fail \"" line) (
-          filter (line: !isComment line) (support.lines (builtins.readFile file.source))
+  codeOf = text: filter (line: !isComment line) (support.lines text);
+
+  # A file refuses if it defines a raising `fail` or borrows another reading's,
+  # which is what separates a realiser's evaluation layer from a builder writing
+  # a shell `fail` into a script it renders.
+  definesRefusal =
+    code: any (line: hasInfix "fail =" line) code && any (line: hasInfix "throw" line) code;
+
+  borrowsRefusal = code: any (line: builtins.match ".*[a-zA-Z]\\.fail .*" line != null) code;
+
+  refuses = code: definesRefusal code || borrowsRefusal code;
+
+  isRefusal = line: builtins.match ".*[^a-zA-Z_]fail [^=].*" line != null;
+
+  accountNameOf =
+    line:
+    let
+      m = builtins.match ".*fail [a-zA-Z.]*accounts\\.([A-Za-z0-9]+).*" line;
+    in
+    if m == null then null else builtins.head m;
+
+  # Every refusal of a file that refuses is paired with a row by the account it
+  # names rather than by its wording. A file that raises and refuses nothing the
+  # walk can read is named too: a raise nobody can account for is what this
+  # exists to catch.
+  accountingOf =
+    {
+      files,
+      produced,
+    }:
+    let
+      read = map (file: file // { code = codeOf file.text; }) files;
+      refusing = filter (file: refuses file.code) read;
+      raisesWithNoRefusal = filter (
+        file: !(refuses file.code) && any (line: hasInfix "throw" line) file.code
+      ) read;
+      refusalsIn =
+        file:
+        map (line: {
+          inherit (file) label accounts;
+          inherit line;
+        }) (filter isRefusal file.code);
+      every = builtins.concatLists (map refusalsIn refusing);
+      accountOf =
+        refusal:
+        let
+          name = accountNameOf refusal.line;
+        in
+        if name == null || !(refusal.accounts ? ${name}) then null else refusal.accounts.${name};
+      accounted =
+        refusal:
+        let
+          account = accountOf refusal;
+        in
+        account != null && (account.id != null || account ? because);
+      declared = uniqueStrings (
+        filter (id: id != null) (
+          builtins.concatLists (
+            map (file: map (account: account.id) (builtins.attrValues file.accounts)) refusing
+          )
         )
       );
+    in
+    {
+      examined = sortStrings (uniqueStrings (map (file: file.label) refusing));
+      refusals = length every;
+      accountedBy = map (refusal: accountNameOf refusal.line) every;
+      unaccounted = map (refusal: "${refusal.label}: ${refusal.line}") (
+        filter (refusal: !(accounted refusal)) every
+      );
+      unexamined = sortStrings (map (file: file.label) raisesWithNoRefusal);
+      namedByNoProducer = sortStrings (filter (id: !(builtins.elem id produced)) declared);
+    };
 
-  everyRefusal = builtins.concatLists (map refusalsOf realiserFiles);
+  producerIds =
+    builtins.concatLists (
+      map (
+        source:
+        builtins.concatLists (
+          map (
+            line:
+            let
+              m = builtins.match ".*id = \"([^\"]+)\".*" line;
+            in
+            if m == null then [ ] else m
+          ) (support.lines (builtins.readFile source))
+        )
+      ) (map (rel: libSource + "/${rel}") libraryFiles ++ [ (operatorSource + "/read.nix") ])
+    )
+    ++ secretsRowIds;
 
-  accountingOf = refusal: filter (entry: hasInfix entry.fragment refusal.line) refusalsAccountedFor;
+  refusalAccounting = accountingOf {
+    files = realiserFiles;
+    produced = producerIds;
+  };
 
-  unaccountedRefusals = map (refusal: "${refusal.label}: ${refusal.line}") (
-    filter (refusal: accountingOf refusal == [ ]) everyRefusal
-  );
+  # A realiser the accounting has never been told about, as text: nothing but
+  # being handed to the walk decides whether its refusals are examined.
+  fabricated =
+    {
+      accounts ? { },
+      refusal,
+    }:
+    {
+      label = "fourth/read.nix";
+      inherit accounts;
+      text = builtins.concatStringsSep "\n" [
+        "  fail = account: message: throw \"planner fourth: \${message}\";"
+        refusal
+      ];
+    };
 
-  producerIds = builtins.concatLists (
-    map (
-      source:
-      builtins.concatLists (
-        map (
-          line:
-          let
-            m = builtins.match ".*id = \"([^\"]+)\".*" line;
-          in
-          if m == null then [ ] else m
-        ) (support.lines (builtins.readFile source))
-      )
-    ) (map (rel: libSource + "/${rel}") libraryFiles ++ [ (operatorSource + "/read.nix") ])
-  );
-
-  rowsNamedByNoProducer = filter (id: id != null && !(builtins.elem id producerIds)) (
-    map (entry: entry.row or null) refusalsAccountedFor
-  );
+  accountingWith =
+    file:
+    accountingOf {
+      files = realiserFiles ++ [ file ];
+      produced = producerIds;
+    };
 
   operatorFiles = filter (rel: hasInfix ".nix" rel) (support.filesUnder operatorSource);
 
@@ -452,8 +518,13 @@ let
       ) idBindings
     );
 
+  # A reading above `lib/` is a producer here where it builds a row of its own.
+  # `image/read.nix` and `flakelet/read.nix` name identifiers they do not
+  # produce, which is what `refusalAccounting` crosses; this walk is about what
+  # the document owes a reader.
   producingFiles = map (rel: libSource + "/${rel}") libraryFiles ++ [
     (operatorSource + "/read.nix")
+    (secretsSource + "/read.nix")
   ];
 
   producedIds = sortStrings (
@@ -1468,11 +1539,13 @@ in
     in
     {
       expr = {
-        # Every `fail` of either realiser is answered by a named row producer, or
-        # by a reason this table states for why no deployment reaches it.
-        unaccounted = unaccountedRefusals;
-        namedByNoProducer = rowsNamedByNoProducer;
-        readSomeRefusals = length everyRefusal;
+        # Every `fail` of every realiser is answered by a row a producing layer
+        # produces, or by a reason its account states for why no deployment
+        # reaches it.
+        unaccounted = refusalAccounting.unaccounted;
+        namedByNoProducer = refusalAccounting.namedByNoProducer;
+        unexamined = refusalAccounting.unexamined;
+        readSomeRefusals = refusalAccounting.refusals;
         readSomeProducers = length producerIds > 20;
         # The rows the accounting names are rows this tree really produces.
         theReadingProducesThem = reading.rows;
@@ -1480,9 +1553,144 @@ in
       expected = {
         unaccounted = [ ];
         namedByNoProducer = [ ];
-        readSomeRefusals = 20;
+        unexamined = [ ];
+        readSomeRefusals = 34;
         readSomeProducers = true;
         theReadingProducesThem = [ ];
+      };
+    };
+
+  testARealiserIsAddedWithoutEditingTheAccounting =
+    let
+      fourth = accountingWith (fabricated {
+        refusal = "  check = value: if value then value else fail \"a fourth realiser refuses\";";
+      });
+    in
+    {
+      expr = {
+        # No list decides this: `secrets/backend.nix` is examined because it is a
+        # file under a source the suite is handed and it defines a refusal.
+        examined = refusalAccounting.examined;
+        theFourthIsExamined = builtins.elem "fourth/read.nix" fourth.examined;
+        andItsRefusalIsNamed = fourth.unaccounted;
+      };
+      expected = {
+        examined = [
+          "flakelet/read.nix"
+          "image/read.nix"
+          "secrets/backend.nix"
+          "secrets/read.nix"
+        ];
+        theFourthIsExamined = true;
+        andItsRefusalIsNamed = [
+          "fourth/read.nix:   check = value: if value then value else fail \"a fourth realiser refuses\";"
+        ];
+      };
+    };
+
+  testARefusalWithNoRowAboveItFailsTheSuite =
+    let
+      unrowed = accountingWith (fabricated {
+        accounts.unrowed.id = null;
+        refusal = "  check = value: if value then value else fail accounts.unrowed \"nothing rows this\";";
+      });
+      excused = accountingWith (fabricated {
+        accounts.unrowed = {
+          id = null;
+          because = "no deployment reaches it";
+        };
+        refusal = "  check = value: if value then value else fail accounts.unrowed \"nothing rows this\";";
+      });
+    in
+    {
+      expr = {
+        named = unrowed.unaccounted;
+        # The same refusal, accounted by a recorded reason rather than by a row.
+        withAReason = excused.unaccounted;
+      };
+      expected = {
+        named = [
+          "fourth/read.nix:   check = value: if value then value else fail accounts.unrowed \"nothing rows this\";"
+        ];
+        withAReason = [ ];
+      };
+    };
+
+  testAnAccountedRowNobodyProducesFailsTheSuite =
+    let
+      invented = accountingWith (fabricated {
+        accounts.invented.id = "no-layer-produces-this";
+        refusal = "  check = value: if value then value else fail accounts.invented \"invented\";";
+      });
+    in
+    {
+      expr = {
+        named = invented.namedByNoProducer;
+        # The identifier is the only thing wrong with it, so the refusal itself
+        # is accounted for.
+        andTheRefusalIsAccounted = invented.unaccounted;
+      };
+      expected = {
+        named = [ "no-layer-produces-this" ];
+        andTheRefusalIsAccounted = [ ];
+      };
+    };
+
+  testARefusalIsReworded =
+    let
+      reworded = map (
+        file:
+        file
+        // {
+          text =
+            builtins.replaceStrings
+              [ "is not a placed entry key" ]
+              [ "does not read as the key of a placed entry" ]
+              file.text;
+        }
+      ) realiserFiles;
+      after = accountingOf {
+        files = reworded;
+        produced = producerIds;
+      };
+    in
+    {
+      expr = {
+        theWordingChanged =
+          hasInfix "does not read as the key of a placed entry"
+            (builtins.head (filter (file: file.label == "image/read.nix") reworded)).text;
+        pairedTheSameWay = after.accountedBy == refusalAccounting.accountedBy;
+        unaccounted = after.unaccounted;
+        namedByNoProducer = after.namedByNoProducer;
+      };
+      expected = {
+        theWordingChanged = true;
+        pairedTheSameWay = true;
+        unaccounted = [ ];
+        namedByNoProducer = [ ];
+      };
+    };
+
+  testARefusalCarriesNoAccount =
+    let
+      bare = accountingWith (fabricated {
+        accounts.unrowed.id = "operator-entry-name-refused";
+        refusal = "  check = value: if value then value else fail \"a message and nothing else\";";
+      });
+    in
+    {
+      expr = {
+        # The realiser carries an account naming a produced row, and this refusal
+        # names none of it, which a message fragment would have matched by
+        # accident.
+        named = bare.unaccounted;
+        itsRowIsProduced = bare.namedByNoProducer;
+      };
+      expected = {
+        named = [
+          "fourth/read.nix:   check = value: if value then value else fail \"a message and nothing else\";"
+        ];
+        itsRowIsProduced = [ ];
       };
     };
 
@@ -1577,7 +1785,7 @@ in
   testADocumentTabulatesARowTheTreeCannotProduce = {
     expr = {
       unproduced = map (
-        id: "docs/diagnostics.md tabulates `${id}`, which nothing under lib/ or operator/ writes"
+        id: "docs/diagnostics.md tabulates `${id}`, which no reading of this tree writes"
       ) unproducedRows;
       constructs = documentedConstructs;
     };

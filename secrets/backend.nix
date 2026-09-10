@@ -19,20 +19,23 @@ let
     match
     replaceStrings
     ;
-  inherit (planner.util) quote;
 
-  fail = message: throw "planner secrets: ${message}";
+  # The rule an address and a path are held to is the reading's, asked of it
+  # rather than restated, so the row it reports and the refusal here are one
+  # sentence.
+  inherit (reader) accounts;
 
-  # A path and an address are rendered into single-quoted words of the script, so
-  # one carrying a quote would be one that closes it. Every path is fixed by the
-  # planner and every address is declared in the machine registry, so this is a
-  # refusal about a deployment nobody has written rather than a routine case.
-  wordRule = "[a-zA-Z0-9_./:@%+=,~-]+";
-
-  word =
-    what: subject: value:
-    if match wordRule value == null then
-      fail "${what} of ${quote subject} is ${quote value}, which is not something this reading will render into a shell script"
+  wordOf =
+    key: what: named: value:
+    if reader.unrenderable value then
+      reader.fail accounts.wordUnrenderable {
+        inherit
+          key
+          what
+          named
+          value
+          ;
+      }
     else
       "'${value}'";
 
@@ -43,6 +46,9 @@ let
   # means the configuration and this script were rendered from two plans.
   branch =
     user: delivery: file:
+    let
+      word = wordOf delivery.key;
+    in
     [
       "  ${quoted "${delivery.name} ${file.file}"})"
     ]
@@ -62,7 +68,7 @@ let
       m = match "(.*)/[^/]*" path;
     in
     if m == null then
-      fail "the path ${quote path} of ${quote key} names no directory, so there is nothing to create on the machine that receives it"
+      reader.fail accounts.pathNamesNoDirectory { inherit key path; }
     else
       builtins.head m;
 

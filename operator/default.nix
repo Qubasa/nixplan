@@ -3,11 +3,12 @@
 # placed entry, in one link farm. mkGeneration is the same plan read as a
 # configuration for the external secret generator.
 #
-# This is the first layer allowed to raise. `lib/` never does, the reading never
-# does, and the realisers do it for a condition a row already reported. What this
+# This is the first layer allowed to raise. `lib/` never does, the readings never
+# do, and the realisers do it for a condition a row already reported. What this
 # file raises for is a caller asking for the artifact of an entry of a deployment
-# the planner called inapplicable, with the planner's own table as the message.
-# The tree itself is always produced: it holds the plan and both halves of the
+# the planner called inapplicable, and a generation whose table carries an error,
+# with the rendered table as the message either way.
+# A deployment tree is always produced: it holds the plan and both halves of the
 # diagnostics whatever the table says, and an artifact of no entry when the table
 # carries an error. A table carrying warnings and no error builds; a warning that
 # stopped a build would be an error.
@@ -212,6 +213,12 @@
 
       json = name: value: pkgs.writeText "planner-${name}.json" (builtins.toJSON value);
 
+      # The plan's rows and the reading's, as one table. The farm carries both
+      # halves of it whatever it says, the way a deployment build does, and an
+      # error refuses the build with the rendered table rather than with a
+      # sentence one condition wrote.
+      reading = reader.generation { inherit (result) plan diagnostics; };
+
       farm = pkgs.linkFarm "planner-generation" [
         {
           name = "secrets.json";
@@ -225,7 +232,15 @@
           name = "plan.nix";
           path = expression;
         }
+        {
+          name = "diagnostics.json";
+          path = json "diagnostics" reading.diagnostics;
+        }
+        {
+          name = "diagnostics.txt";
+          path = pkgs.writeText "planner-diagnostics.txt" (planner.render reading.diagnostics + "\n");
+        }
       ];
     in
-    if result.applicable then farm else throw (planner.render result.diagnostics + "\n");
+    if reading.refused then throw reading.refusal else farm;
 }
