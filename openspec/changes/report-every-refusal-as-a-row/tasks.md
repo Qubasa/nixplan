@@ -166,7 +166,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
 - [x] 7.2 `flakelet/read.nix`: the same for the comment at `:1-9`, naming the deployment build as
   the layer that reports the host-path and naming conditions first. Verify no rule is restated and
   the three raises are unchanged.
-- [ ] 7.3 `tests/unit/diagnostics.nix`: add `testARealiserRefusesAConditionNoRowReports`, which
+- [x] 7.3 `tests/unit/diagnostics.nix`: add `testARealiserRefusesAConditionNoRowReports`, which
   crosses every `fail` in `image/read.nix` and `flakelet/read.nix` against the row producers of
   `lib/` and `operator/read.nix` and names any refusal with no row above it, and
   `testAnApplicableDeploymentIsRealisedWithoutARaise`, which reads every placed entry of the worked

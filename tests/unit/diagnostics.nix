@@ -41,14 +41,156 @@ let
 
   operatorImageReader = import (imageSource + "/read.nix") { inherit planner; };
 
+  operatorFlakeletReader = import (flakeletSource + "/read.nix") {
+    inherit planner;
+    reader = operatorImageReader;
+  };
+
   operatorReader = import (operatorSource + "/read.nix") {
     inherit planner;
     imageReader = operatorImageReader;
-    flakeletReader = import (flakeletSource + "/read.nix") {
-      inherit planner;
-      reader = operatorImageReader;
-    };
+    flakeletReader = operatorFlakeletReader;
   };
+
+  # Every refusal of the two realisers, and the row that reports it first. A
+  # `fail` this table does not account for is what the cross-walk below names.
+  refusalsAccountedFor = [
+    {
+      fragment = "is not a placed entry key";
+      row = "operator-plan-record-unclassified";
+    }
+    {
+      fragment = "is not a `sha256-<hex>` value";
+      row = null;
+      because = "`util.shortHash` answers a `sha256-<hex>` value for every input, so no deployment reaches this";
+    }
+    {
+      fragment = "and it is not inferable from anything else the plan carries";
+      row = "machine-target-incomplete";
+    }
+    {
+      fragment = "the plan has no entry";
+      row = null;
+      because = "the reading enumerates the plan and asks for no key the plan does not carry";
+    }
+    {
+      fragment = "with no platform record";
+      row = "machine-target-incomplete";
+    }
+    {
+      fragment = "records a `target` with no `serviceManager`";
+      row = "machine-target-incomplete";
+    }
+    {
+      fragment = "the profile is stated rather than inferred";
+      row = "operator-image-profile-unknown";
+    }
+    {
+      fragment = "declared closure roots do not contain it";
+      row = "closure-path-undeclared";
+    }
+    {
+      fragment = "records extension fields for backend";
+      row = "unit-extension-backend-mismatch";
+    }
+    {
+      fragment = "which this builder has no rendering for";
+      row = null;
+      because = "the field is one an extension declared and the library accepted, and this builder's own directive table is missing it, which is a defect of the builder rather than of the deployment";
+    }
+    {
+      fragment = "cannot spell as a directive";
+      row = null;
+      because = "the value passed the extension's own type and this builder renders no directive for its shape, which is again the builder's own table";
+    }
+    {
+      fragment = "records no unit, so there is nothing to attach";
+      row = "operator-entry-realises-nothing";
+    }
+    {
+      fragment = "and this builder emits images for";
+      row = "operator-entry-service-manager-mismatch";
+    }
+    {
+      fragment = "which is not a path under the store directory";
+      row = "closure-root-outside-store";
+    }
+    {
+      fragment = "which the plan records as a reference";
+      row = "closure-root-is-delivered";
+    }
+    {
+      fragment = "and the stated confinement profile";
+      row = "operator-entry-access-denied";
+    }
+    {
+      fragment = "to a value containing a newline";
+      row = "unit-env-value-newline";
+    }
+    {
+      fragment = "derives the service name";
+      row = "operator-entry-name-refused";
+    }
+    {
+      fragment = "renders the unit file";
+      row = "operator-entry-name-refused";
+    }
+    {
+      fragment = "is shown the host path";
+      row = "operator-entry-path-not-assembled";
+    }
+  ];
+
+  realiserFiles = [
+    {
+      label = "image/read.nix";
+      source = imageSource + "/read.nix";
+    }
+    {
+      label = "flakelet/read.nix";
+      source = flakeletSource + "/read.nix";
+    }
+  ];
+
+  refusalsOf =
+    file:
+    map
+      (line: {
+        inherit (file) label;
+        inherit line;
+      })
+      (
+        filter (line: hasInfix "fail \"" line) (
+          filter (line: !isComment line) (support.lines (builtins.readFile file.source))
+        )
+      );
+
+  everyRefusal = builtins.concatLists (map refusalsOf realiserFiles);
+
+  accountingOf = refusal: filter (entry: hasInfix entry.fragment refusal.line) refusalsAccountedFor;
+
+  unaccountedRefusals = map (refusal: "${refusal.label}: ${refusal.line}") (
+    filter (refusal: accountingOf refusal == [ ]) everyRefusal
+  );
+
+  producerIds = builtins.concatLists (
+    map (
+      source:
+      builtins.concatLists (
+        map (
+          line:
+          let
+            m = builtins.match ".*id = \"([^\"]+)\".*" line;
+          in
+          if m == null then [ ] else m
+        ) (support.lines (builtins.readFile source))
+      )
+    ) (map (rel: libSource + "/${rel}") libraryFiles ++ [ (operatorSource + "/read.nix") ])
+  );
+
+  rowsNamedByNoProducer = filter (id: id != null && !(builtins.elem id producerIds)) (
+    map (entry: entry.row or null) refusalsAccountedFor
+  );
 
   operatorFiles = filter (rel: hasInfix ".nix" rel) (support.filesUnder operatorSource);
 
@@ -892,6 +1034,111 @@ in
         resolutionLines = 1;
         namesTheMember = true;
         memberCarriedABreak = true;
+      };
+    };
+
+  testARealiserRefusesAConditionNoRowReports =
+    let
+      workedRealise."vault-repo:server" = {
+        realiser = "image";
+        profile = "trusted";
+      };
+      reading = operatorReader.read {
+        inherit (support.workedResult) plan;
+        realise = workedRealise;
+      };
+    in
+    {
+      expr = {
+        # Every `fail` of either realiser is answered by a named row producer, or
+        # by a reason this table states for why no deployment reaches it.
+        unaccounted = unaccountedRefusals;
+        namedByNoProducer = rowsNamedByNoProducer;
+        readSomeRefusals = length everyRefusal;
+        readSomeProducers = length producerIds > 20;
+        # The rows the accounting names are rows this tree really produces.
+        theReadingProducesThem = reading.rows;
+      };
+      expected = {
+        unaccounted = [ ];
+        namedByNoProducer = [ ];
+        readSomeRefusals = 20;
+        readSomeProducers = true;
+        theReadingProducesThem = [ ];
+      };
+    };
+
+  testAnApplicableDeploymentIsRealisedWithoutARaise =
+    let
+      worked = support.workedResult;
+      realise."vault-repo:server" = {
+        realiser = "image";
+        profile = "trusted";
+      };
+      reading = operatorReader.read {
+        inherit (worked) plan;
+        inherit realise;
+      };
+      artifactOf =
+        key:
+        let
+          entry = reading.entries.${key};
+          artifact =
+            if entry.realiser == "image" then
+              operatorImageReader.read {
+                inherit (worked) plan;
+                inherit key;
+                inherit (entry) profile;
+              }
+            else
+              operatorFlakeletReader.read {
+                inherit (worked) plan;
+                inherit key;
+              };
+        in
+        builtins.tryEval (builtins.deepSeq artifact artifact);
+      keys = attrNames reading.entries;
+
+      # An applicable deployment of the same shape, because the worked fixture
+      # carries one deliberate error of its own: a generator that has not run.
+      applicable = planOf {
+        instances.svc = placedOn "one" (soleRoot {
+          module = quiet;
+        });
+      };
+      applicableReading = operatorReader.read { inherit (applicable) plan; };
+      applicableArtifact =
+        let
+          built = operatorFlakeletReader.read {
+            inherit (applicable) plan;
+            key = "svc:only@one";
+          };
+        in
+        builtins.tryEval (builtins.deepSeq built built);
+    in
+    {
+      expr = {
+        applicableIsApplicable = applicable.applicable;
+        applicableRows = applicableReading.rows;
+        applicableRealised = applicableArtifact.success;
+        refused = reading.refused;
+        rows = reading.rows;
+        read = keys;
+        raised = filter (key: !(artifactOf key).success) keys;
+      };
+      expected = {
+        applicableIsApplicable = true;
+        applicableRows = [ ];
+        applicableRealised = true;
+        refused = false;
+        rows = [ ];
+        read = [
+          "nightly:client@alpha"
+          "nightly:client@beta"
+          "nightly:client@gamma"
+          "vault-repo:server@vault"
+        ];
+        raised = [ ];
       };
     };
 }
