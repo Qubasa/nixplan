@@ -171,7 +171,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
   own" is therefore deleted rather than qualified, and no exclusion was added: `treefmt.nix` already
   excludes `fixtures/**` and `openspec/**`, and `workdirs/**` never reaches the formatter because it
   is gitignored and so is not part of the flake's source.
-- [ ] 8.2 `tests/unit/layers.nix`: `testADocumentAdvertisesACommandItAlsoSaysFails`, the evaluating
+- [x] 8.2 `tests/unit/layers.nix`: `testADocumentAdvertisesACommandItAlsoSaysFails`, the evaluating
   layer's test for that scenario. It scans the documents for a command shown and elsewhere reported
   as failing, and names the document and both places. Verify it is red against the tree as it stood
   before 8.1.
