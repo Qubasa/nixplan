@@ -60,6 +60,38 @@ against, and an interface or an extension field may bind to any of them:
 | `schedule` | a named interval (`daily`, `weekly`) or a calendar expression with an optional weekday and date (`Mon 03:00`) |
 | `userName` | the account a unit runs as: the POSIX-portable name, never a uid, because the identity a name resolves to is the machine's answer and not the plan's |
 
+**An interface may also declare a `fold`.** A fold is one function of the set a
+set-valued read collects, and it is the interface's own policy for combining
+many providers into the value one consumer receives:
+
+```nix
+# interfaces/default.nix, continued
+sshHostIdentity = korora.interface {
+  name = "ssh-host-identity";
+  exports = { publicKey = { type = korora.string; }; };
+  fold =
+    set:
+    builtins.concatStringsSep "\n" (
+      builtins.attrValues (
+        builtins.mapAttrs (entry: read: "# ${entry}\n${read.publicKey}") set
+      )
+    );
+};
+```
+
+| Fact | Consequence |
+| --- | --- |
+| the fold applies to `reach = "all"` only | a single-valued read hands `results.<slot>` the read values directly, and the fold is not applied |
+| its input is keyed by provider plan entry key | `issuer:api@alpha`, the same keys the plan's `reads.<slot>.entries` names |
+| its input carries the slot's `reads` and nothing else | a fold cannot observe an export the slot did not name, cannot name a secret export a slot may not name, and cannot widen a delivery set |
+| the planner forces it under a guard | a fold that raises is `interface-fold-raised` and the slot is then **absent** from `results`, the same as any refused read |
+| a fold that is not a function | `interface-fold-not-a-function` against the interface's declaring file, rather than an error at the read |
+| a fold no set-valued read applies | `interface-fold-unapplied`, a warning: a policy nobody applies is a policy nobody is held to |
+
+An interface that declares no fold delivers the set unchanged, keyed by
+provider entry, which is what every interface in `fixtures/minimal-typed-edge/`
+does.
+
 ## 2. Leaf modules
 
 A leaf module is a function of `{ settings, ... }` returning a declaration. It
@@ -149,6 +181,11 @@ impl = { results, ... }: {
   };
 };
 ```
+
+The fold above is hand-written in the consuming module, which is what an
+interface declaring no `fold` leaves each consumer to do. When the interface
+declares one, `results.clients` is already the folded value and the consumer
+walks nothing.
 
 `reach = "local"` is refused: `local` derives from a locality this subset does
 not declare.
@@ -464,6 +501,31 @@ exercise, so the planner leaves nothing:
 
 That is the trade this library is making: `or [ ]` cannot be written, so it
 cannot silently succeed.
+
+### Where a refusal lives
+
+Every row is the planner's. A module has exactly one channel through which it
+can refuse a value another module produced: the `fold` of an interface it
+declares. A fold refuses by returning `{ refused = "<why>"; }`, and the split is
+fixed — the fold states the message, the planner states the row's identifier
+(`interface-fold-refused`), its subject (the consuming entry) and its severity
+(error). The slot is then absent from `results`, as any refused read is.
+
+Two consumers of one refused provider are two rows, one per consuming entry,
+because each consumer is a subject of its own.
+
+Nothing else is a channel:
+
+- An `impl` returns `units`, `configData`, `provides` and `closure`. A key
+  beyond those, `refusals` included, is `implementation-unknown-key`, and that
+  row's resolution names the fold.
+- A declaration writing `severity` is read and discarded with
+  `module-declared-severity`, and every row the planner produced for that
+  module keeps the severity the planner gave it.
+- A module raising anywhere other than a fold is `module-raised`, which names
+  what was being forced. The module's own text is not the message: `tryEval`
+  reports that something raised and never what it said, which is the reason a
+  refusal is a returned value rather than a `throw`.
 
 ## 3. Roots
 

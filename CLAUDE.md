@@ -42,6 +42,12 @@ without reading the code first.
   absolute path is refused, because a rendered table would differ between checkouts. A message and
   a resolution keep their absolute paths on purpose: they name the file to edit.
 - The same fact produced twice is one row. `dedup` keeps the first.
+- An interface fold is the only channel through which a module refuses a value another module
+  produced. The fold returns `{ refused = "<why>"; }` and supplies the message; the planner
+  supplies the identifier, the consuming entry as subject and the severity. `impl` gains no
+  `refusals` key, and a module still may not tag a row's severity. `builtins.tryEval` reports that
+  something raised and never what it said, which is why a refusal is a returned value and why
+  `module-raised` carries the planner's text rather than the author's.
 
 ## Keys and identity
 
@@ -77,6 +83,20 @@ without reading the code first.
   and settings, never of a wire. Do not add cycle detection.
 - A refused read leaves the slot absent from `results` - not `null`, not `{}`. `or [ ]` cannot be
   written, so it cannot silently succeed.
+- An interface may own the fold of a set-valued read, and the planner applies it under `diag.guard`
+  to the value the read already built. What the plan records is the entry-keyed set either way:
+  only `results.<slot>` changes, so no plan field says whether a fold ran. A fold that raises
+  leaves the slot absent rather than empty, a fold that is not a function is a row against the
+  interface's declaring file, and a fold no set-valued read applies is a warning.
+- The slot set a member asks for may be derived from its settings, and that is a warning row rather
+  than a refusal: a removed slot is otherwise the one declaration difference nothing records, since
+  nobody wires it and no `slot-unwired` row misses it. Only the `uses` keyset is compared. A
+  `provides` keyset is blessed by `unify-declaration-and-implementation-readings`, and a value
+  inside a slot, a claim, a generator or an export is ordinary. The baseline reading is `defaults //
+  fixed`, the member's own values, never `defaults` alone: a knob a module declares `fixed` without
+  defaulting it is missing under bare defaults, and a `uses` set reading it then aborts `mkPlan`
+  instead of producing a row. The second reading is taken only where a knob's source is the
+  deployment, because with no deployment knob the two readings are one value by construction.
 - A unit reference (`after`, `requires`) is checked against the units the module declared itself.
 - The delivery set of a generated value comes from the owner's placements plus the machine of
   every entry that declared a read of an export backed by one of its files. Nothing else enters

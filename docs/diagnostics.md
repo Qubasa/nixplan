@@ -58,6 +58,8 @@ discipline and deduplication applied).
 | `export-atom-excluded-key` | an atom declares `locality` or `lifecycle`; the evidence is the condition that would bring the field back |
 | `export-atom-unknown-key` | any other atom key — a misspelling is a row, not a silence |
 | `interface-mismatch` | a slot's interface and the wired capability's interface are different values; the row prints both declaring files, so two same-named interfaces are distinguishable |
+| `interface-fold-not-a-function` | an interface declares a `fold` that is not a function; the row's subject is the declaring file and its evidence states what a fold is applied to |
+| `interface-fold-unapplied` (warning) | an interface declares a `fold` and no slot of the deployment reads it with `reach = "all"`, so the policy is never applied |
 
 ### Leaf modules
 
@@ -99,13 +101,14 @@ discipline and deduplication applied).
 | `placement-unknown-machine` | a placement names a machine the registry does not hold |
 | `member-not-placed` | a member matched no machine and no tag, so nothing it declares runs anywhere |
 | `exposes-unknown-capability` | `exposes` names a capability the root does not provide |
+| `slot-set-settings-derived` (warning) | the set of slots a member asks for differs between its resolved settings and its own values, so the module is publishing a cut; the evidence is the condition that would make member cuts a construct of their own |
 
 ### Units, extensions and configuration files
 
 | id | Raised when |
 | --- | --- |
 | `implementation-malformed` | an `impl` returned something other than an attribute set |
-| `implementation-unknown-key` | a key outside the unit vocabulary, the implementation's own keys or an `extends` entry's keys — a service manager's raw stanza is this row |
+| `implementation-unknown-key` | a key outside the unit vocabulary, the implementation's own keys or an `extends` entry's keys — a service manager's raw stanza is this row, and for an implementation's own keys the resolution names the interface fold as where a refusal belongs |
 | `unit-field-type-mismatch` | a unit field's value fails its type; the failing value is not recorded |
 | `unit-reference-unknown` | `after` or `requires` names a unit the module did not declare |
 | `unit-extends-malformed` | `extends` is not a list |
@@ -143,6 +146,8 @@ discipline and deduplication applied).
 | `export-type-mismatch` | a published value fails its atom's type |
 | `export-secret-not-a-reference` | an export declared `secret` publishes something other than a generated file, so its bytes would be in the plan rather than its path |
 | `slot-reads-undeployed-value` | a `reads` entry names a secret export backed by a `deploy = false` generator, so the path it names resolves to nothing at run time |
+| `interface-fold-raised` | the interface's `fold` raised while combining the set the slot collected; the slot is then absent from `results` |
+| `interface-fold-refused` | the interface's `fold` returned `{ refused = "<why>"; }`; the fold states the message and the planner states the identifier, the consuming entry as subject and the severity |
 | `module-raised` | a module's own code raised a catchable error; its value is recorded as not computed and the rest of the plan is still produced |
 
 ### The plan itself
