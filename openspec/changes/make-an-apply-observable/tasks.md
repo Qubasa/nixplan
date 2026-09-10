@@ -161,7 +161,7 @@ only the scenarios listed below are new.
 
 ## 9. The machine layer
 
-- [ ] 9.1 `tests/e2e/wired-pair/test_wired_pair.py`: a final phase that cuts the route to the second
+- [x] 9.1 `tests/e2e/wired-pair/test_wired_pair.py`: a final phase that cuts the route to the second
   machine, applies the deployment, and reads the broken run's report. It runs after every existing
   phase, restores the route, and leaves both entries applied from the same build, in the idiom
   `test_cutting_the_wires_far_end_is_visible` already uses. The break is deterministic, because the
@@ -169,7 +169,8 @@ only the scenarios listed below are new.
   Verify: `test_a_run_broken_between_two_machines_names_the_step_that_broke`,
   `test_a_second_run_finishes_what_the_broken_run_left` and
   `test_a_machine_the_broken_run_never_reached_holds_what_it_held_before`, all in that folder, with
-  `nix run .#planner-e2e -- wired-pair` green and the count recorded here.
+  `nix run .#planner-e2e -- wired-pair` green and the count recorded here: 35 passed, against 30
+  before this change.
 
 ## 10. Registration and documentation
 
