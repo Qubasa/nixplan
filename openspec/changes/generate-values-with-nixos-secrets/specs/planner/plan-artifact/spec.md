@@ -36,3 +36,18 @@ every machine that receives one of their outputs.
 
 - **WHEN** every closure of a plan whose generators declare programs is read
 - **THEN** none of them SHALL name a generator's program
+
+### Requirement: Every file record says whether bytes arrive at its path
+
+Every generated file the plan records SHALL say whether any machine receives it, on the record of
+the file itself and not only on the value's own entry. A realiser reads one entry, and whether bytes
+arrive at a path is what decides whether that path may be shown to a unit at all.
+
+The path SHALL be recorded either way. A value nobody receives still has the path it would be read
+at, which is what lets a site that opens it be reported as a row rather than silently accepted.
+
+#### Scenario: A file record carries its delivery
+
+- **WHEN** an entry holding a generated file is read
+- **THEN** the file's record SHALL state whether it is deployed
+- **AND** the record SHALL carry the path whether it is deployed or not

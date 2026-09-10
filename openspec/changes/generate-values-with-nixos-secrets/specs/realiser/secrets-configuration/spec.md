@@ -93,11 +93,20 @@ the bytes of any value: it names paths and machines only.
 A value whose delivery set names a machine the plan gives no address for SHALL be refused by the
 reading, before any script exists.
 
+The rendered step SHALL deliver every pair the list holds, including the last one when the list ends
+without a line terminator. The external tool joins the list with newlines, so its last line carries
+none, and a step that dropped it would store a file and deliver nothing at the path a unit opens.
+
 #### Scenario: The rendered step targets the delivery set
 
 - **WHEN** the deploy step rendered from a plan is read
 - **THEN** for each file it SHALL name exactly the machines the value's delivery set names
 - **AND** the path it writes SHALL be the path the plan recorded for that file
+
+#### Scenario: The last pair of the file list is delivered
+
+- **WHEN** the rendered step is given a file list whose last line has no terminator
+- **THEN** that pair SHALL be delivered like every other
 
 #### Scenario: The rendered step carries no bytes
 
