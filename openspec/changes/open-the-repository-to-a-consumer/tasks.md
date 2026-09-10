@@ -11,7 +11,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
 
 ## 1. The outputs a consumer builds against
 
-- [ ] 1.1 `flake-module.nix`: `flake.operator = import ./operator;` beside `flake.lib`, replacing
+- [x] 1.1 `flake-module.nix`: `flake.operator = import ./operator;` beside `flake.lib`, replacing
   the `perSystem` `let` binding at `flake-module.nix:111` as the source of that value, so the
   folders and a consumer read one binding. `mkDeployment` takes the caller's `pkgs`, so the output
   is system-independent and sits outside `perSystem` (design D1). Verify
