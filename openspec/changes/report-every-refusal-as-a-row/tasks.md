@@ -186,7 +186,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
 - [x] 8.2 `docs/operator.md`: what a build of an inapplicable deployment produces and where its rows
   are read from, the statement's field-by-field resolution, the statement-level refusals, the address
   warning, and the identity the record publishes. Verify every command in it runs as written.
-- [ ] 8.3 `CLAUDE.md`: replace the claim under Realisers that every refusal there is a condition
+- [x] 8.3 `CLAUDE.md`: replace the claim under Realisers that every refusal there is a condition
   `mkPlan` reports, with the three-layer rule; record the `closure` and `units` exemption beside the
   `delivery` one; record that a plan record is classified by shape and never by key text; record the
   address warning and where the apply refusal lives; record that the record publishes the artifact

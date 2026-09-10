@@ -32,8 +32,16 @@ without reading the code first.
   string, and a plan of a real deployment has to stay keyable. `util.uniqueStrings` keeps context,
   because a closure root's context is what lets a consumer copy the bytes.
 - `image/` and `flakelet/` do the opposite and raise. A fact the entry does not record is a
-  refusal naming the entry and the field, never a default. Every refusal there is a condition
-  `mkPlan` also reports as a row.
+  refusal naming the entry and the field, never a default.
+- Three layers hold three kinds of fact, and a refusal belongs to the layer that holds one. A fact
+  the plan carries is a row from `mkPlan`. A fact the realisation statement carries is a row from
+  `operator/read.nix`, which is the only layer handed the statement. A realiser raises only for a
+  condition one of those two already reported as an error row, so no path through a deployment
+  build reaches a raise before a row. A raise is what a caller reaching `image/read.nix` or
+  `flakelet/read.nix` directly receives, and `tests/unit/diagnostics.nix` crosses every `fail` of
+  the two against the row producers of `lib/` and `operator/read.nix`: a refusal with no row above
+  it fails the suite. The reading asks each realiser for the rules only it knows rather than
+  restating one, so the row and the raise print the same sentence.
 - `operator/read.nix` is on `lib/`'s side and `operator/default.nix` is on the realisers'. The
   reading is total and every refusal it makes is a row, so a unit suite can assert the decision; the
   derivations over it raise, and the message of an inapplicable deployment is `planner.render` of
@@ -43,6 +51,10 @@ without reading the code first.
 ## Diagnostics
 
 - A row is a value a caller returns beside its result. No accumulator, no ambient list.
+- `row`, `error` and `warning` are exported from the library, and a producer outside it builds a
+  row with them rather than writing the six fields. They are what applies `util.oneLine`, so one
+  row is one line whatever a deployment interpolated into it, and a rendered table cannot show a
+  row nobody produced.
 - Table order is identifier, then subject, then message, so two evaluations of one input render
   the same bytes. `fixtures/minimal-typed-edge/plan/diagnostics.txt` is compared against that.
 - A subject is a plan key, a path relative to the deployment root, or an issue identifier. An
@@ -114,6 +126,11 @@ without reading the code first.
   thing that narrows it.
 - Every value entry carries `delivery` and `deliveryDerivedFrom` whether or not either holds
   anything. A reader must not be able to mistake either field for an absence.
+- A placed entry carries `closure` and `units` for the same reason: `pruned` in `lib/plan.nix`
+  drops an empty list and an empty attrset from every other field, and those two are what a
+  realisation reads. An empty closure means the entry depends on no store path and an empty unit
+  set means it runs nothing, while an absent field means the plan does not know, which
+  `required` in `image/read.nix` refuses. An entry that is placed nowhere records neither.
 - A `deploy = false` generator's value still exists and its public files still travel in the plan.
   What is refused is opening one of its files on a machine. A unit or configuration file of the
   owner is `vars-not-deployed-opened`; a consumer's declared read is `slot-reads-undeployed-value`.
@@ -175,6 +192,28 @@ without reading the code first.
   demonstrate between them. The statement is read by plan key, then by the `<instance>:<service>`
   prefix, then `default`, and `flakelet` is the default because it needs no further fact. An `image`
   entry with no `profile` is `operator-image-profile-missing`, never a profile the builder chose.
+  Every field is resolved down those same three steps, so a `profile` inherits from `default` the
+  way a `realiser` does and no reader has to know which fields inherit.
+- The reading classifies a plan record by what it records and never by the text of its key: a
+  record carrying `delivery` is a generated value, one carrying `placement` is a service entry,
+  one carrying neither is a machine record, and one matching none of the three is
+  `operator-plan-record-unclassified`. `machine` is a legal instance name and `vars/x` a legal
+  member name, so a prefix match answers wrongly for a deployment the planner accepts. A key is
+  read only for the instance, the service and the machine of a placed entry.
+- A placed entry that declares no unit is realised into nothing: it is in the deployment record
+  with its machine and a `null` artifact, it contributes no artifact, and only a statement naming
+  it is a row.
+- A build of an inapplicable deployment still produces its tree. `plan.json`, `diagnostics.json`
+  and `diagnostics.txt` are always there, no artifact of any entry is, the tree carries no marker
+  of its own, and `passthru.entries.<key>` of such a deployment is the raise that carries
+  `planner.render` of the table.
+- `operator-entry-machine-no-address` is a warning. An address is read by the step that dials a
+  machine and by no step that builds one, so the record carries the absence and every artifact is
+  built; refusing to dial belongs to the command, under "The command refuses before it dials".
+- The per-entry identity `manifest.json` publishes is the artifact's own version digest, which is
+  what the endpoint stores as `settings_hash`. The plan entry key stays in `plan.json`: an address
+  edit moves it and no byte of any artifact, so publishing it would present every entry on that
+  machine as a new generation of identical content.
 - `operator.mkGeneration` is where the secrets reading is built, so a folder or a consumer reaches
   it through the one thing that already builds a deployment. It writes `secrets.json`, `names.json`
   and `plan.nix`, and `operator/default.nix` takes `korora` for that last file alone: a plan
