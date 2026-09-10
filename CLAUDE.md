@@ -95,9 +95,32 @@ without reading the code first.
 
 ## Interfaces, composition, reads
 
-- An interface is identified by the value an author imported. `name` is a label for row text; two
-  interfaces in two files may share one. The `interfaces` argument is attribution, never a
-  registry: an interface absent from it is still an interface.
+- An interface is identified by the value an author imported **or** by an identity it claims with
+  an `id`. `name` is a label for row text; two interfaces in two files may share one. The
+  `interfaces` argument is attribution, never a registry: an interface absent from it is still an
+  interface, and a claim registers nothing either.
+- A claim is the `id`, each export's name, korora type name (`type.name`, which carries
+  `attrsOf<string>` where `__name` says `attrsOf`) and resolved secrecy, and the fold's name. It
+  carries no function at any depth, which is what lets it survive two evaluations of `lib/`: this
+  library's atoms are `korora.typedef` applied to a fresh predicate, so two evaluations produce
+  unequal atoms and unequal interfaces over them, while korora's own types survive because
+  `import` is memoised by path.
+- Both ends must claim before a claim is used. Where either claims nothing the rule is value
+  equality, so adopting an `id` breaks no wire that resolves today, and taking one side's word
+  would capture a far end that never agreed. Value equality is tried first, so an in-repository
+  wire costs what it cost before.
+- A refused claim - a malformed `id`, an unnamed fold beside an `id`, a fold name that is not a
+  name - is an error row and the interface falls back to its value. `identityOf` is `null` there,
+  and null is equal to no claim.
+- Two interfaces claiming one `id` whose identities differ is `interface-id-conflict`, observable
+  from the registry and at a wire and reported once: both sites build the row through
+  `interface.conflictRow`, so `dedup` (id, subject, message) keeps one. Subjecting the wire's copy
+  to the consuming entry instead would put two rows in the table for one conflict.
+- Attribution follows the same rule: `fileOf` matches by value first and by claimed identity
+  second, so the identity pass only ever turns a miss into a hit.
+- A claimed identity is recorded at `provides.<capability>.interfaceId` and is absent where nothing
+  was claimed. It is not in `keyInput`: a claim decides which edges exist, not what an entry was
+  rendered from.
 - A root keys each member's settings under that member's own name, including when it owns exactly
   one member, and forwards nothing.
 - Two instances wiring each other is not a cycle: a capability's exports are a function of module
@@ -108,7 +131,12 @@ without reading the code first.
   to the value the read already built. What the plan records is the entry-keyed set either way:
   only `results.<slot>` changes, so no plan field says whether a fold ran. A fold that raises
   leaves the slot absent rather than empty, a fold that is not a function is a row against the
-  interface's declaring file, and a fold no set-valued read applies is a warning.
+  interface's declaring file, and a fold no set-valued read applies is a warning - where "applies"
+  is the same rule a wire matches by, so an interface whose claim-equal twin is read with set reach
+  is not reported as unread. A fold may be spelled `planner.fold "<name>" (set: …)`, which is
+  `typedef name verify` with the words changed: `foldApply` is what the planner applies and
+  `foldName` is what an identity carries. A bare function stays legal, an `id` requires a name, and
+  two folds carrying one name are not required to be one function.
 - The slot set a member asks for may be derived from its settings, and that is a warning row rather
   than a refusal: a removed slot is otherwise the one declaration difference nothing records, since
   nobody wires it and no `slot-unwired` row misses it. Only the `uses` keyset is compared. A
