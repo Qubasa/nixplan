@@ -2021,4 +2021,121 @@ in
         theConsumersOwnFoldRan = "mine:provider:only@one";
       };
     };
+
+  testANamedFoldFolds =
+    let
+      run =
+        iface:
+        reading {
+          inherit iface;
+          providerMachines = [
+            "one"
+            "two"
+          ];
+        };
+      named = run (namedFolding "union" joined);
+      bare = run (folding joined);
+    in
+    {
+      expr = {
+        ids = rowIds named;
+        received = named.plan."consumer:only@one".units.only.env.FAR;
+        sameAsTheBareSpelling =
+          named.plan."consumer:only@one".units.only.env.FAR
+          == bare.plan."consumer:only@one".units.only.env.FAR;
+      };
+      expected = {
+        ids = [ "set-read-in-key" ];
+        received = "provider:only@one=ssh-ed25519 AAAA provider:only@two=ssh-ed25519 AAAA";
+        sameAsTheBareSpelling = true;
+      };
+    };
+
+  testARaisingNamedFold =
+    let
+      raising = _: throw "no provider of this set can be folded";
+      named = reading { iface = namedFolding "union" raising; };
+      bare = reading { iface = folding raising; };
+    in
+    {
+      expr = {
+        ids = rowIds named;
+        theSameRowAsABareFold =
+          rowsById "interface-fold-raised" named == rowsById "interface-fold-raised" bare;
+        receivedSlots = named.plan."consumer:only@one".units.only.env.SLOTS;
+        delivered = named.plan."consumer:only@one".reads.far.delivered;
+      };
+      expected = {
+        ids = [ "interface-fold-raised" ];
+        theSameRowAsABareFold = true;
+        receivedSlots = "";
+        delivered = false;
+      };
+    };
+
+  testABareFoldStaysLegal =
+    let
+      iface = folding joined;
+      result = reading { inherit iface; };
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        theFoldRan = result.plan."consumer:only@one".units.only.env.FAR;
+        claimed = planner.identityOf iface;
+      };
+      expected = {
+        ids = [ "set-read-in-key" ];
+        theFoldRan = "provider:only@one=ssh-ed25519 AAAA";
+        claimed = null;
+      };
+    };
+
+  testTwoInterfacesShareANameAndOneIdentity =
+    let
+      mine = claiming { exports.publicKey = publicString; };
+      theirs = claiming { exports.hostName = publicString; };
+      sharing = claiming {
+        id = "example.com/shared-identity";
+        exports.publicKey = publicString;
+      };
+      alsoSharing = claiming {
+        id = "example.com/shared-identity";
+        exports.publicKey = {
+          type = planner.korora.string;
+          secrecy = "public";
+        };
+      };
+      run =
+        slot: far:
+        edge {
+          consumerModule = consumer {
+            interface = slot;
+            reads = [ "publicKey" ];
+          };
+          providerModule = providerOf far;
+          interfaces = {
+            "interfaces/mine.nix".identity = slot;
+            "interfaces/theirs.nix".identity = far;
+          };
+        };
+      claimed = run sharing alsoSharing;
+      unclaimed = run mine theirs;
+    in
+    {
+      expr = {
+        oneName = sharing.name == alsoSharing.name && mine.name == theirs.name;
+        distinctValues = sharing != alsoSharing;
+        claimedMismatches = countById "interface-mismatch" claimed;
+        claimedDelivered = claimed.plan."consumer:only@one".reads.far.delivered;
+        unclaimedMismatches = countById "interface-mismatch" unclaimed;
+      };
+      expected = {
+        oneName = true;
+        distinctValues = true;
+        claimedMismatches = 0;
+        claimedDelivered = true;
+        unclaimedMismatches = 1;
+      };
+    };
 }

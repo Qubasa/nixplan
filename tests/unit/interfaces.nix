@@ -226,17 +226,43 @@ in
         inherit instances;
       };
       unregistered = planOf { inherit instances; };
+      claimedElsewhere = planner.interface {
+        name = "identity";
+        exports.publicKey = publicString;
+        id = "example.com/identity";
+      };
+      claimedAndUnregistered = planOf {
+        instances.i = {
+          module = soleRoot {
+            module = _: {
+              provides.identity.interface = claimedElsewhere;
+              impl = _: {
+                provides.identity.exports.publicKey = "ssh-ed25519 AAAA";
+                units.only.command = "/bin/true";
+              };
+            };
+            provides = [ "identity" ];
+          };
+          placement.every.only.machines = [ "one" ];
+          exposes = [ "identity" ];
+        };
+      };
     in
     {
       expr = {
         registeredRows = registered.diagnostics;
         unregisteredRows = unregistered.diagnostics;
+        claimedRows = claimedAndUnregistered.diagnostics;
         sameKeys = builtins.attrNames registered.plan == builtins.attrNames unregistered.plan;
+        theClaimIsStillRecorded =
+          claimedAndUnregistered.plan."i:only@one".provides.identity.interfaceId;
       };
       expected = {
         registeredRows = [ ];
         unregisteredRows = [ ];
+        claimedRows = [ ];
         sameKeys = true;
+        theClaimIsStillRecorded = "example.com/identity";
       };
     };
 
