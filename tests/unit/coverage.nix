@@ -184,13 +184,13 @@ let
     "report-every-refusal-as-a-row/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of report-every-refusal-as-a-row has been done, so nothing in this package claims to satisfy it yet";
     "make-an-apply-observable/specs/delivery/real-cluster/spec.md" =
-      "an unimplemented change: no task of make-an-apply-observable has been done, so nothing in this package claims to satisfy it yet";
+      "a change landed in part: the command's own half is in, and the machine-layer phase that breaks a run between two machines is not, so the file is not answerable as a whole yet";
     "make-an-apply-observable/specs/operator/apply-command/spec.md" =
-      "an unimplemented change: no task of make-an-apply-observable has been done, so nothing in this package claims to satisfy it yet";
+      "a change landed in part: the command's own half is in, and the machine-layer phase that breaks a run between two machines is not, so the file is not answerable as a whole yet";
     "make-an-apply-observable/specs/operator/deployment-build/spec.md" =
-      "an unimplemented change: no task of make-an-apply-observable has been done, so nothing in this package claims to satisfy it yet";
+      "a change landed in part: the command refuses a record by its version and its store, and the reading's own test of what a build states is not written yet";
     "make-an-apply-observable/specs/operator/machine-report/spec.md" =
-      "an unimplemented change: no task of make-an-apply-observable has been done, so nothing in this package claims to satisfy it yet";
+      "a change landed in part: the four answers a report gives are in, and the machine-layer evidence for two of them is not observed yet";
     "deliver-a-secret-without-exposing-it/specs/delivery/real-cluster/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "deliver-a-secret-without-exposing-it/specs/operator/apply-command/spec.md" =
