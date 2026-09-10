@@ -185,7 +185,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
 - [x] 9.2 `docs/README.md` and `docs/tooling.md`: the output surface as a table - `lib`, `mkLib`,
   `operator`, `debug`, the packages and the applications - and the newcomer folder in the layer
   list. Verify `testAFileNamesAPathThatIsNotThere` passes.
-- [ ] 9.3 `docs/cluster.md`: the newcomer folder, what its cut holds, and why its test builds a
+- [x] 9.3 `docs/cluster.md`: the newcomer folder, what its cut holds, and why its test builds a
   flake at run time. Verify the folder count each document states matches the folders present.
 - [ ] 9.4 `CLAUDE.md`: the invariants this change creates - the deployment build as an output and
   why the realisers are not, that `flake.debug` is the development attrset and `planner` is the

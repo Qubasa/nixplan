@@ -77,7 +77,7 @@ Neither side names a version: `../pytest-env.nix` takes this nixpkgs' default `p
 rookery takes its own. The one dev shell that carries that environment lives in
 `../devshells.nix`.
 
-## The four folders
+## The five folders
 
 Each directory under `../tests/e2e/` is one end-to-end test and its own fixture: exactly one
 `test_*.py` and a `deployment/` of `default.nix`, `machines.nix`, `instances.nix`, `interfaces/` and
@@ -225,6 +225,14 @@ artifact to the machine its entry names and activates it there; `status` asks bo
 they hold. The greeting each unit writes names the address its entry was planned for, so the two
 entries of one instance are two artifacts and not one copied twice, and the workstation itself runs
 neither - it holds every artifact in its store, which is not a deployment.
+
+The folder's own `deployment/default.nix` imports `template/deployment`, so this flake builds the
+same deployment as `packages.planner-e2e-newcomer` and the two routes are one text rather than two
+copies. That package is not what the test reads. A build on this host would prove a deployment
+evaluates here, and the claim is that a machine holding nothing but the template and a source
+reference can do it, so every evaluation and every build of the walk happens on the workstation,
+out of the template's own flake, at run time. Its cut holds the boot and nothing of the walk: no
+lock, no store the walk filled, no artifact, which is why the fetch is paid on every run.
 
 This is the one cluster of the layer that is not hermetic. `delivery.cluster_stage` takes
 `offline=False` for it, which adds the `pasta` uplink and an upstream for the cluster's resolver,

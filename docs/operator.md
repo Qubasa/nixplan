@@ -60,7 +60,7 @@ The result is a link farm:
 A Nix caller reads the same four answers off `passthru` without a build: `plan`, `manifest`,
 `diagnostics` and `entries`, the last being the derivation of each placed entry keyed by plan key.
 
-Something has to supply `pkgs`, `planner` and `operator` itself. The four end-to-end folders here
+Something has to supply `pkgs`, `planner` and `operator` itself. The five end-to-end folders here
 are the worked examples, and each is a function of exactly those three. Shortened, with the folder's
 own `interfaces/default.nix`, `instances.nix` and `machines.nix` imported beside it as `interfaces`,
 `deployment` and `registry`:
