@@ -244,6 +244,7 @@ in
           profile = "strict";
         };
       } one;
+      row = builtins.head (rowsById "operator-statement-names-nothing" elsewhere);
     in
     {
       expr = {
@@ -251,7 +252,15 @@ in
         defaulted = defaulted.manifest.entries.${oneKey}.realiser;
         elsewhere = elsewhere.manifest.entries.${oneKey}.realiser;
         profile = unstated.manifest.entries.${oneKey}.profile;
-        rows = unstated.rows ++ defaulted.rows ++ elsewhere.rows;
+        rows = unstated.rows ++ defaulted.rows;
+        # A statement about a key the plan does not carry is a decision nobody
+        # applied, so the entry keeps the default realiser and the statement is
+        # refused rather than passed over.
+        statedElsewhere = {
+          ids = idsOf elsewhere;
+          subject = row.subject;
+          refused = elsewhere.refused;
+        };
       };
       expected = {
         unstated = "flakelet";
@@ -259,6 +268,11 @@ in
         elsewhere = "flakelet";
         profile = null;
         rows = [ ];
+        statedElsewhere = {
+          ids = [ "operator-statement-names-nothing" ];
+          subject = "other:thing";
+          refused = true;
+        };
       };
     };
 

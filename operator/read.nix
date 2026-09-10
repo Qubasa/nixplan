@@ -20,9 +20,11 @@ let
     filter
     head
     isAttrs
+    isString
     length
     mapAttrs
     match
+    typeOf
     ;
 
   inherit (planner.util)
@@ -89,18 +91,27 @@ let
   # than per field would leave a reader having to know which fields inherit.
   statementSteps =
     realise: key: parts:
-    filter (s: s != null) [
-      (realise.${key} or null)
-      (realise.${prefixOf parts} or null)
-      (realise.default or null)
+    filter (s: s.value != null) [
+      {
+        from = key;
+        value = realise.${key} or null;
+      }
+      {
+        from = prefixOf parts;
+        value = realise.${prefixOf parts} or null;
+      }
+      {
+        from = "default";
+        value = realise.default or null;
+      }
     ];
 
   fieldOf =
     steps: field:
     let
-      carrying = filter (s: isAttrs s && s ? ${field}) steps;
+      carrying = filter (s: isAttrs s.value && s.value ? ${field}) steps;
     in
-    if carrying == [ ] then null else (head carrying).${field};
+    if carrying == [ ] then null else (head carrying).value.${field};
 
   unitFilesOf =
     name: units:
@@ -134,6 +145,8 @@ let
       name = imageReader.nameOf parts;
       realised = entry.units or { } != { };
       named = realise ? ${key} || realise ? ${prefixOf parts};
+      malformed = filter (s: !isAttrs s.value) steps;
+      found = head malformed;
     in
     {
       inherit
@@ -150,44 +163,57 @@ let
       units = unitFilesOf name (entry.units or { });
       digest = entry.key;
       rows =
-        if !realised then
-          optional named (
-            planner.error {
-              id = "operator-entry-realises-nothing";
-              subject = key;
-              message = "entry ${quote key} is stated to be realised by ${quote realiser} and declares no unit, so there is nothing to realise for it";
-              evidence = "an entry whose whole contribution is an export runs nothing, and a realiser of it would produce an artifact with no unit to attach";
-              resolution = "remove ${quote key} from the deployment's `realise` argument, or declare a unit for it";
-            }
-          )
-        else
-          optional (!known) (
-            planner.error {
-              id = "operator-realiser-unknown";
-              subject = key;
-              message = "entry ${quote key} is stated to be realised by ${quote realiser}, and the realisers that exist are ${quoteList realisers}";
-              evidence = "the realisation statement is read by plan key, then by the `<instance>:<service>` prefix, then by `default`";
-              resolution = "state one of ${quoteList realisers} for ${quote key} in the deployment's `realise` argument";
-            }
-          )
-          ++ optional (known && realiser == "image" && profile == null) (
-            planner.error {
-              id = "operator-image-profile-missing";
-              subject = key;
-              message = "entry ${quote key} is stated to be realised as an image and its statement carries no ${quote "profile"}";
-              evidence = "a confinement profile is a build input no plan field records, so it is stated rather than chosen by the builder";
-              resolution = "add a `profile` to the `realise` statement of ${quote key}: one of ${quoteList imageReader.profileNames}";
-            }
-          )
-          ++ optional (address == null) (
-            planner.error {
-              id = "operator-entry-machine-no-address";
-              subject = key;
-              message = "entry ${quote key} is placed on machine ${quote parts.machine}, and the plan's `machine:${parts.machine}` record declares no address";
-              evidence = "an artifact is copied to the address the registry declared, and an entry's own target is never consulted for it";
-              resolution = "declare an `address` for ${quote parts.machine} in the deployment's machine registry";
-            }
-          );
+        optional (malformed != [ ]) (
+          planner.error {
+            id = "operator-statement-not-a-record";
+            subject = key;
+            message = "the realisation statement ${quote found.from} that entry ${quote key} is read by is ${
+              if isString found.value then "the string ${quote found.value}" else "a ${typeOf found.value}"
+            } rather than a record";
+            evidence = "a statement is a record of the facts a realisation needs that no plan field carries, and a bare value carries none of them";
+            resolution = "write `${found.from} = { realiser = <realiser>; };` in the deployment's `realise` argument";
+          }
+        )
+        ++ (
+          if !realised then
+            optional named (
+              planner.error {
+                id = "operator-entry-realises-nothing";
+                subject = key;
+                message = "entry ${quote key} is stated to be realised by ${quote realiser} and declares no unit, so there is nothing to realise for it";
+                evidence = "an entry whose whole contribution is an export runs nothing, and a realiser of it would produce an artifact with no unit to attach";
+                resolution = "remove ${quote key} from the deployment's `realise` argument, or declare a unit for it";
+              }
+            )
+          else
+            optional (!known) (
+              planner.error {
+                id = "operator-realiser-unknown";
+                subject = key;
+                message = "entry ${quote key} is stated to be realised by ${quote realiser}, and the realisers that exist are ${quoteList realisers}";
+                evidence = "the realisation statement is read by plan key, then by the `<instance>:<service>` prefix, then by `default`";
+                resolution = "state one of ${quoteList realisers} for ${quote key} in the deployment's `realise` argument";
+              }
+            )
+            ++ optional (known && realiser == "image" && profile == null) (
+              planner.error {
+                id = "operator-image-profile-missing";
+                subject = key;
+                message = "entry ${quote key} is stated to be realised as an image and its statement carries no ${quote "profile"}";
+                evidence = "a confinement profile is a build input no plan field records, so it is stated rather than chosen by the builder";
+                resolution = "add a `profile` to the `realise` statement of ${quote key}: one of ${quoteList imageReader.profileNames}";
+              }
+            )
+            ++ optional (address == null) (
+              planner.error {
+                id = "operator-entry-machine-no-address";
+                subject = key;
+                message = "entry ${quote key} is placed on machine ${quote parts.machine}, and the plan's `machine:${parts.machine}` record declares no address";
+                evidence = "an artifact is copied to the address the registry declared, and an entry's own target is never consulted for it";
+                resolution = "declare an `address` for ${quote parts.machine} in the deployment's machine registry";
+              }
+            )
+        );
     };
 
   # `program` is recorded only where the plan records one, so the manifest of a
@@ -266,6 +292,24 @@ in
         }
       ) unplaceable;
 
+      addressable = uniqueStrings (placedKeys ++ map (key: prefixOf (parseKey key)) placedKeys);
+
+      statementRows =
+        map
+          (
+            stated:
+            planner.error {
+              id = "operator-statement-names-nothing";
+              subject = stated;
+              message = "the realisation statement names ${quote stated}, and the keys the plan carries are ${quoteList (sortStrings addressable)}";
+              evidence = "a statement is read by plan key, then by the `<instance>:<service>` prefix, then by `default`, so a key naming neither is a decision about no entry";
+              resolution = "state ${quote stated} as one of ${quoteList (sortStrings addressable)}, or delete it from the deployment's `realise` argument";
+            }
+          )
+          (
+            filter (stated: stated != "default" && !(elem stated addressable)) (sortStrings (attrNames realise))
+          );
+
       entries = builtins.listToAttrs (
         map (key: {
           name = key;
@@ -281,7 +325,10 @@ in
       );
 
       rows =
-        concatLists (map (key: entries.${key}.rows) placedKeys) ++ shapeRows ++ collisionRows entries;
+        concatLists (map (key: entries.${key}.rows) placedKeys)
+        ++ shapeRows
+        ++ statementRows
+        ++ collisionRows entries;
 
       table = planner.mkTable (diagnostics ++ rows);
 

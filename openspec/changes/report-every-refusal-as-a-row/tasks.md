@@ -87,7 +87,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   already read by (`:70-82`, `:102-106`), so `profile` inherits from `realise.default` the way
   `realiser` does. Verify a deployment stating `default = { realiser = "image"; profile = "strict";
   }` and `"svc:only" = { realiser = "image"; }` builds under `strict` and produces no row.
-- [ ] 4.2 `operator/read.nix`: a statement key that is neither a plan key nor a prefix of one is an
+- [x] 4.2 `operator/read.nix`: a statement key that is neither a plan key nor a prefix of one is an
   error row naming the key given and the keys the plan carries; a statement that is not a record is
   an error row naming the entry and what was found. Verify `realise."svc:onlyy"` is refused and that
   `realise."svc:only" = "image"` is refused rather than read as the default.
