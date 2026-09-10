@@ -175,6 +175,14 @@ without reading the code first.
   demonstrate between them. The statement is read by plan key, then by the `<instance>:<service>`
   prefix, then `default`, and `flakelet` is the default because it needs no further fact. An `image`
   entry with no `profile` is `operator-image-profile-missing`, never a profile the builder chose.
+- `operator.mkGeneration` is where the secrets reading is built, so a folder or a consumer reaches
+  it through the one thing that already builds a deployment. It writes `secrets.json`, `names.json`
+  and `plan.nix`, and `operator/default.nix` takes `korora` for that last file alone: a plan
+  carrying a generated value's bytes cannot be a build artifact of a run that has generated
+  nothing yet, so what is built is an expression that instantiates the same library again. nixpkgs
+  arrives as `pkgs.path` and the library as `../lib`, which is why neither is an argument. The
+  expression imports the deployment's `args.nix`, never its `default.nix`: that one takes `pkgs`,
+  which no evaluation outside a build can hand it.
 
 ## The operator's command
 
@@ -195,9 +203,11 @@ without reading the code first.
   so the walk breaks the cycle at the lowest key by sort order and prints the edge it ordered
   against. Refusing would refuse a deployment the library accepts; silence would make a one-off
   startup failure unexplainable.
-- The value source is a directory of bytes and nothing in this repository fills it. The required set
-  is the declared files of every value entry whose delivery set is non-empty: bytes are needed only
-  for a file that will be written, and the plan carries the bytes of nothing.
+- The value source is a directory of bytes and nothing in this repository fills it. The required
+  set is the declared files of every delivered value entry that records no `program`: bytes are
+  needed only for a file that will be written, the plan carries the bytes of nothing, and a value
+  whose entry names a generator is produced and delivered by the external tool. A source holding
+  one of those files is refused naming the program, rather than being read as an undeclared file.
 - `manifest.json` addresses an artifact inside the build, and the build is a farm of symlinks, so
   `cli/manifest.py` resolves each artifact path to its store path. The path an activation names on
   the machine has to be the path the copy put there.
@@ -404,15 +414,18 @@ silently unobserved.
   which is where the guard lives too. It fails naming `secrets/read.nix` when the resolved tool's
   schema differs, and does not fail when the tool cannot be resolved at all: an unreadable signal
   is not evidence the contract moved, and the run skips instead.
-- `tests/e2e/generated-secret/backend.py` is that folder's own `age` store backend and not the
-  PR's example one. The reason is mechanical: the configuration carries a build-time `.drv` path
-  for every backend program, and the example backend lives in the NixOS module tree of a branch
-  resolved at run time, so no derivation path of it exists when the configuration is written. The
-  folder proves the composition, not the backend.
-- That folder builds its plan twice, because a plan is a function of `varsState`. `artifacts.nix`
-  evaluates against a declared state, so the unit files and the generator configuration are a
-  function of the declaration alone; the test re-evaluates at run time against the state the
-  backend answered, and that second plan is what every assertion reads.
+- `tests/e2e/generated-secret/deployment/backend.py` is that folder's own `age` store backend and
+  not the PR's example one. The reason is mechanical: the configuration carries a build-time
+  `.drv` path for every backend program, and the example backend lives in the NixOS module tree of
+  a branch resolved at run time, so no derivation path of it exists when the configuration is
+  written. The folder proves the composition, not the backend.
+- That folder builds its plan twice, because a plan is a function of `varsState`. Its
+  `deployment/args.nix` is the deployment on its own and takes `varsState`; `deployment/default.nix`
+  calls it against a declared state, so the unit files and the generator configuration are a
+  function of the declaration alone. The run evaluates the `plan.nix` of the `generation` build
+  against the state the backend answered, and that second plan is what every assertion reads.
+- Its third build is `age` itself. The run mints its identity with the same binary the store
+  backend runs, and a build of the folder is the only place that binary is named.
 
 ## Machine layer snapshots
 

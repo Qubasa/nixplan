@@ -69,10 +69,10 @@ The suites, and how many tests each holds:
 
 | Suite | Tests | Subject |
 | --- | --- | --- |
-| `interfaces` | 12 | interface identity by value, export atoms, the omission rule |
-| `composition` | 16 | roots, members, the settings namespace, defaults and fixed |
-| `resolution` | 17 | wiring, arity, secrecy, placement, keyset equality |
-| `diagnostics` | 13 | totality, ordering, severity, rendering, and the scan that finds no raising call under `lib/` |
+| `interfaces` | 13 | interface identity by value, export atoms, the omission rule |
+| `composition` | 21 | roots, members, the settings namespace, defaults and fixed |
+| `resolution` | 27 | wiring, arity, secrecy, placement, keyset equality |
+| `diagnostics` | 18 | totality, ordering, severity, rendering, and the scan that finds no raising call under `lib/` |
 | `plan` | 22 | keys, planes, absences, dependencies, serialisation, the golden fixture |
 | `postgres` | 10 | one provider instance and two consumers, planned |
 | `exclusions` | 16 | one deployment per excluded construct, each refused |
@@ -116,17 +116,17 @@ ROOKERY_FLAKE=/path/to/rookery nix run .#planner-e2e                 # four fold
 ROOKERY_FLAKE=/path/to/rookery nix run .#planner-e2e portable-image  # one folder
 ```
 
-See [cluster.md](cluster.md) for the host it needs, the four folders, what a run
+See [cluster.md](cluster.md) for the host it needs, the five folders, what a run
 observes and how to drive `pytest` by hand against the working tree.
 
 The pure half of that layer needs no machine and is a check like any other:
-`nix build .#checks.x86_64-linux.planner-delivery -L`, 17 tests over
+`nix build .#checks.x86_64-linux.planner-delivery -L`, 29 tests over
 `tests/e2e/test_harness.py`. Most of them are the command's rather than the
 harness's now - the order `apply` walks, the refusals it makes before it dials -
 because the harness hands the command a recorder in place of a process table and
 reads the argv it produced. The check exports `PYTHONPATH` naming `cli/`, since
 that is where those modules live. `nix develop` carries the same `pytest`, so
-`PYTHONPATH=cli pytest -q tests/e2e/test_harness.py` runs the same 17 against
+`PYTHONPATH=cli pytest -q tests/e2e/test_harness.py` runs the same 29 against
 the working tree.
 
 ## Mapping a specification scenario to a test
@@ -315,7 +315,7 @@ Everything the flake exposes, so a reader can tell what runs where:
 
 | `nix build .#checks.x86_64-linux.<name>` | Needs | Subject |
 | --- | --- | --- |
-| `planner-tests` | nothing | the seventeen nix-unit suites, evaluated |
+| `planner-tests` | nothing | the nineteen nix-unit suites, evaluated |
 | `planner-delivery` | nothing | the pure half of the machine layer: the order `apply` walks, the refusals it makes before it dials, addressing |
 | `planner-perf` | nothing | the counter budgets and the growth bound |
 | `planner-perf-checker` | nothing | the budget checker's own tests |
@@ -335,7 +335,9 @@ Everything the flake exposes, so a reader can tell what runs where:
 | `planner-e2e-wired-pair-changed` | the second build of that same folder, which differs in the file it serves |
 | `planner-e2e-portable-image` | that folder's deployment: two images, one of them for a machine this host is not |
 | `planner-e2e-secret-delivery` | that folder's deployment: three entries and two generated values |
-| `planner-e2e-generated-secret` | the artifacts and the generator configuration of the folder that generates one |
+| `planner-e2e-generated-secret` | that folder's deployment: three entries and two values a real generator produces |
+| `planner-e2e-generated-secret-generation` | its `secrets.json`, `names.json` and the `plan.nix` the run evaluates against the state the backend answered |
+| `planner-e2e-generated-secret-age` | the `age` the folder's store backend runs, so a run mints its identity with that one |
 | `planner-e2e-guest` | the guest image every machine boots |
 | `planner-e2e-env` | the script `nix develop` carries: the exports a manual `pytest` run needs |
 | `planner-e2e-env-paths` | those exports as a file, built when the script is called |
@@ -344,4 +346,4 @@ Everything the flake exposes, so a reader can tell what runs where:
 
 The `planner-e2e-<folder>` rows are one per folder and build rather than a list
 written here: `flake-module.nix` reads `tests/e2e/*/deployment/default.nix`, so a
-fourth folder becomes a package by existing.
+further folder becomes a package by existing.

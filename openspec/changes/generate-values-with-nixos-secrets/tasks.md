@@ -10,21 +10,24 @@ to fail until 3.x and 4.x land, and each states the failure it should be showing
   `gamma`), one instance whose module declares a `per = "instance"` generator with a secret file and
   a public file, a consumer module on `beta` declaring a read of the secret export, and a service on
   `gamma` that declares neither. Verify with
-  `nix eval --json '.#packages.x86_64-linux.planner-e2e-generated-secret.passthru.plan.diagnostics'`
+  `nix eval --json '.#packages.x86_64-linux.planner-e2e-generated-secret.passthru.diagnostics'`
   returning `[]`.
 - [x] 1.2 Add the generator script package the deployment declares, producing both files under
   `$out` from `$prompts` never and `$in` never, and verify it builds and writes exactly the two
   declared file names.
-- [x] 1.3 Write `tests/e2e/generated-secret/artifacts.nix` rendering the plan, the flakelet
-  artifacts of each placed entry, and the `SecretsConfiguration` JSON, following
-  `tests/e2e/secret-delivery/artifacts.nix`. Verify `nix build .#planner-e2e-generated-secret`
-  succeeds once 3.x exists, and until then fails naming the missing reading rather than a Nix error.
+- [x] 1.3 Split the deployment into `deployment/args.nix`, which takes
+  `{ planner, packages, varsState }`, and `deployment/default.nix`, which takes
+  `{ pkgs, planner, operator }` and returns three builds: the deployment through
+  `operator.mkDeployment`, the `generation` farm through `operator.mkGeneration`, and the `age`
+  the store backend runs. Verify `nix build .#planner-e2e-generated-secret` and
+  `nix build .#planner-e2e-generated-secret-generation` both succeed once 3.x exists, and until
+  then fail naming the missing reading rather than a Nix error.
 - [x] 1.4 Write `tests/e2e/generated-secret/test_generated_secret.py` with the cluster stage, one
   test per scenario of `delivery/generated-values` and the new scenario of `delivery/real-cluster`.
   Verify each test name matches its scenario heading under `test_<snake_case>`.
-- [x] 1.5 Add the folder to `flake-module.nix` (`e2eArtifactPaths`, `packages.planner-e2e-generated-secret`)
-  and `treefmt.nix`'s mypy roots. Verify `nix run .#planner-e2e -- nosuchfolder` still refuses and
-  `nix run .#planner-e2e` lists three folders.
+- [x] 1.5 No flake edit: a folder holding `deployment/default.nix` is discovered, and
+  `treefmt.nix` reads its mypy roots from `tests/e2e`. Verify `nix run .#planner-e2e -- nosuchfolder`
+  still refuses and `nix run .#planner-e2e` lists five folders.
 
 ## 2. The operator-side driver
 
