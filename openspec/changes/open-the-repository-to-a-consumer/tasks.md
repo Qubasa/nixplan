@@ -52,7 +52,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
   applied to, as a value beside `platform`. The identity is what the caller passed in, not a name
   this library invents. Verify the exported value equals the revision this flake's lock records for
   its package set.
-- [ ] 3.2 `flake-module.nix`: `flake.mkLib` taking a caller's own `lib.systems` and returning the
+- [x] 3.2 `flake-module.nix`: `flake.mkLib` taking a caller's own `lib.systems` and returning the
   library elaborated against it, with `flake.lib` staying the applied default (design D2). Verify
   `nix eval .#mkLib` resolves and that a library obtained through it plans the worked fixture.
 - [ ] 3.3 `tests/unit/consumer.nix`: `testTheLibraryStatesWhoseNixpkgsElaboratedItsPlatforms` and

@@ -34,6 +34,18 @@ in
 {
   flake.lib = planner;
 
+  # The library elaborated against a caller's own platform definitions. `flake.lib`
+  # is the pin this flake carries, applied and recorded, and this is the way out of
+  # it: a consumer following another package set hands its own `lib.systems` here
+  # and states the identity beside it, so one package set decides every entry key
+  # instead of two.
+  flake.mkLib =
+    {
+      systems,
+      platformSource ? null,
+    }:
+    import ./lib { inherit korora systems platformSource; };
+
   # The deployment build, published for a consumer that is not this repository.
   # `flake.lib` alone leaves a caller able to plan and unable to build, and the
   # only other reach is a path inside this flake's source, which is not an
