@@ -13,7 +13,25 @@
 ## 3. The scenario the suite cannot assert
 
 - [x] 3.1 Register `An unguarded consumer of a refused fold ends the evaluation` in `omitted` in `tests/unit/coverage.nix`, with a reason naming the class it shares with `A module's own code raises an uncatchable error` (a missing attribute is what `builtins.tryEval` does not catch, so a test of the propagation would abort this suite rather than fail it) and naming `testAGuardedConsumerStillReportsARefusedFold` as the half that is containable; verify `nix eval --json .#planner.suites.coverage.testEveryScenarioHasATest.expr` lists the title under `excused` and not under `unaccounted`
-- [ ] 3.2 Record the measurement that stands in for it, the way `clean-up-transplant-residue` task 4.3 records its one unobservable counter: build a throwaway two-consumer deployment through `nix eval .#lib --apply`, evaluate it three ways - a fold returning `{ refused = ...; }` with an unconditional `results.<slot>` read, the same fold with both consumers guarded, and a raising fold with both consumers guarded - and quote each result in this task; delete the probe afterwards and confirm nothing was written into the tree
+- [x] 3.2 Record the measurement that stands in for it, the way `clean-up-transplant-residue` task 4.3 records its one unobservable counter: build a throwaway two-consumer deployment through `nix eval .#lib --apply`, evaluate it three ways - a fold returning `{ refused = ...; }` with an unconditional `results.<slot>` read, the same fold with both consumers guarded, and a raising fold with both consumers guarded - and quote each result in this task; delete the probe afterwards and confirm nothing was written into the tree.
+  The deployment: one provider `ids` placed on `one`, two consumers `authz` and `hosts` each
+  reading slot `keys` with `reach = "all"` and `reads = [ "publicKey" ]`. The probe was held in
+  `/tmp` and passed to `--apply` as text, because pure evaluation refuses an absolute path and
+  `--impure` is not used here.
+  1. Refusing fold, unconditional `env.RENDERED = results.keys`: no table at all.
+     `error: attribute 'keys' missing`, raised at the consumer's own `results.keys`, under
+     `… while evaluating the attribute 'applicable' at lib/default.nix:116:7`.
+  2. The same fold, both consumers reading under `results ? keys`:
+     `{"applicable":false,"deliveredAuthz":false,"deliveredHosts":false,"ids":["interface-fold-refused","interface-fold-refused"],"messages":["no key of this set is rotatable","no key of this set is rotatable"],"providerStillPlanned":"ssh-ed25519 AAAA","renderedAuthz":"<undelivered>","subjects":["authz:node","hosts:node"]}`
+  3. A raising fold, both consumers guarded: the same shape with
+     `ids` `["interface-fold-raised","interface-fold-raised"]`, the same two subjects,
+     `applicable false`, both reads undelivered, `renderedAuthz` `"<undelivered>"`, and each
+     message the planner's own text, "the fold of \`identity\` (interfaces/folded.nix) for slot
+     \`keys\` of \`authz:node\` raised a catchable error, so its value is recorded as not
+     computed" and the same for `hosts:node`.
+     The proposal's Why says a raising fold gives "an empty message list". It does not: the two
+     rows carry the planner's own text, because a raise cannot carry the author's. What is lost is
+     the fold's message, not the row.
 
 ## 4. Coverage cross-walk closure
 
