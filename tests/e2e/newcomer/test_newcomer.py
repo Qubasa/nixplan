@@ -412,7 +412,8 @@ def test_both_halves_of_the_table_are_reachable_for_a_refused_deployment(
 
     rows = json.loads(vm.ssh_succeed(f"cat {refused}/diagnostics.json", timeout=BRIEF))
     errors = [row for row in rows if row["severity"] == "error"]
-    assert [row["id"] for row in errors] == ["closure-root-outside-store"], rows
+    assert {row["id"] for row in errors} == {"closure-root-outside-store"}, rows
+    assert [row["subject"] for row in errors] == [f"{ENTRY}@{name}" for name in TARGETS], errors
     assert OUTSIDE in errors[0]["message"], errors
 
     rendered = vm.ssh_succeed(f"cat {refused}/diagnostics.txt", timeout=BRIEF)

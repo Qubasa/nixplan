@@ -259,5 +259,14 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
     `tests/e2e/newcomer/test_newcomer.py`, which now annotates it the way that file's other reader
     does, and vale refused a sentence of `docs/diagnostics.md` beginning with `so`. `nix fmt`
     changes no file afterwards.
-- [ ] 9.6 `nix run .#planner-e2e`: green, with the count recorded here against the count before the
+- [x] 9.6 `nix run .#planner-e2e`: green, with the count recorded here against the count before the
   change, and the two new end-to-end tests present in it.
+  - `60 passed in 172.79s`, against 58 before this change: the two added are
+    `newcomer/test_both_halves_of_the_table_are_reachable_for_a_refused_deployment` and
+    `wired-pair/test_the_endpoint_reports_the_identity_the_build_published`. Both were written
+    against the tree and both were wrong about a machine on their first run, which is what the
+    layer is for. The refused deployment reports one row per placed entry, not one row, because
+    the template's greeter is placed on two machines; and `flakelet status --json` does not report
+    the artifact's `settings_hash`, so the identity is read off the `meta.json` of the artifact
+    the machine holds, at the path the copy put it, while the endpoint's own record supplies the
+    plan key it registered under.
