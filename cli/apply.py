@@ -218,6 +218,26 @@ def _taking(step: str, address: str, record: Callable[[str], None]) -> Iterator[
         raise
 
 
+@dataclass(frozen=True)
+class Nobody:
+    """The channel of a run asked what it would do: it dials nothing.
+
+    Every refusal this command makes is made from the plan, the deployment record
+    and the value source, which is before the first dial, so a dry run is the same
+    walk over a channel that takes no step and answers nothing. The steps it prints
+    are therefore the steps a real run prints, and what is missing from its output
+    is what a machine would have said.
+    """
+
+    def run(self, cmd: list[str], *, env: dict[str, str] | None = None) -> object:
+        """Take no step."""
+        return None
+
+    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
+        """Answer nothing, which is what a machine that was not asked said."""
+        return ""
+
+
 def apply(
     deployment: Deployment,
     runner: remote.Runner,
@@ -227,6 +247,7 @@ def apply(
     ssh_key: Path | None = None,
     user: str = "root",
     base_env: Mapping[str, str] | None = None,
+    dry_run: bool = False,
     log: Callable[[str], None] = _ignore,
 ) -> tuple[str, ...]:
     """Apply a built deployment, in the order the plan implies.
@@ -240,6 +261,7 @@ def apply(
         user: The login user on every machine.
         base_env: The environment a `nix copy` inherits, the process's own by
             default.
+        dry_run: Whether to print the steps rather than take them.
         log: Called with each step line as that step happens.
 
     Returns:
@@ -249,6 +271,7 @@ def apply(
         ApplyError: For any refusal, all of which happen before the first dial.
     """
     environment = os.environ if base_env is None else base_env
+    channel = Nobody() if dry_run else runner
     refuse_inapplicable(deployment)
     keys, named = selection(deployment, only)
     reached = values.reaching(deployment, (deployment.entries[key].machine for key in keys), named)
@@ -274,7 +297,7 @@ def apply(
             f"value {write.value.key} {write.file.name} -> {user}@{write.address}:{write.file.path}"
         )
         with _taking(step, write.address, record):
-            runner.run(
+            channel.run(
                 remote.ssh_argv(
                     write.address,
                     remote.write_script(write.file.path, write.content),
@@ -288,14 +311,14 @@ def apply(
         entry = deployment.entries[key]
         address = addresses[key]
         with _taking(f"copy {key} {entry.path} -> {user}@{address}", address, record):
-            runner.run(remote.copy_argv(entry.path, address, user=user), env=env)
+            channel.run(remote.copy_argv(entry.path, address, user=user), env=env)
         if entry.realiser == "image" and holds_attached(
-            runner, entry, address, opts=opts, user=user, env=env
+            channel, entry, address, opts=opts, user=user, env=env
         ):
             record(f"attached {key} already on {user}@{address}")
             continue
         with _taking(f"activate {key} ({entry.realiser}) on {user}@{address}", address, record):
-            reported = runner.output(
+            reported = channel.output(
                 remote.ssh_argv(address, scripts[key], opts=opts, user=user), env=env
             )
         for line in reported.splitlines():

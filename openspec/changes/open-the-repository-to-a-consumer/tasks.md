@@ -142,7 +142,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
   `--only`, that `rollback` takes exactly one `--only`, and where `docs/operator.md` is (design
   D10). Verify `planner --help` and `planner rollback --help` each name every constraint their
   parser enforces.
-- [ ] 7.2 `cli/planner.py` and `cli/apply.py`: `apply --dry-run`. It makes every refusal a real run
+- [x] 7.2 `cli/planner.py` and `cli/apply.py`: `apply --dry-run`. It makes every refusal a real run
   makes, prints the value writes, the copies and the activations it would perform in walk order, and
   contacts nothing (design D9). Verify the printed lines of a dry run and of the same run without
   the flag differ in nothing but the machine's own reports, by `diff`.
