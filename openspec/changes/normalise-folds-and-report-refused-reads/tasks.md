@@ -51,7 +51,7 @@
   `diagnostic-subject-invalid` and `module-declared-severity` appear twice each. The first is
   residue of `generate-values-with-nixos-secrets`, which added the identifier and no row here.
 - [x] 5.5 Record the invariant in `CLAUDE.md` under "Interfaces, composition, reads": a fold normalises and refuses while rendering stays in the consumer, one interface has one fold for every consumer, and a refusal is rendered only where no implementation forces the absent slot; verify the file still names every registration point it names today
-- [ ] 5.6 Confirm no document names a path that is not there: verify `nix eval --json .#planner.failuresBySuite.layers` is `{}`, which includes the scan asserting that every path written in any file, comments included, resolves
+- [x] 5.6 Confirm no document names a path that is not there: verify `nix eval --json .#planner.failuresBySuite.layers` is `{}`, which includes the scan asserting that every path written in any file, comments included, resolves
 
 ## 6. Verification
 
