@@ -21,7 +21,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
   `aarch64-darwin`, delete the `systems` input and its `flake.lock` entry, and comment the removal
   with the platform the pinned nixpkgs dropped (design D4). Verify `nix flake show` completes and
   prints an output for each of the three, and `nix flake metadata --json` names no `systems` input.
-- [ ] 1.3 `cli/flake-module.nix`: `apps.default` alongside `apps.planner`, the same program. Verify
+- [x] 1.3 `cli/flake-module.nix`: `apps.default` alongside `apps.planner`, the same program. Verify
   `nix run . -- --help` prints the five subcommands.
 - [ ] 1.4 `tests/e2e/newcomer/test_newcomer.py`: `test_the_flake_names_its_outputs` and
   `test_a_consumer_reads_the_build_off_an_output`, the machine layer's tests for *The flake names
