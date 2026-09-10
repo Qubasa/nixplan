@@ -64,7 +64,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
 
 ## 4. The newcomer folder
 
-- [ ] 4.1 `tests/e2e/newcomer/template/`: a `flake.nix` naming the published input and following
+- [x] 4.1 `tests/e2e/newcomer/template/`: a `flake.nix` naming the published input and following
   its package set, and a deployment of one service placed on two machines by a tag, whose unit
   writes the address its entry was planned for. `tests/e2e/newcomer/deployment/default.nix` imports
   that deployment so the folder holds one (design D3). Verify
