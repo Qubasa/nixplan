@@ -152,11 +152,13 @@
       "hostKey": {
         "files": {
           "ssh_host_ed25519_key": {
+            "deploy": true,
             "inPlan": "reference",
             "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key",
             "secrecy": "secret"
           },
           "ssh_host_ed25519_key.pub": {
+            "deploy": true,
             "inPlan": "value",
             "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key.pub",
             "secrecy": "public"
@@ -284,11 +286,13 @@
       "hostKey": {
         "files": {
           "ssh_host_ed25519_key": {
+            "deploy": true,
             "inPlan": "reference",
             "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key",
             "secrecy": "secret"
           },
           "ssh_host_ed25519_key.pub": {
+            "deploy": true,
             "inPlan": "value",
             "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key.pub",
             "secrecy": "public"
@@ -422,12 +426,14 @@
         "files": {
           "ssh_host_ed25519_key": {
             "bytes": "absent",
+            "deploy": true,
             "inPlan": "reference",
             "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key",
             "secrecy": "secret"
           },
           "ssh_host_ed25519_key.pub": {
             "bytes": "absent",
+            "deploy": true,
             "inPlan": "value",
             "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key.pub",
             "secrecy": "public"
@@ -449,17 +455,19 @@
     "deploy": true,
     "files": {
       "ssh_host_ed25519_key": {
+        "deploy": true,
         "inPlan": "reference",
         "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key",
         "secrecy": "secret"
       },
       "ssh_host_ed25519_key.pub": {
+        "deploy": true,
         "inPlan": "value",
         "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key.pub",
         "secrecy": "public"
       }
     },
-    "key": "sha256-b219c0b316cb1464",
+    "key": "sha256-46812ee867232e5a",
     "per": "placement"
   },
   "nightly:vars/hostKey@beta": {
@@ -475,17 +483,19 @@
     "deploy": true,
     "files": {
       "ssh_host_ed25519_key": {
+        "deploy": true,
         "inPlan": "reference",
         "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key",
         "secrecy": "secret"
       },
       "ssh_host_ed25519_key.pub": {
+        "deploy": true,
         "inPlan": "value",
         "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key.pub",
         "secrecy": "public"
       }
     },
-    "key": "sha256-c209fc935606e2b5",
+    "key": "sha256-50420b317ca8924b",
     "per": "placement"
   },
   "nightly:vars/hostKey@gamma": {
@@ -502,18 +512,20 @@
     "files": {
       "ssh_host_ed25519_key": {
         "bytes": "absent",
+        "deploy": true,
         "inPlan": "reference",
         "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key",
         "secrecy": "secret"
       },
       "ssh_host_ed25519_key.pub": {
         "bytes": "absent",
+        "deploy": true,
         "inPlan": "value",
         "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key.pub",
         "secrecy": "public"
       }
     },
-    "key": "sha256-e56d46a662121f49",
+    "key": "sha256-13c879aa4727fbcb",
     "per": "placement"
   },
   "vault-repo:server@vault": {
