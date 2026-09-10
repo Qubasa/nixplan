@@ -20,7 +20,12 @@ let
       changesRoot
       ;
     libSource = ./lib;
-    inherit imageSource secretsSource flakeletSource operatorSource;
+    inherit
+      imageSource
+      secretsSource
+      flakeletSource
+      operatorSource
+      ;
     perfSource = ./perf;
     repoSource = ./.;
   };
@@ -33,7 +38,7 @@ in
   # only other reach is a path inside this flake's source, which is not an
   # interface. `mkDeployment` takes the caller's own `pkgs`, so it is a
   # system-independent output like the library beside it.
-  flake.operator = import ./operator;
+  flake.operator = import ./operator { korora = inputs.korora; };
 
   flake.planner = {
     inherit worked suites;
@@ -117,7 +122,7 @@ in
       # The one function that builds a deployment, handed to every folder as an
       # argument. A folder resolves no path outside itself, which is what the
       # end-to-end path scan holds it to.
-      operator = import ./operator;
+      operator = import ./operator { korora = inputs.korora; };
 
       e2eRoot = ./tests/e2e;
 
@@ -148,24 +153,6 @@ in
         )
       );
 
-      secretsReader = import ./secrets/read.nix { inherit planner; };
-
-      flakeletBuilder = import ./flakelet { inherit pkgs planner; };
-
-      secretsDeployStep = import ./secrets/backend.nix {
-        inherit planner;
-        reader = secretsReader;
-      };
-
-      generatedSecretArtifacts = import ./tests/e2e/generated-secret/artifacts.nix {
-        inherit pkgs planner flakeletBuilder;
-        reader = secretsReader;
-        deployStep = secretsDeployStep;
-        korora = inputs.korora;
-        nixpkgs = inputs.nixpkgs;
-        libSource = ./lib;
-      };
-
       e2eGuest = import ./tests/e2e/guest.nix {
         inherit (pkgs) lib;
         inherit pkgs system;
@@ -179,7 +166,6 @@ in
       # deployment is absent on purpose: the machine layer builds one with the
       # command, so no link farm is forced before pytest starts.
       e2eArtifactPaths = {
-        PLANNER_GENERATED_SECRET = "${generatedSecretArtifacts}";
         PLANNER_E2E_GUEST_IMAGE = "${e2eGuest}/nixos.qcow2";
         PLANNER_E2E_SSH_KEY = "${e2eGuest.sshPrivateKey}";
         PLANNER_CLI = pkgs.lib.getExe config.packages.planner-cli;
@@ -303,7 +289,6 @@ in
         planner-perf = perf;
         planner-perf-results = measurement;
         planner-e2e-guest = e2eGuest;
-        planner-e2e-generated-secret = generatedSecretArtifacts;
         planner-e2e-env = e2eEnvScript;
         planner-e2e-env-paths = e2eEnvPaths;
       };

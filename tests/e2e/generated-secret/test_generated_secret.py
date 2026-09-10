@@ -4,7 +4,16 @@
 bytes of a value: the generator the deployment declares mints them inside the
 external tool's own sandbox, a real `age` backend holds them, and the tool's
 deploy step - rendered from the plan by ``secrets/backend.nix`` - carries them to
-the machines the plan's delivery set names.
+the machines the plan's delivery set names. The operator's command asks the
+operator for none of them: every value of this deployment records a ``program``,
+so ``planner apply`` runs with no ``--values`` at all.
+
+Three builds of this folder are the subjects, and each is built the way an
+operator builds it: the deployment, written by ``planner build`` and read back
+out of its own manifest; the generation farm, holding the generator
+configuration, the projected name of every value and the plan expression the run
+evaluates; and the same ``age`` the store backend runs, which mints this run's
+identity rather than whatever the host happens to carry.
 
 **The phases are ordered and the file order is the order.**
 
@@ -12,8 +21,9 @@ the machines the plan's delivery set names.
    the absence the planner produces for a value nothing has generated
 2. generation runs, the state is read again, provenance is recorded, and the plan
    is re-evaluated against what the backend answered
-3. the values are deployed by the tool, the three artifacts are activated, and the
-   consumer's unit is the assertion: it authenticated with the delivered bytes
+3. the values are deployed by the tool, the three entries are activated by one
+   ``planner apply``, and the consumer's unit is the assertion: it authenticated
+   with the delivered bytes
 
 ``$NIXOS_SECRETS_FLAKE`` is resolved at run time, so this folder skips itself
 when the tool cannot be resolved and when the sandbox it needs is unavailable. A
@@ -38,6 +48,7 @@ import pytest
 
 import delivery
 import generation
+import manifest
 
 snapshot = pytest.importorskip(
     "rookery.snapshot",
@@ -56,6 +67,8 @@ ISSUER_UNIT = "issuer-api-serve.service"
 PROBE_UNIT = "probe-client-attest.service"
 RECORD_PATH = "/run/generated-secret-attest.json"
 MACHINES = (ISSUER_MACHINE, PROBE_MACHINE, IDLE_MACHINE)
+ATTRIBUTE = "planner-e2e-generated-secret"
+USER = "root"
 HEX = re.compile("^[0-9a-f]{64}$")
 
 
@@ -67,9 +80,67 @@ def _env_path(variable: str) -> Path:
     return Path(value)
 
 
-ARTIFACTS = _env_path("PLANNER_GENERATED_SECRET")
+def _build(target: str) -> manifest.Deployment:
+    """Build one deployment with the command, and read what it built.
+
+    This runs in the pytest process rather than through the cluster, because a
+    build needs no machine, and running it inside the cluster's user namespace
+    would put an evaluation and a build there (design.md D8). The command prints
+    the store path first and describes the deployment after it.
+    """
+    built = subprocess.run([str(CLI), "build", target], capture_output=True, text=True, check=False)
+    if built.returncode != 0:
+        pytest.fail(f"planner build {target} exited {built.returncode}:\n{built.stderr}")
+    return manifest.read(Path(built.stdout.splitlines()[0]))
+
+
+def _built(target: str) -> Path:
+    """Build one attribute that is not a deployment, and return its store path.
+
+    The generation farm and `age` are builds beside the deployment rather than
+    deployments, so `planner build` is not what makes them: it reads a manifest
+    and neither carries one.
+    """
+    built = subprocess.run(
+        ["nix", "build", "--no-link", "--print-out-paths", target],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if built.returncode != 0:
+        pytest.fail(f"nix build {target} exited {built.returncode}:\n{built.stderr}")
+    return Path(built.stdout.split()[-1])
+
+
+CLI = _env_path("PLANNER_CLI")
+FLAKE = _env_path("PLANNER_E2E_FLAKE")
 GUEST_IMAGE = _env_path("PLANNER_E2E_GUEST_IMAGE")
 KEY = delivery.ssh_key(delivery.state_root(), _env_path("PLANNER_E2E_SSH_KEY"))
+DEPLOYMENT = _build(f"{FLAKE}#{ATTRIBUTE}")
+GENERATION = _built(f"{FLAKE}#{ATTRIBUTE}-generation")
+AGE = _built(f"{FLAKE}#{ATTRIBUTE}-age")
+CONFIGURATION = GENERATION / "secrets.json"
+NAMES = GENERATION / "names.json"
+EXPRESSION = GENERATION / "plan.nix"
+
+
+def _files_in(root: Path) -> list[Path]:
+    """Every file a build holds, under the name the build gives it.
+
+    A build of this layer is a farm of symlinks and an artifact inside it is
+    another one, so a walk that does not follow them reads the deployment's own
+    four files and none of the artifacts. The names are kept unresolved so a
+    failure names the file a reader would open.
+    """
+    found: list[Path] = []
+    pending = [root]
+    while pending:
+        for child in sorted(pending.pop().iterdir()):
+            if child.resolve().is_dir():
+                pending.append(child)
+            else:
+                found.append(child)
+    return found
 
 
 @dataclass
@@ -77,14 +148,13 @@ class Run:
     """The cluster, the tool, the backend the values live in, and the plan of them."""
 
     cluster: Any
-    artifacts: Path
+    deployment: manifest.Deployment
     root: Path
     tool: Path
     env: dict[str, str]
     store: generation.BackendStore
     configuration: dict[str, Any]
     names: dict[str, str]
-    declared: dict[str, Any]
     ungenerated: dict[str, Any] = field(default_factory=dict)
     ungenerated_result: dict[str, Any] = field(default_factory=dict)
     state: dict[str, Any] = field(default_factory=dict)
@@ -93,13 +163,11 @@ class Run:
     plan: dict[str, Any] = field(default_factory=dict)
     result: dict[str, Any] = field(default_factory=dict)
     output: str = ""
+    steps: list[str] = field(default_factory=list)
     observed: dict[str, Any] = field(default_factory=dict)
 
     def vm(self, machine: str) -> Any:
         return self.cluster.vm(machine)
-
-    def artifact(self, name: str) -> Path:
-        return (self.artifacts / name).resolve()
 
     def value_path(self, key: str, file: str) -> str:
         """The path the plan records for one file of one generated value."""
@@ -107,8 +175,14 @@ class Run:
         assert isinstance(path, str), path
         return path
 
-    def values(self, plan: dict[str, Any]) -> tuple[generation.Value, ...]:
-        return generation.values(plan, self.configuration, self.names)
+    def declared(self) -> tuple[generation.Value, ...]:
+        """The generated values of the plan the deployment was built against."""
+        return generation.values(dict(self.deployment.plan), self.configuration, self.names)
+
+    def activation(self, key: str) -> str:
+        """The step the command records for the activation of one placed entry."""
+        entry = self.deployment.entries[key]
+        return f"activate {key} ({entry.realiser}) on {USER}@{entry.address}"
 
     def published(self, export: str) -> Any:
         return self.plan[ISSUER_KEY]["provides"]["api"]["exports"][export]["value"]
@@ -173,19 +247,18 @@ def run(booted: Any) -> Run:
 
     root = delivery.state_root() / "generated-secret"
     root.mkdir(parents=True, exist_ok=True)
-    configuration = json.loads((ARTIFACTS / "secrets.json").read_text())
-    environment = _identity(root, ARTIFACTS / "age")
+    configuration = json.loads(CONFIGURATION.read_text())
+    environment = _identity(root, AGE)
 
     return Run(
         cluster=booted.cluster,
-        artifacts=ARTIFACTS,
+        deployment=DEPLOYMENT,
         root=root,
         tool=tool,
         env=environment,
         store=generation.backend_store(configuration, name="age", env=environment),
         configuration=configuration,
-        names=json.loads((ARTIFACTS / "names.json").read_text()),
-        declared=json.loads((ARTIFACTS / "plan.json").read_text()),
+        names=json.loads(NAMES.read_text()),
     )
 
 
@@ -195,15 +268,15 @@ def generated(run: Run) -> Run:
     if run.observed.get("generated"):
         return run
 
-    values = run.values(run.declared)
+    values = run.declared()
     run.ungenerated = generation.state(values, run.store)
     run.ungenerated_result = generation.plan_of(
-        ARTIFACTS / "plan.nix", _written(run.root / "ungenerated.json", run.ungenerated)
+        EXPRESSION, _written(run.root / "ungenerated.json", run.ungenerated)
     )
 
     run.output = generation.require_success(
         subprocess.run(
-            generation.generate_argv(run.tool, ARTIFACTS / "secrets.json"),
+            generation.generate_argv(run.tool, CONFIGURATION),
             capture_output=True,
             text=True,
             check=False,
@@ -219,9 +292,7 @@ def generated(run: Run) -> Run:
     generation.write_provenance(record, values)
     generation.require_provenance(values, run.state, generation.read_provenance(record))
 
-    run.result = generation.plan_of(
-        ARTIFACTS / "plan.nix", _written(run.root / "state.json", run.state)
-    )
+    run.result = generation.plan_of(EXPRESSION, _written(run.root / "state.json", run.state))
     run.plan = run.result["plan"]
     run.observed["generated"] = True
     return run
@@ -235,39 +306,37 @@ def _written(path: Path, state: dict[str, Any]) -> Path:
 
 @pytest.fixture(scope="session")
 def delivered(generated: Run) -> Run:
-    """Phase 3: the tool deploys the values, then the artifacts are activated."""
+    """Phase 3: the tool deploys the values, then the command activates the entries.
+
+    Two invocations and both go through ``Cluster.run``, because the machines'
+    addresses resolve only there. The tool's deploy step carries the bytes of
+    every delivered value, and the ``planner apply`` after it is given no
+    ``--values``: a value entry recording a ``program`` is delivered by the
+    generator, so the command holds none of its bytes and asks for none.
+    """
     run = generated
     if run.observed.get("delivered"):
         return run
 
-    environment = {
-        **os.environ,
-        **run.env,
-        generation.SSH_OPTIONS_VARIABLE: delivery.ssh_opts(KEY),
-    }
-    run.cluster.run(generation.deploy_argv(run.tool, ARTIFACTS / "secrets.json"), env=environment)
+    run.cluster.run(
+        generation.deploy_argv(run.tool, CONFIGURATION),
+        env={
+            **os.environ,
+            **run.env,
+            generation.SSH_OPTIONS_VARIABLE: delivery.guest_ssh_options(KEY),
+        },
+    )
 
-    base_env = dict(os.environ)
-    for key, name, machine in (
-        (ISSUER_KEY, "issuer", ISSUER_MACHINE),
-        (IDLE_KEY, "idle", IDLE_MACHINE),
-        (PROBE_KEY, "probe", PROBE_MACHINE),
-    ):
-        artifact = run.artifact(name)
-        delivery.deliver(
-            run.cluster,
-            plan=run.plan,
-            key=key,
-            artifact=artifact,
-            ssh_key=KEY,
-            base_env=base_env,
-        )
-        delivery.activate(run.vm(machine), delivery.service_name(artifact), artifact)
-        if key == ISSUER_KEY:
-            port = run.plan[ISSUER_KEY]["alloc"]["ports"]["http"]
-            run.vm(machine).wait_for_unit(ISSUER_UNIT, timeout=120)
-            run.vm(machine).wait_until_succeeds(f"ss -ltn | grep -q ':{port}'", timeout=60)
+    reported = run.cluster.run(
+        [str(CLI), "apply", str(run.deployment.root)],
+        env=delivery.command_env(dict(os.environ), KEY),
+    )
+    run.steps.extend(reported.stdout.splitlines())
 
+    port = run.plan[ISSUER_KEY]["alloc"]["ports"]["http"]
+    issuer = run.vm(ISSUER_MACHINE)
+    issuer.wait_for_unit(ISSUER_UNIT, timeout=120)
+    issuer.wait_until_succeeds(f"ss -ltn | grep -q ':{port}'", timeout=60)
     run.vm(PROBE_MACHINE).wait_for_unit(PROBE_UNIT, timeout=120)
     run.observed["delivered"] = True
     return run
@@ -345,7 +414,7 @@ def test_an_unchanged_declaration_is_not_regenerated(generated: Run) -> None:
     run = generated
     again = generation.require_success(
         subprocess.run(
-            generation.generate_argv(run.tool, ARTIFACTS / "secrets.json"),
+            generation.generate_argv(run.tool, CONFIGURATION),
             capture_output=True,
             text=True,
             check=False,
@@ -356,7 +425,7 @@ def test_an_unchanged_declaration_is_not_regenerated(generated: Run) -> None:
     assert generation.updated(again) == 0
     assert generation.regenerated(again) == ()
 
-    values = run.values(run.declared)
+    values = run.declared()
     after = generation.state(values, run.store)
     assert after == run.state
     generation.require_provenance(
@@ -385,9 +454,13 @@ def test_the_delivered_bytes_were_generated_not_written(delivered: Run) -> None:
     assert record["authorizedBody"] == "attested", record
     assert record["anonymousStatus"] == 401, record
 
-    # Nowhere in the folder, nowhere in its artifacts, and on no machine's store.
+    # Nowhere in the folder, nowhere in what it builds, and on no machine's store.
     searched = 0
-    for each in sorted(list(Path(__file__).parent.rglob("*")) + list(run.artifacts.rglob("*"))):
+    for each in sorted(
+        list(Path(__file__).parent.rglob("*"))
+        + _files_in(run.deployment.root)
+        + _files_in(GENERATION)
+    ):
         resolved = each.resolve()
         if not resolved.is_file():
             continue
@@ -396,8 +469,18 @@ def test_the_delivered_bytes_were_generated_not_written(delivered: Run) -> None:
     assert searched > 0
     assert secret not in json.dumps(run.plan)
 
+    # The command activated all three entries and wrote no value: the bytes of a
+    # value whose entry records a program are the generator's deploy step's.
+    assert [step for step in run.steps if step.startswith("value ")] == []
+    for key in (ISSUER_KEY, PROBE_KEY, IDLE_KEY):
+        assert run.activation(key) in run.steps, run.steps
+    for value in (ROOT_VALUE, TOKEN_VALUE):
+        program = run.deployment.values[value].program
+        assert program is not None and program.endswith(".drv"), (value, program)
+
     # The value nobody receives is on no machine, and the third machine holds none.
     assert run.plan[ROOT_VALUE]["delivery"] == []
+    assert run.deployment.values[ROOT_VALUE].delivery == ()
     for machine in MACHINES:
         assert run.vm(machine).ssh(f"test -e {run.value_path(ROOT_VALUE, 'key')}").returncode != 0
     assert run.vm(IDLE_MACHINE).ssh("test -e /run/vars/issuer").returncode != 0
