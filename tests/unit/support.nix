@@ -2,6 +2,8 @@
   planner,
   folder,
   perfSource,
+  korora,
+  systems,
 }:
 let
   inherit (builtins)
@@ -22,9 +24,19 @@ let
     ;
 
   k = planner.korora;
+
+  # A second, independent evaluation of the library. `import` is memoised by path
+  # and not by application, so this is a different value of the same shape, which
+  # is the arrangement two authors of two flakes are in.
+  anotherEvaluation = libSource: import libSource { inherit korora systems; };
 in
 rec {
-  inherit planner folder perfSource;
+  inherit
+    planner
+    folder
+    perfSource
+    anotherEvaluation
+    ;
   korora = k;
 
   publicString = {

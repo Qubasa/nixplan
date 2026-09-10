@@ -13,13 +13,21 @@
 }:
 let
   planner = import libSource { inherit korora systems; };
-  support = import ./unit/support.nix { inherit planner folder perfSource; };
+  support = import ./unit/support.nix {
+    inherit
+      planner
+      folder
+      perfSource
+      korora
+      systems
+      ;
+  };
 in
 let
   # Adding a suite file means adding it here. This attrset is the only place a suite
   # is registered, and coverage.nix cross-walks its names against the specifications.
   suites = {
-    interfaces = import ./unit/interfaces.nix { inherit planner support; };
+    interfaces = import ./unit/interfaces.nix { inherit planner support libSource; };
     composition = import ./unit/composition.nix { inherit planner support; };
     resolution = import ./unit/resolution.nix { inherit planner support; };
     diagnostics = import ./unit/diagnostics.nix {

@@ -1,4 +1,8 @@
-{ planner, support }:
+{
+  planner,
+  support,
+  libSource,
+}:
 let
   inherit (support)
     countById
