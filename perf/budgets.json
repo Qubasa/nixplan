@@ -20,14 +20,14 @@
         "nrThunks": 715.4546,
         "nrFunctionCalls": 404,
         "nrPrimOpCalls": 283.9091,
-        "values.number": 887.2728,
-        "sets.bytes": 11440,
-        "envs.bytes": 8884.3637,
-        "list.elements": 178.5455,
+        "values.number": 886.2728,
+        "sets.bytes": 11426.1819,
+        "envs.bytes": 8885.091,
+        "list.elements": 178.2728,
         "nrOpUpdateValuesCopied": 51.091,
-        "gc.totalBytes": 43562.1819
+        "gc.totalBytes": 43568
       },
-      "note": "Moved by report-every-refusal-as-a-row: every placed entry now records `closure` and `units` empty or not, and the planner gained three checks over an entry it did not make before - a declared closure root against the store directory, a declared closure root against the entry's own delivered references, and every unit environment value against a line break. The rise is a level shift in cost per plan entry of about three percent in thunks and five in primop calls, and the growth across sizes is unchanged. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
+      "note": "Moved by open-the-repository-to-a-consumer: the library records the identity of the package set whose platform definitions elaborated it, so `lib/default.nix` takes one more argument and exports one more value. The cost is a constant per evaluation rather than per entry, which is why every figure here moved by a fraction of a percent and the largest fixture moved least: gc.totalBytes of `worked` rose 5.8 per entry of 43562, and envs.bytes 0.7 of 8884, while values.number, sets.bytes and list.elements fell by about as much."
     },
     "fleet-4": {
       "fixture": "fleet",
@@ -38,14 +38,14 @@
         "nrThunks": 627.1539,
         "nrFunctionCalls": 348.6924,
         "nrPrimOpCalls": 253.8462,
-        "values.number": 764,
-        "sets.bytes": 9736.6154,
-        "envs.bytes": 7604.9231,
-        "list.elements": 154.3077,
+        "values.number": 763.1539,
+        "sets.bytes": 9724.9231,
+        "envs.bytes": 7605.5385,
+        "list.elements": 154.077,
         "nrOpUpdateValuesCopied": 33.4616,
-        "gc.totalBytes": 36787.6924
+        "gc.totalBytes": 36792.6154
       },
-      "note": "Moved by report-every-refusal-as-a-row: every placed entry now records `closure` and `units` empty or not, and the planner gained three checks over an entry it did not make before - a declared closure root against the store directory, a declared closure root against the entry's own delivered references, and every unit environment value against a line break. The rise is a level shift in cost per plan entry of about three percent in thunks and five in primop calls, and the growth across sizes is unchanged. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
+      "note": "Moved by open-the-repository-to-a-consumer: the library records the identity of the package set whose platform definitions elaborated it, so `lib/default.nix` takes one more argument and exports one more value. The cost is a constant per evaluation rather than per entry, which is why every figure here moved by a fraction of a percent and the largest fixture moved least: gc.totalBytes of `worked` rose 5.8 per entry of 43562, and envs.bytes 0.7 of 8884, while values.number, sets.bytes and list.elements fell by about as much."
     },
     "fleet-16": {
       "fixture": "fleet",
@@ -56,14 +56,14 @@
         "nrThunks": 385.8164,
         "nrFunctionCalls": 241.6531,
         "nrPrimOpCalls": 179.2654,
-        "values.number": 465.9592,
-        "sets.bytes": 5785.1429,
-        "envs.bytes": 4938.7756,
-        "list.elements": 112.9388,
+        "values.number": 465.7347,
+        "sets.bytes": 5782.0409,
+        "envs.bytes": 4938.9388,
+        "list.elements": 112.8776,
         "nrOpUpdateValuesCopied": 13.2041,
-        "gc.totalBytes": 22464
+        "gc.totalBytes": 22465.3062
       },
-      "note": "Moved by report-every-refusal-as-a-row: every placed entry now records `closure` and `units` empty or not, and the planner gained three checks over an entry it did not make before - a declared closure root against the store directory, a declared closure root against the entry's own delivered references, and every unit environment value against a line break. The rise is a level shift in cost per plan entry of about three percent in thunks and five in primop calls, and the growth across sizes is unchanged. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
+      "note": "Moved by open-the-repository-to-a-consumer: the library records the identity of the package set whose platform definitions elaborated it, so `lib/default.nix` takes one more argument and exports one more value. The cost is a constant per evaluation rather than per entry, which is why every figure here moved by a fraction of a percent and the largest fixture moved least: gc.totalBytes of `worked` rose 5.8 per entry of 43562, and envs.bytes 0.7 of 8884, while values.number, sets.bytes and list.elements fell by about as much."
     },
     "fleet-64": {
       "fixture": "fleet",
@@ -74,14 +74,14 @@
         "nrThunks": 320.7928,
         "nrFunctionCalls": 212.8135,
         "nrPrimOpCalls": 159.171,
-        "values.number": 385.6581,
-        "sets.bytes": 4723.1503,
-        "envs.bytes": 4220.4353,
-        "list.elements": 101.7928,
+        "values.number": 385.6011,
+        "sets.bytes": 4722.3627,
+        "envs.bytes": 4220.4767,
+        "list.elements": 101.7773,
         "nrOpUpdateValuesCopied": 7.912,
-        "gc.totalBytes": 18618.7773
+        "gc.totalBytes": 18619.1089
       },
-      "note": "Moved by report-every-refusal-as-a-row: every placed entry now records `closure` and `units` empty or not, and the planner gained three checks over an entry it did not make before - a declared closure root against the store directory, a declared closure root against the entry's own delivered references, and every unit environment value against a line break. The rise is a level shift in cost per plan entry of about three percent in thunks and five in primop calls, and the growth across sizes is unchanged. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
+      "note": "Moved by open-the-repository-to-a-consumer: the library records the identity of the package set whose platform definitions elaborated it, so `lib/default.nix` takes one more argument and exports one more value. The cost is a constant per evaluation rather than per entry, which is why every figure here moved by a fraction of a percent and the largest fixture moved least: gc.totalBytes of `worked` rose 5.8 per entry of 43562, and envs.bytes 0.7 of 8884, while values.number, sets.bytes and list.elements fell by about as much."
     },
     "fleet-256": {
       "fixture": "fleet",
@@ -92,14 +92,14 @@
         "nrThunks": 304.2198,
         "nrFunctionCalls": 205.463,
         "nrPrimOpCalls": 154.0495,
-        "values.number": 365.1912,
-        "sets.bytes": 4451.1418,
-        "envs.bytes": 4037.3473,
-        "list.elements": 98.9519,
+        "values.number": 365.1769,
+        "sets.bytes": 4450.9441,
+        "envs.bytes": 4037.3577,
+        "list.elements": 98.948,
         "nrOpUpdateValuesCopied": 6.4799,
-        "gc.totalBytes": 17617.8102
+        "gc.totalBytes": 17617.8934
       },
-      "note": "Moved by report-every-refusal-as-a-row: every placed entry now records `closure` and `units` empty or not, and the planner gained three checks over an entry it did not make before - a declared closure root against the store directory, a declared closure root against the entry's own delivered references, and every unit environment value against a line break. The rise is a level shift in cost per plan entry of about three percent in thunks and five in primop calls, and the growth across sizes is unchanged. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
+      "note": "Moved by open-the-repository-to-a-consumer: the library records the identity of the package set whose platform definitions elaborated it, so `lib/default.nix` takes one more argument and exports one more value. The cost is a constant per evaluation rather than per entry, which is why every figure here moved by a fraction of a percent and the largest fixture moved least: gc.totalBytes of `worked` rose 5.8 per entry of 43562, and envs.bytes 0.7 of 8884, while values.number, sets.bytes and list.elements fell by about as much."
     },
     "mesh-4": {
       "fixture": "mesh",
@@ -110,14 +110,14 @@
         "nrThunks": 681.8462,
         "nrFunctionCalls": 396.1539,
         "nrPrimOpCalls": 302.3077,
-        "values.number": 841.8462,
-        "sets.bytes": 10408,
-        "envs.bytes": 8457.8462,
-        "list.elements": 188.3077,
+        "values.number": 841,
+        "sets.bytes": 10396.3077,
+        "envs.bytes": 8458.4616,
+        "list.elements": 188.077,
         "nrOpUpdateValuesCopied": 33.6924,
-        "gc.totalBytes": 40086.1539
+        "gc.totalBytes": 40091.077
       },
-      "note": "Moved by report-every-refusal-as-a-row: every placed entry now records `closure` and `units` empty or not, and the planner gained three checks over an entry it did not make before - a declared closure root against the store directory, a declared closure root against the entry's own delivered references, and every unit environment value against a line break. The rise is a level shift in cost per plan entry of about three percent in thunks and five in primop calls, and the growth across sizes is unchanged. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
+      "note": "Moved by open-the-repository-to-a-consumer: the library records the identity of the package set whose platform definitions elaborated it, so `lib/default.nix` takes one more argument and exports one more value. The cost is a constant per evaluation rather than per entry, which is why every figure here moved by a fraction of a percent and the largest fixture moved least: gc.totalBytes of `worked` rose 5.8 per entry of 43562, and envs.bytes 0.7 of 8884, while values.number, sets.bytes and list.elements fell by about as much."
     },
     "mesh-16": {
       "fixture": "mesh",
@@ -128,14 +128,14 @@
         "nrThunks": 446.1225,
         "nrFunctionCalls": 293.9592,
         "nrPrimOpCalls": 232.5511,
-        "values.number": 551.5103,
-        "sets.bytes": 6547.1021,
-        "envs.bytes": 5872.9796,
-        "list.elements": 149.8776,
+        "values.number": 551.2858,
+        "sets.bytes": 6544,
+        "envs.bytes": 5873.1429,
+        "list.elements": 149.8164,
         "nrOpUpdateValuesCopied": 13.5103,
-        "gc.totalBytes": 26589.7143
+        "gc.totalBytes": 26591.0205
       },
-      "note": "Moved by report-every-refusal-as-a-row: every placed entry now records `closure` and `units` empty or not, and the planner gained three checks over an entry it did not make before - a declared closure root against the store directory, a declared closure root against the entry's own delivered references, and every unit environment value against a line break. The rise is a level shift in cost per plan entry of about three percent in thunks and five in primop calls, and the growth across sizes is unchanged. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
+      "note": "Moved by open-the-repository-to-a-consumer: the library records the identity of the package set whose platform definitions elaborated it, so `lib/default.nix` takes one more argument and exports one more value. The cost is a constant per evaluation rather than per entry, which is why every figure here moved by a fraction of a percent and the largest fixture moved least: gc.totalBytes of `worked` rose 5.8 per entry of 43562, and envs.bytes 0.7 of 8884, while values.number, sets.bytes and list.elements fell by about as much."
     },
     "mesh-64": {
       "fixture": "mesh",
@@ -146,14 +146,14 @@
         "nrThunks": 382.6114,
         "nrFunctionCalls": 266.3835,
         "nrPrimOpCalls": 213.7358,
-        "values.number": 473.285,
-        "sets.bytes": 5509.513,
-        "envs.bytes": 5175.8757,
-        "list.elements": 139.5234,
+        "values.number": 473.228,
+        "sets.bytes": 5508.7254,
+        "envs.bytes": 5175.9171,
+        "list.elements": 139.5078,
         "nrOpUpdateValuesCopied": 8.2384,
-        "gc.totalBytes": 22834.57
+        "gc.totalBytes": 22834.9016
       },
-      "note": "Moved by report-every-refusal-as-a-row: every placed entry now records `closure` and `units` empty or not, and the planner gained three checks over an entry it did not make before - a declared closure root against the store directory, a declared closure root against the entry's own delivered references, and every unit environment value against a line break. The rise is a level shift in cost per plan entry of about three percent in thunks and five in primop calls, and the growth across sizes is unchanged. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
+      "note": "Moved by open-the-repository-to-a-consumer: the library records the identity of the package set whose platform definitions elaborated it, so `lib/default.nix` takes one more argument and exports one more value. The cost is a constant per evaluation rather than per entry, which is why every figure here moved by a fraction of a percent and the largest fixture moved least: gc.totalBytes of `worked` rose 5.8 per entry of 43562, and envs.bytes 0.7 of 8884, while values.number, sets.bytes and list.elements fell by about as much."
     },
     "mesh-256": {
       "fixture": "mesh",
@@ -164,14 +164,14 @@
         "nrThunks": 366.424,
         "nrFunctionCalls": 259.3551,
         "nrPrimOpCalls": 208.9402,
-        "values.number": 453.3473,
-        "sets.bytes": 5243.7244,
-        "envs.bytes": 4998.2003,
-        "list.elements": 136.8843,
+        "values.number": 453.3329,
+        "sets.bytes": 5243.5267,
+        "envs.bytes": 4998.2107,
+        "list.elements": 136.8804,
         "nrOpUpdateValuesCopied": 6.8115,
-        "gc.totalBytes": 21808.645
+        "gc.totalBytes": 21803.4019
       },
-      "note": "Moved by report-every-refusal-as-a-row: every placed entry now records `closure` and `units` empty or not, and the planner gained three checks over an entry it did not make before - a declared closure root against the store directory, a declared closure root against the entry's own delivered references, and every unit environment value against a line break. The rise is a level shift in cost per plan entry of about three percent in thunks and five in primop calls, and the growth across sizes is unchanged. The figures are re-recorded rather than the margin widened, so the next change is gated against these."
+      "note": "Moved by open-the-repository-to-a-consumer: the library records the identity of the package set whose platform definitions elaborated it, so `lib/default.nix` takes one more argument and exports one more value. The cost is a constant per evaluation rather than per entry, which is why every figure here moved by a fraction of a percent and the largest fixture moved least: gc.totalBytes of `worked` rose 5.8 per entry of 43562, and envs.bytes 0.7 of 8884, while values.number, sets.bytes and list.elements fell by about as much."
     }
   }
 }
