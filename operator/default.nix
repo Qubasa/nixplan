@@ -3,11 +3,14 @@
 # placed entry, in one link farm. mkGeneration is the same plan read as a
 # configuration for the external secret generator.
 #
-# This is the first layer allowed to raise. `lib/` never does, the realisers do
-# it for a fact an entry does not record, and this file does it for a deployment
-# the planner itself called inapplicable - with the planner's own table as the
-# message. A table carrying warnings and no error builds; a warning that stopped
-# a build would be an error.
+# This is the first layer allowed to raise. `lib/` never does, the reading never
+# does, and the realisers do it for a condition a row already reported. What this
+# file raises for is a caller asking for the artifact of an entry of a deployment
+# the planner called inapplicable, with the planner's own table as the message.
+# The tree itself is always produced: it holds the plan and both halves of the
+# diagnostics whatever the table says, and an artifact of no entry when the table
+# carries an error. A table carrying warnings and no error builds; a warning that
+# stopped a build would be an error.
 #
 # korora is the pin the library was instantiated from, and it is here because
 # mkGeneration writes an expression that instantiates the same library again: a
@@ -57,9 +60,17 @@
             inherit key;
           };
 
-      entries = builtins.mapAttrs artifactOf (
-        planner.util.filterAttrs (_: entry: entry.realised) reading.entries
-      );
+      realised = planner.util.filterAttrs (_: entry: entry.realised) reading.entries;
+
+      # Nothing is realised for an inapplicable deployment, and asking for one
+      # entry's artifact is answered with the table rather than with an absence.
+      entries =
+        if reading.refused then
+          builtins.mapAttrs (_: _: throw reading.refusal) realised
+        else
+          builtins.mapAttrs artifactOf realised;
+
+      links = if reading.refused then { } else entries;
 
       json = name: value: pkgs.writeText "planner-${name}.json" (builtins.toJSON value);
 
@@ -87,8 +98,8 @@
         ]
         ++ map (key: {
           name = reading.entries.${key}.artifact;
-          path = entries.${key};
-        }) (builtins.attrNames entries)
+          path = links.${key};
+        }) (builtins.attrNames links)
       );
 
       built = farm.overrideAttrs (old: {
@@ -99,7 +110,7 @@
         };
       });
     in
-    if reading.refused then throw reading.refusal else built;
+    built;
 
   # The same deployment read as a configuration for the external secret
   # generator, plus the two things that configuration cannot carry. The contract

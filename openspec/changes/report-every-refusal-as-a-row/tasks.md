@@ -125,7 +125,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
 
 ## 6. What a build produces and publishes
 
-- [ ] 6.1 `operator/default.nix`: stop discarding the derivation (`:88-92`). The tree always holds
+- [x] 6.1 `operator/default.nix`: stop discarding the derivation (`:88-92`). The tree always holds
   `plan.json`, `diagnostics.json` and `diagnostics.txt`; it holds `entries/<projected>` for the
   entries the reading realises and nothing for an entry of an inapplicable deployment; it carries no
   marker of its own; and `passthru.entries.<key>` of an inapplicable deployment is refused with
