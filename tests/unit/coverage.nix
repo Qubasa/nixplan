@@ -140,6 +140,9 @@ let
     "apply-deployments-with-an-operator-command/specs/operator/apply-command/spec.md"
     "apply-deployments-with-an-operator-command/specs/delivery/real-cluster/spec.md"
     "apply-deployments-with-an-operator-command/specs/tooling/test-layers/spec.md"
+    "hold-declaration-shape-and-fold-set-reads/specs/planner/interface-fold/spec.md"
+    "hold-declaration-shape-and-fold-set-reads/specs/planner/typed-edge/spec.md"
+    "hold-declaration-shape-and-fold-set-reads/specs/planner/diagnostics/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
