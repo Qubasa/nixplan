@@ -295,7 +295,7 @@ artifact. The bytes are what [`cluster.md`](cluster.md) is for.
 ```
 planner plan     <target>
 planner build    <target>
-planner apply    <target> [--values DIR] [--only KEY]... [--ssh-key PATH] [--user USER]
+planner apply    <target> [--dry-run] [--values DIR] [--only KEY]... [--ssh-key PATH] [--user USER]
 planner status   <target> [--only KEY]... [--ssh-key PATH] [--user USER]
 planner rollback <target> --only KEY [--ssh-key PATH] [--user USER]
 ```
@@ -356,6 +356,26 @@ activate <plan key> (<realiser>) on <user>@<address>
 The first line appears only for an edge a cycle forced the walk to contradict. A flakelet entry is
 activated by the machine's own endpoint, `flakelet activate <name> <artifact>`; an image entry is
 attached by the script the artifact itself carries, `bin/attach`.
+
+**`apply --dry-run`** asks what a run would do. It makes every refusal a real run makes - the
+planner's own table, a restriction naming an entry the plan does not carry, a value source that is
+short of a declared file or carries a file nobody declared - and then prints the value writes, the
+copies and the activations it would perform, in the order it would perform them, and contacts no
+machine. What it does not print is the only thing missing: the indented lines are a machine's own
+report, and asking for one is a dial. This is the observed output of a dry run of the deployment
+`tests/e2e/newcomer/` builds, whose two machines this host cannot reach:
+
+```
+copy greeter:greet@alpha /nix/store/ld5...-flakelet-greeter-greet -> root@10.0.0.11
+activate greeter:greet@alpha (flakelet) on root@10.0.0.11
+copy greeter:greet@beta /nix/store/izw...-flakelet-greeter-greet -> root@10.0.0.12
+activate greeter:greet@beta (flakelet) on root@10.0.0.12
+```
+
+The note that nothing was contacted goes to stderr, so the two runs stay comparable line by line on
+stdout: `diff <(planner apply --dry-run <target>) <(planner apply <target>)` is the machine's own
+reports and nothing else. What a machine currently holds is not a question a dry run answers, and
+`status` is where it is asked.
 
 **`status`** prints one line per entry, and asks rather than applies. A line is the machine's own
 answer:

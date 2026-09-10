@@ -155,7 +155,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
 - [x] 7.4 `tests/e2e/newcomer/test_newcomer.py`: `test_the_help_text_is_read_as_the_only_document`,
   the machine layer's test for *The help text is read as the only document*. Verify it fails against
   the help text as it stood before 7.1.
-- [ ] 7.5 `docs/operator.md`: `--dry-run` in the command's synopsis and one paragraph on what it
+- [x] 7.5 `docs/operator.md`: `--dry-run` in the command's synopsis and one paragraph on what it
   prints and what it does not ask. Verify the example output in the document is the output of the
   command as run.
 
