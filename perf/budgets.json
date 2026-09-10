@@ -21,13 +21,13 @@
         "nrFunctionCalls": 408.8182,
         "nrPrimOpCalls": 286.8182,
         "values.number": 897.1819,
-        "sets.bytes": 11478.5455,
-        "envs.bytes": 9020.3637,
+        "sets.bytes": 11480,
+        "envs.bytes": 9021.091,
         "list.elements": 178.4546,
         "nrOpUpdateValuesCopied": 51.1819,
-        "gc.totalBytes": 43944.7273
+        "gc.totalBytes": 44002.9091
       },
-      "note": "Moved by open-the-repository-to-a-consumer: the library records the identity of the package set whose platform definitions elaborated it, so `lib/default.nix` takes one more argument and exports one more value. The cost is a constant per evaluation rather than per entry, which is why every figure here moved by a fraction of a percent and the largest fixture moved least: gc.totalBytes of `worked` rose 5.8 per entry of 43562, and envs.bytes 0.7 of 8884, while values.number, sets.bytes and list.elements fell by about as much."
+      "note": "Moved by two changes together: open-the-repository-to-a-consumer made the library record the identity of the package set whose platform definitions elaborated it, and identify-interfaces-by-declared-id gave an interface a declared id that a capability records where a claim was made. Both costs are constant per evaluation rather than per-entry work, which is why every figure moved by a fraction of a percent and the largest fixture moved least. Recorded from the sandboxed planner-perf-results measurement of the integrated tree."
     },
     "fleet-4": {
       "fixture": "fleet",
@@ -39,13 +39,13 @@
         "nrFunctionCalls": 352.7693,
         "nrPrimOpCalls": 256.3077,
         "values.number": 772.5385,
-        "sets.bytes": 9770.4616,
-        "envs.bytes": 7721.2308,
+        "sets.bytes": 9771.6924,
+        "envs.bytes": 7721.8462,
         "list.elements": 154.2308,
         "nrOpUpdateValuesCopied": 33.5385,
-        "gc.totalBytes": 37091.6924
+        "gc.totalBytes": 37121.2308
       },
-      "note": "Moved by open-the-repository-to-a-consumer: the library records the identity of the package set whose platform definitions elaborated it, so `lib/default.nix` takes one more argument and exports one more value. The cost is a constant per evaluation rather than per entry, which is why every figure here moved by a fraction of a percent and the largest fixture moved least: gc.totalBytes of `worked` rose 5.8 per entry of 43562, and envs.bytes 0.7 of 8884, while values.number, sets.bytes and list.elements fell by about as much."
+      "note": "Moved by two changes together: open-the-repository-to-a-consumer made the library record the identity of the package set whose platform definitions elaborated it, and identify-interfaces-by-declared-id gave an interface a declared id that a capability records where a claim was made. Both costs are constant per evaluation rather than per-entry work, which is why every figure moved by a fraction of a percent and the largest fixture moved least. Recorded from the sandboxed planner-perf-results measurement of the integrated tree."
     },
     "fleet-16": {
       "fixture": "fleet",
@@ -57,13 +57,13 @@
         "nrFunctionCalls": 242.7347,
         "nrPrimOpCalls": 179.9184,
         "values.number": 468.7143,
-        "sets.bytes": 5798.0409,
-        "envs.bytes": 4973.5511,
+        "sets.bytes": 5798.3674,
+        "envs.bytes": 4973.7143,
         "list.elements": 112.9184,
         "nrOpUpdateValuesCopied": 13.2245,
-        "gc.totalBytes": 22565.2245
+        "gc.totalBytes": 22574.3674
       },
-      "note": "Moved by open-the-repository-to-a-consumer: the library records the identity of the package set whose platform definitions elaborated it, so `lib/default.nix` takes one more argument and exports one more value. The cost is a constant per evaluation rather than per entry, which is why every figure here moved by a fraction of a percent and the largest fixture moved least: gc.totalBytes of `worked` rose 5.8 per entry of 43562, and envs.bytes 0.7 of 8884, while values.number, sets.bytes and list.elements fell by about as much."
+      "note": "Moved by two changes together: open-the-repository-to-a-consumer made the library record the identity of the package set whose platform definitions elaborated it, and identify-interfaces-by-declared-id gave an interface a declared id that a capability records where a claim was made. Both costs are constant per evaluation rather than per-entry work, which is why every figure moved by a fraction of a percent and the largest fixture moved least. Recorded from the sandboxed planner-perf-results measurement of the integrated tree."
     },
     "fleet-64": {
       "fixture": "fleet",
@@ -75,13 +75,13 @@
         "nrFunctionCalls": 213.0881,
         "nrPrimOpCalls": 159.3368,
         "values.number": 386.855,
-        "sets.bytes": 4730.4042,
-        "envs.bytes": 4233.2436,
+        "sets.bytes": 4730.4871,
+        "envs.bytes": 4233.285,
         "list.elements": 101.7876,
         "nrOpUpdateValuesCopied": 7.9171,
-        "gc.totalBytes": 18688.7462
+        "gc.totalBytes": 18690.7358
       },
-      "note": "Moved by open-the-repository-to-a-consumer: the library records the identity of the package set whose platform definitions elaborated it, so `lib/default.nix` takes one more argument and exports one more value. The cost is a constant per evaluation rather than per entry, which is why every figure here moved by a fraction of a percent and the largest fixture moved least: gc.totalBytes of `worked` rose 5.8 per entry of 43562, and envs.bytes 0.7 of 8884, while values.number, sets.bytes and list.elements fell by about as much."
+      "note": "Moved by two changes together: open-the-repository-to-a-consumer made the library record the identity of the package set whose platform definitions elaborated it, and identify-interfaces-by-declared-id gave an interface a declared id that a capability records where a claim was made. Both costs are constant per evaluation rather than per-entry work, which is why every figure moved by a fraction of a percent and the largest fixture moved least. Recorded from the sandboxed planner-perf-results measurement of the integrated tree."
     },
     "fleet-256": {
       "fixture": "fleet",
@@ -93,13 +93,13 @@
         "nrFunctionCalls": 205.5319,
         "nrPrimOpCalls": 154.0911,
         "values.number": 365.9909,
-        "sets.bytes": 4456.9571,
-        "envs.bytes": 4044.5566,
+        "sets.bytes": 4456.9779,
+        "envs.bytes": 4044.567,
         "list.elements": 98.9506,
         "nrOpUpdateValuesCopied": 6.4812,
-        "gc.totalBytes": 17646.4604
+        "gc.totalBytes": 17646.9597
       },
-      "note": "Moved by open-the-repository-to-a-consumer: the library records the identity of the package set whose platform definitions elaborated it, so `lib/default.nix` takes one more argument and exports one more value. The cost is a constant per evaluation rather than per entry, which is why every figure here moved by a fraction of a percent and the largest fixture moved least: gc.totalBytes of `worked` rose 5.8 per entry of 43562, and envs.bytes 0.7 of 8884, while values.number, sets.bytes and list.elements fell by about as much."
+      "note": "Moved by two changes together: open-the-repository-to-a-consumer made the library record the identity of the package set whose platform definitions elaborated it, and identify-interfaces-by-declared-id gave an interface a declared id that a capability records where a claim was made. Both costs are constant per evaluation rather than per-entry work, which is why every figure moved by a fraction of a percent and the largest fixture moved least. Recorded from the sandboxed planner-perf-results measurement of the integrated tree."
     },
     "mesh-4": {
       "fixture": "mesh",
@@ -111,13 +111,13 @@
         "nrFunctionCalls": 400.2308,
         "nrPrimOpCalls": 304.7693,
         "values.number": 850.3847,
-        "sets.bytes": 10441.8462,
-        "envs.bytes": 8574.1539,
+        "sets.bytes": 10443.077,
+        "envs.bytes": 8574.7693,
         "list.elements": 188.2308,
         "nrOpUpdateValuesCopied": 33.7693,
-        "gc.totalBytes": 40360.6154
+        "gc.totalBytes": 40390.1539
       },
-      "note": "Moved by open-the-repository-to-a-consumer: the library records the identity of the package set whose platform definitions elaborated it, so `lib/default.nix` takes one more argument and exports one more value. The cost is a constant per evaluation rather than per entry, which is why every figure here moved by a fraction of a percent and the largest fixture moved least: gc.totalBytes of `worked` rose 5.8 per entry of 43562, and envs.bytes 0.7 of 8884, while values.number, sets.bytes and list.elements fell by about as much."
+      "note": "Moved by two changes together: open-the-repository-to-a-consumer made the library record the identity of the package set whose platform definitions elaborated it, and identify-interfaces-by-declared-id gave an interface a declared id that a capability records where a claim was made. Both costs are constant per evaluation rather than per-entry work, which is why every figure moved by a fraction of a percent and the largest fixture moved least. Recorded from the sandboxed planner-perf-results measurement of the integrated tree."
     },
     "mesh-16": {
       "fixture": "mesh",
@@ -129,13 +129,13 @@
         "nrFunctionCalls": 295.0409,
         "nrPrimOpCalls": 233.2041,
         "values.number": 554.2654,
-        "sets.bytes": 6560,
-        "envs.bytes": 5907.7552,
+        "sets.bytes": 6560.3266,
+        "envs.bytes": 5907.9184,
         "list.elements": 149.8572,
         "nrOpUpdateValuesCopied": 13.5307,
-        "gc.totalBytes": 26691.2654
+        "gc.totalBytes": 26705.6327
       },
-      "note": "Moved by open-the-repository-to-a-consumer: the library records the identity of the package set whose platform definitions elaborated it, so `lib/default.nix` takes one more argument and exports one more value. The cost is a constant per evaluation rather than per entry, which is why every figure here moved by a fraction of a percent and the largest fixture moved least: gc.totalBytes of `worked` rose 5.8 per entry of 43562, and envs.bytes 0.7 of 8884, while values.number, sets.bytes and list.elements fell by about as much."
+      "note": "Moved by two changes together: open-the-repository-to-a-consumer made the library record the identity of the package set whose platform definitions elaborated it, and identify-interfaces-by-declared-id gave an interface a declared id that a capability records where a claim was made. Both costs are constant per evaluation rather than per-entry work, which is why every figure moved by a fraction of a percent and the largest fixture moved least. Recorded from the sandboxed planner-perf-results measurement of the integrated tree."
     },
     "mesh-64": {
       "fixture": "mesh",
@@ -147,13 +147,13 @@
         "nrFunctionCalls": 266.6581,
         "nrPrimOpCalls": 213.9016,
         "values.number": 474.4819,
-        "sets.bytes": 5516.7669,
-        "envs.bytes": 5188.684,
+        "sets.bytes": 5516.8498,
+        "envs.bytes": 5188.7254,
         "list.elements": 139.5182,
         "nrOpUpdateValuesCopied": 8.2436,
-        "gc.totalBytes": 22904.456
+        "gc.totalBytes": 22906.4456
       },
-      "note": "Moved by open-the-repository-to-a-consumer: the library records the identity of the package set whose platform definitions elaborated it, so `lib/default.nix` takes one more argument and exports one more value. The cost is a constant per evaluation rather than per entry, which is why every figure here moved by a fraction of a percent and the largest fixture moved least: gc.totalBytes of `worked` rose 5.8 per entry of 43562, and envs.bytes 0.7 of 8884, while values.number, sets.bytes and list.elements fell by about as much."
+      "note": "Moved by two changes together: open-the-repository-to-a-consumer made the library record the identity of the package set whose platform definitions elaborated it, and identify-interfaces-by-declared-id gave an interface a declared id that a capability records where a claim was made. Both costs are constant per evaluation rather than per-entry work, which is why every figure moved by a fraction of a percent and the largest fixture moved least. Recorded from the sandboxed planner-perf-results measurement of the integrated tree."
     },
     "mesh-256": {
       "fixture": "mesh",
@@ -165,13 +165,13 @@
         "nrFunctionCalls": 259.424,
         "nrPrimOpCalls": 208.9818,
         "values.number": 454.147,
-        "sets.bytes": 5249.5397,
-        "envs.bytes": 5005.4097,
+        "sets.bytes": 5249.5605,
+        "envs.bytes": 5005.4201,
         "list.elements": 136.883,
         "nrOpUpdateValuesCopied": 6.8128,
-        "gc.totalBytes": 21831.9688
+        "gc.totalBytes": 21832.4682
       },
-      "note": "Moved by open-the-repository-to-a-consumer: the library records the identity of the package set whose platform definitions elaborated it, so `lib/default.nix` takes one more argument and exports one more value. The cost is a constant per evaluation rather than per entry, which is why every figure here moved by a fraction of a percent and the largest fixture moved least: gc.totalBytes of `worked` rose 5.8 per entry of 43562, and envs.bytes 0.7 of 8884, while values.number, sets.bytes and list.elements fell by about as much."
+      "note": "Moved by two changes together: open-the-repository-to-a-consumer made the library record the identity of the package set whose platform definitions elaborated it, and identify-interfaces-by-declared-id gave an interface a declared id that a capability records where a claim was made. Both costs are constant per evaluation rather than per-entry work, which is why every figure moved by a fraction of a percent and the largest fixture moved least. Recorded from the sandboxed planner-perf-results measurement of the integrated tree."
     }
   }
 }
