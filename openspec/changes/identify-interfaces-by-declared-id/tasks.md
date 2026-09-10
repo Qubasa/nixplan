@@ -1,7 +1,7 @@
 ## 1. Ordering and registration while the change is in flight
 
-- [ ] 1.1 Confirm the prerequisite is in: verify `hold-declaration-shape-and-fold-set-reads/tasks.md` has every task checked, that `lib/interface.nix` carries `fold ? null` and `foldOf`, and that `nix eval --json .#planner.failures` is `[]`. Do not start section 2 before this holds - `foldName` and `foldApply` are written against a field that change introduces
-- [ ] 1.2 `git add openspec/changes/identify-interfaces-by-declared-id/` so the flake can see the change, and add the four new spec paths to `excused` in `tests/unit/coverage.nix` with the precedent reason used for `declare-service-state` ("an unimplemented change: no task of identify-interfaces-by-declared-id has been done, so nothing in this package claims to satisfy it yet"); verify `nix eval --json .#planner.suites.coverage.testEverySpecificationIsClassified.expr` reports empty `unclassified`, `vanished` and `unreadable`
+- [x] 1.1 Confirm the prerequisite is in: verify `hold-declaration-shape-and-fold-set-reads/tasks.md` has every task checked, that `lib/interface.nix` carries `fold ? null` and `foldOf`, and that `nix eval --json .#planner.failures` is `[]`. Do not start section 2 before this holds - `foldName` and `foldApply` are written against a field that change introduces
+- [x] 1.2 `git add openspec/changes/identify-interfaces-by-declared-id/` so the flake can see the change, and add the four new spec paths to `excused` in `tests/unit/coverage.nix` with the precedent reason used for `declare-service-state` ("an unimplemented change: no task of identify-interfaces-by-declared-id has been done, so nothing in this package claims to satisfy it yet"); verify `nix eval --json .#planner.suites.coverage.testEverySpecificationIsClassified.expr` reports empty `unclassified`, `vanished` and `unreadable`
 
 ## 2. Identity in the library
 
