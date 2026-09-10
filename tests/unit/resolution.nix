@@ -1758,4 +1758,222 @@ in
         valueResolution = true;
       };
     };
+
+  # Two interface values differing only in the label an identity ignores, so an
+  # edge between them can only have matched by claim.
+  testOneClaimAndOneShapeMatch =
+    let
+      mine = claiming { exports.publicKey = publicString; };
+      theirs = claiming {
+        name = "host-identity";
+        exports.publicKey = publicString;
+      };
+      run =
+        slotInterface:
+        edge {
+          consumerModule = consumer {
+            interface = slotInterface;
+            reads = [ "publicKey" ];
+          };
+          providerModule = providerOf theirs;
+          interfaces = {
+            "interfaces/mine.nix".identity = mine;
+            "interfaces/theirs.nix".identity = theirs;
+          };
+        };
+      claimed = run mine;
+      byValue = run theirs;
+    in
+    {
+      expr = {
+        distinctValues = mine != theirs;
+        ids = rowIds claimed;
+        delivered = claimed.plan."consumer:only@one".reads.far.delivered;
+        received = claimed.plan."consumer:only@one".units.only.env.FAR;
+        sameReadAsOneValue =
+          claimed.plan."consumer:only@one".reads.far == byValue.plan."consumer:only@one".reads.far;
+      };
+      expected = {
+        distinctValues = true;
+        ids = [ ];
+        delivered = true;
+        received = "publicKey";
+        sameReadAsOneValue = true;
+      };
+    };
+
+  testAClaimDoesNotWidenARead =
+    let
+      exports = {
+        publicKey = publicString;
+        key = {
+          type = planner.korora.secretRef;
+          secrecy = "secret";
+        };
+      };
+      mine = claiming { inherit exports; };
+      theirs = claiming {
+        name = "host-identity";
+        inherit exports;
+      };
+      holder = _: {
+        vars.app.files."key".secrecy = "secret";
+        provides.identity.interface = theirs;
+        impl =
+          { vars, ... }:
+          {
+            provides.identity.exports = {
+              publicKey = "ssh-ed25519 AAAA";
+              key = vars.app."key";
+            };
+            units.only.command = "/bin/true";
+          };
+      };
+      run =
+        slotInterface:
+        planOf {
+          inherit sources;
+          interfaces = {
+            "interfaces/mine.nix".identity = mine;
+            "interfaces/theirs.nix".identity = theirs;
+          };
+          varsState."holder:vars/app@one"."key".present = true;
+          instances = {
+            holder = {
+              module = soleRoot {
+                module = holder;
+                provides = [ "identity" ];
+              };
+              placement.every.only.machines = [ "one" ];
+              exposes = [ "identity" ];
+            };
+            consumer = {
+              module = soleRoot {
+                module = consumer {
+                  interface = slotInterface;
+                  reads = [ "publicKey" ];
+                };
+              };
+              placement.every.only.machines = [ "two" ];
+              wire.far = {
+                instance = "holder";
+                provides = "identity";
+              };
+            };
+          };
+        };
+      claimed = run mine;
+      byValue = run theirs;
+      value = claimed.plan."holder:vars/app@one";
+    in
+    {
+      expr = {
+        ids = rowIds claimed;
+        received = claimed.plan."consumer:only@two".units.only.env.FAR;
+        delivery = value.delivery;
+        reasons = value.deliveryDerivedFrom;
+        sameAsOneValue =
+          value.delivery == byValue.plan."holder:vars/app@one".delivery
+          && value.deliveryDerivedFrom == byValue.plan."holder:vars/app@one".deliveryDerivedFrom;
+      };
+      expected = {
+        ids = [ ];
+        received = "publicKey";
+        delivery = [ "one" ];
+        reasons = [ "holder:only@one owns it" ];
+        sameAsOneValue = true;
+      };
+    };
+
+  testEachSideVerifiesAgainstItsOwnValue =
+    let
+      exports.endpoint = publicUrl;
+      mine = claiming { inherit exports; };
+      theirs = claiming {
+        name = "host-endpoint";
+        inherit exports;
+      };
+      publisher = _: {
+        provides.identity.interface = theirs;
+        impl = _: {
+          provides.identity.exports.endpoint = "not-a-url";
+          units.only.command = "/bin/true";
+        };
+      };
+      result = edge {
+        consumerModule = consumer {
+          interface = mine;
+          reads = [ "endpoint" ];
+        };
+        providerModule = publisher;
+        interfaces = {
+          "interfaces/mine.nix".identity = mine;
+          "interfaces/theirs.nix".identity = theirs;
+        };
+      };
+      row = builtins.head (rowsById "export-type-mismatch" result);
+    in
+    {
+      expr = {
+        rows = countById "export-type-mismatch" result;
+        mismatches = countById "interface-mismatch" result;
+        inherit (row) subject;
+        namesThePublishersOwnInterface = hasInfix "interfaces/theirs.nix" row.evidence;
+        quotesTheVerification = hasInfix "declares endpoint as `url`, and korora reports:" row.evidence;
+      };
+      expected = {
+        rows = 1;
+        mismatches = 0;
+        subject = "provider:only@one";
+        namesThePublishersOwnInterface = true;
+        quotesTheVerification = true;
+      };
+    };
+
+  testTwoTypeNamesAgreeAndTwoPredicatesDoNot =
+    let
+      strict = planner.korora.typedef "hostKey" (
+        v: builtins.isString v && builtins.match "ssh-.*" v != null
+      );
+      loose = planner.korora.typedef "hostKey" (v: builtins.isString v);
+      mine = claiming { exports.publicKey.type = strict; };
+      theirs = claiming {
+        name = "host-identity";
+        exports.publicKey.type = loose;
+      };
+      publisher = _: {
+        provides.identity.interface = theirs;
+        impl = _: {
+          provides.identity.exports.publicKey = "k";
+          units.only.command = "/bin/true";
+        };
+      };
+      result = edge {
+        consumerModule = consumer {
+          interface = mine;
+          reads = [ "publicKey" ];
+        };
+        providerModule = publisher;
+        interfaces = {
+          "interfaces/mine.nix".identity = mine;
+          "interfaces/theirs.nix".identity = theirs;
+        };
+      };
+    in
+    {
+      expr = {
+        oneIdentity = planner.identityOf mine == planner.identityOf theirs;
+        thePredicatesDisagree = strict.verify "k" != null && loose.verify "k" == null;
+        ids = rowIds result;
+        delivered = result.plan."consumer:only@one".reads.far.delivered;
+        received = result.plan."consumer:only@one".reads.far.values.publicKey;
+      };
+      expected = {
+        oneIdentity = true;
+        thePredicatesDisagree = true;
+        ids = [ ];
+        delivered = true;
+        received = "k";
+      };
+    };
 }
