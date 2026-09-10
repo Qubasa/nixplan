@@ -390,7 +390,7 @@ def refused(workstation: Workstation) -> str:
         f"{REFUSED}/deployment/modules/hello/greet.nix",
         timeout=BRIEF,
     )
-    built = vm.ssh_succeed(
+    built: str = vm.ssh_succeed(
         f"cd {REFUSED} && nix build --no-link --print-out-paths .#default",
         timeout=PATIENT,
     )

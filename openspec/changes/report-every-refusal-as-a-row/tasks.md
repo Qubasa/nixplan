@@ -252,7 +252,12 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
     row for"` was added above the no-unit refusal of `image/read.nix`. The suite went red on
     exactly `diagnostics.testARealiserRefusesAConditionNoRowReports`, whose `unaccounted` field
     named the new line verbatim. Removing the branch returned the suite to green.
-- [ ] 9.5 `nix build .#checks.x86_64-linux.treefmt -L` and `nix fmt`: no change to any file this
+- [x] 9.5 `nix build .#checks.x86_64-linux.treefmt -L` and `nix fmt`: no change to any file this
   change touched, and no blank line left where a comment moved.
+  - Green. Two alerts were fixed on the way there and both were this change's own text: mypy
+    `--strict` refused the `Any` returned by `ssh_succeed` in the refused-deployment fixture of
+    `tests/e2e/newcomer/test_newcomer.py`, which now annotates it the way that file's other reader
+    does, and vale refused a sentence of `docs/diagnostics.md` beginning with `so`. `nix fmt`
+    changes no file afterwards.
 - [ ] 9.6 `nix run .#planner-e2e`: green, with the count recorded here against the count before the
   change, and the two new end-to-end tests present in it.

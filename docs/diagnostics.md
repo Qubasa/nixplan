@@ -55,8 +55,8 @@ receives. `tests/unit/diagnostics.nix` holds that rule to the source: every
 it. The deployment build asks each realiser for the rules only it knows -
 `acceptsName`, `acceptsUnit`, `acceptsHostPath`, `confinement` and `backend` of
 `flakelet/read.nix`, `profileNames`, `denials`, `hostPaths` and `versionFor` of
-`image/read.nix` - so one rule has one home and the row and the raise say the
-same thing.
+`image/read.nix` - and one rule therefore has one home, with the row and the
+raise saying the same thing.
 
 `row`, `error` and `warning` are exported from the library, and every producer
 of a row uses them: they are what applies `util.oneLine` to a message, an
