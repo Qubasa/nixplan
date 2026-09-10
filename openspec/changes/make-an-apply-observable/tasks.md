@@ -134,7 +134,7 @@ only the scenarios listed below are new.
   as the file already does it), and `test_a_machine_with_no_endpoint_is_not_reported_as_absent`,
   `test_a_machine_that_cannot_be_reached_is_reported_as_unreachable` and
   `test_an_entry_whose_machine_records_no_address_is_not_dialled` in `tests/e2e/test_harness.py`.
-- [ ] 6.4 `cli/report.py:status` and `cli/planner.py:_status`: print each line as it is known rather
+- [x] 6.4 `cli/report.py:status` and `cli/planner.py:_status`: print each line as it is known rather
   than after the last machine, and return a non-zero status when any machine could not be asked.
   Verify: `test_one_unreachable_machine_does_not_hide_the_others` and
   `test_a_report_that_could_not_ask_every_machine_exits_non_zero` in `tests/e2e/test_harness.py`,
