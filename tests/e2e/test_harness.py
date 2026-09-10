@@ -832,3 +832,56 @@ def test_a_target_that_was_collected_is_named_as_collected(
     assert collected in message
     assert "collected" in message
     assert "don't know how to build" not in message
+
+
+def test_a_file_outside_every_values_own_directory_is_left_alone(tmp_path: Path) -> None:
+    """Bytes under no value's directory are a claim about no value, so nothing measures them."""
+    deployment = _built(
+        tmp_path / "built",
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+        values={SESSION_VALUE: {"delivery": ["alpha"], "files": TOKEN}},
+    )
+    source = _source(
+        tmp_path / "values",
+        {
+            f"{SESSION_VALUE}/token": "s3cret",
+            "README": "the bytes of this deployment's values",
+            ".gitignore": "*\n",
+        },
+    )
+    recorder = Recorder()
+
+    log = apply.apply(deployment, recorder, source=source, base_env={})
+
+    assert [line for line in log if line.startswith("value ")] == [
+        f"value {SESSION_VALUE} token -> root@10.0.0.10:/run/vars/issuer/session/token"
+    ]
+    assert "README" not in " ".join(" ".join(command) for command in recorder.commands)
+
+
+def test_two_undeclared_files_are_both_named(tmp_path: Path) -> None:
+    """An operator fixing a source wants the list, not the first line of it."""
+    deployment = _built(
+        tmp_path / "built",
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+        values={SESSION_VALUE: {"delivery": ["alpha"], "files": TOKEN}},
+    )
+    source = _source(
+        tmp_path / "values",
+        {
+            f"{SESSION_VALUE}/token": "s3cret",
+            f"{SESSION_VALUE}/toekn": "misspelled",
+            f"{SESSION_VALUE}/spare": "unnamed",
+        },
+    )
+    recorder = Recorder()
+
+    with pytest.raises(errors.ApplyError) as raised:
+        apply.apply(deployment, recorder, source=source, base_env={})
+
+    message = str(raised.value)
+    assert f"{SESSION_VALUE}/toekn" in message
+    assert f"{SESSION_VALUE}/spare" in message
+    assert recorder.commands == []

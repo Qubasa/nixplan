@@ -43,7 +43,7 @@ only the scenarios listed below are new.
 
 ## 2. The value source, measured where files are declared
 
-- [ ] 2.1 `cli/values.py`: `held` takes the delivered value entries and enumerates the files under
+- [x] 2.1 `cli/values.py`: `held` takes the delivered value entries and enumerates the files under
   each entry's own directory rather than `rglob("*")` over the source. `check` reports every
   undeclared file it finds, sorted, in one refusal.
   Verify: `tests/e2e/test_harness.py` gains

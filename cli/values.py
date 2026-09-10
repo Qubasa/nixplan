@@ -3,9 +3,11 @@ anything is dialled.
 
 The layout is `<dir>/<entry-key>/<file>`, and an entry key carries a `/` of its
 own (`issuer:vars/session`), so `<dir>/issuer:vars/session/token` is a real
-nested path. The source is therefore enumerated by walking it, and a declared
-file is addressed by joining the key and the name rather than by splitting a
-relative path back into the two.
+nested path. A file claims to be a value's where it lies under that value's own
+directory, so the source is enumerated under the directory of every value entry
+the deployment delivers and a file under none of them is measured by nothing. A
+declared file is addressed by joining the key and the name rather than by
+splitting a relative path back into the two.
 
 The required set is exactly the declared files of every value entry whose
 delivery set is non-empty and which records no `program`. Bytes are needed only
@@ -99,10 +101,24 @@ def generated(deployment: Deployment) -> tuple[tuple[Value, ValueFile], ...]:
     )
 
 
-def held(root: Path) -> tuple[str, ...]:
-    """Return the files the source holds, as paths relative to it, sorted."""
+def held(root: Path, keys: Iterable[str]) -> tuple[str, ...]:
+    """Return the files the source holds for ``keys``, relative to it, sorted.
+
+    Args:
+        root: The value source.
+        keys: The value entries the deployment delivers.
+
+    Returns:
+        Every file under one of those entries' own directories. A file under
+        none of them makes no claim about a value, so it is not measured.
+    """
     return tuple(
-        sorted(found.relative_to(root).as_posix() for found in root.rglob("*") if found.is_file())
+        sorted(
+            found.relative_to(root).as_posix()
+            for key in keys
+            for found in (root / key).rglob("*")
+            if found.is_file()
+        )
     )
 
 
@@ -122,7 +138,7 @@ def check(deployment: Deployment, root: Path | None, keys: Iterable[str]) -> Non
     """
     if root is not None and not root.is_dir():
         raise ApplyError(f"the value source {root} is not a directory")
-    present = frozenset(held(root)) if root is not None else frozenset()
+    present = frozenset(held(root, delivered(deployment))) if root is not None else frozenset()
 
     for value, file in required(deployment, keys):
         relative = f"{value.key}/{file.name}"
@@ -153,7 +169,8 @@ def check(deployment: Deployment, root: Path | None, keys: Iterable[str]) -> Non
     extra = sorted(present - everything)
     if extra:
         raise ApplyError(
-            f"the value source holds {extra[0]}, which no value this deployment delivers declares"
+            f"the value source holds {', '.join(extra)}, which no value this deployment "
+            f"delivers declares"
         )
 
 
