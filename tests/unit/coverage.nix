@@ -160,6 +160,10 @@ let
     "make-an-apply-observable/specs/operator/machine-report/spec.md"
     "make-an-apply-observable/specs/delivery/real-cluster/spec.md"
     "normalise-folds-and-report-refused-reads/specs/planner/interface-fold/spec.md"
+    "identify-interfaces-by-declared-id/specs/planner/interface-identity/spec.md"
+    "identify-interfaces-by-declared-id/specs/planner/interface-fold/spec.md"
+    "identify-interfaces-by-declared-id/specs/planner/typed-edge/spec.md"
+    "identify-interfaces-by-declared-id/specs/planner/plan-artifact/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -201,14 +205,6 @@ let
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "deliver-a-secret-without-exposing-it/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
-    "identify-interfaces-by-declared-id/specs/planner/interface-fold/spec.md" =
-      "an unimplemented change: no task of identify-interfaces-by-declared-id has been done, so nothing in this package claims to satisfy it yet";
-    "identify-interfaces-by-declared-id/specs/planner/interface-identity/spec.md" =
-      "an unimplemented change: no task of identify-interfaces-by-declared-id has been done, so nothing in this package claims to satisfy it yet";
-    "identify-interfaces-by-declared-id/specs/planner/plan-artifact/spec.md" =
-      "an unimplemented change: no task of identify-interfaces-by-declared-id has been done, so nothing in this package claims to satisfy it yet";
-    "identify-interfaces-by-declared-id/specs/planner/typed-edge/spec.md" =
-      "an unimplemented change: no task of identify-interfaces-by-declared-id has been done, so nothing in this package claims to satisfy it yet";
   };
 
   isSpecFile = path: match ".*/spec\\.md" path != null;
