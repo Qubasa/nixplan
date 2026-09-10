@@ -28,22 +28,50 @@ flakelet/  a realiser: one plan entry as a flakelet service artifact
 operator/  a whole deployment built: the plan, a manifest, one artifact per entry
 cli/       the operator's command, `planner`, which builds and applies one
 tests/unit/  nix-unit suites over the library, the realisers and the build
-tests/e2e/   three folders of real machines, and the harness they share
+tests/e2e/   four folders of real machines, and the harness they share
 fixtures/  the worked deployment the unit suites evaluate, with its golden plan
 perf/      two synthetic deployments, a measurement harness and committed budgets
 docs/      the documentation, starting at docs/README.md
 openspec/  the change records this repository was built from
 ```
 
+## Using it from your own flake
+
+Two outputs are the whole interface: `lib`, the planner, and `operator`, the build over
+a plan. Neither is system-specific, because both take your own `pkgs`, and a consumer
+wires them once:
+
+```nix
+{
+  inputs.nixplan.url = "github:Qubasa/nixplan";
+
+  outputs =
+    { nixplan, nixpkgs, ... }:
+    {
+      packages.x86_64-linux.default =
+        (import ./deployment {
+          pkgs = nixpkgs.legacyPackages.x86_64-linux;
+          planner = nixplan.lib;
+          operator = nixplan.operator;
+        }).default;
+    };
+}
+```
+
+`tests/e2e/newcomer/` is that flake, run as a test. Its `template/` holds the wiring
+above and a deployment of two machines; a run copies the template onto a third machine,
+which locks it against this checkout, builds it there and applies it to the other two.
+[docs/operator.md](docs/operator.md) walks it end to end.
+
 ## Commands
 
 | Command | What it does |
 | --- | --- |
-| `nix run .#planner -- --help` | the operator's command: `plan`, `build`, `apply`, `status`, `rollback` |
+| `nix run . -- --help`, or `nix run .#planner` | the operator's command: `plan`, `build`, `apply`, `status`, `rollback` |
 | `nix build .#checks.x86_64-linux.planner-tests` | the unit suites |
 | `nix build .#checks.x86_64-linux.planner-perf` | the evaluation-cost gate |
 | `nix build .#checks.x86_64-linux.treefmt` | formatters, linters, type checker and prose |
 | `nix develop` | the one shell, with the interpreter the machine layer runs under |
 
 The machine layer needs real VMs, so it is an app rather than a check:
-`nix run .#planner-e2e` boots the guests and runs all three folders.
+`nix run .#planner-e2e` boots the guests and runs all four folders.

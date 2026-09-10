@@ -39,5 +39,13 @@
         program = pkgs.lib.getExe cli;
         meta.description = "Build and apply a deployment plan on the machines it names";
       };
+
+      # `nix run .` is the first thing a reader types, and the command is the one
+      # thing this flake is for running.
+      apps.default = {
+        type = "app";
+        program = pkgs.lib.getExe cli;
+        meta.description = "Build and apply a deployment plan on the machines it names";
+      };
     };
 }

@@ -176,6 +176,16 @@ without reading the code first.
 - `manifest.json` addresses an artifact inside the build, and the build is a farm of symlinks, so
   `cli/manifest.py` resolves each artifact path to its store path. The path an activation names on
   the machine has to be the path the copy put there.
+- `flake.lib` and `flake.operator` are the whole consumer interface, and both are
+  system-independent because each takes the caller's own `pkgs`. A consumer that can only reach the
+  planner can plan and cannot build, which is what `flake.operator` exists to prevent; a path
+  inside this flake's source is not an interface and neither is anything under `tests/`.
+- `flake.nix` writes its `systems` out rather than taking `nix-systems/default`, which names
+  `x86_64-darwin`. The pinned nixpkgs removed that platform with a `throw`, so `nix flake show` died
+  in a release note before it reached an output of this flake. Filtering the input's list instead
+  would leave two sources of truth for a set this flake states in one line.
+- `apps.default` and `apps.planner` are the same wrapper. `nix run .` is the first thing a reader
+  types and the command is the only thing here worth running.
 
 ## Registration points
 
@@ -314,7 +324,8 @@ silently unobserved.
   to the exported URL, which does use `target.address`.
 - `--retry` in the probe exists for cross-machine boot ordering, not for flakiness.
 - `schedule = "daily"` keeps the next elapse in the future for the whole run.
-- The cluster's dnsmasq has no upstream, which is why the offline assertion holds.
+- Every cluster's dnsmasq has no upstream except `newcomer`'s, which is why the offline assertion
+  holds where it is made.
 - The pytest phases are session-scoped and order-dependent. The trailing `wait_until_succeeds`
   restores the wire for the phases after it.
 - `systemctl is-active` exits 3 for an inactive unit, so that assertion uses `ssh` rather than
@@ -324,6 +335,37 @@ silently unobserved.
 - In `portable-image`, `elsewhere` is aarch64 and never booted: it exists so an image can be built
   for a machine this host is not. The attaching entry is stated `strict` because enforcement is
   the claim under test.
+- `newcomer` proves the outward surface, not a deployment, and it proves it on a machine. The host
+  computes one thing: the store path `nix flake metadata --json` resolves the checkout to. A
+  `path:` reference copies the ignored trees beside it and a `git+file:` one pins `HEAD`, which
+  tests the last commit instead of the tree under test.
+- That source path and the image's key are handed to the workstation with one `nix copy` inside the
+  cluster's namespace, and every step after it is a command the workstation runs. Moving a build or
+  an apply back onto the host removes the claim: that a machine with nothing but the template and
+  the source can do it.
+- `template/flake.nix` carries the published input url verbatim and is never edited. The
+  workstation runs `nix flake lock --override-input nixplan path:<source>`, which writes the
+  substitution into the lock without fetching the published ref, and the first test reads the lock
+  rather than trusting it.
+- `newcomer`'s cluster is the one that is not hermetic (`offline=False` on the stage, `pasta`
+  uplink, an upstream for the resolver). Without egress the folder skips itself: a machine that
+  cannot reach the substituter can only be observed failing to fetch.
+- The workstation does not download nixpkgs. A NixOS system pins its own flake in the registry, so
+  the image's closure already holds that source, and nix never fetches a locked input whose hash is
+  valid in the store. What it does fetch is the command's interpreter and the build's inputs, about
+  340 MB. Do not "fix" the fidelity by pinning the template to another nixpkgs: a consumer follows
+  the library's pin, and a second one would evaluate the deployment against packages the library
+  never saw.
+- The guest image carries `nix-command`, `flakes` and 6 GiB of spare filesystem for that
+  workstation. All three are properties of the shared image, so changing one re-keys every folder's
+  cut, and the assertion in `tests/e2e/guest.nix` says why they are there.
+- `newcomer`'s test names no symbol of the planner. `tests/unit/layers.nix` scans a folder's text
+  for `mkPlan`, so the consumer surface is asserted by what the machines do rather than by a name
+  check.
+- The folder's own `deployment/default.nix` imports `../template/deployment` rather than holding a
+  second copy: `tests/unit/layers.nix` requires a folder to hold one, and two would drift.
+- A unit of a service artifact runs with the PATH the artifact carries, so `newcomer`'s greeter
+  takes `coreutils` as a runtime input. The machine's own PATH is not a fact the plan records.
 - The runner's state directory prefix stays short. The virtiofs socket path
   `<state>/rookery/rookery-<pid>-<id>/vm-<i>/virtiofs-<tag>.sock` hits the 108-byte `AF_UNIX`
   limit, and virtiofsd then exits during startup with no useful error.

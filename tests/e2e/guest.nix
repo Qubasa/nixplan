@@ -77,6 +77,13 @@ let
           assertion = builtins.elem config.systemd.package config.environment.systemPackages;
           message = "the attach script the artifact carries resolves `portablectl` and `systemctl` on PATH, so systemd's own package has to be in the guest's system profile";
         }
+        {
+          assertion = lib.all (feature: builtins.elem feature config.nix.settings.experimental-features) [
+            "nix-command"
+            "flakes"
+          ];
+          message = "a machine of tests/e2e/newcomer/ locks a flake of its own, fetches its inputs and builds a deployment in its own store, and a stock nix.conf answers all three with a refusal about experimental features: the two flags every reader already has are part of this image";
+        }
       ];
 
       boot.kernelModules = [ "vmw_vsock_virtio_transport" ];
@@ -127,6 +134,14 @@ let
 
       services.flakelets.enable = true;
 
+      # The workstation of tests/e2e/newcomer/ builds on the machine, so its store
+      # holds a nixpkgs checkout and the inputs of one deployment build. Both flags
+      # are what a reader's own machine has; neither reaches a delivered artifact.
+      nix.settings.experimental-features = [
+        "nix-command"
+        "flakes"
+      ];
+
       documentation.enable = false;
       documentation.nixos.enable = false;
       system.stateVersion = config.system.nixos.release;
@@ -145,8 +160,9 @@ let
     partitionTableType = "efi";
     label = "nixos";
     diskSize = "auto";
-    # Room for the two delivered artifacts and their closures.
-    additionalSpace = "2048M";
+    # Room for the two delivered artifacts and their closures, and for the nixpkgs
+    # checkout and build inputs a machine of tests/e2e/newcomer/ fetches for itself.
+    additionalSpace = "6144M";
   };
 in
 # make-disk-image runs inside a VM builder whose result has no overrideAttrs, so

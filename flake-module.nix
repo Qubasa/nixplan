@@ -27,6 +27,13 @@ in
 {
   flake.lib = planner;
 
+  # The deployment build, published for a consumer that is not this repository.
+  # `flake.lib` alone leaves a caller able to plan and unable to build, and the
+  # only other reach is a path inside this flake's source, which is not an
+  # interface. `mkDeployment` takes the caller's own `pkgs`, so it is a
+  # system-independent output like the library beside it.
+  flake.operator = import ./operator;
+
   flake.planner = {
     inherit worked suites;
     rendered = planner.render worked.diagnostics;

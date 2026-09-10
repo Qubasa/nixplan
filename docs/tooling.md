@@ -111,11 +111,11 @@ Two machines and the network between them are devices a build sandbox does not
 have, so this layer is an app rather than a check:
 
 ```bash
-ROOKERY_FLAKE=/path/to/rookery nix run .#planner-e2e                 # three folders
+ROOKERY_FLAKE=/path/to/rookery nix run .#planner-e2e                 # four folders
 ROOKERY_FLAKE=/path/to/rookery nix run .#planner-e2e portable-image  # one folder
 ```
 
-See [cluster.md](cluster.md) for the host it needs, the three folders, what a run
+See [cluster.md](cluster.md) for the host it needs, the four folders, what a run
 observes and how to drive `pytest` by hand against the working tree.
 
 The pure half of that layer needs no machine and is a check like any other:

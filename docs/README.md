@@ -17,7 +17,7 @@ nixplan/
   flakelet/  the flakelet service-artifact realiser
   operator/  a whole deployment built: the plan, the manifest, one artifact per entry
   cli/       planner, the operator's command, which builds a deployment and applies it
-  tests/     nix-unit suites in unit/, three machine tests and their harness in e2e/
+  tests/     nix-unit suites in unit/, four machine tests and their harness in e2e/
   fixtures/  the worked deployment the unit suites evaluate, with its golden plan
   perf/      two synthetic deployments, measurement harness, committed budgets, checker
   docs/      you are here
@@ -34,7 +34,7 @@ nixplan/
 | [tooling.md](tooling.md) | flake attributes, checks, fixture regeneration, the perf gate |
 | [flakelet.md](flakelet.md) | the store-backed realiser: what a flakelet service artifact holds, who decides a unit is enabled, and what it refuses |
 | [operator.md](operator.md) | building a whole deployment, and the command that puts one on machines |
-| [cluster.md](cluster.md) | two real machines: what a delivery moves, the host it needs, and how to attach to a live run |
+| [cluster.md](cluster.md) | real machines: what a delivery moves, the host it needs, how a consumer's own flake is proved, and how to attach to a live run |
 
 Two realisers read one plan and neither adds a field to it. The image is **store-less** - it
 carries its own closure and a machine attaches it with `portablectl`, which is the tier where no

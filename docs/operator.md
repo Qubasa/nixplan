@@ -60,7 +60,7 @@ The result is a link farm:
 A Nix caller reads the same four answers off `passthru` without a build: `plan`, `manifest`,
 `diagnostics` and `entries`, the last being the derivation of each placed entry keyed by plan key.
 
-Something has to supply `pkgs`, `planner` and `operator` itself. The three end-to-end folders here
+Something has to supply `pkgs`, `planner` and `operator` itself. The four end-to-end folders here
 are the worked examples, and each is a function of exactly those three. Shortened, with the folder's
 own `interfaces/default.nix`, `instances.nix` and `machines.nix` imported beside it as `interfaces`,
 `deployment` and `registry`:
@@ -97,6 +97,25 @@ nix build .#planner-e2e-wired-pair          # one folder, two builds of one sour
 nix build .#planner-e2e-wired-pair-changed  # the second of them
 ```
 
+## Getting all three from outside this repository
+
+`planner` and `operator` are flake outputs of this repository, and neither is system-specific:
+`lib` is the library, `operator` is the one attribute above, and both take the caller's own `pkgs`.
+A consumer therefore adds one input and wires three arguments, which is the whole flake the
+[README](../README.md) shows: its own `pkgs`, `nixplan.lib` as `planner` and `nixplan.operator` as
+`operator`, handed to a directory that returns deployment builds by name. Then:
+
+```bash
+nix build .                                          # the link farm above
+nix run github:Qubasa/nixplan -- apply result        # or any built deployment directory
+```
+
+Nothing else is needed and no other output is an interface: a path inside this flake's source is
+not one, and neither is anything under `tests/`. `tests/e2e/newcomer/` is that consumer flake run
+as a test - a machine holding nothing but its template and this checkout's source locks the one
+against the other, builds the deployment in its own store and applies it to the two machines the
+template names. [`cluster.md`](cluster.md) describes the walk.
+
 ## The artifact name a plan key projects onto
 
 A plan key is `<instance>:<service>@<machine>`. The artifact built for it is addressed by that key
@@ -113,7 +132,7 @@ The key is not the directory name, and the caller does not choose the name eithe
 | Approach | Why not |
 | --- | --- |
 | the key as the directory name | `@` and `:` are the two characters the key grammar splits on, so every consumer of the build would quote them |
-| a name the caller chooses | that is the local convention the three folders each had, and a local convention cannot be generic |
+| a name the caller chooses | that is the local convention each folder had, and a local convention cannot be generic |
 | a projection plus a recorded mapping | one rule, and `manifest.json` carries the mapping as data |
 
 The tool never reconstructs a name from a key. It reads the mapping, which is why the projection is

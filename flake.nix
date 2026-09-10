@@ -3,7 +3,6 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    systems.url = "github:nix-systems/default";
 
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
@@ -32,7 +31,14 @@
   outputs =
     inputs@{ flake-parts, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
-      systems = import inputs.systems;
+      # Written out rather than taken from `nix-systems/default`, which names
+      # `x86_64-darwin` - a platform the pinned nixpkgs removed with a `throw`, so
+      # `nix flake show` died in a release note before it reached an output here.
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "aarch64-darwin"
+      ];
 
       imports = [
         inputs.treefmt-nix.flakeModule

@@ -247,6 +247,7 @@ def cluster_stage(
     key: Path,
     memory_mib: int = 2048,
     cpus: int = 2,
+    offline: bool = True,
 ) -> Callable[[Preparation], Any]:
     """Return the decorator that declares a folder's machines as a snapshot stage.
 
@@ -274,6 +275,11 @@ def cluster_stage(
         key: The private key the image authorizes.
         memory_mib: Memory per machine; part of the key.
         cpus: Virtual CPUs per machine; part of the key.
+        offline: Whether the cluster is hermetic; part of the key. A folder whose
+            claim is about a machine fetching its own inputs states ``False``,
+            which adds the ``pasta`` uplink and an upstream for the cluster's
+            resolver. Every other folder leaves it on, and the wire it tests is
+            then bounded by the machines themselves.
 
     Returns:
         The decorator to apply to the folder's preparation generator.
@@ -287,6 +293,7 @@ def cluster_stage(
         uefi=True,
         secure_boot=False,
         tpm=False,
+        offline=offline,
         scope="session",
     )
     return decorator

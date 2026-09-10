@@ -10,10 +10,11 @@ None of it is a `check`. A build sandbox has no `/dev/kvm`, no `/dev/net/tun` an
 layer is one app:
 
 ```bash
-nix run .#planner-e2e                  # three folders, six machines
+nix run .#planner-e2e                  # four folders, nine machines
 nix run .#planner-e2e wired-pair       # two machines
 nix run .#planner-e2e portable-image   # one machine booted, two images built
 nix run .#planner-e2e secret-delivery  # three machines
+nix run .#planner-e2e newcomer         # three machines, and a build that runs on one of them
 nix run .#planner-e2e -- nosuchfolder  # refused, without building or booting anything
 ```
 
@@ -30,6 +31,7 @@ anyway.
   NO END-TO-END TEST NAMED 'nosuchfolder'
 ===========================================
   the end-to-end tests are:
+    newcomer
     portable-image
     secret-delivery
     wired-pair
@@ -73,7 +75,7 @@ Neither side names a version: `../pytest-env.nix` takes this nixpkgs' default `p
 rookery takes its own. The one dev shell that carries that environment lives in
 `../devshells.nix`.
 
-## The three folders
+## The four folders
 
 Each directory under `../tests/e2e/` is one end-to-end test and its own fixture: exactly one
 `test_*.py` and a `deployment/` of `default.nix`, `machines.nix`, `instances.nix`, `interfaces/` and
@@ -96,7 +98,7 @@ realising and the collecting are the repository's and arrive as `operator`, docu
 
 Both discoveries happen by looking. The runner finds a folder's tests as `test_*.py` under each
 directory, and `../flake-module.nix` finds a folder's deployment at
-`tests/e2e/<folder>/deployment/default.nix`, so a fourth folder needs no registration anywhere and
+`tests/e2e/<folder>/deployment/default.nix`, so a fifth folder needs no registration anywhere and
 the flake names no folder. `../tests/unit/layers.nix` holds both halves: no file of a folder names
 `mkPlan`, a link farm or either realiser's builder, and every folder carrying a deployment is
 reachable as a package.
@@ -163,15 +165,50 @@ One test per scenario of
 [`realiser/portable-service-image/spec.md`](../openspec/changes/emit-systemd-portable-service-images/specs/realiser/portable-service-image/spec.md)
 that is about what a real machine does with a built image.
 
+### `newcomer` - three machines, and a walk that runs on one of them
+
+Three machines, and the subject is not the deployment: it is whether somebody who is not this
+repository can build and apply one. A workstation boots beside `alpha` and `beta`, belongs to no
+plan, and runs every step of the walk itself. What this host does is hand that machine two store
+paths - the checkout's tracked content, and the key the image authorizes - with one `nix copy`
+inside the cluster's namespace. Nothing else about the walk happens here.
+
+`template/` is what a reader copies: a `flake.nix` naming the published input, and a deployment of
+one module placed on two machines by a tag. The run copies it onto the workstation, and the
+workstation locks it with `nix flake lock --override-input nixplan path:<source>`, which is where
+the template stops naming the published flake and starts naming the tree under test. The lock
+records the substitution, and the first test reads it there rather than trusting it: the input is
+still `github:Qubasa/nixplan`, its resolution is the copied source, and `nixpkgs` is a `github:`
+entry the machine fetched over the network for itself.
+
+Then, three commands, each of them `nix run path:<source> --` on the workstation: `build`
+substitutes what the machine's store lacks and builds the deployment there; `apply` copies each
+artifact to the machine its entry names and activates it there; `status` asks both machines what
+they hold. The greeting each unit writes names the address its entry was planned for, so the two
+entries of one instance are two artifacts and not one copied twice, and the workstation itself runs
+neither - it holds every artifact in its store, which is not a deployment.
+
+This is the one cluster of the layer that is not hermetic. `delivery.cluster_stage` takes
+`offline=False` for it, which adds the `pasta` uplink and an upstream for the cluster's resolver,
+because a machine that obtains its own inputs cannot be observed doing so against a local cache.
+What it goes out for is the command's interpreter and the build's inputs, around 340 MB; the
+nixpkgs *source* is already in the image, since a NixOS system pins its own flake in the registry,
+and nix never downloads a locked input whose hash is already valid in the store. Without egress
+the folder skips itself and says so: a green run there would be a lie. The image carries
+`nix-command`, `flakes` and 6 GiB of spare filesystem for the same machine.
+
 ## Where the machines come from
 
 Each folder's machines are a `@cluster_snapshot_fixture` stage, declared through
 `delivery.cluster_stage` so every folder states the same posture once: UEFI, no Secure Boot, no TPM,
-2048 MiB and two CPUs per machine, session-scoped. The stage's body only waits - each machine to
-its vsock sshd and then to `multi-user.target`, then the cluster to its DHCP leases - and yields.
-The first run boots the machines and rookery cuts them there; every later run resumes that cut,
-which is RAM, device state and the disk overlay of every slot, taken as one consistent
-whole-cluster cut so the frozen leases and the route between the two machines still hold.
+2048 MiB and two CPUs per machine, hermetic, session-scoped. `newcomer` is the one folder that
+states otherwise - 4096 MiB, because one evaluation of nixpkgs needs more than 2 GiB, and
+`offline=False` - and both are part of the cut's key, so its machines are never the machines of
+another folder. The stage's body only waits - each machine to its vsock sshd and then to
+`multi-user.target`, then the cluster to its DHCP leases - and yields. The first run boots the
+machines and rookery cuts them there; every later run resumes that cut, which is RAM, device state
+and the disk overlay of every slot, taken as one consistent whole-cluster cut so the frozen leases
+and the route between the two machines still hold.
 
 ```
                           total   wired-pair setup   portable-image setup

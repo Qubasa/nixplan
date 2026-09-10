@@ -143,6 +143,7 @@ let
     "hold-declaration-shape-and-fold-set-reads/specs/planner/interface-fold/spec.md"
     "hold-declaration-shape-and-fold-set-reads/specs/planner/typed-edge/spec.md"
     "hold-declaration-shape-and-fold-set-reads/specs/planner/diagnostics/spec.md"
+    "open-the-repository-to-a-consumer/specs/tooling/test-layers/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -168,6 +169,42 @@ let
       "an unimplemented change: no task of generate-values-with-nixos-secrets has been done, so nothing in this package claims to satisfy it yet";
     "generate-values-with-nixos-secrets/specs/realiser/secrets-configuration/spec.md" =
       "an unimplemented change: no task of generate-values-with-nixos-secrets has been done, so nothing in this package claims to satisfy it yet";
+    "open-the-repository-to-a-consumer/specs/operator/apply-command/spec.md" =
+      "an unimplemented change: `--dry-run` does not exist, so nothing in this package claims to satisfy it yet";
+    "open-the-repository-to-a-consumer/specs/tooling/consumer-surface/spec.md" =
+      "a change landed in part: `flake.operator`, `apps.default` and the written-out system list are in, and the rest - the debug attrset's rename, the shell, the help text and the smallest example building - is not, so the file is not answerable as a whole yet";
+    "open-the-repository-to-a-consumer/specs/tooling/repository-shape/spec.md" =
+      "an unimplemented change: no task of open-the-repository-to-a-consumer's shell and help-text phases has been done, so nothing in this package claims to satisfy it yet";
+    "report-every-refusal-as-a-row/specs/operator/deployment-build/spec.md" =
+      "an unimplemented change: no task of report-every-refusal-as-a-row has been done, so nothing in this package claims to satisfy it yet";
+    "report-every-refusal-as-a-row/specs/planner/diagnostics/spec.md" =
+      "an unimplemented change: no task of report-every-refusal-as-a-row has been done, so nothing in this package claims to satisfy it yet";
+    "report-every-refusal-as-a-row/specs/planner/plan-artifact/spec.md" =
+      "an unimplemented change: no task of report-every-refusal-as-a-row has been done, so nothing in this package claims to satisfy it yet";
+    "report-every-refusal-as-a-row/specs/realiser/flakelet-artifact/spec.md" =
+      "an unimplemented change: no task of report-every-refusal-as-a-row has been done, so nothing in this package claims to satisfy it yet";
+    "report-every-refusal-as-a-row/specs/realiser/portable-service-image/spec.md" =
+      "an unimplemented change: no task of report-every-refusal-as-a-row has been done, so nothing in this package claims to satisfy it yet";
+    "make-an-apply-observable/specs/delivery/real-cluster/spec.md" =
+      "an unimplemented change: no task of make-an-apply-observable has been done, so nothing in this package claims to satisfy it yet";
+    "make-an-apply-observable/specs/operator/apply-command/spec.md" =
+      "an unimplemented change: no task of make-an-apply-observable has been done, so nothing in this package claims to satisfy it yet";
+    "make-an-apply-observable/specs/operator/deployment-build/spec.md" =
+      "an unimplemented change: no task of make-an-apply-observable has been done, so nothing in this package claims to satisfy it yet";
+    "make-an-apply-observable/specs/operator/machine-report/spec.md" =
+      "an unimplemented change: no task of make-an-apply-observable has been done, so nothing in this package claims to satisfy it yet";
+    "deliver-a-secret-without-exposing-it/specs/delivery/real-cluster/spec.md" =
+      "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
+    "deliver-a-secret-without-exposing-it/specs/operator/apply-command/spec.md" =
+      "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
+    "deliver-a-secret-without-exposing-it/specs/operator/machine-identity/spec.md" =
+      "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
+    "deliver-a-secret-without-exposing-it/specs/planner/diagnostics/spec.md" =
+      "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
+    "deliver-a-secret-without-exposing-it/specs/planner/plan-artifact/spec.md" =
+      "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
+    "deliver-a-secret-without-exposing-it/specs/realiser/portable-service-image/spec.md" =
+      "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
   };
 
   isSpecFile = path: match ".*/spec\\.md" path != null;
