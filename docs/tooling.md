@@ -13,8 +13,21 @@ nix eval --raw  .#debug.rendered                   # the rows, rendered
 nix eval --json .#debug.worked.applicable          # false: one row is an error
 ```
 
-`.#lib` is the library itself, for a caller that wants `mkPlan` from another
-flake.
+## What this flake publishes
+
+Four outputs are system-independent, because each one takes the caller's own
+package set rather than choosing one:
+
+| Output | What it is |
+| --- | --- |
+| `lib` | the library, elaborated against the nixpkgs this flake pins |
+| `mkLib { systems ? null, platformSource ? null }` | the same library against a caller's own platform definitions, which decides every entry key |
+| `operator` | `mkDeployment`, the whole deployment built - see [operator.md](operator.md) |
+| `debug` | the worked fixture, the suites and their failures, for reading a value while iterating |
+
+`lib` and `mkLib` are the two answers to one question and a consumer picks one;
+`debug` is this repository's own and no consumer needs it. The per-system
+attributes are `packages`, `apps` and `checks`, each tabled further down.
 
 ## The two layers
 
@@ -112,7 +125,7 @@ Two machines and the network between them are devices a build sandbox does not
 have, so this layer is an app rather than a check:
 
 ```bash
-ROOKERY_FLAKE=/path/to/rookery nix run .#planner-e2e                 # four folders
+ROOKERY_FLAKE=/path/to/rookery nix run .#planner-e2e                 # five folders
 ROOKERY_FLAKE=/path/to/rookery nix run .#planner-e2e portable-image  # one folder
 ```
 

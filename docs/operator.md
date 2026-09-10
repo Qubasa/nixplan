@@ -102,7 +102,7 @@ nix build .#planner-e2e-wired-pair-changed  # the second of them
 `planner` and `operator` are flake outputs of this repository, and neither is system-specific:
 `lib` is the library, `operator` is the one attribute above, and both take the caller's own `pkgs`.
 `mkLib` is beside them for a consumer whose own package set should elaborate the platform records
-as well, which [`README.md`](README.md#what-the-library-exports) describes. The choice decides
+as well, which [`tooling.md`](tooling.md#what-this-flake-publishes) tables. The choice decides
 every entry key: a platform record is a field of every placed entry and the key is a digest over
 it, so `lib` keys a plan against the nixpkgs this flake pins and `mkLib { systems = ...; }` keys
 the same deployment against the caller's. One of the two is the answer, never both at once. A

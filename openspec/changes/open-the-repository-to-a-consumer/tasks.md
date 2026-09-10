@@ -182,7 +182,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
   flake in full, and `flake.mkLib` beside `flake.lib` with what choosing one over the other decides.
   Verify every command in it runs as written and the downstream flake it shows is the one 5.4
   compares against.
-- [ ] 9.2 `docs/README.md` and `docs/tooling.md`: the output surface as a table - `lib`, `mkLib`,
+- [x] 9.2 `docs/README.md` and `docs/tooling.md`: the output surface as a table - `lib`, `mkLib`,
   `operator`, `debug`, the packages and the applications - and the newcomer folder in the layer
   list. Verify `testAFileNamesAPathThatIsNotThere` passes.
 - [ ] 9.3 `docs/cluster.md`: the newcomer folder, what its cut holds, and why its test builds a

@@ -32,7 +32,7 @@ nixplan/
 | [authoring.md](authoring.md) | how to write an interface, a leaf module, a root and a deployment |
 | [diagnostics.md](diagnostics.md) | the row contract, every row the planner can produce, and rendering |
 | [plan.md](plan.md) | what is in the plan artifact and what each field means |
-| [tooling.md](tooling.md) | flake attributes, checks, fixture regeneration, the perf gate |
+| [tooling.md](tooling.md) | the outputs this flake publishes, checks, fixture regeneration, the perf gate |
 | [flakelet.md](flakelet.md) | the store-backed realiser: what a flakelet service artifact holds, who decides a unit is enabled, and what it refuses |
 | [operator.md](operator.md) | building a whole deployment, and the command that puts one on machines |
 | [secrets.md](secrets.md) | the realiser that reads a plan as a configuration for the external secret generator: the program a generator declares, the name projection, the rendered deploy step and the pinned contract |
@@ -218,6 +218,11 @@ its own rather than under a literal written in the library.
 | `registry`, `fileOf`, `label`, `atomRows`, `exportNames`, `secrecyOf`, `foldOf` | the attribution helpers row text is written with: index a caller's `interfaces` by value, find an interface's declaring file, print `` `name` (file) ``, check one interface's atoms, list its exports, read an atom's `secrecy`, read an interface's `fold` |
 | `excluded` | the exclusion table as data: construct -> the trigger that would bring it back |
 | `util` | the list and attrset helpers the library runs on |
+
+That value is `lib` of this flake, and `mkLib` returns the same attributes
+against a caller's own platform definitions.
+[tooling.md](tooling.md#what-this-flake-publishes) tables both, beside
+`operator`, which is how a deployment is built rather than planned.
 
 ## What it deliberately does not do
 
