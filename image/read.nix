@@ -203,7 +203,7 @@ rec {
           gen: g:
           mapAttrsToList (fname: file: {
             inherit gen fname;
-            inherit (file) path secrecy;
+            inherit (file) path secrecy deploy;
             inPlan = file.inPlan;
             present = !(file ? bytes);
           }) g.files
@@ -233,13 +233,16 @@ rec {
           inherit (f) mode;
           disposition = if f.source != null then "source" else "render";
         }) configFiles
+        # A path is shown only where bytes arrive at it. An undeployed value is on
+        # no machine, so a mount of its path would be a mount of nothing: the unit
+        # then fails at NAMESPACE rather than at anything an operator can read.
         ++ map (g: {
           path = g.path;
           from = g.path;
           kind = "generated-file";
           inherit (g) secrecy;
           disposition = g.inPlan;
-        }) (filter (g: g.inPlan == reference) generated);
+        }) (filter (g: g.deploy && g.inPlan == reference) generated);
 
       version = versionOf {
         inherit
@@ -299,7 +302,9 @@ rec {
           };
 
       needsStaticUser = filter (u: units.${u} ? user) (attrNames units);
-      needsRootOnlyFile = filter (g: g.secrecy == "secret") (filter (g: g.inPlan == reference) generated);
+      needsRootOnlyFile = filter (
+        g: g.deploy && g.secrecy == "secret" && g.inPlan == reference
+      ) generated;
 
       denied =
         map (u: {
