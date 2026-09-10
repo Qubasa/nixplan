@@ -21,6 +21,7 @@ let
     elem
     filter
     head
+    isFunction
     length
     mapAttrs
     ;
@@ -464,7 +465,7 @@ in
             }
           ) declaration.uses;
 
-          results = mapAttrs (_: edge: edge.value) (util.filterAttrs (_: edge: edge.delivered) edges);
+          results = mapAttrs (_: edge: edge.implValue) (util.filterAttrs (_: edge: edge.delivered) edges);
 
           unplaced = mkPlacement {
             inherit iname mname;
@@ -484,6 +485,12 @@ in
                 ];
               }
             ) member.unknownKeys
+            ++ compose.slotSetRows {
+              subject = moduleSubject;
+              name = mname;
+              inherit deploymentFile;
+              observation = member.slotSet;
+            }
             ++ settings.rows
             ++ declaration.rows
             ++ placementRows
@@ -718,6 +725,7 @@ in
                 inherit key;
                 allowed = module.implKeys;
                 id = "implementation-unknown-key";
+                note = "a refusal of a value another module produced belongs in the fold of the interface that carries it, where the fold states the message and the planner states the row's identifier, subject and severity";
               }
             ) (util.extraKeys module.implKeys implValue)
             ++ util.optional implNotAttrs (
@@ -955,18 +963,47 @@ in
           arityOk =
             interfaceMatches && (if slot.reach == "all" then placements != [ ] else length placements == 1);
 
-          delivered = slot.resolvable && wire != null && !isMemberCut && capability != null && arityOk;
+          deliverable = slot.resolvable && wire != null && !isMemberCut && capability != null && arityOk;
 
-          value =
-            if slot.reach == "all" then
-              builtins.listToAttrs (
-                map (c: {
-                  name = c.entryKey;
-                  value = c.values;
-                }) collected
-              )
+          entryKeyed = builtins.listToAttrs (
+            map (c: {
+              name = c.entryKey;
+              value = c.values;
+            }) collected
+          );
+
+          declaredFold = if slot.interface == null then null else interface.foldOf slot.interface;
+
+          # A fold is the interface's policy for the set, so it is applied to the
+          # value the read already built and only where that read would deliver.
+          foldApplies = deliverable && slot.reach == "all" && declaredFold != null && isFunction declaredFold;
+
+          folded = safe {
+            inherit subject;
+            id = "interface-fold-raised";
+            what = "the fold of ${ifaceLabel} for slot ${util.quote slotName} of ${util.quote subject}";
+            fallback = null;
+            value = declaredFold entryKeyed;
+          };
+
+          foldRaised = foldApplies && folded.rows != [ ];
+
+          # The one channel through which a module refuses another module's value:
+          # a fold states why, and the planner decides the row's id, subject and
+          # severity. A raise cannot carry text, so a refusal is a returned value.
+          refusal =
+            if foldApplies && !foldRaised && builtins.isAttrs folded.value && folded.value ? refused then
+              toString folded.value.refused
             else
-              (head collected).values;
+              null;
+
+          delivered = deliverable && !foldRaised && refusal == null;
+
+          # The plan records the set the read collected; the fold decides only what
+          # the consuming implementation receives.
+          value = if slot.reach == "all" then entryKeyed else (head collected).values;
+
+          implValue = if foldApplies then folded.value else value;
 
           rows =
             util.optional (wire == null) (
@@ -1063,6 +1100,18 @@ in
                   }
                 ) c.undeployed
               ) undeployedEntries
+            )
+            ++ (if foldApplies then folded.rows else [ ])
+            ++ util.optional (refusal != null) (
+              diag.error {
+                inherit subject;
+                id = "interface-fold-refused";
+                message = refusal;
+                evidence = "the fold of ${ifaceLabel} refused the set slot ${util.quote slotName} collected over ${
+                  util.quoteList (map (c: c.entryKey) collected)
+                }, and the fold states the message while the planner states this row's identifier, subject and severity";
+                resolution = "act on the message above in the module or the deployment it names, or wire ${util.quote slotName} of ${util.quote subject} to a capability whose values the fold accepts";
+              }
             );
         in
         {
@@ -1094,7 +1143,45 @@ in
             }) collected
           );
           value = if delivered then value else null;
+          implValue = if delivered then implValue else null;
         };
+
+      # An interface's fold is a policy, so one no read applies is one nobody is
+      # held to. Derived from the slots the deployment resolved rather than from a
+      # second traversal, and the same interface named twice is one row.
+      declaredSlots = concatLists (
+        util.mapAttrsToList (
+          _: inst:
+          concatLists (
+            util.mapAttrsToList (
+              _: member: util.mapAttrsToList (_: slot: slot) member.declaration.uses
+            ) inst.members
+          )
+        ) resolved.instances
+      );
+
+      setReachInterfaces = map (slot: slot.interface) (
+        filter (slot: slot.interface != null && slot.reach == "all") declaredSlots
+      );
+
+      foldDeclared = filter (iface: interface.foldOf iface != null) (
+        map (r: r.value) (filter (r: interface.isInterface r.value) reg)
+        ++ filter (iface: iface != null) (map (slot: slot.interface) declaredSlots)
+      );
+
+      foldRows = map (
+        iface:
+        let
+          subject = interface.subjectOf reg iface;
+        in
+        diag.warning {
+          inherit subject;
+          id = "interface-fold-unapplied";
+          message = "interface ${interface.label reg iface} declares a fold and no slot of this deployment reads it with reach ${util.quote "all"}";
+          evidence = "a fold combines the set a read collects, so a deployment resolving only single-valued reads of this interface never applies it and never observes what it does";
+          resolution = "declare `reach = \"all\"` on a slot reading this interface, or delete the fold from ${subject}";
+        }
+      ) (filter (iface: !(builtins.any (applied: applied == iface) setReachInterfaces)) foldDeclared);
 
       resolved = {
         instances = mapAttrs mkInstance instances;
@@ -1103,6 +1190,7 @@ in
         inherit storeDir;
         rows =
           machineRows
+          ++ foldRows
           ++ util.concatMapAttrsToList (
             _: inst:
             inst.rows
