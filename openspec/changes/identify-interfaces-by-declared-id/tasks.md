@@ -25,7 +25,7 @@
 
 ## 4. Attribution
 
-- [ ] 4.1 Give `fileOf` (`lib/interface.nix:75-80`) an identity fallback: value equality first, then the first registry entry whose `identityOf` is non-null and equal; leave `label` and `subjectOf` unchanged above it; verify an `interfaces` suite test asserts that a row about an interface built by a second evaluation prints the declaring file of the attributed interface claiming the same identity, and that an unattributed interface still renders the "declaring file not recorded" text
+- [x] 4.1 Give `fileOf` (`lib/interface.nix:75-80`) an identity fallback: value equality first, then the first registry entry whose `identityOf` is non-null and equal; leave `label` and `subjectOf` unchanged above it; verify an `interfaces` suite test asserts that a row about an interface built by a second evaluation prints the declaring file of the attributed interface claiming the same identity, and that an unattributed interface still renders the "declaring file not recorded" text
 
 ## 5. The plan field
 

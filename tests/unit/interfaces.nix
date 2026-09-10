@@ -1,8 +1,9 @@
 { planner, support }:
 let
   inherit (support)
-    hasInfix
     countById
+    evidenceById
+    hasInfix
     messageById
     planOf
     publicInt
@@ -751,6 +752,68 @@ in
         rows = 1;
         subject = "interfaces/mine.nix";
         namesBothFolds = true;
+      };
+    };
+
+  testARowNamesAThirdPartysDeclaringFile =
+    let
+      attributed = claiming { exports.publicKey = publicString; };
+      elsewhere = claiming {
+        name = "host-identity";
+        exports.publicKey = publicString;
+      };
+      result = planOf {
+        interfaces."interfaces/theirs.nix".identity = attributed;
+        instances.reader = {
+          module = soleRoot { module = readerOf elsewhere; };
+          placement.every.only.machines = [ "one" ];
+        };
+      };
+    in
+    {
+      expr = {
+        distinctValues = elsewhere != attributed;
+        oneIdentity = planner.identityOf elsewhere == planner.identityOf attributed;
+        namesTheDeclaringFile = hasInfix "`host-identity` (interfaces/theirs.nix)" (
+          evidenceById "slot-unwired" result
+        );
+        foundByClaim =
+          planner.fileOf (planner.registry { "interfaces/theirs.nix".identity = attributed; }) elsewhere;
+      };
+      expected = {
+        distinctValues = true;
+        oneIdentity = true;
+        namesTheDeclaringFile = true;
+        foundByClaim = "interfaces/theirs.nix";
+      };
+    };
+
+  testAnUnattributedInterfaceRendersAsItDoesToday =
+    let
+      claimless = planner.interface {
+        name = "identity";
+        exports.publicKey = publicString;
+      };
+      attributed = claiming { exports.publicKey = publicInt; };
+      result = planOf {
+        interfaces."interfaces/theirs.nix".identity = attributed;
+        instances.reader = {
+          module = soleRoot { module = readerOf claimless; };
+          placement.every.only.machines = [ "one" ];
+        };
+      };
+    in
+    {
+      expr = {
+        rendersNoFile = hasInfix "`identity` (declaring file not recorded in the `interfaces` argument of mkPlan)" (
+          evidenceById "slot-unwired" result
+        );
+        noFile =
+          planner.fileOf (planner.registry { "interfaces/theirs.nix".identity = attributed; }) claimless;
+      };
+      expected = {
+        rendersNoFile = true;
+        noFile = null;
       };
     };
 }

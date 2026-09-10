@@ -110,8 +110,10 @@ rec {
       };
 
   # An interface's declaring file, found by value in the registry the caller passed
-  # to mkPlan. A miss is not an error: the registry exists so a row can print a
-  # file beside a name, not so an interface can be rejected for being absent.
+  # to mkPlan and then by the identity it claims, so a row about an interface
+  # another evaluation built can still print a file. A miss is not an error: the
+  # registry exists so a row can print a file beside a name, not so an interface
+  # can be rejected for being absent.
   registry =
     interfaces:
     util.concatMapAttrsToList (
@@ -125,8 +127,15 @@ rec {
     reg: iface:
     let
       hits = builtins.filter (r: r.value == iface) reg;
+      claim = identityOf iface;
+      claimed = if claim == null then [ ] else builtins.filter (r: identityOf r.value == claim) reg;
     in
-    if hits == [ ] then null else (builtins.head hits).file;
+    if hits != [ ] then
+      (builtins.head hits).file
+    else if claimed == [ ] then
+      null
+    else
+      (builtins.head claimed).file;
 
   label =
     reg: iface:
