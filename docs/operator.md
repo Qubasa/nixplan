@@ -301,6 +301,11 @@ files. The artifact column is the resolved store path, which is the path the cop
 machine and the path the activation names there. `issuer:vars/ca` is delivered to no machine because
 its generator is not deployed, and the line says so rather than leaving the value out.
 
+After those lines comes the diagnostics table the build wrote, rendered as the planner renders it.
+A build whose rows are all warnings prints them and exits zero; a build whose rows carry an error
+prints the table and exits non-zero, because that refusal is the planner's own rather than a second
+one the command invents.
+
 **`apply`** prints one line per step, in the order the steps happened:
 
 ```
@@ -315,14 +320,33 @@ The first line appears only for an edge a cycle forced the walk to contradict. A
 activated by the machine's own endpoint, `flakelet activate <name> <artifact>`; an image entry is
 attached by the script the artifact itself carries, `bin/attach`.
 
-**`status`** prints one line per entry, and asks rather than applies, so an entry a machine does not
-hold is reported as absent instead of as a failure:
+**`status`** prints one line per entry, and asks rather than applies. A line is the machine's own
+answer:
 
 ```
-issuer:api@alpha flakelet generation 1 of plan:issuer:api@alpha
-probe:client@beta flakelet absent
-watch:file@alpha image attached
+issuer:api@alpha flakelet generation 1 of path:/nix/store/6y1...-source?narHash=sha256-Xy0...
+probe:client@beta flakelet generation 1 of path:/nix/store/6y1...-source?narHash=sha256-Zq4...
+watch:file@alpha image running
 ```
+
+Four answers are kept apart, because each one needs something different done about it:
+
+| The line | What happened |
+| --- | --- |
+| the generation and the identity the endpoint stores | the endpoint answered, and the entry is there |
+| `absent` | the endpoint answered and holds no entry under that name |
+| `no endpoint on <machine>: <what it printed>` | the endpoint could not be run there |
+| `unreachable: <machine> at <address> answered nothing` | the machine answered no connection |
+
+`absent` is an endpoint's own answer and nothing else gives it: a machine that was never asked has
+said nothing about the deployment, and printing absence on its behalf would tell an operator the
+entries were never applied. An entry whose machine declares no address is reported as one the
+command will not dial, naming the machine, rather than dialled and reported unreachable. An entry
+whose last activation the endpoint recorded as failed carries that error on its line.
+
+Each line is printed as it is known rather than after the last machine, so one machine's silence
+costs one line and hides nobody else's answer. The command exits non-zero when any machine could
+not be asked, and zero when every machine answered, whatever the answers were.
 
 **`rollback`** takes exactly one `--only`, prints `rollback <key> on <user>@<address>` and then the
 endpoint's own report. An image entry carries no generation to return to, so rolling one back is
@@ -351,11 +375,13 @@ split. The required set is the declared files of every value entry whose deliver
 bytes are needed for a file that will be written, and a value delivered to no machine is written
 nowhere.
 
-The source is checked against the plan before anything is dialled. A file the plan declares that the
-source does not hold is refused naming the entry and the file. A file the source holds that no
-delivered value declares is refused naming the file. What the source holds is measured against the
-whole deployment even under `--only`, so a source that is right for a deployment stays right for a
-restricted run of it.
+The source is checked against the plan before anything is dialled. A file the plan declares that
+the source does not hold is refused naming the entry and the file. A file a delivered value's own
+directory holds that the value does not declare is refused, and every such file is named rather
+than the first of them. A file under no delivered value's directory, a `README` or a `.gitignore`
+beside them, is a claim about no value and is measured by nothing. What the source holds is
+measured against the whole deployment even under `--only`, so a source that is right for a
+deployment stays right for a restricted run of it.
 
 Each file is written over ssh under `umask 077` and left at mode 0400, outside the store, at the
 path the value entry records. Not `nix copy`: a store object is readable by every process on the
@@ -380,8 +406,10 @@ anything would be activating something other than what was built.
 
 Ties break by plan key sort order, so one deployment always walks one way. Two instances wiring each
 other is a legal deployment - a capability's exports are a function of module and settings, never of
-a wire - but its activation graph genuinely has no first element. The walk breaks such a cycle at
-the lowest key by sort order and prints the edge it ordered against. Refusing would refuse a
+a wire - but its activation graph genuinely has no first element. Where nothing is ready, the walk
+takes the lowest entry every unapplied provider of which it can reach forward, contradicts exactly
+the reads into that entry, and prints each edge it ordered against. Every edge it prints therefore
+lies on a cycle, and an entry that merely reads into one keeps its order. Refusing would refuse a
 deployment the library considers correct, and silence would leave a one-off startup failure
 unexplainable.
 
@@ -389,6 +417,59 @@ Every refusal the command can make from the plan, `manifest.json` and the value 
 before the first machine is contacted: an inapplicable deployment, a `--only` naming a key the
 deployment carries as neither an entry nor a value, a missing or unnamed value file, a machine with
 no address. A run that has started is a run whose remaining failures belong to a machine.
+
+## When a run breaks
+
+A run stops at the first step a machine refuses. Each step's line is printed before that step is
+attempted, so the last step line an interrupted run printed names the step that was running when it
+ended, and the failure line after it names that step, the machine and what the machine said. Nothing
+after the failed step is attempted: a broken run leaves one boundary rather than a set of them.
+
+What the cluster then holds is a partial application. The machines the walk had already reached hold
+the new artifact and run it, and every machine after the break holds what the previous run left. No
+single machine is half applied, because each step is one ssh invocation that either completed on
+that machine or did not.
+
+The recovery is another `apply` of the same build and the same `--values` directory, not an undo and
+not a resume of a recorded prefix. Undoing needs a generation that moves a whole run as one, and no
+such generation exists: an endpoint counts generations per service, and an image entry has none at
+all. A resume needs a record of what the run had done, and the command keeps none of its own - the
+machines hold the state, and `status` asks them. A second run costs a comparison per step that
+already happened:
+
+- a value write rewrites the same bytes at the same path with the same mode;
+- a copy is `nix copy` of a closure the machine may already hold, and a store path already valid on
+  the target is not sent again;
+- a flakelet activation of an unchanged artifact is the endpoint's own no-op, and the generation
+  does not move;
+- an image attachment is asked about first, and an image the machine already holds attached is
+  reported as already attached instead of attached a second time.
+
+A narrower second run is `--only`, which bounds the machines contacted as well as the entries
+applied: the machines of the entries it names, plus the delivery set of a value entry it names
+directly, and no others. A machine that receives a value only because some unselected entry reads it
+is not dialled at all.
+
+## Reaching a machine
+
+The command bounds silence and does not bound work. It appends these to the `NIX_SSHOPTS` its caller
+set, and `nix copy` inherits the same string:
+
+```
+-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=3
+```
+
+`BatchMode` asks nothing of a terminal nobody is watching, `ConnectTimeout` gives up on a machine
+that does not answer a connection, and the server-alive pair ends a connection that has stopped
+carrying bytes. A step that keeps making progress is never interrupted by the command: a first
+`nix copy` onto a fresh machine legitimately runs for minutes, and every wall-clock bound on a step
+breaks a real deployment on a slow link. They are appended rather than prepended because ssh uses
+the first value it is given for an option, so an operator who states `ConnectTimeout` in
+`NIX_SSHOPTS` keeps their own.
+
+A step the machine refuses is reported as the command's own refusal, naming the entry, the machine
+and what the machine printed. The argv is no part of that message: a value write carries the bytes
+of a secret.
 
 ## Two directories, one role
 

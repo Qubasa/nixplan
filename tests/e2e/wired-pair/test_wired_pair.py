@@ -782,14 +782,12 @@ def test_a_run_broken_between_two_machines_names_the_step_that_broke(
     """The last step line is the step that was running, and the failure names it."""
     printed: list[str] = interrupted.observed["interrupted"]
     consumer = interrupted.built.entries[CLIENT_KEY]
-    producer = interrupted.built.entries[SERVER_KEY]
-    reached = manifest.address_of(consumer)
+    reached = interrupted.plan[f"machine:{CLIENT_MACHINE}"]["address"]
+    serving = interrupted.plan[f"machine:{SERVER_MACHINE}"]["address"]
     steps = [line for line in printed if not line.startswith(("  ", "failed ", "planner:"))]
 
     assert interrupted.observed["interrupted_status"] != 0, printed
-    assert f"activate {SERVER_KEY} (flakelet) on root@{manifest.address_of(producer)}" in steps, (
-        printed
-    )
+    assert f"activate {SERVER_KEY} (flakelet) on root@{serving}" in steps, printed
     assert steps[-1] == f"copy {CLIENT_KEY} {consumer.path} -> root@{reached}", printed
 
     failed = [line for line in printed if line.startswith("failed ")]

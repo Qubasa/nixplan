@@ -176,7 +176,7 @@ only the scenarios listed below are new.
 - [x] 10.1 The four spec files of this change go in `accountable` in `tests/unit/coverage.nix`.
   Verify: the coverage cross-walk reports an empty difference rather than a specification it cannot
   read, and `nix build .#checks.x86_64-linux.planner-tests` is green.
-- [ ] 10.2 `docs/operator.md`: what a broken run leaves, why the recovery is a second apply rather
+- [x] 10.2 `docs/operator.md`: what a broken run leaves, why the recovery is a second apply rather
   than an undo, which steps cost nothing when repeated, how `--only` narrows the second run, the
   four answers `status` gives, and the ssh options the command adds. The document's `status` example
   is replaced by one a successful run can produce.
