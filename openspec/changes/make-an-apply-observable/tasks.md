@@ -114,7 +114,7 @@ only the scenarios listed below are new.
   Verify: the scripts hold no `2>/dev/null` and no `|| printf`, and
   `tests/e2e/wired-pair/test_wired_pair.py`'s existing use of `remote.flakelet_status_script` on a
   machine that registers nothing still yields the empty list.
-- [ ] 6.2 `cli/report.py:_read_status`: read the endpoint's record whole. A flakelet line carries
+- [x] 6.2 `cli/report.py:_read_status`: read the endpoint's record whole. A flakelet line carries
   the generation, the identity the endpoint stores and `last_error` where the endpoint holds one; an
   image line carries the word `portablectl is-attached` printed, with only `detached` read as
   absence.
