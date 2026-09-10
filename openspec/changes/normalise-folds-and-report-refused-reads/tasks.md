@@ -55,7 +55,7 @@
 
 ## 6. Verification
 
-- [ ] 6.1 Run `nix build .#checks.x86_64-linux.planner-tests -L` as a supervised process and confirm it passes; verify `nix eval --json .#planner.failures` is `{}`
+- [x] 6.1 Run `nix build .#checks.x86_64-linux.planner-tests -L` as a supervised process and confirm it passes; verify `nix eval --json .#planner.failures` is `{}`. 321/321 successful, the three new tests among them.
 - [ ] 6.2 Confirm no re-measurement is owed, per design D6: run `nix build .#checks.x86_64-linux.planner-perf -L` as a supervised process and verify it passes against the committed `perf/budgets.json` with no figure edited
 - [ ] 6.3 Confirm the goldens did not move: `nix eval --json .#planner.worked.plan | jq -S .` still equals `fixtures/minimal-typed-edge/plan/backup.json`, the rendered table still equals `fixtures/minimal-typed-edge/plan/diagnostics.txt`, and `git status --porcelain fixtures` is empty
 - [ ] 6.4 Run `nix fmt` and confirm the only changes are formatting of the markdown this change touched, and that `fixtures/**` is untouched
