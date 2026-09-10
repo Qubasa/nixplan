@@ -107,7 +107,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
   `confinement` are already exported (`:103-111`). `operator/read.nix` imports them the way it
   already imports `../image/read.nix`, and asks rather than restating. Verify no rule text appears
   twice in the tree and `tests/unit/layers.nix` still passes.
-- [ ] 5.2 `operator/read.nix`: four rows from the statement crossed with the entry - a host path the
+- [x] 5.2 `operator/read.nix`: four rows from the statement crossed with the entry - a host path the
   stated realiser cannot assemble, a service manager the stated realiser does not emit for, a name
   the stated realiser's endpoint refuses, and a unit needing an access the stated profile denies.
   Each names the entry, the fact and the statement that produced it. Verify the worked fixture's

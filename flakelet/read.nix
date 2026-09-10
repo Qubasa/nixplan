@@ -99,6 +99,14 @@ let
   # install section on that service would run the job once at deploy time and then
   # again on its schedule, which is the mistake this rule prevents.
   installSection = target: "\n[Install]\nWantedBy=${target}\n";
+
+  # A configuration file's bytes come out of the store and land at a host path
+  # through an assemble step, and this realiser has none: the endpoint reads the
+  # directory, links and starts. A generated file is its own source and its bytes
+  # arrive by delivery before the entry is activated, so it is not this case.
+  pathRule = "a host path this realiser shows is a path bytes already arrive at, because it runs no step on the machine that could assemble one";
+
+  acceptsHostPath = p: p.from == p.path;
 in
 {
   inherit
@@ -106,9 +114,13 @@ in
     confinement
     nameRule
     unitRule
+    pathRule
     acceptsName
     acceptsUnit
+    acceptsHostPath
     ;
+
+  inherit (reader) backend;
 
   read =
     { plan, key }:
@@ -120,13 +132,7 @@ in
 
       refusedUnits = filter (file: !(acceptsUnit image.name file)) (filesOf image);
 
-      # A configuration file's bytes come out of the store and land at a host path
-      # through an assemble step, and this realiser has none: the endpoint reads
-      # the directory, links and starts. A generated file is its own source, and
-      # its bytes arrive by delivery of the value the plan names before the entry
-      # is activated, so there is nothing here to assemble and nothing to refuse.
-      # A value no machine receives is already refused by the planner.
-      shownPaths = sort (a: b: a.path < b.path) (filter (p: p.from != p.path) image.hostPaths);
+      shownPaths = sort (a: b: a.path < b.path) (filter (p: !(acceptsHostPath p)) image.hostPaths);
     in
     if !(acceptsName image.name) then
       fail "entry ${quote key} derives the service name ${quote image.name}, which the endpoint refuses: ${nameRule}"
@@ -136,7 +142,7 @@ in
       let
         first = head shownPaths;
       in
-      fail "entry ${quote key} is shown the host path ${quote first.path} as a ${first.kind} assembled from ${quote first.from}, and this realiser ships unit files and metadata only: it runs no step on the machine that could assemble that path. A delivered generated file is not this case: its bytes arrive at the path the plan names"
+      fail "entry ${quote key} is shown the host path ${quote first.path} as a ${first.kind} assembled from ${quote first.from}: ${pathRule}"
     else
       image;
 

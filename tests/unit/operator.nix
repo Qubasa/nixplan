@@ -85,7 +85,19 @@ let
     };
 
   worked = support.workedResult;
-  workedRead = reader.read { inherit (worked) plan; };
+
+  # The fixture's `vault-repo:server` assembles a configuration file, which is
+  # the one thing the default realiser runs no step for, so the worked reading
+  # states an image for it.
+  workedRealise."vault-repo:server" = {
+    realiser = "image";
+    profile = "trusted";
+  };
+
+  workedRead = reader.read {
+    inherit (worked) plan;
+    realise = workedRealise;
+  };
 
   placedOf =
     plan:
@@ -365,7 +377,10 @@ in
 
   testADeploymentWhoseDiagnosticsCarryAnError =
     let
-      reading = reader.read { inherit (worked) plan diagnostics; };
+      reading = reader.read {
+        inherit (worked) plan diagnostics;
+        realise = workedRealise;
+      };
     in
     {
       expr = {
@@ -445,8 +460,8 @@ in
         ];
         entry = {
           path = "entries/vault-repo-server-vault";
-          realiser = "flakelet";
-          profile = null;
+          realiser = "image";
+          profile = "trusted";
           machine = "vault";
           address = "vault.example";
           units = [ "vault-repo-server-borgRepo.service" ];
@@ -628,7 +643,14 @@ in
           placement.every."vars/x".machines = [ "one" ];
         };
       };
-      reading = readOf { } result;
+      # Stated as an image because `svc-vars/x` is a service name flakelet's own
+      # endpoint refuses, which is a row of its own and not this scenario's.
+      reading = readOf {
+        default = {
+          realiser = "image";
+          profile = "trusted";
+        };
+      } result;
     in
     {
       expr = {

@@ -10,6 +10,10 @@
 {
   planner,
   imageReader ? import ../image/read.nix { inherit planner; },
+  flakeletReader ? import ../flakelet/read.nix {
+    inherit planner;
+    reader = imageReader;
+  },
 }:
 let
   inherit (builtins)
@@ -150,6 +154,43 @@ let
       named = realise ? ${key} || realise ? ${prefixOf parts};
       malformed = filter (s: !isAttrs s.value) steps;
       found = head malformed;
+
+      # Each realiser is asked what it accepts rather than restated here, so the
+      # sentence a row states and the sentence its raise states are one string.
+      confinement = if realiser == "image" then profile else flakeletReader.confinement;
+      emits = if realiser == "image" then imageReader.backend else flakeletReader.backend;
+      runs = (entry.target or { }).serviceManager or null;
+      hostPaths = imageReader.hostPaths { inherit key entry; };
+      unassemblable =
+        if realiser == "flakelet" then filter (p: !(flakeletReader.acceptsHostPath p)) hostPaths else [ ];
+      refusedNames =
+        if realiser == "flakelet" && !(flakeletReader.acceptsName name) then
+          [
+            {
+              named = name;
+              what = "the service name";
+              rule = flakeletReader.nameRule;
+            }
+          ]
+        else
+          [ ];
+      refusedUnits =
+        if realiser == "flakelet" then
+          map (file: {
+            named = file;
+            what = "the unit file";
+            rule = flakeletReader.unitRule name;
+          }) (filter (file: !(flakeletReader.acceptsUnit name file)) (unitFilesOf name (entry.units or { })))
+        else
+          [ ];
+      denials =
+        if confinement == null then
+          [ ]
+        else
+          imageReader.denials {
+            inherit entry;
+            profile = confinement;
+          };
     in
     {
       inherit
@@ -225,6 +266,45 @@ let
                 resolution = "declare an `address` for ${quote parts.machine} in the deployment's machine registry";
               }
             )
+            ++ map (
+              p:
+              planner.error {
+                id = "operator-entry-path-not-assembled";
+                subject = key;
+                message = "entry ${quote key} is stated to be realised by ${quote realiser} and is shown the host path ${quote p.path} as a ${p.kind} assembled from ${quote p.from}, and ${flakeletReader.pathRule}";
+                evidence = "a realisation statement decides which realiser meets the entry, and this one runs no step on the machine";
+                resolution = "state ${quote "image"} for ${quote key}, or stop declaring the ${p.kind} the path is assembled from";
+              }
+            ) unassemblable
+            ++ optional (known && runs != null && runs != emits) (
+              planner.error {
+                id = "operator-entry-service-manager-mismatch";
+                subject = key;
+                message = "entry ${quote key} is planned for machine ${quote parts.machine}, which runs ${shown runs}, and the stated realiser ${quote realiser} emits for ${quote emits}";
+                evidence = "which service manager an artifact is emitted for is the realiser's, and which one a machine runs is the registry's";
+                resolution = "place ${quote key} on a machine running ${quote emits}, or state a realiser that emits for ${shown runs}";
+              }
+            )
+            ++ map (
+              refused:
+              planner.error {
+                id = "operator-entry-name-refused";
+                subject = key;
+                message = "entry ${quote key} is stated to be realised by ${quote realiser}, whose endpoint refuses ${refused.what} ${quote refused.named}: ${refused.rule}";
+                evidence = "the rule is the realiser's own, asked of it rather than restated, so this row and the realiser's refusal say one thing";
+                resolution = "rename the instance or the service of ${quote key} so that ${refused.what} it derives is one the endpoint accepts";
+              }
+            ) (refusedNames ++ refusedUnits)
+            ++ map (
+              denial:
+              planner.error {
+                id = "operator-entry-access-denied";
+                subject = key;
+                message = "entry ${quote key} unit ${quote denial.unit} needs ${denial.access}, and the confinement profile ${quote confinement} the statement produced denies it";
+                evidence = "a profile is stated and the accesses a unit needs are recorded in the plan, and the profile is not widened on the entry's behalf";
+                resolution = "state a profile that allows ${denial.access} for ${quote key}, or stop needing it in unit ${quote denial.unit}";
+              }
+            ) denials
         );
     };
 

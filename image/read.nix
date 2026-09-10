@@ -145,6 +145,80 @@ let
   stagedPath = name: path: "${stagingOf name}/files${path}";
 
   reference = "reference";
+
+  # What an entry records about its own files, and what a profile denies of it.
+  # Read here rather than inside the reading below, so a caller that must not
+  # raise can ask the same functions the refusals are written over.
+  generatedOf =
+    entry:
+    concatLists (
+      mapAttrsToList (
+        gen: g:
+        mapAttrsToList (fname: file: {
+          inherit gen fname;
+          inherit (file) path secrecy deploy;
+          inPlan = file.inPlan;
+          present = !(file ? bytes);
+        }) g.files
+      ) (entry.vars or { })
+    );
+
+  configFilesOf =
+    name: entry:
+    mapAttrsToList (path: file: {
+      inherit path;
+      inherit (file) mode reload computed;
+      source = file.source or null;
+      render = file.render or null;
+      staged = stagedPath name path;
+    }) (entry.configData or { });
+
+  hostPathsOf =
+    { name, entry }:
+    map (f: {
+      path = f.path;
+      from = f.staged;
+      kind = "configuration-file";
+      inherit (f) mode;
+      disposition = if f.source != null then "source" else "render";
+    }) (configFilesOf name entry)
+    ++ map (g: {
+      path = g.path;
+      from = g.path;
+      kind = "generated-file";
+      inherit (g) secrecy;
+      disposition = g.inPlan;
+    }) (filter (g: g.deploy && g.inPlan == reference) (generatedOf entry));
+
+  denialsOf =
+    {
+      denies,
+      units,
+      generated,
+    }:
+    map
+      (u: {
+        unit = u;
+        access = "a static host user";
+      })
+      (if elem "a static host user" denies then filter (u: units.${u} ? user) (attrNames units) else [ ])
+    ++ concatLists (
+      map
+        (
+          g:
+          map (u: {
+            unit = u;
+            access = "a host file only root may read";
+            inherit (g) path;
+          }) (attrNames units)
+        )
+        (
+          if elem "a host file only root may read" denies then
+            filter (g: g.deploy && g.secrecy == "secret" && g.inPlan == reference) generated
+          else
+            [ ]
+        )
+    );
 in
 rec {
   inherit
@@ -158,6 +232,27 @@ rec {
     stagingOf
     stagedPath
     ;
+
+  # A caller that holds an entry and a stated profile, and may not raise, asks
+  # these. An unknown profile answers no denial, because the statement that named
+  # it is refused by the layer that read it.
+  hostPaths =
+    { key, entry }:
+    hostPathsOf {
+      name = nameOf (parseKey key);
+      inherit entry;
+    };
+
+  denials =
+    { entry, profile }:
+    if !(profiles ? ${profile}) then
+      [ ]
+    else
+      denialsOf {
+        inherit (profiles.${profile}) denies;
+        units = entry.units or { };
+        generated = generatedOf entry;
+      };
 
   read =
     {
@@ -198,25 +293,9 @@ rec {
         else
           fail "confinement profile ${quote profile} is not one of ${quoteList profileNames}; the profile is stated rather than inferred";
 
-      generated = concatLists (
-        mapAttrsToList (
-          gen: g:
-          mapAttrsToList (fname: file: {
-            inherit gen fname;
-            inherit (file) path secrecy deploy;
-            inPlan = file.inPlan;
-            present = !(file ? bytes);
-          }) g.files
-        ) (entry.vars or { })
-      );
+      generated = generatedOf entry;
 
-      configFiles = mapAttrsToList (path: file: {
-        inherit path;
-        inherit (file) mode reload computed;
-        source = file.source or null;
-        render = file.render or null;
-        staged = stagedPath name path;
-      }) (entry.configData or { });
+      configFiles = configFilesOf name entry;
 
       referencePaths = uniqueStrings (
         map (g: g.path) (filter (g: g.inPlan == reference) generated)
@@ -225,24 +304,10 @@ rec {
         )
       );
 
-      hostPaths =
-        map (f: {
-          path = f.path;
-          from = f.staged;
-          kind = "configuration-file";
-          inherit (f) mode;
-          disposition = if f.source != null then "source" else "render";
-        }) configFiles
-        # A path is shown only where bytes arrive at it. An undeployed value is on
-        # no machine, so a mount of its path would be a mount of nothing: the unit
-        # then fails at NAMESPACE rather than at anything an operator can read.
-        ++ map (g: {
-          path = g.path;
-          from = g.path;
-          kind = "generated-file";
-          inherit (g) secrecy;
-          disposition = g.inPlan;
-        }) (filter (g: g.deploy && g.inPlan == reference) generated);
+      # A path is shown only where bytes arrive at it. An undeployed value is on
+      # no machine, so a mount of its path would be a mount of nothing: the unit
+      # then fails at NAMESPACE rather than at anything an operator can read.
+      hostPaths = hostPathsOf { inherit name entry; };
 
       version = versionOf {
         inherit
@@ -301,26 +366,10 @@ rec {
             record = unit;
           };
 
-      needsStaticUser = filter (u: units.${u} ? user) (attrNames units);
-      needsRootOnlyFile = filter (
-        g: g.deploy && g.secrecy == "secret" && g.inPlan == reference
-      ) generated;
-
-      denied =
-        map (u: {
-          unit = u;
-          access = "a static host user";
-        }) (if elem "a static host user" profileRecord.denies then needsStaticUser else [ ])
-        ++ concatLists (
-          map (
-            g:
-            map (u: {
-              unit = u;
-              access = "a host file only root may read";
-              inherit (g) path;
-            }) (attrNames units)
-          ) (if elem "a host file only root may read" profileRecord.denies then needsRootOnlyFile else [ ])
-        );
+      denied = denialsOf {
+        inherit (profileRecord) denies;
+        inherit units generated;
+      };
 
       # A unit file is line-oriented, so a newline in a value is a fact the file
       # cannot carry. Spaces and quotes can be: they are escaped at render.
