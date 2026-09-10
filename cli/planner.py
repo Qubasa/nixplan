@@ -41,9 +41,10 @@ def _plan(args: argparse.Namespace) -> int:
 def _build(args: argparse.Namespace) -> int:
     root = manifest.resolve(args.target)
     print(root)
-    for line in report.describe(manifest.read(root)):
+    deployment = manifest.read(root)
+    for line in report.describe(deployment):
         print(line)
-    return 0
+    return 1 if deployment.errors else 0
 
 
 def _apply(args: argparse.Namespace) -> int:

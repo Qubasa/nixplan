@@ -87,17 +87,12 @@ def refuse_inapplicable(deployment: Deployment) -> None:
         deployment: The deployment being applied.
 
     Raises:
-        ApplyError: If any row is an error, with the rendered table as the
-            message, or the rows themselves when the deployment carries no
-            rendered table.
+        ApplyError: If any row is an error, with the diagnostics as the planner
+            rendered them as the message.
     """
-    rows = deployment.errors
-    if not rows:
+    if not deployment.errors:
         return
-    rendered = deployment.table.strip() or "\n".join(
-        f"{row.id} {row.subject} {row.message}" for row in rows
-    )
-    raise ApplyError(f"{deployment.root} is not applicable:\n{rendered}")
+    raise ApplyError(f"{deployment.root} is not applicable:\n{deployment.rendered}")
 
 
 def writes(

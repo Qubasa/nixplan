@@ -144,7 +144,7 @@ only the scenarios listed below are new.
 
 ## 7. What a build reports
 
-- [ ] 7.1 `cli/report.py:describe` and `cli/planner.py:_build`: print the rendered diagnostics table
+- [x] 7.1 `cli/report.py:describe` and `cli/planner.py:_build`: print the rendered diagnostics table
   beside the entries and the values, and exit non-zero when a row is an error. The rows come from
   the tree, which `report-every-refusal-as-a-row` now leaves in place for an inapplicable
   deployment.

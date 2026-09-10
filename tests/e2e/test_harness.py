@@ -1226,3 +1226,53 @@ def test_a_report_that_could_not_ask_every_machine_exits_non_zero(
     silent = Silent("10.0.0.11", 255, "ssh: connect to host: timed out\n")
     monkeypatch.setattr(remote, "Subprocess", lambda: silent)
     assert planner.main(["status", str(root)]) == 1
+
+
+def _row(severity: str) -> dict[str, str]:
+    return {
+        "id": "slot-unwired",
+        "subject": CLIENT_KEY,
+        "severity": severity,
+        "message": "no wire reaches site",
+        "evidence": "",
+        "resolution": "",
+    }
+
+
+TABLE = "slot-unwired  check:client@beta  no wire reaches site"
+
+
+def test_a_build_of_a_deployment_carrying_warnings_prints_them(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A warning is what a deployment holds as much as an entry is."""
+    root = tmp_path / "built"
+    _built(
+        root,
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+        values={SESSION_VALUE: {"delivery": ["alpha"], "files": TOKEN}},
+        rows=[_row("warning")],
+        table=f"{TABLE}\n",
+    )
+
+    assert planner.main(["build", str(root)]) == 0
+
+    printed = capsys.readouterr().out
+    assert SERVER_KEY in printed
+    assert SESSION_VALUE in printed
+    assert TABLE in printed
+
+
+def test_a_build_of_a_deployment_carrying_an_error_prints_the_table_and_refuses(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The planner refused it, so the report is that refusal rather than a second one."""
+    root = tmp_path / "built"
+    _built(root, plan=PLAN, entries={}, rows=[_row("error")], table=f"{TABLE}\n")
+
+    assert planner.main(["build", str(root)]) == 1
+
+    assert TABLE in capsys.readouterr().out

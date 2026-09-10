@@ -51,7 +51,10 @@ def describe(deployment: Deployment) -> tuple[str, ...]:
     Returns:
         A line per placed entry naming its realiser, machine, address, artifact
         and units, then a line per value entry naming its delivery set and its
-        files, both in plan key order.
+        files, both in plan key order, and then the diagnostics the build wrote
+        as the planner rendered them. The rows are the build's own: a warning
+        is what a deployment holds as much as an entry is, and a deployment the
+        planner refused publishes its rows and no entries at all.
     """
     lines = [
         f"{entry.key} {entry.realiser} {entry.machine} {entry.address or 'unaddressed'} "
@@ -64,6 +67,7 @@ def describe(deployment: Deployment) -> tuple[str, ...]:
         f"files [{' '.join(file.name for file in value.files)}]"
         for _, value in sorted(deployment.values.items())
     ]
+    lines += deployment.rendered.splitlines()
     return tuple(lines)
 
 

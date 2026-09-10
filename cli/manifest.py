@@ -100,6 +100,13 @@ class Deployment:
         """The rows that make the deployment inapplicable."""
         return tuple(row for row in self.diagnostics if row.severity == "error")
 
+    @property
+    def rendered(self) -> str:
+        """The table the build wrote, or the rows themselves where it wrote none."""
+        return self.table.strip() or "\n".join(
+            f"{row.id} {row.subject} {row.message}" for row in self.diagnostics
+        )
+
 
 def store_dir() -> str:
     """Return the store directory this command runs against.
