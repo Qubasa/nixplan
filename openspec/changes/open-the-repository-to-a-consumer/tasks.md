@@ -187,7 +187,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
   list. Verify `testAFileNamesAPathThatIsNotThere` passes.
 - [x] 9.3 `docs/cluster.md`: the newcomer folder, what its cut holds, and why its test builds a
   flake at run time. Verify the folder count each document states matches the folders present.
-- [ ] 9.4 `CLAUDE.md`: the invariants this change creates - the deployment build as an output and
+- [x] 9.4 `CLAUDE.md`: the invariants this change creates - the deployment build as an output and
   why the realisers are not, that `flake.debug` is the development attrset and `planner` is the
   command, the recorded platform identity and `mkLib`, that the newcomer deployment holds no path
   interpolation and why, that the documented example and the folder are one text, and the shell's

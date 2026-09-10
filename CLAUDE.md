@@ -259,6 +259,10 @@ without reading the code first.
   the command's own error naming the entry, the machine and what the machine printed, never a
   traceback and never the argv: a value write carries the bytes of a secret. The run attempts
   nothing after the step that broke, and the recovery is a second apply.
+- `--dry-run` replaces the channel every remote step goes through, and nothing else. Every refusal
+  the command makes is made from the plan, the deployment record and the value source, all of which
+  are read before the first dial, so the two runs are comparable line by line and the mode is not a
+  second copy of the walk. What a machine currently holds is not a question it answers; `status` is.
 - Absence is an endpoint's own answer and nothing else's. A machine with no endpoint, a machine
   that answers nothing and an entry whose machine declares no address are three other lines, one
   each, printed as they are known; a report that could not ask a machine exits non-zero. Only
@@ -283,16 +287,40 @@ without reading the code first.
 - `manifest.json` addresses an artifact inside the build, and the build is a farm of symlinks, so
   `cli/manifest.py` resolves each artifact path to its store path. The path an activation names on
   the machine has to be the path the copy put there.
-- `flake.lib` and `flake.operator` are the whole consumer interface, and both are
-  system-independent because each takes the caller's own `pkgs`. A consumer that can only reach the
-  planner can plan and cannot build, which is what `flake.operator` exists to prevent; a path
-  inside this flake's source is not an interface and neither is anything under `tests/`.
+- `flake.lib`, `flake.mkLib` and `flake.operator` are the whole consumer interface, and all three
+  are system-independent because each takes the caller's own `pkgs`. A consumer that can only reach
+  the planner can plan and cannot build, which is what `flake.operator` exists to prevent; a path
+  inside this flake's source is not an interface and neither is anything under `tests/`. The three
+  realisers are published as nothing on purpose: which realiser reads an entry is a statement
+  beside the deployment, so `realise` of `mkDeployment` is where a consumer says it, and their
+  source paths reach the suites as arguments rather than as outputs.
+- `platformSource` is the identity of the package set whose `lib.systems` elaborated a machine's
+  platform record. A record is a field of every placed entry and a key is a digest over the entry,
+  so the elaboration decides identity, and `flake.lib` records `inputs.nixpkgs.rev` for the pin
+  this flake carries. `flake.mkLib` is the way out of that pin for a consumer following another
+  package set, and the library invents no name where a caller states none: two elaborations of one
+  deployment are two plans, and nothing merges them.
+- `flake.debug` is the development attrset - the worked plan, the suites and their failures - and
+  `planner` is the command in every namespace that answers for it: `apps.planner`,
+  `packages.planner` and `packages.planner-src`. One name answering both a debug value and the
+  program an operator installs is what a reader trips on, and `docs/tooling.md` is written against
+  the debug name.
 - `flake.nix` writes its `systems` out rather than taking `nix-systems/default`, which names
   `x86_64-darwin`. The pinned nixpkgs removed that platform with a `throw`, so `nix flake show` died
   in a release note before it reached an output of this flake. Filtering the input's list instead
   would leave two sources of truth for a set this flake states in one line.
 - `apps.default` and `apps.planner` are the same wrapper. `nix run .` is the first thing a reader
   types and the command is the only thing here worth running.
+- The smallest example `docs/README.md` shows is the deployment `tests/e2e/newcomer/template/` holds,
+  and `README.md` shows that template's `flake.nix`. Both comparisons are byte equality in
+  `tests/unit/layers.nix`, so a documented example that stopped building fails a check naming the
+  document and the folder. The template therefore writes no path of this repository: every path in
+  it is either a host path a unit reads at run time or an interpolation of an argument the flake
+  handed it. A path relative to a repository resolves from the reader's own tree there, and
+  `testAFileNamesAPathThatIsNotThere` reads that text as this tree's, comments included.
+- The one shell takes its root from `git rev-parse --show-toplevel`, and `planner-e2e-env` refuses
+  to run outside a checkout of this repository. The shell is documentation about this tree: entered
+  from a foreign one it would export the paths of a checkout the reader is not editing.
 
 ## Registration points
 

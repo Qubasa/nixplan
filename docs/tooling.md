@@ -21,7 +21,7 @@ package set rather than choosing one:
 | Output | What it is |
 | --- | --- |
 | `lib` | the library, elaborated against the nixpkgs this flake pins |
-| `mkLib { systems ? null, platformSource ? null }` | the same library against a caller's own platform definitions, which decides every entry key |
+| `mkLib { systems, platformSource ? null }` | the same library against a caller's own platform definitions, which decides every entry key |
 | `operator` | `mkDeployment`, the whole deployment built - see [operator.md](operator.md) |
 | `debug` | the worked fixture, the suites and their failures, for reading a value while iterating |
 
