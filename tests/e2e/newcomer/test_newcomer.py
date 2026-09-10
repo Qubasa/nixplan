@@ -150,23 +150,33 @@ def _reported(line: str) -> Reported:
     )
 
 
-def _host(*argv: str, timeout: float = BRIEF) -> str:
-    """Run a command on this host and return its stdout.
+def _host(
+    *argv: str, timeout: float = BRIEF, cwd: Path | None = None
+) -> subprocess.CompletedProcess[str]:
+    """Run a command on this host and return what it did.
 
     Args:
         argv: The command and its arguments.
         timeout: Seconds to allow.
+        cwd: The directory to run it in, or this process's own.
 
     Returns:
-        The command's stdout.
+        The finished process, stdout and stderr captured.
 
     Raises:
         RuntimeError: If it refused, carrying its own message.
     """
-    done = subprocess.run(argv, capture_output=True, text=True, check=False, timeout=timeout)
+    done = subprocess.run(
+        argv, capture_output=True, text=True, check=False, timeout=timeout, cwd=cwd
+    )
     if done.returncode != 0:
         raise RuntimeError(f"{shlex.join(argv)} failed:\n{done.stderr.strip()}")
-    return done.stdout
+    return done
+
+
+def _out(*argv: str, timeout: float = BRIEF) -> str:
+    """The stdout of a command this host ran, which is the usual thing wanted."""
+    return _host(*argv, timeout=timeout).stdout
 
 
 def _source_of(flake: Path) -> str:
@@ -183,7 +193,7 @@ def _source_of(flake: Path) -> str:
     Returns:
         The store path of its tracked content.
     """
-    return str(json.loads(_host("nix", "flake", "metadata", "--json", str(flake)))["path"])
+    return str(json.loads(_out("nix", "flake", "metadata", "--json", str(flake)))["path"])
 
 
 def test_the_flake_names_its_outputs() -> None:
@@ -195,7 +205,7 @@ def test_the_flake_names_its_outputs() -> None:
     at something a reader can type next, so the flake with no attribute named
     runs the command and the command's own help names its subcommands.
     """
-    shown = json.loads(_host("nix", "flake", "show", "--json", str(FLAKE)))
+    shown = json.loads(_out("nix", "flake", "show", "--json", str(FLAKE)))
     claimed = ["aarch64-darwin", "aarch64-linux", "x86_64-linux"]
 
     assert sorted(shown["apps"]) == claimed, sorted(shown["apps"])
@@ -205,7 +215,7 @@ def test_the_flake_names_its_outputs() -> None:
         assert "default" in shown["apps"][system], shown["apps"][system]
         assert "planner" in shown["packages"][system], sorted(shown["packages"][system])
 
-    helped = _host("nix", "run", str(FLAKE), "--", "--help", timeout=PATIENT)
+    helped = _out("nix", "run", str(FLAKE), "--", "--help", timeout=PATIENT)
     for subcommand in ("plan", "build", "apply", "status", "rollback"):
         assert f"    {subcommand}" in helped, helped
 
@@ -217,21 +227,21 @@ def test_a_consumer_reads_the_build_off_an_output() -> None:
     caller's own package set: a consumer on one double building for another reads
     one name rather than one name per double.
     """
-    shown = json.loads(_host("nix", "flake", "show", "--json", str(FLAKE)))
+    shown = json.loads(_out("nix", "flake", "show", "--json", str(FLAKE)))
     assert "lib" in shown, sorted(shown)
     assert "operator" in shown, sorted(shown)
 
     library = json.loads(
-        _host("nix", "eval", "--json", f"{FLAKE}#lib", "--apply", "builtins.attrNames")
+        _out("nix", "eval", "--json", f"{FLAKE}#lib", "--apply", "builtins.attrNames")
     )
     assert {"interface", "registry", "render", "service", "platform"} <= set(library), library
 
     build = json.loads(
-        _host("nix", "eval", "--json", f"{FLAKE}#operator", "--apply", "builtins.attrNames")
+        _out("nix", "eval", "--json", f"{FLAKE}#operator", "--apply", "builtins.attrNames")
     )
     assert "mkDeployment" in build, build
     assert (
-        _host(
+        _out(
             "nix",
             "eval",
             f"{FLAKE}#operator",
@@ -250,7 +260,7 @@ def test_one_published_name_answers_two_different_things() -> None:
     set` while `nix run` answered with the command. The name is the program's.
     """
     built = Path(
-        _host(
+        _out(
             "nix",
             "build",
             "--no-link",
@@ -263,7 +273,7 @@ def test_one_published_name_answers_two_different_things() -> None:
     )
     assert (built / "bin" / "planner").is_file(), built
 
-    shown = json.loads(_host("nix", "flake", "show", "--json", str(FLAKE)))
+    shown = json.loads(_out("nix", "flake", "show", "--json", str(FLAKE)))
     assert "planner" not in shown, sorted(shown)
 
 
@@ -273,13 +283,11 @@ def test_the_test_results_are_reachable_under_a_name_of_their_own() -> None:
     That name is nobody else's: no application and no package answers for it, so
     the command and the development values cannot be confused for each other.
     """
-    failures = json.loads(
-        _host("nix", "eval", "--json", f"{FLAKE}#debug.failures", timeout=PATIENT)
-    )
+    failures = json.loads(_out("nix", "eval", "--json", f"{FLAKE}#debug.failures", timeout=PATIENT))
     assert failures == [], failures
 
     suites = json.loads(
-        _host(
+        _out(
             "nix",
             "eval",
             "--json",
@@ -292,7 +300,7 @@ def test_the_test_results_are_reachable_under_a_name_of_their_own() -> None:
     assert "plan" in suites, suites
 
     entries = json.loads(
-        _host(
+        _out(
             "nix",
             "eval",
             "--json",
@@ -304,11 +312,80 @@ def test_the_test_results_are_reachable_under_a_name_of_their_own() -> None:
     )
     assert entries, entries
 
-    shown = json.loads(_host("nix", "flake", "show", "--json", str(FLAKE)))
+    shown = json.loads(_out("nix", "flake", "show", "--json", str(FLAKE)))
     assert "debug" in shown, sorted(shown)
     for system in sorted(shown["apps"]):
         assert "debug" not in shown["apps"][system], shown["apps"][system]
         assert "debug" not in shown["packages"][system], sorted(shown["packages"][system])
+
+
+def test_the_shell_carries_the_command_its_documentation_is_about() -> None:
+    """The one shell carries every command a document tells a reader to run in it.
+
+    `docs/operator.md` is a document about a command the one shell of this
+    repository did not carry, so a reader following it typed `nix run .#planner
+    --` at every step. `planner-e2e-env` and `pytest` are the other two a
+    document names inside the shell.
+    """
+    for command in ("planner", "planner-e2e-env", "pytest"):
+        found = _out(
+            "nix",
+            "develop",
+            str(FLAKE),
+            "-c",
+            "bash",
+            "-c",
+            f"command -v {command}",
+            timeout=PATIENT,
+        )
+        assert found.strip(), command
+
+    helped = _out("nix", "develop", str(FLAKE), "-c", "planner", "--help", timeout=PATIENT)
+    for subcommand in ("plan", "build", "apply", "status", "rollback"):
+        assert f"    {subcommand}" in helped, helped
+
+
+def test_the_shell_is_entered_from_outside_this_checkout(tmp_path: Path) -> None:
+    """A shell of this checkout is a shell of this checkout from anywhere.
+
+    The hook asked `git rev-parse --show-toplevel` about the caller's own
+    directory, so entering it from an unrelated repository put that repository's
+    directories on `PYTHONPATH` and entering it from no repository at all
+    exported `/tests/e2e:/cli`. Both were silent.
+    """
+    foreign = tmp_path / "elsewhere"
+    foreign.mkdir()
+    (foreign / "flake.nix").write_text("{ outputs = _: { }; }\n")
+    _host("git", "init", "-q", str(foreign))
+
+    for where in (foreign, tmp_path):
+        entered = _host(
+            "nix",
+            "develop",
+            str(FLAKE),
+            "-c",
+            "bash",
+            "-c",
+            'printf %s "$PYTHONPATH"',
+            timeout=PATIENT,
+            cwd=where,
+        )
+        configured = entered.stdout.split(os.pathsep)
+        assert not [path for path in configured if path.startswith(str(tmp_path))], configured
+        assert any(path.startswith("/nix/store") for path in configured), configured
+        assert str(FLAKE) not in entered.stdout, entered.stdout
+        assert "planner:" in entered.stderr, entered.stderr
+
+    named = _host(
+        "nix",
+        "develop",
+        str(FLAKE),
+        "-c",
+        "true",
+        timeout=PATIENT,
+        cwd=foreign,
+    ).stderr
+    assert str(foreign) in named, named
 
 
 def _planner(work: Workstation, *argv: str, timeout: float = PATIENT) -> str:

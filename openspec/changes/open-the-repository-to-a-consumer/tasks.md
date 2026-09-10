@@ -129,7 +129,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
   `testACommandTheRootAdvertisesNeedsSomethingThisRepositoryCannotProvide`, the evaluating layer's
   test for that scenario, and the needle-list addition from 6.3. Verify the test is red against the
   root as it stood before 6.3.
-- [ ] 6.5 `tests/e2e/newcomer/test_newcomer.py`:
+- [x] 6.5 `tests/e2e/newcomer/test_newcomer.py`:
   `test_the_shell_carries_the_command_its_documentation_is_about` and
   `test_the_shell_is_entered_from_outside_this_checkout`, the machine layer's tests for the two
   scenarios of *The one shell is a shell of this checkout*. Both enter the shell with a real `nix`
