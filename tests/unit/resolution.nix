@@ -1296,6 +1296,99 @@ in
       };
     };
 
+  testTwoConsumersReadingDifferentExportsFoldDifferentSets =
+    let
+      iface = planner.interface {
+        name = "identity";
+        exports = {
+          publicKey = publicString;
+          comment = publicString;
+        };
+        fold =
+          set:
+          builtins.concatStringsSep ";" (
+            map (key: "${key}=${builtins.concatStringsSep "," (builtins.attrNames set.${key})}") (
+              builtins.attrNames set
+            )
+          );
+      };
+      both = _: {
+        provides.identity.interface = iface;
+        impl = _: {
+          provides.identity.exports = {
+            publicKey = "ssh-ed25519 AAAA";
+            comment = "a comment";
+          };
+          units.only.command = "/bin/true";
+        };
+      };
+      consuming = reads: {
+        module = soleRoot { module = folds { inherit iface reads; }; };
+        placement.every.only.machines = [ "one" ];
+        wire.far = {
+          instance = "provider";
+          provides = "identity";
+        };
+      };
+      result = planOf {
+        sources = sources // {
+          modules = sources.modules // {
+            authz = "modules/authz/default.nix";
+            hosts = "modules/hosts/default.nix";
+          };
+          leaves = sources.leaves // {
+            authz.only = "modules/authz/leaf.nix";
+            hosts.only = "modules/hosts/leaf.nix";
+          };
+        };
+        interfaces = folderRegistry iface;
+        instances = {
+          provider = {
+            module = soleRoot {
+              module = both;
+              provides = [ "identity" ];
+            };
+            placement.every.only.machines = [
+              "one"
+              "two"
+            ];
+            exposes = [ "identity" ];
+          };
+          authz = consuming [ "publicKey" ];
+          hosts = consuming [
+            "publicKey"
+            "comment"
+          ];
+        };
+      };
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        authzFolded = result.plan."authz:only@one".units.only.env.FAR;
+        hostsFolded = result.plan."hosts:only@one".units.only.env.FAR;
+        absentRatherThanNull = result.plan."authz:only@one".reads.far.entries."provider:only@one" ? comment;
+        hostsSawBoth =
+          builtins.attrNames
+            result.plan."hosts:only@one".reads.far.entries."provider:only@one";
+        applicable = result.applicable;
+      };
+      expected = {
+        ids = [
+          "set-read-in-key"
+          "set-read-in-key"
+        ];
+        authzFolded = "provider:only@one=publicKey;provider:only@two=publicKey";
+        hostsFolded = "provider:only@one=comment,publicKey;provider:only@two=comment,publicKey";
+        absentRatherThanNull = false;
+        hostsSawBoth = [
+          "comment"
+          "publicKey"
+        ];
+        applicable = true;
+      };
+    };
+
   testAFoldNobodyReaches =
     let
       iface = folding joined;
