@@ -83,7 +83,7 @@ Each scenario's test belongs to exactly one layer. A fact about evaluation is a 
 
 ## 4. The reading answers the whole statement
 
-- [ ] 4.1 `operator/read.nix`: resolve the statement field by field down the three steps it is
+- [x] 4.1 `operator/read.nix`: resolve the statement field by field down the three steps it is
   already read by (`:70-82`, `:102-106`), so `profile` inherits from `realise.default` the way
   `realiser` does. Verify a deployment stating `default = { realiser = "image"; profile = "strict";
   }` and `"svc:only" = { realiser = "image"; }` builds under `strict` and produces no row.

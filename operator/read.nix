@@ -19,6 +19,7 @@ let
     elemAt
     filter
     head
+    isAttrs
     length
     mapAttrs
     match
@@ -81,20 +82,25 @@ let
         machine = elemAt m 2;
       };
 
-  # A statement is read by plan key, then by the `<instance>:<service>` prefix,
-  # then by `default`. A statement that names an entry without naming a realiser
-  # still takes the default one: what it carries is the fact the default cannot.
-  statementOf =
+  prefixOf = parts: "${parts.instance}:${parts.service}";
+
+  # Every field is resolved down the same three steps: the plan key, then the
+  # `<instance>:<service>` prefix, then `default`. Resolving per statement rather
+  # than per field would leave a reader having to know which fields inherit.
+  statementSteps =
     realise: key: parts:
+    filter (s: s != null) [
+      (realise.${key} or null)
+      (realise.${prefixOf parts} or null)
+      (realise.default or null)
+    ];
+
+  fieldOf =
+    steps: field:
     let
-      prefix = "${parts.instance}:${parts.service}";
+      carrying = filter (s: isAttrs s && s ? ${field}) steps;
     in
-    if realise ? ${key} then
-      realise.${key}
-    else if realise ? ${prefix} then
-      realise.${prefix}
-    else
-      realise.default or { };
+    if carrying == [ ] then null else (head carrying).${field};
 
   unitFilesOf =
     name: units:
@@ -116,18 +122,18 @@ let
     key:
     let
       parts = parseKey key;
-      statement = statementOf realise key parts;
-      stated = realise.default.realiser or defaultRealiser;
-      realiser = statement.realiser or stated;
+      steps = statementSteps realise key parts;
+      statedRealiser = fieldOf steps "realiser";
+      realiser = if statedRealiser == null then defaultRealiser else statedRealiser;
       known = elem realiser realisers;
-      profile = statement.profile or null;
+      profile = fieldOf steps "profile";
       record = machineRecordOf plan parts.machine;
       declared = record.address or null;
       address = if declared == "" then null else declared;
       entry = plan.${key};
       name = imageReader.nameOf parts;
       realised = entry.units or { } != { };
-      named = realise ? ${key} || realise ? "${parts.instance}:${parts.service}";
+      named = realise ? ${key} || realise ? ${prefixOf parts};
     in
     {
       inherit
