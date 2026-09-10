@@ -182,7 +182,7 @@ only the scenarios listed below are new.
   is replaced by one a successful run can produce.
   Verify: the words interrupt, partial, resume and unreachable each appear, every command in the
   document runs as written, and `testAFileNamesAPathThatIsNotThere` passes.
-- [ ] 10.3 `CLAUDE.md`: the invariants this change creates - a step line precedes its step; a
+- [x] 10.3 `CLAUDE.md`: the invariants this change creates - a step line precedes its step; a
   machine's refusal is the command's own error; absence is an endpoint's answer and nothing else;
   the walk contradicts only an edge on a cycle; the value source is measured under the value
   entries' own directories; a record is refused by version and by store; and ssh options are

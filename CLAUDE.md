@@ -200,9 +200,33 @@ without reading the code first.
   `dependsOn` is `machine:<name>@<hash>`, which is key provenance rather than order. Values are
   written before any entry is activated, and an entry is copied before it is activated.
 - Two instances wiring each other is a legal deployment whose activation graph has no first element,
-  so the walk breaks the cycle at the lowest key by sort order and prints the edge it ordered
-  against. Refusing would refuse a deployment the library accepts; silence would make a one-off
-  startup failure unexplainable.
+  so the walk contradicts an edge rather than refusing. Only an edge on a cycle is contradicted:
+  with nothing ready it takes the lowest entry every unapplied provider of which is reachable from
+  it, contradicts exactly the reads into that entry and prints each, and a provider left behind by
+  a contradicted edge is applied at the first opportunity. An entry that merely reads into a cycle
+  keeps its order. Refusing would refuse a deployment the library accepts; silence would make a
+  one-off startup failure unexplainable.
+- A step's line is printed before the step is attempted, so the last step line a run printed names
+  the step that was running when it ended, and a failure line follows it. A machine's refusal is
+  the command's own error naming the entry, the machine and what the machine printed, never a
+  traceback and never the argv: a value write carries the bytes of a secret. The run attempts
+  nothing after the step that broke, and the recovery is a second apply.
+- Absence is an endpoint's own answer and nothing else's. A machine with no endpoint, a machine
+  that answers nothing and an entry whose machine declares no address are three other lines, one
+  each, printed as they are known; a report that could not ask a machine exits non-zero. Only
+  `detached` is a detached image: `portablectl is-attached` prints four words for one a machine
+  holds.
+- The value source is measured under the directories of the value entries the deployment delivers.
+  A file under none of them is a claim about no value, and every undeclared file inside one is
+  named rather than the first of them.
+- A deployment record is refused by its `version` and by its `storeDir`, before any entry of it is
+  read, and a record carrying no `entries` table is refused rather than read as a deployment that
+  places nothing. An entry's `address` may be absent, because a machine declaring none is a warning
+  of the planner; the refusal is made where the machine would be dialled.
+- The ssh options the command adds - `BatchMode`, `ConnectTimeout` and the server-alive pair - are
+  appended to the caller's `NIX_SSHOPTS`, never prepended, because ssh takes the first value it is
+  given for an option. They bound silence and never work: a first `nix copy` onto a fresh machine
+  legitimately runs for minutes.
 - The value source is a directory of bytes and nothing in this repository fills it. The required
   set is the declared files of every delivered value entry that records no `program`: bytes are
   needed only for a file that will be written, the plan carries the bytes of nothing, and a value
