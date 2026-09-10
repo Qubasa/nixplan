@@ -502,7 +502,7 @@ def test_the_documented_smallest_example_is_built(
         placed = plan[key]
         assert placed["closure"], placed
         assert sorted(placed["units"]) == ["say"], placed
-        held = vm.ssh_succeed(f"ls {root}/{entry.path}/units", timeout=BRIEF).split()
+        held = vm.ssh_succeed(f"ls {entry.path}/units", timeout=BRIEF).split()
         assert held == [UNIT], held
 
 
