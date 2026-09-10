@@ -17,6 +17,7 @@ let
     inherit
       korora
       systems
+      platformSource
       folder
       changesRoot
       ;
@@ -74,6 +75,7 @@ in
         import ${./tests} {
           korora = import ${inputs.korora}/types.nix;
           systems = (import ${inputs.nixpkgs}/lib).systems;
+          platformSource = "${platformSource}";
           folder = ${folder};
           libSource = ${./lib};
           imageSource = ${./image};

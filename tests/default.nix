@@ -1,6 +1,7 @@
 {
   korora,
   systems,
+  platformSource,
   folder,
   libSource,
   perfSource,
@@ -12,7 +13,7 @@
   flakeletSource,
 }:
 let
-  planner = import libSource { inherit korora systems; };
+  planner = import libSource { inherit korora systems platformSource; };
   support = import ./unit/support.nix { inherit planner folder perfSource; };
 in
 let
@@ -22,6 +23,17 @@ let
     interfaces = import ./unit/interfaces.nix { inherit planner support; };
     composition = import ./unit/composition.nix { inherit planner support; };
     resolution = import ./unit/resolution.nix { inherit planner support; };
+    consumer = import ./unit/consumer.nix {
+      inherit
+        planner
+        support
+        korora
+        systems
+        libSource
+        repoSource
+        folder
+        ;
+    };
     diagnostics = import ./unit/diagnostics.nix {
       inherit
         planner

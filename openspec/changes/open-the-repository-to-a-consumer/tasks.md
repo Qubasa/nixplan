@@ -55,7 +55,7 @@ under `tests/e2e/`. The layer is named in the task that writes the test.
 - [x] 3.2 `flake-module.nix`: `flake.mkLib` taking a caller's own `lib.systems` and returning the
   library elaborated against it, with `flake.lib` staying the applied default (design D2). Verify
   `nix eval .#mkLib` resolves and that a library obtained through it plans the worked fixture.
-- [ ] 3.3 `tests/unit/consumer.nix`: `testTheLibraryStatesWhoseNixpkgsElaboratedItsPlatforms` and
+- [x] 3.3 `tests/unit/consumer.nix`: `testTheLibraryStatesWhoseNixpkgsElaboratedItsPlatforms` and
   `testAConsumerElaboratesAMachineWithItsOwnNixpkgs`, the evaluating layer's tests for the two
   scenarios of *The platform elaboration a consumer receives is a stated choice*. Both are pure
   evaluation and neither names a built output. Register the suite as `consumer` in `suites` in
