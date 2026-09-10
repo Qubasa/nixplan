@@ -239,18 +239,20 @@ def attach_script(artifact: Path) -> str:
 
 
 def flakelet_status_script(name: str) -> str:
-    """Return the endpoint's report for one entry, or an empty list of entries.
+    """Return the endpoint's own report for one entry.
 
-    An entry the machine does not hold is an absence rather than a failure, so
-    an endpoint that refuses the name answers with the empty list it would give
-    for a name it holds nothing under.
+    Neither the standard error nor the exit status is discarded. An endpoint
+    that holds nothing under the name, one that is not on the machine's path
+    and one that refuses the caller need four different things done about
+    them, and a script that answered the empty list for all of them told an
+    operator none of it.
     """
-    return f"flakelet status --json {shlex.quote(name)} 2>/dev/null || printf '[]'"
+    return f"flakelet status --json {shlex.quote(name)}"
 
 
 def image_status_script(image: Path) -> str:
-    """Return whether the machine holds one image attached."""
-    return f"portablectl is-attached {shlex.quote(str(image))} 2>/dev/null || printf 'detached'"
+    """Return what the machine's own tool says about holding one image attached."""
+    return f"portablectl is-attached {shlex.quote(str(image))}"
 
 
 def rollback_script(name: str) -> str:
