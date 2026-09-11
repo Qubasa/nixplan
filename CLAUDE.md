@@ -134,6 +134,11 @@ Recorded so the question is answered once.
   `refusals` key, and a module still may not tag a row's severity. `builtins.tryEval` reports that
   something raised and never what it said, which is why a refusal is a returned value and why
   `module-raised` carries the planner's text rather than the author's.
+- `tests/unit/diagnostics.nix` walks two file lists and they are not one list. `totalFiles` is
+  `lib/**` plus `operator/read.nix`, and it is what the purity scan reads: those are the files that
+  never raise. `producingFiles` adds `secrets/read.nix`, because a realiser's reading writes row
+  identifiers the table owes a reader while still raising. Merging the two makes the purity scan
+  report a realiser's own `throw` as a defect, which is how the lists first came apart.
 
 ## Keys and identity
 
@@ -778,14 +783,6 @@ silently unobserved.
 - A fold's refusal is an in-band sentinel: `lib/resolve.nix` reads a returned attrset carrying a
   `refused` attribute as a refusal, so a fold whose own successful result carries that name cannot
   succeed. A tagged pair costs one line per fold.
-- Every refusal in `secrets/read.nix` and `secrets/backend.nix` sits above no row and outside the
-  accounting in `tests/unit/diagnostics.nix`, whose `realiserFiles` names two files. A generator
-  declaring no `program`, a file name outside the external grammar and a recipient machine with no
-  address each abort a generation build under an empty table.
-  `openspec/changes/report-a-secrets-refusal-as-a-row`.
-- The deployment record publishes a per-entry identity so a report can compare a machine against a
-  build, and `cli/manifest.py` reads no such field, so `status` cannot tell a current machine from
-  one holding an earlier build. `openspec/changes/answer-whether-a-machine-is-current`.
 - The purity scan in `tests/unit/diagnostics.nix` is substring matching over comment-stripped text,
   so `.check ` matches inside a string literal and `assert ` misses a call spelled with no space.
   `ast-grep` is installed and parses.
