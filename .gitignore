@@ -1,4 +1,6 @@
 .direnv
+slopo-report/**
+slopo.db
 .envrc.local
 workdirs/**
 .omp
