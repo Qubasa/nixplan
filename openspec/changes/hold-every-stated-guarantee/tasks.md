@@ -182,30 +182,35 @@ at the end, from one measurement.
 
 ## 10. Verification
 
-- [x] 10.1 `nix build -L --no-link .#checks.x86_64-linux.planner-tests`: green. 403 unit tests, from
-      the 382 this change started at, measured against `9ce69dc`: `diagnostics` 22 -> 32, `plan`
-      29 -> 35, `operator` 29 -> 31, `coverage` 8 -> 10, `exclusions` 16 -> 17, and every other
-      suite unchanged in count, three of them with a tautology replaced by an observation.
+- [x] 10.1 `nix build -L --no-link .#checks.x86_64-linux.planner-tests`: green. 407 unit tests, from
+      the 382 this change started at, measured against `9ce69dc`: `diagnostics` 22 -> 35, `plan`
+      29 -> 35, `operator` 29 -> 31, `resolution` 43 -> 44, `coverage` 8 -> 10, `exclusions`
+      16 -> 17, and every other suite unchanged in count, three of them with a tautology replaced
+      by an observation. The last four of those tests are the review's own: an unattributed fold
+      row, a refused sibling read, a module that is not a function, and a record of the wrong kind.
 - [x] 10.2 Regenerated: `nix eval --json .#debug.worked.plan | jq -S .` is byte-identical to the
       committed golden. No entry key moved and no field appeared, which is the expected reading of
       this change against this fixture: every generator in it declares files, so the always-present
       `files` field was already recorded, and the fixture declares no malformed value, no name
       carrying a separator and no member spelled twice, so no new row is earned.
-- [x] 10.3 Re-recorded once from `planner-perf-results`, with `check.py`'s own `figure` rounding and
+- [x] 10.3 Re-recorded from `planner-perf-results`, with `check.py`'s own `figure` rounding and
       `margin` 0.15 / `growth` 1.25 untouched. Every one of the 81 gated figures moved up by about
       7% per plan entry, uniformly across sizes 4, 16, 64 and 256 - `worked`'s `nrThunks` 726.18 ->
-      785.82, `fleet-16`'s 388.76 -> 417.94, `fleet-256`'s 305.03 -> 326.86, `mesh-256`'s 367.24 ->
-      389.40 - so the cost is a constant added to the reading of one entry rather than a new term in
+      794.73, `fleet-16`'s 388.76 -> 420.90, `fleet-256`'s 305.03 -> 328.30, `mesh-256`'s 367.24 ->
+      390.84 - so the cost is a constant added to the reading of one entry rather than a new term in
       how the reading grows. The three sources are the guarded field reading, the key-grammar check
       on every name, and the interface rows now earned from the modules rather than from
-      attribution; none is avoidable without giving up the guarantee it holds.
+      attribution; none is avoidable without giving up the guarantee it holds. Recorded twice: once
+      for the change and once for the review's library repairs, which moved every figure a further
+      0.4% to 1% and no figure's growth across sizes.
       `.#checks.x86_64-linux.planner-perf` and `planner-perf-checker` exit 0.
 - [x] 10.4 `.#checks.x86_64-linux.planner-delivery` and `.#checks.x86_64-linux.treefmt`: green. The
-      delivery check's 63 tests are the 54 this change started at plus nine the specs' headings name.
-- [x] 10.5 `nix run .#planner-e2e` with `PYTHONPATH` unset: 70 passed, 8 skipped, in 183s. The eight
-      are `newcomer`, which needs cluster egress this host does not give it, and that skip predates
-      this change. 70 against the 75 recorded at the start is not a loss: that figure counted the
-      `newcomer` cases the run skips here, and `portable-image` gained three assembly tests.
+      delivery check's 65 tests are the 54 this change started at plus nine the specs' headings name
+      and two the review added about a malformed file inside a build.
+- [x] 10.5 `nix run .#planner-e2e` with `PYTHONPATH` unset: 78 passed, none skipped, in 174s. The
+      75 recorded at the start is beaten by three, which is `portable-image`'s three assembly tests;
+      `newcomer`'s eight cases skip themselves on a host that gives the cluster no egress and ran
+      here.
 - [x] 10.6 Each repair reverted, its named check observed red, restored:
       - a set-valued read is an ordering edge (`cli/order.py`) ->
         `test_an_entry_reading_a_set_of_providers_follows_all_of_them`
@@ -235,4 +240,8 @@ at the end, from one measurement.
         `::test_the_mode_does_not_depend_on_the_attaching_environment`, both red with the recipe
         reverted to `: >` and green with it restored. The second was rewritten first: with the old
         recipe chmod-ing at the end, the finished file's mode alone could not tell the two recipes
-        apart, so it now reads the mode of the assembly as well as of the finished file.
+        apart, so it now reads the mode of the assembly as well as of the finished file. All three
+        assembly tests were then moved onto the machine, where the rest of the folder observes: the
+        script is the artifact's own under a root of the run's choosing, the two commands that would
+        attach are answered by a `PATH` that refuses, and one case is one ssh command because the
+        guest's per-connection sshd stops accepting a burst of short logins.

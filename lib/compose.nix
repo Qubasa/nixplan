@@ -87,7 +87,13 @@ rec {
       settings,
     }:
     let
-      given = settings.${name} or { };
+      # The namespace a deployment wrote for this member, read with the shape the
+      # rest of this function needs: `attrNames` of a value of another kind ends
+      # the evaluation, and the deployment's half is read with the module half's
+      # tolerance.
+      written = settings.${name} or { };
+      malformed = !(builtins.isAttrs written);
+      given = if malformed then { } else written;
       givenKeys = attrNames given;
       fixedKeys = attrNames fixed;
       defaultKeys = attrNames defaults;
@@ -108,7 +114,16 @@ rec {
           "defaults"
       ) values;
       rows =
-        map (
+        util.optional malformed (
+          diag.error {
+            inherit subject;
+            id = "declaration-field-malformed";
+            message = "${deploymentFile} declares the settings of ${util.quote name} as a value of type ${builtins.typeOf written}, and the reading needs a record";
+            evidence = "the half of a declaration a deployment writes is read with the tolerance the half a module writes is read with, so a value of the wrong kind is a row and the rest of the deployment is still read";
+            resolution = "write a record for ${util.quote name} under `settings` in ${deploymentFile}";
+          }
+        )
+        ++ map (
           k:
           diag.error {
             inherit subject;

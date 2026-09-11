@@ -417,16 +417,20 @@ let
 
   isComment = line: builtins.match "[[:space:]]*#.*" line != null;
 
+  # Every file the tree declares total, which is `lib/` plus the reading beside
+  # it: `operator/read.nix` produces rows and raises nothing, so the same rule
+  # is checked there rather than only stated about it.
   raises = builtins.concatLists (
     map (
-      rel:
+      file:
       let
-        code = filter (line: !isComment line) (support.lines (builtins.readFile (libSource + "/${rel}")));
+        code = filter (line: !isComment line) (support.lines (builtins.readFile file));
+        rel = baseNameOf (toString file);
       in
       builtins.concatLists (
         map (call: map (_: "${rel}: ${call}") (filter (line: hasInfix call line) code)) raising
       )
-    ) libraryFiles
+    ) producingFiles
   );
 
   # Every row identifier the tree writes as a literal, against the table
@@ -785,6 +789,175 @@ in
       };
     };
 
+  # Every case below is a declaration the reading refuses. The refusal is a row
+  # and the plan is still forceable: a missing attribute and a type error are
+  # the two failures `tryEval` cannot catch, so a reading that reaches one loses
+  # the whole table rather than filling a row in it.
+  testAWireNamesSomethingTheReadingRefused =
+    let
+      iface = planner.interface {
+        name = "pub";
+        exports.publicKey = publicString;
+      };
+      provider = soleRoot {
+        module = _: {
+          provides.thing.interface = iface;
+          impl = _: {
+            provides.thing.exports.publicKey = "ssh-ed25519 AAAA";
+            units.only.command = "/bin/true";
+          };
+        };
+        provides = [ "thing" ];
+      };
+      consumer = soleRoot {
+        module = _: {
+          uses.slot = {
+            interface = iface;
+            reads = [ "publicKey" ];
+          };
+          impl = _: { units.only.command = "/bin/true"; };
+        };
+      };
+      wired =
+        instance: write:
+        planOf {
+          instances = {
+            ${instance} = exposedOn [ "one" ] provider;
+            reader = (placedOn "one" consumer) // write;
+          };
+        };
+      cases = {
+        separatorInstance = wired "va:ult" {
+          wire.slot = {
+            instance = "va:ult";
+            provides = "thing";
+          };
+        };
+        noCapability = wired "vault" { wire.slot.instance = "vault"; };
+        instanceNotAName = wired "vault" {
+          wire.slot = {
+            instance = 3;
+            provides = "thing";
+          };
+        };
+        capabilityNotAName = wired "vault" {
+          wire.slot = {
+            instance = "vault";
+            provides = 3;
+          };
+        };
+      };
+      # The plan is forced: the reading of a refused name is what used to end
+      # the evaluation, and no row is a row about a plan nobody can read.
+      read = result: {
+        rows = ids result;
+        planned = builtins.deepSeq result.plan (result.plan != { });
+        # The read is recorded and resolved to nothing, so the consuming
+        # implementation is handed no value for the slot.
+        delivered = result.plan."reader:only@one".reads.slot.delivered;
+      };
+    in
+    {
+      expr = builtins.mapAttrs (_: read) cases;
+      expected = {
+        separatorInstance = {
+          rows = [ "name-carries-key-separator" ];
+          planned = true;
+          delivered = false;
+        };
+        noCapability = {
+          rows = [ "declaration-field-missing" ];
+          planned = true;
+          delivered = false;
+        };
+        instanceNotAName = {
+          rows = [ "declaration-field-malformed" ];
+          planned = true;
+          delivered = false;
+        };
+        capabilityNotAName = {
+          rows = [ "declaration-field-malformed" ];
+          planned = true;
+          delivered = false;
+        };
+      };
+    };
+
+  testAGeneratorReadsASiblingTheReadingRefused =
+    let
+      result = planOf {
+        instances.inst = placedOn "one" (soleRoot {
+          module = _: {
+            vars."a:b".files.f = { };
+            vars.good = {
+              reads = [ "a:b" ];
+              files.g = { };
+            };
+            impl = _: { units.only.command = "/bin/true"; };
+          };
+        });
+      };
+    in
+    {
+      expr = {
+        rows = ids result;
+        # The surviving generator is an entry, and forcing it does not reach the
+        # sibling the reading left out of every set.
+        planned = builtins.deepSeq result.plan (elem "inst:vars/good@one" (attrNames result.plan));
+        reads = result.plan."inst:vars/good@one".reads or null;
+      };
+      expected = {
+        rows = [ "name-carries-key-separator" ];
+        planned = true;
+        reads = null;
+      };
+    };
+
+  testADeclarationIsNotTheKindTheReadingNeeds =
+    let
+      cases = {
+        moduleIsARecord = malformed {
+          module = {
+            services = { };
+          };
+          placement.every.only.machines = [ "one" ];
+        };
+        settings = malformed (
+          (placedOn "one" (soleRoot {
+            module = quiet;
+          }))
+          // {
+            settings = "not a record";
+          }
+        );
+        namespace = malformed (
+          (placedOn "one" (soleRoot {
+            module = quiet;
+          }))
+          // {
+            settings.only = "not a record";
+          }
+        );
+        instance = malformed "nope";
+        machine = planner.mkPlan {
+          machines.one = "x86_64-linux";
+          instances = { };
+        };
+      };
+      readable =
+        result: builtins.deepSeq result.plan (elem "declaration-field-malformed" (rowIds result));
+    in
+    {
+      expr = builtins.mapAttrs (_: readable) cases;
+      expected = {
+        moduleIsARecord = true;
+        settings = true;
+        namespace = true;
+        instance = true;
+        machine = true;
+      };
+    };
+
   testAPublishedExportDeclaresNoAtom = {
     expr = {
       rows = ids untypedPlan;
@@ -857,7 +1030,6 @@ in
         namesTheSlot = hasInfix "`slot`" row.message;
         namesTheInterface = hasInfix "`pub`" row.message;
         # Not a row rendered with an empty message.
-        message = row.message;
         emptyMessages = filter (r: r.message == "") result.diagnostics;
       };
       expected = {
@@ -865,7 +1037,6 @@ in
         subject = "reader:only";
         namesTheSlot = true;
         namesTheInterface = true;
-        message = row.message;
         emptyMessages = [ ];
       };
     };

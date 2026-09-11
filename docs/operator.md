@@ -262,8 +262,9 @@ therefore reached only by a caller that never asked the reading:
 A record carrying `delivery` is a generated value, one carrying `placement` is a service entry, and
 one carrying neither is a machine record. Nothing is classified by the text of a key: `machine` is a
 legal instance name and `vars/x` a legal member name. A placed entry that declares no unit is
-realised into nothing - it is named in `manifest.json` with its machine and a `null` artifact, and
-only a statement naming it is a refusal.
+realised into nothing - it is named in `manifest.json` with its machine and no `path`, the key is
+omitted rather than stated as `null`, and only a statement naming it is a refusal. A command that
+needs an artifact for such an entry refuses naming that entry, and one that does not proceeds.
 
 ## Why the build layer raises
 

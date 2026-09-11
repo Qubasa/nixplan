@@ -54,7 +54,7 @@ Recorded so the question is answered once.
   declaration to edit, and a minimal unsatisfiable core names no resolution.
 - Datalog would replace six `groupBy` calls - tags, platform elaborations and placements in
   `lib/resolve.nix`, the two reader indexes in `lib/plan.nix`, unit extensions by backend in
-  `lib/module.nix` - and leave the 83 row constructors, the reading in `lib/module.nix` and every
+  `lib/module.nix` - and leave the 92 row constructors, the reading in `lib/module.nix` and every
   message. Four reasons it cannot be `lib/`: an engine is a process, and `mkPlan` runs inside a
   pure evaluation a consumer's own flake performs; a relation holds ground terms, while `impl`, a
   korora predicate and a fold are functions, which is why `identityOf` had to project one out to
@@ -320,8 +320,9 @@ Recorded so the question is answered once.
   member name, so a prefix match answers wrongly for a deployment the planner accepts. A key is
   read only for the instance, the service and the machine of a placed entry.
 - A placed entry that declares no unit is realised into nothing: it is in the deployment record
-  with its machine and a `null` artifact, it contributes no artifact, and only a statement naming
-  it is a row.
+  with its machine and no `path` at all, it contributes no artifact, and only a statement naming
+  it is a row. The absence is an omitted key rather than a `null` or an empty string, because a
+  record stating either is one every subcommand refuses.
 - A build of an inapplicable deployment still produces its tree. `plan.json`, `diagnostics.json`
   and `diagnostics.txt` are always there, no artifact of any entry is, the tree carries no marker
   of its own, and `passthru.entries.<key>` of such a deployment is the raise that carries
@@ -585,6 +586,16 @@ silently unobserved.
 - In `portable-image`, `elsewhere` is aarch64 and never booted: it exists so an image can be built
   for a machine this host is not. The attaching entry is stated `strict` because enforcement is
   the claim under test.
+- `portable-image`'s assembly tests run the artifact's own attach script on the machine, under a
+  `PORTABLE_PLANNER_ROOT` of the run's own and with `portablectl` and `systemctl` answered by a
+  `PATH` that refuses: the script then stops where the assembly ends, which leaves the machine's
+  real attachment untouched and is the only window in which a half-written file exists. Running the
+  script on this host instead would observe a recipe nothing on a machine ever ran.
+- One case is one ssh command, and everything it observes is echoed as `key=value` lines. The
+  guest's sshd is per-connection socket activated, so a burst of short logins is answered by the
+  socket's own trigger limit: the machine stops accepting connections part way through a test and
+  the failure reads as a dead VM. A value spanning lines is a parse the reader cannot make, which
+  is why a file's bytes are compared on the machine and reported as one word.
 - `newcomer` proves the outward surface, not a deployment, and it proves it on a machine. The host
   computes one thing: the store path `nix flake metadata --json` resolves the checkout to. A
   `path:` reference copies the ignored trees beside it and a `git+file:` one pins `HEAD`, which

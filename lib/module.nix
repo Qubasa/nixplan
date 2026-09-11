@@ -380,7 +380,10 @@ rec {
       perOf = g: if g ? per then toString g.per else "placement";
       deployOf = g: if g ? deploy then g.deploy else true;
       readsOf = g: if g ? reads && isList g.reads then filter isString g.reads else [ ];
-      declaredReadsOf = g: filter (name: vars ? ${name}) (readsOf g);
+
+      # A read resolves against the generators the reading kept, so a value whose
+      # name the reading refused is read by nobody and no key is built from it.
+      declaredReadsOf = g: filter (name: vars ? ${name} && !(util.carriesKeySeparator name)) (readsOf g);
 
       # A program is recorded and never run, so the only thing checked is that it
       # is one store path and nothing else: that is what a consumer can hand to a

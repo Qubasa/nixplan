@@ -180,28 +180,45 @@ measure_case() {
 		"$out/$label.json" "$repeats" "$first"
 }
 
-measure_fixture() {
-	local fixture="$1" size
+# The labels a request names, collected before anything is measured so that the
+# checker gates on what the run was asked for rather than on what it produced: a
+# subset run covers its subset, and a run that died covers the case it never
+# wrote.
+collect_labels() {
+	local fixture size
+	local fixture_list=()
 	local size_list=()
 
-	case "$fixture" in
+	requested=()
+	IFS=',' read -r -a fixture_list <<<"$fixtures"
+	for fixture in "${fixture_list[@]}"; do
+		case "$fixture" in
+		worked) requested+=(worked) ;;
+		fleet | mesh)
+			IFS=',' read -r -a size_list <<<"$sizes"
+			for size in "${size_list[@]}"; do
+				case "$size" in
+				'' | *[!0-9]*) die "--sizes takes comma-separated integers, got $sizes" ;;
+				esac
+				requested+=("$fixture-$size")
+			done
+			;;
+		*) die "unknown fixture: $fixture" ;;
+		esac
+	done
+}
+
+measure_label() {
+	local label="$1"
+
+	case "$label" in
 	worked) measure_case worked 0 worked null ;;
-	fleet | mesh)
-		IFS=',' read -r -a size_list <<<"$sizes"
-		for size in "${size_list[@]}"; do
-			case "$size" in
-			'' | *[!0-9]*) die "--sizes takes comma-separated integers, got $sizes" ;;
-			esac
-			measure_case "$fixture" "$size" "$fixture-$size" "$size"
-		done
-		;;
-	*) die "unknown fixture: $fixture" ;;
+	*) measure_case "${label%-*}" "${label##*-}" "$label" "${label##*-}" ;;
 	esac
 }
 
 main() {
-	local fixture
-	local fixture_list=()
+	local label
 
 	parse_args "$@"
 	check_args
@@ -211,9 +228,10 @@ main() {
 	interpreter="$(nix_version)"
 	printf 'measure.sh: nix %s, %s repeats per case\n' "$interpreter" "$repeats"
 
-	IFS=',' read -r -a fixture_list <<<"$fixtures"
-	for fixture in "${fixture_list[@]}"; do
-		measure_fixture "$fixture"
+	collect_labels
+	printf '%s\n' "${requested[@]}" >"$out/requested"
+	for label in "${requested[@]}"; do
+		measure_label "$label"
 	done
 }
 

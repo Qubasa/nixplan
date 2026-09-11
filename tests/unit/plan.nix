@@ -46,7 +46,7 @@ let
     subjectsById
     ;
 
-  inherit (planner.util) uniqueStrings;
+  inherit (planner.util) sortStrings uniqueStrings;
 
   worked = support.workedResult;
   workedPlan = worked.plan;
@@ -1485,6 +1485,10 @@ in
         keysNamingThem = filter (k: hasInfix "a:b" k || hasInfix "x@y" k || hasInfix "g/h" k) (
           attrNames result.plan
         );
+        # The refused name earns the row that explains it and no second row
+        # stating its root does not own it: the root does, and the reading is
+        # what left it out.
+        every = sortStrings (rowIds result);
       };
       expected = {
         rows = 3;
@@ -1494,6 +1498,11 @@ in
           true
         ];
         keysNamingThem = [ ];
+        every = [
+          "name-carries-key-separator"
+          "name-carries-key-separator"
+          "name-carries-key-separator"
+        ];
       };
     };
 
@@ -1600,13 +1609,18 @@ in
 
   testAnEntryRecordsAnEmptyCollectionAReaderDependsOn =
     let
+      # An entry that publishes an export and runs nothing: both collections a
+      # realisation reads are empty, so moving either back into `pruned` is
+      # observable here rather than only in the half that happens to be empty.
       result = planOf {
         instances.svc = placedOn [ "one" ] (soleRoot {
           module = _: {
+            provides.thing.interface = pub;
             impl = _: {
-              units.only.command = "/bin/true";
+              provides.thing.exports.publicKey = "ssh-ed25519 AAAA";
             };
           };
+          provides = [ "thing" ];
         });
       };
       entry = result.plan."svc:only@one";
@@ -1619,6 +1633,7 @@ in
           (entry ? units)
         ];
         closure = entry.closure;
+        units = entry.units;
       };
       expected = {
         rows = [ ];
@@ -1627,6 +1642,7 @@ in
           true
         ];
         closure = [ ];
+        units = { };
       };
     };
 }

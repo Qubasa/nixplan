@@ -17,15 +17,15 @@
       "date": "2026-09-11",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 785.8182,
-        "nrFunctionCalls": 445.2728,
-        "nrPrimOpCalls": 308.091,
-        "values.number": 962.6364,
-        "sets.bytes": 12328.7273,
-        "envs.bytes": 9952.7273,
+        "nrThunks": 794.7273,
+        "nrFunctionCalls": 448.5455,
+        "nrPrimOpCalls": 309.3637,
+        "values.number": 972.2728,
+        "sets.bytes": 12528.7273,
+        "envs.bytes": 10074.9091,
         "list.elements": 187.3637,
         "nrOpUpdateValuesCopied": 51.6364,
-        "gc.totalBytes": 47479.2728
+        "gc.totalBytes": 47861.8182
       },
       "note": "Moved by hold-every-stated-guarantee: the deployment half of a declaration is read through the guarded reader the module half already used, every name entering a key is held to the key grammar, and every interface the deployment reaches earns its rows rather than only the interfaces the deployment attributed. The cost is about 7% per plan entry at every one of 4, 16, 64 and 256, so it is a constant added to the reading of one entry rather than a new term in how the reading grows."
     },
@@ -35,15 +35,15 @@
       "date": "2026-09-11",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 687.3077,
-        "nrFunctionCalls": 383.8462,
-        "nrPrimOpCalls": 274.9231,
-        "values.number": 828.3077,
-        "sets.bytes": 10485.5385,
-        "envs.bytes": 8514.4616,
+        "nrThunks": 694.7693,
+        "nrFunctionCalls": 386.6154,
+        "nrPrimOpCalls": 275.9231,
+        "values.number": 836.3847,
+        "sets.bytes": 10654.7693,
+        "envs.bytes": 8617.8462,
         "list.elements": 161.4616,
-        "nrOpUpdateValuesCopied": 34,
-        "gc.totalBytes": 38782.7693
+        "nrOpUpdateValuesCopied": 34.0,
+        "gc.totalBytes": 40067.6924
       },
       "note": "Moved by hold-every-stated-guarantee: the deployment half of a declaration is read through the guarded reader the module half already used, every name entering a key is held to the key grammar, and every interface the deployment reaches earns its rows rather than only the interfaces the deployment attributed. The cost is about 7% per plan entry at every one of 4, 16, 64 and 256, so it is a constant added to the reading of one entry rather than a new term in how the reading grows."
     },
@@ -53,15 +53,15 @@
       "date": "2026-09-11",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 417.9388,
-        "nrFunctionCalls": 262.9796,
-        "nrPrimOpCalls": 190,
-        "values.number": 500.898,
-        "sets.bytes": 6238.5307,
-        "envs.bytes": 5489.6327,
-        "list.elements": 117.2858,
+        "nrThunks": 420.898,
+        "nrFunctionCalls": 265.1837,
+        "nrPrimOpCalls": 190.5103,
+        "values.number": 504.7552,
+        "sets.bytes": 6322.6123,
+        "envs.bytes": 5546.449,
+        "list.elements": 117.7756,
         "nrOpUpdateValuesCopied": 13.5919,
-        "gc.totalBytes": 24158.6939
+        "gc.totalBytes": 24496.6531
       },
       "note": "Moved by hold-every-stated-guarantee: the deployment half of a declaration is read through the guarded reader the module half already used, every name entering a key is held to the key grammar, and every interface the deployment reaches earns its rows rather than only the interfaces the deployment attributed. The cost is about 7% per plan entry at every one of 4, 16, 64 and 256, so it is a constant added to the reading of one entry rather than a new term in how the reading grows."
     },
@@ -71,15 +71,15 @@
       "date": "2026-09-11",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 345.3627,
-        "nrFunctionCalls": 230.4146,
-        "nrPrimOpCalls": 167.1192,
-        "values.number": 412.684,
-        "sets.bytes": 5096.912,
-        "envs.bytes": 4674.6529,
-        "list.elements": 105.3835,
+        "nrThunks": 347.1089,
+        "nrFunctionCalls": 232.4664,
+        "nrPrimOpCalls": 167.4975,
+        "values.number": 415.4042,
+        "sets.bytes": 5158.0519,
+        "envs.bytes": 4718.9223,
+        "list.elements": 106.0052,
         "nrOpUpdateValuesCopied": 8.2591,
-        "gc.totalBytes": 20017.9897
+        "gc.totalBytes": 20177.0778
       },
       "note": "Moved by hold-every-stated-guarantee: the deployment half of a declaration is read through the guarded reader the module half already used, every name entering a key is held to the key grammar, and every interface the deployment reaches earns its rows rather than only the interfaces the deployment attributed. The cost is about 7% per plan entry at every one of 4, 16, 64 and 256, so it is a constant added to the reading of one entry rather than a new term in how the reading grows."
     },
@@ -89,15 +89,15 @@
       "date": "2026-09-11",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 326.8648,
-        "nrFunctionCalls": 222.1145,
-        "nrPrimOpCalls": 161.2874,
-        "values.number": 390.2003,
-        "sets.bytes": 4804.6086,
-        "envs.bytes": 4466.9337,
-        "list.elements": 102.3499,
+        "nrThunks": 328.3017,
+        "nrFunctionCalls": 224.1275,
+        "nrPrimOpCalls": 161.632,
+        "values.number": 392.6307,
+        "sets.bytes": 4859.9012,
+        "envs.bytes": 4508.0053,
+        "list.elements": 103.0053,
         "nrOpUpdateValuesCopied": 6.8167,
-        "gc.totalBytes": 18888.2185
+        "gc.totalBytes": 19036.5046
       },
       "note": "Moved by hold-every-stated-guarantee: the deployment half of a declaration is read through the guarded reader the module half already used, every name entering a key is held to the key grammar, and every interface the deployment reaches earns its rows rather than only the interfaces the deployment attributed. The cost is about 7% per plan entry at every one of 4, 16, 64 and 256, so it is a constant added to the reading of one entry rather than a new term in how the reading grows."
     },
@@ -107,15 +107,15 @@
       "date": "2026-09-11",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 742.3077,
-        "nrFunctionCalls": 430.6924,
-        "nrPrimOpCalls": 323.3077,
-        "values.number": 906.4616,
-        "sets.bytes": 11156.9231,
-        "envs.bytes": 9357.5385,
+        "nrThunks": 749.6924,
+        "nrFunctionCalls": 433.4616,
+        "nrPrimOpCalls": 324.2308,
+        "values.number": 914.4616,
+        "sets.bytes": 11326.1539,
+        "envs.bytes": 9460.9231,
         "list.elements": 195.4616,
         "nrOpUpdateValuesCopied": 34.2308,
-        "gc.totalBytes": 42376.6154
+        "gc.totalBytes": 43015.3847
       },
       "note": "Moved by hold-every-stated-guarantee: the deployment half of a declaration is read through the guarded reader the module half already used, every name entering a key is held to the key grammar, and every interface the deployment reaches earns its rows rather than only the interfaces the deployment attributed. The cost is about 7% per plan entry at every one of 4, 16, 64 and 256, so it is a constant added to the reading of one entry rather than a new term in how the reading grows."
     },
@@ -125,15 +125,15 @@
       "date": "2026-09-11",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 478.5715,
-        "nrFunctionCalls": 314.6327,
-        "nrPrimOpCalls": 243.2654,
-        "values.number": 586.7756,
-        "sets.bytes": 7000.4898,
-        "envs.bytes": 6413.3878,
-        "list.elements": 154.2245,
+        "nrThunks": 481.5103,
+        "nrFunctionCalls": 316.8368,
+        "nrPrimOpCalls": 243.7552,
+        "values.number": 590.6123,
+        "sets.bytes": 7084.5715,
+        "envs.bytes": 6470.2041,
+        "list.elements": 154.7143,
         "nrOpUpdateValuesCopied": 13.898,
-        "gc.totalBytes": 28207.347
+        "gc.totalBytes": 28379.1021
       },
       "note": "Moved by hold-every-stated-guarantee: the deployment half of a declaration is read through the guarded reader the module half already used, every name entering a key is held to the key grammar, and every interface the deployment reaches earns its rows rather than only the interfaces the deployment attributed. The cost is about 7% per plan entry at every one of 4, 16, 64 and 256, so it is a constant added to the reading of one entry rather than a new term in how the reading grows."
     },
@@ -143,15 +143,15 @@
       "date": "2026-09-11",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 407.513,
-        "nrFunctionCalls": 283.3213,
-        "nrPrimOpCalls": 221.6788,
-        "values.number": 500.6425,
-        "sets.bytes": 5883.2747,
-        "envs.bytes": 5619.4819,
-        "list.elements": 143.114,
+        "nrThunks": 409.2539,
+        "nrFunctionCalls": 285.3731,
+        "nrPrimOpCalls": 222.0519,
+        "values.number": 503.3576,
+        "sets.bytes": 5944.4146,
+        "envs.bytes": 5663.7513,
+        "list.elements": 143.7358,
         "nrOpUpdateValuesCopied": 8.5855,
-        "gc.totalBytes": 24149.3057
+        "gc.totalBytes": 24371.2332
       },
       "note": "Moved by hold-every-stated-guarantee: the deployment half of a declaration is read through the guarded reader the module half already used, every name entering a key is held to the key grammar, and every interface the deployment reaches earns its rows rather than only the interfaces the deployment attributed. The cost is about 7% per plan entry at every one of 4, 16, 64 and 256, so it is a constant added to the reading of one entry rather than a new term in how the reading grows."
     },
@@ -161,15 +161,15 @@
       "date": "2026-09-11",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 389.4019,
-        "nrFunctionCalls": 275.3408,
-        "nrPrimOpCalls": 216.1769,
-        "values.number": 478.6893,
-        "sets.bytes": 5597.1912,
-        "envs.bytes": 5417.134,
-        "list.elements": 140.2822,
+        "nrThunks": 390.8375,
+        "nrFunctionCalls": 277.3538,
+        "nrPrimOpCalls": 216.5202,
+        "values.number": 481.1184,
+        "sets.bytes": 5652.4838,
+        "envs.bytes": 5458.2055,
+        "list.elements": 140.9376,
         "nrOpUpdateValuesCopied": 7.1483,
-        "gc.totalBytes": 23073.7062
+        "gc.totalBytes": 23227.3186
       },
       "note": "Moved by hold-every-stated-guarantee: the deployment half of a declaration is read through the guarded reader the module half already used, every name entering a key is held to the key grammar, and every interface the deployment reaches earns its rows rather than only the interfaces the deployment attributed. The cost is about 7% per plan entry at every one of 4, 16, 64 and 256, so it is a constant added to the reading of one entry rather than a new term in how the reading grows."
     }

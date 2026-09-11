@@ -28,6 +28,8 @@ GATED_COUNTERS: tuple[str, ...] = (
     "gc.totalBytes",
 )
 REQUIRED_BUDGET_FIELDS: tuple[str, ...] = ("fixture", "interpreter", "date", "margin")
+# What `measure.sh` writes beside its result files, one fixture key per line.
+REQUESTED = "requested"
 DEFAULT_MARGIN = 0.15
 TOLERANCE = 1e-9
 
@@ -293,14 +295,18 @@ def ratchet_counter(result: Result, counter: str, budget: float, margin: float) 
     )
 
 
-def measured_figures(results: Sequence[Result]) -> set[tuple[str, str]]:
-    """Return every (fixture, counter) pair this run carries a measurement for."""
-    return {
-        (result.key, counter)
-        for result in results
-        for counter in GATED_COUNTERS
-        if counter in result.runs[0].counters
-    }
+def requested_fixtures(results_dir: Path) -> set[str] | None:
+    """Return the fixture keys the measurement was asked to produce, if it said.
+
+    `measure.sh` writes the list before it measures anything, so a run asked for
+    a subset covers that subset and a run that died covers the case it never
+    wrote. A directory carrying no such list is held to the whole budget file.
+    """
+    stated = results_dir / REQUESTED
+    if not stated.is_file():
+        return None
+    asked = stated.read_text(encoding="utf-8").splitlines()
+    return {line.strip() for line in asked if line.strip()}
 
 
 def gated_figures(fixtures: dict[str, RawBudgetEntry]) -> set[tuple[str, str]]:
@@ -313,30 +319,44 @@ def gated_figures(fixtures: dict[str, RawBudgetEntry]) -> set[tuple[str, str]]:
     }
 
 
-def check_coverage(results: Sequence[Result], fixtures: dict[str, RawBudgetEntry]) -> list[Finding]:
-    """Refuse a run that measured none of a figure the budget file gates.
+def check_coverage(
+    compared: set[tuple[str, str]],
+    fixtures: dict[str, RawBudgetEntry],
+    asked: set[str] | None,
+) -> list[Finding]:
+    """Refuse a run that compared nothing against a figure it was asked to cover.
 
     A gate reporting no failures because it compared nothing is the failure this
-    exists for: the absence is named per fixture, with the figures it covers.
+    exists for. What it covers is the figures of the fixtures the run was asked
+    for: a comparison the run skipped for a reason it printed is uncovered too,
+    because a reason printed beside a green gate is still a green gate.
     """
+    covered = {figure for figure in gated_figures(fixtures) if asked is None or figure[0] in asked}
     absent: dict[str, list[str]] = {}
-    for name, counter in sorted(gated_figures(fixtures) - measured_figures(results)):
+    for name, counter in sorted(covered - compared):
         absent.setdefault(name, []).append(counter)
     return [
         Finding(
             "FAIL",
-            f"the budget file gates {len(counters)} figures of fixture {name} - "
-            f"{', '.join(counters)} - and this run measured none of them, so nothing was "
-            f"compared for {name}",
+            f"the budget file gates {counters_of(fixtures, name)} figures of fixture {name} and "
+            f"this run compared none of {', '.join(counters)}",
         )
         for name, counters in sorted(absent.items())
     ]
 
 
-def check_ratchet(results: Sequence[Result], budgets: RawBudgets, skip: set[str]) -> list[Finding]:
-    """Run the two-sided ratchet over every comparable fixture."""
+def counters_of(fixtures: dict[str, RawBudgetEntry], name: str) -> int:
+    """Return how many figures the budget file gates for one fixture."""
+    return len([figure for figure in gated_figures(fixtures) if figure[0] == name])
+
+
+def check_ratchet(
+    results: Sequence[Result], budgets: RawBudgets, skip: set[str]
+) -> tuple[set[tuple[str, str]], list[Finding]]:
+    """Run the two-sided ratchet, returning the figures it compared and its findings."""
     fixtures = budgets.get("fixtures", {})
     default_margin = budgets.get("margin", DEFAULT_MARGIN)
+    compared: set[tuple[str, str]] = set()
     findings: list[Finding] = []
     for result in results:
         entry = fixtures.get(result.key)
@@ -347,8 +367,9 @@ def check_ratchet(results: Sequence[Result], budgets: RawBudgets, skip: set[str]
             budget = (entry.get("perEntry") or {}).get(counter)
             if budget is None or counter not in result.runs[0].counters:
                 continue
+            compared.add((result.key, counter))
             findings.append(ratchet_counter(result, counter, budget, margin))
-    return findings
+    return compared, findings
 
 
 def sized_series(
@@ -477,21 +498,23 @@ def run_checks(results_dir: Path, budgets_path: Path) -> Report:
     """Run every check in order and return the whole report."""
     budgets = cast(RawBudgets, json.loads(budgets_path.read_text(encoding="utf-8")))
     fixtures = budgets.get("fixtures", {})
+    asked = requested_fixtures(results_dir)
     results, findings = load_results(results_dir)
     if not fixtures:
         findings.append(Finding("FAIL", f"the budget file {budgets_path} lists no fixtures"))
     unstable, reproducibility = check_reproducibility(results)
     mismatched, interpreter = check_interpreter(results, fixtures)
     unusable, provenance = check_provenance(results, fixtures)
-    ratchet = check_ratchet(results, budgets, unstable | mismatched | unusable)
+    compared, ratchet = check_ratchet(results, budgets, unstable | mismatched | unusable)
+    covers = {figure for figure in gated_figures(fixtures) if asked is None or figure[0] in asked}
     findings.extend(reproducibility)
     findings.extend(interpreter)
     findings.extend(provenance)
-    findings.extend(check_coverage(results, fixtures))
+    findings.extend(check_coverage(compared, fixtures, asked))
     findings.extend(ratchet)
     findings.extend(check_growth(results, budgets, unstable))
     findings.extend(report_timings(results))
-    return Report(findings=findings, compared=len(ratchet), gated=len(gated_figures(fixtures)))
+    return Report(findings=findings, compared=len(compared), gated=len(covers))
 
 
 def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:

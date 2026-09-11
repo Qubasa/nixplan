@@ -204,14 +204,13 @@ def read(root: Path) -> Deployment:
         key: _value(key, _mapping(record, of=f"manifest value {key}"))
         for key, record in sorted(_mapping(interface.get("values", {}), of=MANIFEST).items())
     }
-    table = root / TABLE
     return Deployment(
         root=root,
         plan=plan,
         entries=entries,
         values=values,
         diagnostics=_rows(root / ROWS),
-        table=table.read_text() if table.is_file() else "",
+        table=_read(root / TABLE),
     )
 
 
@@ -352,7 +351,7 @@ def _entry(root: Path, key: str, record: Mapping[str, Any]) -> Entry:
     if address is not None and not isinstance(address, str):
         raise ApplyError(f"{key} records address as {address!r}, which is not an address")
     stated = record.get("path")
-    if stated is not None and not isinstance(stated, str):
+    if stated is not None and not (isinstance(stated, str) and stated):
         raise ApplyError(f"{key} records path as {stated!r}, which is not a path in the build")
     return Entry(
         key=key,
@@ -405,13 +404,31 @@ def _rows(path: Path) -> tuple[Diagnostic, ...]:
     )
 
 
+def _read(path: Path) -> str:
+    """Return the text of one file inside the build, or refuse naming it.
+
+    A build this command reads is a directory the operator named, so its bytes
+    are not guaranteed to be the bytes a build wrote. Text that is not UTF-8
+    raises a `UnicodeDecodeError`, which is a `ValueError` and not a
+    `JSONDecodeError`, so decoding is guarded here rather than at each caller.
+    """
+    if not path.is_file():
+        return ""
+    try:
+        return path.read_text()
+    except OSError as absent:
+        raise ApplyError(f"{path} cannot be read: {absent}") from absent
+    except ValueError as malformed:
+        raise ApplyError(f"{path} is not readable as text: {malformed}") from malformed
+
+
 def _decoded(path: Path) -> Any:
     """Return what one file inside the build decodes to, or refuse naming it."""
     try:
         return json.loads(path.read_text())
     except OSError as absent:
         raise ApplyError(f"{path} cannot be read: {absent}") from absent
-    except json.JSONDecodeError as malformed:
+    except ValueError as malformed:
         raise ApplyError(f"{path} is not readable as JSON: {malformed}") from malformed
 
 
