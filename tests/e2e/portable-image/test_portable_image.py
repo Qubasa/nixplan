@@ -42,9 +42,7 @@ from __future__ import annotations
 
 import json
 import os
-import platform
 import shlex
-import shutil
 import subprocess
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
@@ -603,6 +601,165 @@ def test_an_attached_image_from_an_earlier_build_is_not_reported_as_current(
     assert status == 0, reported
 
 
+# The assembly below runs on the machine, like everything else this folder
+# observes, and under a root of its own: `PORTABLE_PLANNER_ROOT` is what the
+# attach script already offers for staging an assembly somewhere other than `/`,
+# so this is the artifact's own script reading the recipe the plan recorded.
+#
+# What the script does after the assembly - `portablectl attach` and `systemctl
+# start` - is the machine's attachment, which the phases above already made and
+# the phase below takes apart. Those two commands are answered by a `PATH` of
+# this run's own, so the script stops at the first thing that would change the
+# machine and the window the assembly opens is all these tests observe.
+
+
+def _staged() -> tuple[str, str, str]:
+    """The file the attach script stages, that file's mode, and the path it reads.
+
+    The staged path and its mode are the attachment's; the path the recipe reads
+    is the plan's, because a reference is a fragment of the recipe and never a
+    host path of its own.
+    """
+    entry = DEPLOYMENT.entries[CONFINED_KEY]
+    attachment = json.loads((manifest.artifact_of(entry) / "attachment.json").read_text())
+    configuration = [p for p in attachment["hostPaths"] if p["kind"] == "configuration-file"]
+    assert len(configuration) == 1, attachment["hostPaths"]
+    records = list(DEPLOYMENT.plan[CONFINED_KEY]["configData"].values())
+    assert len(records) == 1, records
+    referenced = [item["ref"] for item in records[0]["render"] if "ref" in item]
+    assert len(referenced) == 1, records
+    return (str(configuration[0]["from"]), str(configuration[0]["mode"]), str(referenced[0]))
+
+
+STOP = "/run/planner-assembly/stop-here"
+
+
+@pytest.fixture(scope="session")
+def assembling(attached: Run) -> Run:
+    """A machine ready to run the attach script without attaching anything.
+
+    The two commands the script ends in are answered by a directory of this
+    run's own: `command -v systemctl` is one of the script's guards, so the name
+    has to resolve, and what it does when the script runs it is refuse, which
+    ends the run where the assembly ends.
+    """
+    if attached.observed.get("assembling"):
+        return attached
+
+    stubs = " && ".join(
+        f"printf '#!/bin/sh\\nexit 1\\n' > {STOP}/{name} && chmod 0755 {STOP}/{name}"
+        for name in ("portablectl", "systemctl")
+    )
+    attached.vm.ssh_succeed(f"mkdir -p {STOP} && {stubs}")
+    attached.observed["assembling"] = STOP
+    return attached
+
+
+def _probe(run: Run, case: str, mask: str, *, shown: bool) -> dict[str, str]:
+    """Assemble under one root and one umask, and report what the machine holds.
+
+    One command rather than one per observation: the machine's sshd is
+    per-connection socket activated, and a burst of short logins is answered by
+    the socket's own trigger limit rather than by a shell.
+
+    Args:
+        run: The machine and the deployment the command built.
+        case: A name for the root this case assembles under.
+        mask: The umask the attaching login runs with.
+        shown: Whether the file the recipe reads is a file. A directory in its
+            place passes the check the script makes before it writes anything
+            and fails the `cat` that appends it, which is the interrupted run.
+
+    Returns:
+        The mode of the staged file and of the assembly beside it - `none`
+        where there is no such file - and whether the staged file ends in the
+        bytes of the file the recipe references.
+    """
+    staged, _, read = _staged()
+    root = f"/run/planner-assembly/{case}"
+    script = f"{run.artifact(CONFINED_KEY)}/bin/attach"
+    place = (
+        f"mkdir -p $(dirname {root}{read}) && printf %s {shlex.quote(SHOWN_TEXT)} > {root}{read}"
+        if shown
+        else f"mkdir -p {root}{read}"
+    )
+    tail = (
+        f"if [ -f {root}{read} ] && [ -f {root}{staged} ] && "
+        f"tail -c $(wc -c < {root}{read}) {root}{staged} | cmp -s - {root}{read}; "
+        'then echo "tail=referenced"; else echo "tail=other"; fi'
+    )
+    reported = run.vm.ssh_succeed(
+        "; ".join(
+            [
+                f"rm -rf {root}",
+                place,
+                f"env PATH={STOP}:$PATH PORTABLE_PLANNER_ROOT={root} "
+                f"sh -c {shlex.quote(f'umask {mask}; exec {script}')} > /dev/null 2>&1",
+                f'echo "staged=$(stat -c %a {root}{staged} 2>/dev/null || echo none)"',
+                f'echo "assembly=$(stat -c %a {root}{staged}.assembling 2>/dev/null || echo none)"',
+                tail,
+            ]
+        ),
+        timeout=180,
+    )
+    answered = dict(line.split("=", 1) for line in reported.splitlines() if "=" in line)
+    assert {"staged", "assembly", "tail"} <= answered.keys(), reported
+    return answered
+
+
+def test_a_staged_file_renders_a_secret(assembling: Run) -> None:
+    """The staged file carries its declared mode, the bytes are the recipe's, and
+    nothing the assembly needed on the way is left behind. The fragment appended
+    here is a reference to a host file rather than to a generated secret, and the
+    rule is the same one: a login that would create a file at 0666 writes 0444
+    because the declaration said so."""
+    _, mode, _ = _staged()
+
+    answered = _probe(assembling, "whole", "000", shown=True)
+
+    assert answered["staged"] == f"{int(mode, 8):o}"
+    assert answered["tail"] == "referenced", answered
+    assert answered["assembly"] == "none"
+
+
+def test_the_assembly_of_a_file_fails_part_way(assembling: Run) -> None:
+    """A run that dies between the first byte and the last leaves nothing readable wider.
+
+    What is on the machine at that point is the half-written file the assembly
+    concatenates into, which nobody but its owner can read, and no file at the
+    path the unit is shown.
+    """
+    interrupted = _probe(assembling, "part", "000", shown=False)
+
+    assert interrupted["staged"] == "none"
+    assert interrupted["assembly"] == "600"
+
+
+def test_the_mode_does_not_depend_on_the_attaching_environment(assembling: Run) -> None:
+    """Two attaching environments, one mode: the declaration decides it, not the login.
+
+    Both the file the unit is shown and the file it is assembled into are read,
+    because a recipe that chmod-ed at the end would answer for the first under
+    either mask and still have spent the assembly at whatever the login left.
+    """
+    _, mode, _ = _staged()
+    permissive = (
+        _probe(assembling, "open-whole", "000", shown=True),
+        _probe(assembling, "open-part", "000", shown=False),
+    )
+    restrictive = (
+        _probe(assembling, "tight-whole", "077", shown=True),
+        _probe(assembling, "tight-part", "077", shown=False),
+    )
+
+    declared = f"{int(mode, 8):o}"
+    assert [answered["staged"] for answered in (permissive[0], restrictive[0])] == [
+        declared,
+        declared,
+    ]
+    assert [answered["assembly"] for answered in (permissive[1], restrictive[1])] == ["600", "600"]
+
+
 def test_detaching_removes_the_units_and_the_staging_directory(detached: Run) -> None:
     """The units are unknown again, the staging directory is gone, the store is not."""
     for unit in detached.units_of(CONFINED_KEY):
@@ -622,132 +779,3 @@ def test_a_host_file_the_image_was_shown_survives_detaching(detached: Run) -> No
     """A file the machine was shown is the machine's, so detaching does not touch it."""
     shown = detached.shown_path()
     assert detached.vm.ssh_succeed(f"cat {shlex.quote(shown)}") == SHOWN_TEXT
-
-
-# The assembly below runs on this host rather than on the machine, because what
-# it observes is a window inside one script and the machine only ever shows the
-# state after it. `PORTABLE_PLANNER_ROOT` is what the script already offers for
-# staging an assembly somewhere other than `/`, so nothing is stubbed: this is
-# the artifact's own script, reading the recipe the plan recorded.
-ASSEMBLY = pytest.mark.skipif(
-    shutil.which("systemctl") is None or platform.machine() != "x86_64",
-    reason="the attach script's own guards refuse a host that is not the target",
-)
-
-
-def _staged() -> tuple[Path, str, str, str]:
-    """The attach script, the file it stages, that file's mode, and the path it reads.
-
-    The staged path and its mode are the attachment's; the path the recipe reads
-    is the plan's, because a reference is a fragment of the recipe and never a
-    host path of its own.
-    """
-    entry = DEPLOYMENT.entries[CONFINED_KEY]
-    attachment = json.loads((manifest.artifact_of(entry) / "attachment.json").read_text())
-    configuration = [p for p in attachment["hostPaths"] if p["kind"] == "configuration-file"]
-    assert len(configuration) == 1, attachment["hostPaths"]
-    records = list(DEPLOYMENT.plan[CONFINED_KEY]["configData"].values())
-    assert len(records) == 1, records
-    referenced = [item["ref"] for item in records[0]["render"] if "ref" in item]
-    assert len(referenced) == 1, records
-    return (
-        manifest.artifact_of(entry) / "bin" / "attach",
-        str(configuration[0]["from"]),
-        str(configuration[0]["mode"]),
-        str(referenced[0]),
-    )
-
-
-def _assemble(root: Path, mask: str) -> subprocess.CompletedProcess[str]:
-    """Run the artifact's attach script against a root of this host, under one umask.
-
-    It gets as far as `portablectl`, which is the first thing in it that needs a
-    machine, so everything before that - the guards, the reference checks and the
-    assembly - has happened by the time it returns.
-    """
-    script, _, _, _ = _staged()
-    return subprocess.run(
-        ["sh", "-c", f"umask {mask}; exec {shlex.quote(str(script))}"],
-        env={"PATH": os.environ["PATH"], "PORTABLE_PLANNER_ROOT": str(root)},
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-
-@ASSEMBLY
-def test_a_staged_file_renders_a_secret(tmp_path: Path) -> None:
-    """The staged file carries its declared mode, the bytes are the recipe's, and
-    nothing the assembly needed on the way is left behind. The fragment appended
-    here is a reference to a host file rather than to a generated secret, and the
-    rule is the same one: a login that would create a file at 0666 writes 0444
-    because the declaration said so."""
-    _, staged, mode, read = _staged()
-    (tmp_path / read.lstrip("/")).parent.mkdir(parents=True)
-    (tmp_path / read.lstrip("/")).write_text(SHOWN_TEXT)
-
-    _assemble(tmp_path, "000")
-
-    assembled = tmp_path / staged.lstrip("/")
-    assert oct(assembled.stat().st_mode & 0o7777) == oct(int(mode, 8))
-    assert assembled.read_text().endswith(SHOWN_TEXT)
-    assert not assembled.with_name(f"{assembled.name}.assembling").exists()
-
-
-@ASSEMBLY
-def test_the_assembly_of_a_file_fails_part_way(tmp_path: Path) -> None:
-    """A run that dies between the first byte and the last leaves nothing readable wider.
-
-    The referenced path is a directory, so it exists for the check the script
-    makes before it writes anything and then fails the `cat` that appends it.
-    What is on the host at that point is the half-written file the assembly
-    concatenates into, which nobody but its owner can read, and no file at the
-    path the unit is shown.
-    """
-    _, staged, mode, read = _staged()
-    (tmp_path / read.lstrip("/")).mkdir(parents=True)
-
-    interrupted = _assemble(tmp_path, "000")
-    assert interrupted.returncode != 0
-
-    assembled = tmp_path / staged.lstrip("/")
-    partial = assembled.with_name(f"{assembled.name}.assembling")
-    assert not assembled.exists()
-    assert partial.read_text() != ""
-    assert oct(partial.stat().st_mode & 0o7777) == "0o600"
-
-    (tmp_path / read.lstrip("/")).rmdir()
-    (tmp_path / read.lstrip("/")).write_text(SHOWN_TEXT)
-    _assemble(tmp_path, "000")
-    assert assembled.read_text().endswith(SHOWN_TEXT)
-    assert oct(assembled.stat().st_mode & 0o7777) == oct(int(mode, 8))
-
-
-@ASSEMBLY
-def test_the_mode_does_not_depend_on_the_attaching_environment(tmp_path: Path) -> None:
-    """Two attaching environments, one mode: the declaration decides it, not the login.
-
-    Both the file the unit is shown and the file it is assembled into are read,
-    because a recipe that chmod-ed at the end would answer for the first under
-    either mask and still have spent the assembly at whatever the login left.
-    """
-    _, staged, mode, read = _staged()
-    finished = []
-    staging = []
-    for index, mask in enumerate(("000", "077")):
-        whole = tmp_path / f"{index}-whole"
-        (whole / read.lstrip("/")).parent.mkdir(parents=True)
-        (whole / read.lstrip("/")).write_text(SHOWN_TEXT)
-        _assemble(whole, mask)
-        finished.append((whole / staged.lstrip("/")).stat().st_mode & 0o7777)
-
-        # A directory where the recipe expects a file: the run gets as far as
-        # appending it and stops, so what is on the host is the assembly itself.
-        part = tmp_path / f"{index}-part"
-        (part / read.lstrip("/")).mkdir(parents=True)
-        _assemble(part, mask)
-        partial = (part / staged.lstrip("/")).with_name(f"{Path(staged).name}.assembling")
-        staging.append(partial.stat().st_mode & 0o7777)
-
-    assert finished == [int(mode, 8), int(mode, 8)]
-    assert staging == [0o600, 0o600]

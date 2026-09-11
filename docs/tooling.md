@@ -84,8 +84,8 @@ The suites, and how many tests each holds:
 | --- | --- | --- |
 | `interfaces` | 26 | interface identity by value, export atoms, the omission rule |
 | `composition` | 21 | roots, members, the settings namespace, defaults and fixed |
-| `resolution` | 43 | wiring, arity, secrecy, placement, keyset equality |
-| `diagnostics` | 37 | totality, ordering, severity, rendering, the scan that finds no raising call under `lib/`, the row table against `docs/diagnostics.md`, and every realiser refusal against the row producer above it |
+| `resolution` | 44 | wiring, arity, secrecy, placement, keyset equality |
+| `diagnostics` | 40 | totality, ordering, severity, rendering, the scan that finds no raising call under `lib/` or in the reading beside it, the row table against `docs/diagnostics.md`, and every realiser refusal against the row producer above it |
 | `plan` | 35 | keys, planes, absences, dependencies, serialisation, the golden fixture |
 | `postgres` | 10 | one provider instance and two consumers, planned |
 | `exclusions` | 17 | one deployment per excluded construct, each refused, and the counts the fixture README records about its own folder |
@@ -110,7 +110,7 @@ nix eval --json '.#debug.suites' \
 ```
 
 Nineteen suites, counted as the keys of `suites` in `tests/default.nix`, and
-417 tests, counted as the test attributes of the files under `tests/unit/`. Both
+421 tests, counted as the test attributes of the files under `tests/unit/`. Both
 numbers, and every figure in the table above, are compared against the tree by
 `coverage.testASuiteGainsATest`, so a suite that gains a test fails a check
 naming this document rather than leaving a stale number in it. That
@@ -137,13 +137,13 @@ See [cluster.md](cluster.md) for the host it needs, the five folders, what a run
 observes and how to drive `pytest` by hand against the working tree.
 
 The pure half of that layer needs no machine and is a check like any other:
-`nix build .#checks.x86_64-linux.planner-delivery -L`, 76 tests over
+`nix build .#checks.x86_64-linux.planner-delivery -L`, 78 tests over
 `tests/e2e/test_harness.py`. Most of them are the command's rather than the
 harness's now - the order `apply` walks, the refusals it makes before it dials -
 because the harness hands the command a recorder in place of a process table and
 reads the argv it produced. The check exports `PYTHONPATH` naming `cli/`, since
 that is where those modules live. `nix develop` carries the same `pytest`, so
-`PYTHONPATH=cli pytest -q tests/e2e/test_harness.py` runs the same 76 against
+`PYTHONPATH=cli pytest -q tests/e2e/test_harness.py` runs the same 78 against
 the working tree. Nothing here answers for `portablectl`: every claim about what
 a real one prints, and every verdict read out of it, is a test of
 `tests/e2e/portable-image/`.
@@ -293,7 +293,7 @@ the ratchet is that both directions are a decision.
 ## The other checks
 
 ```bash
-nix build .#checks.x86_64-linux.planner-perf-checker -L  # the checker's own 13 tests
+nix build .#checks.x86_64-linux.planner-perf-checker -L  # the checker's own 17 tests
 nix build .#checks.x86_64-linux.treefmt -L               # every formatter and linter, python included
 nix fmt                                                  # the same set, applied to the tree
 ```

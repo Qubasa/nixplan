@@ -63,8 +63,8 @@ let
   # end the evaluation instead of filling a row.
   shapes = {
     root = {
-      what = "a module function or a record";
-      is = v: builtins.isFunction v || builtins.isAttrs v;
+      what = "a module function";
+      is = builtins.isFunction;
     };
     record = {
       what = "a record";
@@ -124,6 +124,35 @@ let
         else
           [ ];
     };
+
+  # A whole record a deployment wrote. Every field reader above tolerates a value
+  # of another kind, but the unknown-key scans call `attrNames` on the record
+  # itself, and that ends the evaluation rather than filling a row.
+  declaredRecord =
+    {
+      subject,
+      file,
+      where,
+      value,
+    }:
+    if builtins.isAttrs value then
+      {
+        inherit value;
+        rows = [ ];
+      }
+    else
+      {
+        value = { };
+        rows = [
+          (diag.error {
+            inherit subject;
+            id = "declaration-field-malformed";
+            message = "${where} is declared as ${shownValue value}, and the reading needs a record";
+            evidence = "the half of a declaration a deployment writes is read with the tolerance the half a module writes is read with, so a value of the wrong kind is a row and the rest of the deployment is still read";
+            resolution = "write a record for ${where} in ${file}";
+          })
+        ];
+      };
 
   # The root of an instance that declares none: it owns no member and provides
   # nothing, so the rest of the deployment reads it as an instance with no
@@ -212,13 +241,23 @@ in
       # Every field of the machine registry, read once with its shape. A machine
       # is the deployment's own declaration, so a value of the wrong kind is a
       # row here rather than a type error deep inside an elaboration.
+      machineDeclarations = mapAttrs (
+        name: value:
+        declaredRecord {
+          subject = machinesFile;
+          file = machinesFile;
+          where = "machine ${util.quote name}";
+          inherit value;
+        }
+      ) machines;
+
       machineFieldOf =
         name: field: shape: fallback:
         declaredField {
           subject = machinesFile;
           file = machinesFile;
           where = "machine ${util.quote name}";
-          record = machines.${name};
+          record = machineDeclarations.${name}.value;
           inherit field shape fallback;
         };
 
@@ -230,11 +269,13 @@ in
         microarchitecture = machineFieldOf name "microarchitecture" shapes.name null;
       }) machines;
 
-      machineFieldRows = concatLists (
-        util.mapAttrsToList (
-          _: fields: concatLists (util.mapAttrsToList (_: f: f.rows) fields)
-        ) machineFields
-      );
+      machineFieldRows =
+        concatLists (util.mapAttrsToList (_: record: record.rows) machineDeclarations)
+        ++ concatLists (
+          util.mapAttrsToList (
+            _: fields: concatLists (util.mapAttrsToList (_: f: f.rows) fields)
+          ) machineFields
+        );
 
       # Machines by tag, indexed once for the whole deployment, so a selector asks
       # for a tag instead of scanning the registry per member per tag.
@@ -319,7 +360,7 @@ in
 
       machineRows =
         util.concatMapAttrsToList (
-          name: decl:
+          name: _:
           map (
             key:
             module.keyRow {
@@ -328,7 +369,7 @@ in
               inherit key;
               allowed = machineRegistryKeys;
             }
-          ) (util.extraKeys machineRegistryKeys decl)
+          ) (util.extraKeys machineRegistryKeys machineDeclarations.${name}.value)
         ) machines
         ++ map (
           incomplete:
@@ -427,8 +468,16 @@ in
       ) instances;
 
       mkInstance =
-        iname: idecl:
+        iname: given:
         let
+          declared = declaredRecord {
+            subject = "${iname}:instance";
+            file = deploymentFile;
+            where = "instance ${util.quote iname}";
+            value = given;
+          };
+          idecl = declared.value;
+
           instanceField =
             field: shape: fallback: required:
             declaredField {
@@ -447,6 +496,7 @@ in
           declaredRoot = instanceField "module" shapes.root emptyRoot true;
           declaredExposes = instanceField "exposes" shapes.names [ ] false;
           declaredWire = instanceField "wire" shapes.record { } false;
+          declaredSettings = instanceField "settings" shapes.record { } false;
           placed = placementOf.${iname};
 
           root = compose.mkRoot declaredRoot.value (
@@ -464,7 +514,7 @@ in
                 moduleFile
                 ;
               subject = "${iname}:${name}";
-              settings = idecl.settings or { };
+              settings = declaredSettings.value;
             }
           );
           moduleFile = moduleFileOf iname;
@@ -526,7 +576,7 @@ in
                 evidence = "the root in ${moduleFile} owns ${util.quoteList memberNames}";
                 resolution = "place one of ${util.quoteList memberNames} in ${deploymentFile}";
               }
-            ) (util.subtractList (attrNames every) memberNames);
+            ) (util.subtractList (attrNames every) (memberNames ++ badMemberNames));
 
           exposeRows = map (
             cap:
@@ -581,8 +631,10 @@ in
             ++ compose.namespaceRows {
               inherit subject deploymentFile moduleFile;
               members = memberNames;
-              settings = idecl.settings or { };
+              settings = declaredSettings.value;
             }
+            ++ declared.rows
+            ++ declaredSettings.rows
             ++ declaredRoot.rows
             ++ declaredExposes.rows
             ++ declaredWire.rows
@@ -643,7 +695,8 @@ in
               declaringFile = file;
               interfaceName = if iface == null then null else iface.name;
               interfaceId = if claim == null then null else claim.id;
-              label = interface.labelFor iface file;
+              label =
+                if iface == null then "an interface the module does not declare" else interface.labelFor iface file;
             }
           ) declaration.provides;
 
@@ -1231,17 +1284,40 @@ in
             && !(wire ? instance)
             && builtins.any (v: builtins.isAttrs v && v ? instance) (builtins.attrValues wire);
 
-          target = if wire == null then null else wire.instance or null;
-          capName = if wire == null then null else wire.provides or null;
+          # A wire's own two fields are names the reading turns into attribute
+          # keys, so each is read with its shape before it is one. A member cut
+          # carries neither, and is a row of its own.
+          wireField =
+            field:
+            declaredField {
+              inherit subject;
+              file = deploymentFile;
+              where = "the wire of ${util.quote slotName} in instance ${util.quote iname}";
+              record = if wire == null then { } else wire;
+              inherit field;
+              shape = shapes.name;
+              fallback = null;
+              required = wire != null && !isMemberCut;
+            };
+
+          wireTarget = wireField "instance";
+          wireCapability = wireField "provides";
+          target = wireTarget.value;
+          capName = wireCapability.value;
+
+          # Membership is asked of the set the reading built, never of the
+          # deployment's own: a name the reading refused is absent from one and
+          # present in the other, and indexing the second ends the evaluation.
           targetInstance =
-            if target != null && instances ? ${target} then resolved.instances.${target} else null;
+            if target != null && resolved.instances ? ${target} then resolved.instances.${target} else null;
           capability =
             if targetInstance == null || capName == null then
               null
             else
               targetInstance.exposed.${capName} or null;
 
-          providerMember = if capability == null then null else targetInstance.members.${capability.member};
+          providerMember =
+            if capability == null then null else targetInstance.members.${capability.member} or null;
           placements = if providerMember == null then [ ] else providerMember.placements;
 
           slotClaim = if slot.interface == null then null else interface.identityOf slot.interface;
@@ -1366,16 +1442,30 @@ in
                 resolution = "write one `wire.${slotName}` naming an instance and a capability in ${deploymentFile}";
               }
             )
-            ++ util.optional (wire != null && !isMemberCut && targetInstance == null) (
-              diag.error {
-                inherit subject;
-                id = "wire-unknown-instance";
-                message = "${deploymentFile} wires ${util.quote slotName} of instance ${util.quote iname} to instance ${util.quote (toString target)}, which the deployment does not declare";
-                evidence = "the deployment declares ${util.quoteList instanceNames}";
-                resolution = "name one of ${util.quoteList instanceNames} in ${deploymentFile}";
-              }
-            )
-            ++ util.optional (targetInstance != null && capability == null) (
+            ++ wireTarget.rows
+            ++ wireCapability.rows
+            # A name the reading refused is named by its own row, and a name it
+            # never read is named by the field row above, so neither earns a
+            # second row stating the deployment does not declare it.
+            ++
+              util.optional
+                (
+                  wire != null
+                  && !isMemberCut
+                  && target != null
+                  && !(util.carriesKeySeparator target)
+                  && targetInstance == null
+                )
+                (
+                  diag.error {
+                    inherit subject;
+                    id = "wire-unknown-instance";
+                    message = "${deploymentFile} wires ${util.quote slotName} of instance ${util.quote iname} to instance ${util.quote (toString target)}, which the deployment does not declare";
+                    evidence = "the deployment declares ${util.quoteList instanceNames}";
+                    resolution = "name one of ${util.quoteList instanceNames} in ${deploymentFile}";
+                  }
+                )
+            ++ util.optional (targetInstance != null && capName != null && capability == null) (
               if targetInstance.rootProvides ? ${capName} then
                 diag.error {
                   inherit subject;
@@ -1542,10 +1632,9 @@ in
           applied: applied == iface || (claim != null && interface.identityOf applied == claim)
         ) setReachInterfaces;
 
-      foldDeclared = filter (iface: interface.foldOf iface != null) (
-        map (r: r.value) (filter (r: interface.isInterface r.value) reg)
-        ++ filter (iface: iface != null) (map (slot: slot.interface) declaredSlots)
-      );
+      # Reached, never attributed: listing an interface in `interfaces` decides
+      # what a row says and never whether one exists.
+      foldDeclared = filter (iface: interface.foldOf iface != null) reachedInterfaces;
 
       # Which interfaces the deployment reaches: every slot's and every
       # capability's. Attribution is never a registry, so an interface absent

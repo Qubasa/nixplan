@@ -1443,6 +1443,48 @@ in
       };
     };
 
+  testAnUnattributedFoldIsReportedUnapplied =
+    let
+      iface = folding joined;
+      # A provider and no consumer at all: the interface is reached through the
+      # capability alone, which is the half attribution used to decide.
+      planned =
+        interfaces:
+        planOf {
+          inherit sources interfaces;
+          instances.provider = {
+            module = soleRoot {
+              module = providerOf iface;
+              provides = [ "identity" ];
+            };
+            placement.every.only.machines = [ "one" ];
+            exposes = [ "identity" ];
+          };
+        };
+      listed = planned (folderRegistry iface);
+      unlisted = planned { };
+    in
+    {
+      expr = {
+        listed = rowIds listed;
+        unlisted = rowIds unlisted;
+        # The row exists either way; what attribution decides is the subject it
+        # names, a declaring file against the interface's own name.
+        subjects = [
+          (subjectsById "interface-fold-unapplied" listed)
+          (subjectsById "interface-fold-unapplied" unlisted)
+        ];
+      };
+      expected = {
+        listed = [ "interface-fold-unapplied" ];
+        unlisted = [ "interface-fold-unapplied" ];
+        subjects = [
+          [ "interfaces/folded.nix" ]
+          [ "interface:identity" ]
+        ];
+      };
+    };
+
   testAFoldAppliedAtLeastOnce =
     let
       iface = folding joined;

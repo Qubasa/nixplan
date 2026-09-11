@@ -191,8 +191,11 @@ def rollback(
         The step line and the endpoint's own report, line by line.
 
     Raises:
-        ApplyError: If the key is not an entry of the deployment, or the entry
-            is realised as an image, which carries no generation.
+        ApplyError: If the key is not an entry of the deployment, if the entry
+            is realised as an image, which carries no generation, or if its
+            machine or its artifact is one the build does not name. Every one
+            of those is settled before the step is announced, so a `failed`
+            line always names a machine's own refusal.
     """
     entry = _entry(deployment, key)
     if entry.realiser != "flakelet":
@@ -204,6 +207,7 @@ def rollback(
     opts = remote.ssh_opts(ssh_key, inherited=environment.get("NIX_SSHOPTS"))
     env = remote.copy_env(environment, opts)
     address = address_of(entry)
+    script = remote.rollback_script(service_name(entry))
     lines: list[str] = []
 
     def record(line: str) -> None:
@@ -211,12 +215,7 @@ def rollback(
         log(line)
 
     with remote.taking(f"rollback {entry.key} on {user}@{address}", address, record):
-        reported = runner.output(
-            remote.ssh_argv(
-                address, remote.rollback_script(service_name(entry)), opts=opts, user=user
-            ),
-            env=env,
-        )
+        reported = runner.output(remote.ssh_argv(address, script, opts=opts, user=user), env=env)
     for line in reported.splitlines():
         record(line)
     return tuple(lines)

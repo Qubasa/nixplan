@@ -141,15 +141,23 @@ class CheckerTest(unittest.TestCase):
         self.assertEqual(0, self.exit_code())
 
     def test_the_interpreter_changes(self) -> None:
+        """The comparison is invalid rather than failed, and the run gated nothing.
+
+        Both halves are the point: no figure of the fixture is reported as over
+        or under its budget, and the run does not pass, because a run that
+        compared nothing has checked nothing.
+        """
         self.write_result("worked", result_doc("worked", None, 8, [run_doc(counter_map(800))]))
         self.write_budgets(
             {"worked": budget_doc("worked", budget_figures(10), interpreter="2.34.0")}
         )
 
-        self.assertEqual([], self.failures())
+        self.assertEqual([], [m for m in self.failures() if "per plan entry" in m])
         invalid = self.notes("INVALID")
         self.assertTrue(any("2.34.0" in m and "2.35.2" in m for m in invalid), invalid)
-        self.assertEqual(0, self.exit_code())
+        self.assertTrue(any("compared none of" in m for m in self.failures()), self.failures())
+        self.assertEqual(1, self.exit_code())
+        self.assertIn("0 of 9 gated figures compared", self.printed())
 
     def test_a_fixture_grows(self) -> None:
         self.write_result("worked", result_doc("worked", None, 16, [run_doc(counter_map(160))]))
@@ -304,6 +312,44 @@ class CheckerTest(unittest.TestCase):
         self.assertEqual(report.gated, report.compared)
         self.assertIn(f"{report.compared} of {report.gated} gated figures compared", self.printed())
         self.assertEqual(0, self.exit_code())
+
+    def test_a_run_was_asked_for_a_subset(self) -> None:
+        """A run gates on the fixtures it was asked for, not on the whole budget file.
+
+        `measure.sh` records the request before it measures, so `--sizes 4` is a
+        run that covered everything it was asked to cover; a fixture missing
+        from a run nobody restricted is still the absence above.
+        """
+        self.write_result("fleet-4", result_doc("fleet", 4, 13, [run_doc(counter_map(130))]))
+        self.write_budgets(
+            {
+                "fleet-4": budget_doc("fleet", budget_figures(10)),
+                "fleet-16": budget_doc("fleet", budget_figures(10)),
+            }
+        )
+        (self.results / check.REQUESTED).write_text("fleet-4\n", encoding="utf-8")
+
+        report = check.run_checks(self.results, self.budgets)
+        self.assertEqual([], self.failures())
+        self.assertEqual(len(check.GATED_COUNTERS), report.gated)
+        self.assertEqual(report.gated, report.compared)
+        self.assertEqual(0, self.exit_code())
+
+    def test_a_run_did_not_produce_what_it_was_asked_for(self) -> None:
+        """A measurement that died before its last case is an absence, not a subset."""
+        self.write_result("fleet-4", result_doc("fleet", 4, 13, [run_doc(counter_map(130))]))
+        self.write_budgets(
+            {
+                "fleet-4": budget_doc("fleet", budget_figures(10)),
+                "fleet-16": budget_doc("fleet", budget_figures(10)),
+            }
+        )
+        (self.results / check.REQUESTED).write_text("fleet-4\nfleet-16\n", encoding="utf-8")
+
+        failures = self.failures()
+        self.assertTrue(any("fixture fleet-16" in m for m in failures), failures)
+        self.assertFalse(any("fixture fleet-4" in m for m in failures), failures)
+        self.assertEqual(1, self.exit_code())
 
 
 if __name__ == "__main__":

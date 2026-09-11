@@ -1612,6 +1612,41 @@ def test_a_file_inside_the_build_is_malformed(tmp_path: Path) -> None:
     assert "not readable as JSON" in message
 
 
+def test_a_file_inside_the_build_is_not_text(tmp_path: Path) -> None:
+    """Bytes that decode as nothing are the same refusal as bytes that parse as nothing.
+
+    `UnicodeDecodeError` is a `ValueError` and not a `JSONDecodeError`, so a
+    reader that names only the latter lets the former out as a traceback.
+    """
+    root = tmp_path / "built"
+    _built(root, plan=PLAN, entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")})
+
+    for name, said in (("diagnostics.json", "not readable as JSON"), ("diagnostics.txt", "text")):
+        (root / name).write_bytes(b"\xff\xfe[]")
+
+        with pytest.raises(errors.ApplyError) as raised:
+            manifest.read(root)
+
+        assert str(root / name) in str(raised.value)
+        assert said in str(raised.value)
+        (root / name).unlink()
+
+
+def test_an_entry_records_a_path_that_names_nothing(tmp_path: Path) -> None:
+    """An empty path is not the build root: absence is an omitted key, never a name."""
+    root = tmp_path / "built"
+    _built(root, plan=PLAN, entries={SERVER_KEY: {**_stated(SERVER_KEY, "alpha", "10.0.0.10")}})
+    record = json.loads((root / "manifest.json").read_text())
+    record["entries"][SERVER_KEY]["path"] = ""
+    (root / "manifest.json").write_text(json.dumps(record))
+
+    with pytest.raises(errors.ApplyError) as raised:
+        manifest.read(root)
+
+    assert SERVER_KEY in str(raised.value)
+    assert "records path as ''" in str(raised.value)
+
+
 def _publishes_only(tmp_path: Path) -> manifest.Deployment:
     """A deployment placing one entry that publishes an export and runs nothing."""
     stated = _stated(CLIENT_KEY, "beta", "10.0.0.11")
@@ -1647,18 +1682,25 @@ def test_an_entry_declares_no_unit(tmp_path: Path) -> None:
 
 
 def test_a_command_needs_the_artifact_an_entry_does_not_have(tmp_path: Path) -> None:
-    """A step that wants the artifact refuses naming that entry and no other."""
+    """A step that wants the artifact refuses naming that entry and no other.
+
+    The refusal is the command's own and is made before the step is announced,
+    so no line presents a local read of the build as a machine's answer.
+    """
     deployment = _publishes_only(tmp_path)
     recorder = Recorder()
+    printed: list[str] = []
 
     with pytest.raises(errors.ApplyError) as raised:
-        report.rollback(deployment, recorder, CLIENT_KEY)
+        report.rollback(deployment, recorder, CLIENT_KEY, log=printed.append)
 
     message = str(raised.value)
     assert CLIENT_KEY in message
     assert "declares no unit" in message
     assert SERVER_KEY not in message
     assert recorder.commands == []
+    assert printed == []
+    assert "10.0.0.11" not in message
 
 
 def test_an_entry_the_endpoint_recorded_a_failure_for_is_not_reported_as_healthy(
