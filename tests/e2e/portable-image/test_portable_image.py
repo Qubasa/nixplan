@@ -495,18 +495,25 @@ ASSEMBLY = pytest.mark.skipif(
 
 
 def _staged() -> tuple[Path, str, str, str]:
-    """The attach script, the file it stages, that file's mode, and the path it reads."""
+    """The attach script, the file it stages, that file's mode, and the path it reads.
+
+    The staged path and its mode are the attachment's; the path the recipe reads
+    is the plan's, because a reference is a fragment of the recipe and never a
+    host path of its own.
+    """
     entry = DEPLOYMENT.entries[CONFINED_KEY]
     attachment = json.loads((manifest.artifact_of(entry) / "attachment.json").read_text())
     configuration = [p for p in attachment["hostPaths"] if p["kind"] == "configuration-file"]
-    referenced = [p for p in attachment["hostPaths"] if p["disposition"] == "reference"]
     assert len(configuration) == 1, attachment["hostPaths"]
-    assert len(referenced) == 1, attachment["hostPaths"]
+    records = list(DEPLOYMENT.plan[CONFINED_KEY]["configData"].values())
+    assert len(records) == 1, records
+    referenced = [item["ref"] for item in records[0]["render"] if "ref" in item]
+    assert len(referenced) == 1, records
     return (
         manifest.artifact_of(entry) / "bin" / "attach",
         str(configuration[0]["from"]),
         str(configuration[0]["mode"]),
-        str(referenced[0]["path"]),
+        str(referenced[0]),
     )
 
 
@@ -530,7 +537,10 @@ def _assemble(root: Path, mask: str) -> subprocess.CompletedProcess[str]:
 @ASSEMBLY
 def test_a_staged_file_renders_a_secret(tmp_path: Path) -> None:
     """The staged file carries its declared mode, the bytes are the recipe's, and
-    nothing the assembly needed on the way is left behind."""
+    nothing the assembly needed on the way is left behind. The fragment appended
+    here is a reference to a host file rather than to a generated secret, and the
+    rule is the same one: a login that would create a file at 0666 writes 0444
+    because the declaration said so."""
     _, staged, mode, read = _staged()
     (tmp_path / read.lstrip("/")).parent.mkdir(parents=True)
     (tmp_path / read.lstrip("/")).write_text(SHOWN_TEXT)
@@ -574,14 +584,29 @@ def test_the_assembly_of_a_file_fails_part_way(tmp_path: Path) -> None:
 
 @ASSEMBLY
 def test_the_mode_does_not_depend_on_the_attaching_environment(tmp_path: Path) -> None:
-    """Two attaching environments, one mode: the declaration decides it, not the login."""
-    _, staged, mode, read = _staged()
-    observed = []
-    for index, mask in enumerate(("000", "077")):
-        root = tmp_path / str(index)
-        (root / read.lstrip("/")).parent.mkdir(parents=True)
-        (root / read.lstrip("/")).write_text(SHOWN_TEXT)
-        _assemble(root, mask)
-        observed.append((root / staged.lstrip("/")).stat().st_mode & 0o7777)
+    """Two attaching environments, one mode: the declaration decides it, not the login.
 
-    assert observed == [int(mode, 8), int(mode, 8)]
+    Both the file the unit is shown and the file it is assembled into are read,
+    because a recipe that chmod-ed at the end would answer for the first under
+    either mask and still have spent the assembly at whatever the login left.
+    """
+    _, staged, mode, read = _staged()
+    finished = []
+    staging = []
+    for index, mask in enumerate(("000", "077")):
+        whole = tmp_path / f"{index}-whole"
+        (whole / read.lstrip("/")).parent.mkdir(parents=True)
+        (whole / read.lstrip("/")).write_text(SHOWN_TEXT)
+        _assemble(whole, mask)
+        finished.append((whole / staged.lstrip("/")).stat().st_mode & 0o7777)
+
+        # A directory where the recipe expects a file: the run gets as far as
+        # appending it and stops, so what is on the host is the assembly itself.
+        part = tmp_path / f"{index}-part"
+        (part / read.lstrip("/")).mkdir(parents=True)
+        _assemble(part, mask)
+        partial = (part / staged.lstrip("/")).with_name(f"{Path(staged).name}.assembling")
+        staging.append(partial.stat().st_mode & 0o7777)
+
+    assert finished == [int(mode, 8), int(mode, 8)]
+    assert staging == [0o600, 0o600]
