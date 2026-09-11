@@ -76,6 +76,8 @@ let
     "ruff.toml" = "the formatter's own configuration";
     ".envrc" = "the checkout's own configuration";
     ".gitignore" = "the checkout's own configuration";
+    "slopo.conf.yaml" = "the checkout's own configuration";
+    "slopo.ignore.txt" = "the checkout's own configuration";
     "LICENSE.md" = "the licence";
   };
 

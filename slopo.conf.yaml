@@ -1,7 +1,6 @@
 # Source directory with code to index.
 # Absolute path, or relative to the current directory.
 source_dir: .
-
 # Paths to exclude from indexing, as a YAML list of .gitignore-style patterns
 source_dir_exclude:
   - ".direnv"
@@ -10,15 +9,12 @@ source_dir_exclude:
   - "**/test/**"
   - "*_test.py"
   - "test_*.py"
-
 # Embedding model in LiteLLM format, e.g. "voyage/voyage-code-3"
 # For all supported providers see
 # https://docs.litellm.ai/docs/embedding/supported_embedding
 embedding_model: voyage/voyage-code-3
-
 # Output dimensions of the embedding model.
 embedding_dimensions: 512
-
 # Provider API key.
 # Alternatively, set the SLOPO_EMBEDDING_API_KEY environment variable
 # (also picked up from a .env file in the current directory)
