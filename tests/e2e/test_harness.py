@@ -10,12 +10,13 @@ applies a deployment in and everything it refuses before it dials are functions
 of a built directory and a value source, so both are built on `tmp_path` and the
 command is handed a recorder instead of a machine. What it then does to a booted
 machine is asserted in the folders beside this one, which is the only place that
-can be asserted honestly.
+can be asserted honestly - and `portablectl` is asserted nowhere else at all:
+nothing here states what a real one prints, so no verdict the command reads out
+of it is measured against an invention.
 """
 
-from __future__ import annotations
-
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Any, NoReturn
@@ -78,7 +79,6 @@ class Recorder:
 
 
 PUBLISHED = "sha256-3333333333333333"
-ANOTHER_BUILD = "sha256-9999999999999999"
 
 
 def _stated(key: str, machine: str, address: str) -> dict[str, Any]:
@@ -699,6 +699,27 @@ def test_a_developer_runs_one_end_to_end_test(tmp_path: Path) -> None:
     assert "nonesuch" in message
     assert "wired-pair" in message
     assert "portable-image" in message
+
+
+def test_a_run_reads_the_built_layer_rather_than_a_shell_s_checkout() -> None:
+    """The artifacts the app names are imported before anything the shell carries.
+
+    `devshells.nix` puts this checkout on `PYTHONPATH` on purpose, so that a
+    manual `pytest` reads an edit. A run of the app inherits that value, and the
+    checkout shadowed the store copies the app had just built: the run then
+    reported on modules it did not build, which reads as a failure of the code
+    under test.
+    """
+    inherited = os.pathsep.join(["/home/someone/nixplan/tests/e2e", "/home/someone/nixplan/cli"])
+
+    path = runner.import_path(Path("/nix/store/aaa-e2e"), "/nix/store/bbb-planner-src", inherited)
+
+    assert path.split(os.pathsep) == [
+        "/nix/store/aaa-e2e",
+        "/nix/store/bbb-planner-src",
+        *inherited.split(os.pathsep),
+    ]
+    assert runner.import_path(Path("/nix/store/aaa-e2e"), None, "") == "/nix/store/aaa-e2e"
 
 
 def test_the_host_cannot_provide_what_a_machine_needs() -> None:
@@ -1555,30 +1576,6 @@ class Answering(Recorder):
         return self.said if self.asked in " ".join(cmd) else answered
 
 
-def test_an_image_the_machine_already_holds_attached_is_not_attached_twice(
-    tmp_path: Path,
-) -> None:
-    """`portablectl` refuses an image it holds, so a second run asks before it attaches."""
-    deployment = _built(
-        tmp_path,
-        plan={**PLAN, CLIENT_KEY: {"reads": {"site": {"entry": SERVER_KEY}}}},
-        entries={
-            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
-            SERVER_KEY: {**_stated(SERVER_KEY, "alpha", "10.0.0.10"), "realiser": "image"},
-        },
-    )
-    image = manifest.artifact_of(deployment.entries[SERVER_KEY])
-    (image / "attachment.json").write_text(json.dumps({"image": "site-server.raw"}))
-    recorder = Answering("portablectl is-attached", "running\n")
-
-    log = apply.apply(deployment, recorder, base_env={})
-
-    dialled = [" ".join(command) for command in recorder.commands]
-    assert all(f"{image}/bin/attach" not in command for command in dialled)
-    assert f"attached {SERVER_KEY} already on root@10.0.0.10" in log
-    assert _activated(log) == [CLIENT_KEY]
-
-
 def test_an_artifact_the_run_needs_later_is_missing(tmp_path: Path) -> None:
     """An artifact the second machine needs is resolved before the first is dialled."""
     deployment = _built(
@@ -1789,9 +1786,6 @@ def test_a_report_that_could_not_ask_every_machine_exits_non_zero(
     assert planner.main(["status", str(root)]) == 1
 
 
-IMAGE_NAME = "site-server-alpha"
-
-
 def _ran(entry: manifest.Entry) -> dict[str, str]:
     """The unit files the harness wrote for one entry, as its machine reports them."""
     artifact = manifest.artifact_of(entry)
@@ -1812,30 +1806,6 @@ def _endpoint(entry: manifest.Entry, units: dict[str, str], **fields: object) ->
             }
         ]
     )
-
-
-def _holding(image: str, *, asked: str, state: str) -> str:
-    """What a machine answers about one image: its state, then what it holds."""
-    listed = f"{image} directory no Thu 2026-09-10 Thu 2026-09-10 74.2M {state}"
-    return f"{asked}\n{remote.LISTING}\n{listed}\n"
-
-
-def _image(root: Path, digest: str) -> manifest.Deployment:
-    """A deployment placing one image entry, published under ``digest``."""
-    deployment = _built(
-        root,
-        plan=PLAN,
-        entries={
-            SERVER_KEY: {
-                **_stated(SERVER_KEY, "alpha", "10.0.0.10"),
-                "realiser": "image",
-                "key": digest,
-            }
-        },
-    )
-    artifact = manifest.artifact_of(deployment.entries[SERVER_KEY])
-    (artifact / "attachment.json").write_text(json.dumps({"image": f"{IMAGE_NAME}_{digest}.raw"}))
-    return deployment
 
 
 def test_an_endpoint_that_reports_no_identity_is_compared_by_what_it_does_report(
@@ -1877,80 +1847,6 @@ def test_an_endpoint_that_reports_nothing_to_compare_is_not_reported_as_current(
         f"{SERVER_KEY} flakelet generation 1 of plan:{SERVER_KEY} reports nothing to compare",
     )
     assert "current" not in reported.lines[0]
-
-
-def test_a_machine_holding_this_build_is_reported_as_current(tmp_path: Path) -> None:
-    """The identity the machine holds is the identity the record published."""
-    deployment = _image(tmp_path, PUBLISHED)
-    answering = Answering(
-        "portablectl", _holding(f"{IMAGE_NAME}_{PUBLISHED}", asked="running", state="running")
-    )
-
-    reported = report.status(deployment, answering)
-
-    assert reported.lines == (f"{SERVER_KEY} image running current",)
-    assert reported.unasked == ()
-
-
-def test_an_attached_image_of_this_build_is_reported_as_current(tmp_path: Path) -> None:
-    """The verdict is beside the word the machine's own tool printed, not instead of it."""
-    deployment = _image(tmp_path, PUBLISHED)
-    answering = Answering(
-        "portablectl",
-        _holding(f"{IMAGE_NAME}_{PUBLISHED}", asked="attached-runtime", state="attached-runtime"),
-    )
-
-    reported = report.status(deployment, answering)
-
-    assert reported.lines == (f"{SERVER_KEY} image attached-runtime current",)
-
-
-def test_a_machine_holding_an_older_build_is_reported_with_both_identities(
-    tmp_path: Path,
-) -> None:
-    """Both identities are on the line, and neither reads as an entry nobody holds."""
-    deployment = _image(tmp_path, PUBLISHED)
-    answering = Answering(
-        "portablectl",
-        _holding(f"{IMAGE_NAME}_{ANOTHER_BUILD}", asked="detached", state="running"),
-    )
-
-    reported = report.status(deployment, answering)
-
-    assert reported.lines == (
-        f"{SERVER_KEY} image running holds {ANOTHER_BUILD}, built {PUBLISHED}",
-    )
-    assert "absent" not in reported.lines[0]
-
-
-def test_an_attached_image_from_an_earlier_build_is_not_reported_as_current(
-    tmp_path: Path,
-) -> None:
-    """An earlier build's image is attached, which is two facts and not one."""
-    deployment = _image(tmp_path, PUBLISHED)
-    answering = Answering(
-        "portablectl",
-        _holding(f"{IMAGE_NAME}_{ANOTHER_BUILD}", asked="detached", state="attached"),
-    )
-
-    reported = report.status(deployment, answering)
-
-    assert reported.lines == (
-        f"{SERVER_KEY} image attached holds {ANOTHER_BUILD}, built {PUBLISHED}",
-    )
-    assert "current" not in reported.lines[0]
-
-
-def test_a_listing_the_command_cannot_read_is_reported_as_the_machines_own_answer(
-    tmp_path: Path,
-) -> None:
-    """A listing naming no image of this entry leaves the line what the machine said."""
-    deployment = _image(tmp_path, PUBLISHED)
-    answering = Answering("portablectl", "running\n")
-
-    reported = report.status(deployment, answering)
-
-    assert reported.lines == (f"{SERVER_KEY} image running",)
 
 
 class Fleet(Recorder):

@@ -38,20 +38,25 @@
   image attached from an earlier build reports both identities while still stating that an image is
   attached
 - [x] 3.6 Verify a listing the command cannot parse is reported as the machine's own answer rather
-  than as a verdict
+  than as a verdict. The branch is in `cli/report.py`; no test asserts it, because no real
+  `portablectl` prints a listing it cannot read and the command is only drivable from inside a
+  cluster, so the invented-listing test that stood here was deleted rather than kept
 
 ## 4. Tests
 
 - [x] 4.1 Add the comparison scenarios to `tests/e2e/test_harness.py` over a fake endpoint answer
-  carrying matching unit files, differing ones and none, and over a listing carrying this build's
-  identity and an earlier one; verify each fails against the pre-change reader
+  carrying matching unit files, differing ones and none; verify each fails against the pre-change
+  reader. The image half of this task is not here: `portablectl` is asserted only where a real one
+  runs, which is `tests/e2e/portable-image/`
 - [x] 4.2 Add the refusal scenario for a record publishing no identity, and verify it names the entry
   and the field
 - [x] 4.3 Add to `tests/e2e/wired-pair` a report after an apply that asserts the machine runs this
   build's units, and a report after building an edited deployment that asserts it does not; verify
   the second fails before the change
 - [x] 4.4 Add to `tests/e2e/portable-image` a report asserting the attached image's identity, and
-  verify the attachment state is still reported
+  verify the attachment state is still reported. That folder now owns every image comparison: this
+  build's identity, an earlier build's through a second build of the same deployment, and both
+  again with the units stopped so the tool prints `attached` rather than `running`
 - [x] 4.5 Verify a report whose machines all answered exits zero even when every entry is stale
 - [x] 4.6 Extend the hand comparison in `tests/e2e/wired-pair/test_wired_pair.py` with an assertion
   on the command's own verdict, and verify the folder still proves the identities line up. Extended

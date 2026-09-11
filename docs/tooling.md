@@ -137,14 +137,16 @@ See [cluster.md](cluster.md) for the host it needs, the five folders, what a run
 observes and how to drive `pytest` by hand against the working tree.
 
 The pure half of that layer needs no machine and is a check like any other:
-`nix build .#checks.x86_64-linux.planner-delivery -L`, 81 tests over
+`nix build .#checks.x86_64-linux.planner-delivery -L`, 76 tests over
 `tests/e2e/test_harness.py`. Most of them are the command's rather than the
 harness's now - the order `apply` walks, the refusals it makes before it dials -
 because the harness hands the command a recorder in place of a process table and
 reads the argv it produced. The check exports `PYTHONPATH` naming `cli/`, since
 that is where those modules live. `nix develop` carries the same `pytest`, so
-`PYTHONPATH=cli pytest -q tests/e2e/test_harness.py` runs the same 81 against
-the working tree.
+`PYTHONPATH=cli pytest -q tests/e2e/test_harness.py` runs the same 76 against
+the working tree. Nothing here answers for `portablectl`: every claim about what
+a real one prints, and every verdict read out of it, is a test of
+`tests/e2e/portable-image/`.
 
 ## Mapping a specification scenario to a test
 

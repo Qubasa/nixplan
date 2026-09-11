@@ -628,6 +628,24 @@ silently unobserved.
 - In `portable-image`, `elsewhere` is aarch64 and never booted: it exists so an image can be built
   for a machine this host is not. The attaching entry is stated `strict` because enforcement is
   the claim under test.
+- `portablectl` is asserted in `tests/e2e/portable-image/` and nowhere else. `test_harness.py`
+  hands the command a recorder, so a test there could state what the tool prints - and a verdict
+  measured against an invented answer is the one thing this layer exists to avoid. The folder
+  therefore owns every image comparison and builds the same deployment twice: `changed` carries
+  another identity through another unit script, nothing attaches it, and a report read against it
+  is what names two identities. One phase stops the units and leaves the image attached, because
+  the tool prints `attached` there rather than `running` and only `detached` reads as absence;
+  nothing restores them, since the detach below does not care and the file order is the order.
+- The fallback in `cli/report.py` for a listing the command cannot read has no test. No real
+  `portablectl` prints one, and the command can only be driven from inside a cluster, so there is
+  nowhere to inject an answer without inventing it. A rewrite of `remote.attachment_of` is
+  therefore unguarded against that branch.
+- `tests/e2e/runner.py` puts the roots the app names **before** any inherited `PYTHONPATH`.
+  `devshells.nix` puts this checkout on that variable on purpose, and appending the run's own roots
+  let a checkout shadow the store copies the app had just built: a run then reported on modules it
+  did not build, which reads as a failure of the code under test. `import_path` is the one place
+  that order is decided, and `test_a_run_reads_the_built_layer_rather_than_a_shell_s_checkout`
+  holds it.
 - `newcomer` proves the outward surface, not a deployment, and it proves it on a machine. The host
   computes one thing: the store path `nix flake metadata --json` resolves the checkout to. A
   `path:` reference copies the ignored trees beside it and a `git+file:` one pins `HEAD`, which

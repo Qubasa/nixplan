@@ -277,6 +277,26 @@ def cluster_environment(rookery: Path, base_env: dict[str, str]) -> dict[str, st
     return env
 
 
+def import_path(root: Path, cli_source: str | None, inherited: str) -> str:
+    """Return the import path a run reads its own modules from.
+
+    The artifacts the app names come first. A shell that already carries this
+    checkout on ``PYTHONPATH`` - which `devshells.nix` does on purpose, so that
+    a manual `pytest` reads an edit - would otherwise shadow the built copies,
+    and a run would report on files it did not build.
+
+    Args:
+        root: The built end-to-end layer, which is ``$PLANNER_E2E``.
+        cli_source: The built command source, where the app named one.
+        inherited: The import path the run was handed.
+
+    Returns:
+        One ``PYTHONPATH`` value, the run's own roots before the inherited one.
+    """
+    roots = [str(root), *(value for value in [cli_source] if value)]
+    return os.pathsep.join([*roots, *(entry for entry in [inherited] if entry)])
+
+
 def print_env() -> int:
     """Print the exports a manual ``pytest`` run needs, on stdout, for ``eval``.
 
@@ -332,8 +352,7 @@ def main(argv: list[str]) -> int:
         print(exc, file=sys.stderr)
         return 1
 
-    roots = [str(root), *(v for v in [os.environ.get("PLANNER_CLI_SRC")] if v is not None)]
-    env["PYTHONPATH"] = os.pathsep.join([env["PYTHONPATH"], *roots])
+    env["PYTHONPATH"] = import_path(root, os.environ.get("PLANNER_CLI_SRC"), env["PYTHONPATH"])
 
     # Keep this prefix short. The virtiofs socket path built underneath it hits the
     # 108 byte AF_UNIX limit, and virtiofsd then dies during startup with no clear

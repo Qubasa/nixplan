@@ -10,6 +10,11 @@ that is about what a real machine does with a built image, named after it, plus
 the image scenario of
 ``openspec/changes/apply-deployments-with-an-operator-command/specs/operator/apply-command/spec.md``.
 
+It builds that deployment twice. The second build,
+``planner-e2e-portable-image-changed``, is attached by nothing and exists so
+that a report about a machine holding an earlier build has two identities to
+name.
+
 The build runs in this process and the apply runs inside the cluster (`design.md
 D8`): a build needs no address, and a machine's address exists only in the
 cluster's own net namespace.
@@ -20,7 +25,9 @@ cluster's own net namespace.
 2. the image is attached by the script the artifact carries, and its unit runs
 3. the profile the entry was stated under is the one the machine enforces
 4. an image built for another architecture is refused by its own script
-5. detaching removes what attaching made, and leaves what it was shown
+5. a report says what this machine holds, against this build and against another
+6. the units are stopped, the image stays attached, and a report says so
+7. detaching removes what attaching made, and leaves what it was shown
 
 rookery is imported at run time rather than statically: it is resolved from
 ``$ROOKERY_FLAKE`` by the runner and is deliberately not an input of this flake
@@ -102,6 +109,8 @@ def _built(target: str) -> Path:
 
 BUILT = _built(f"{FLAKE}#planner-e2e-portable-image")
 DEPLOYMENT = manifest.read(BUILT)
+CHANGED = _built(f"{FLAKE}#planner-e2e-portable-image-changed")
+CHANGED_BUILD = manifest.read(CHANGED)
 
 
 @dataclass
@@ -327,17 +336,14 @@ def test_an_image_reports_the_attachment_word_the_machine_printed(attached: Run)
     printed = attached.vm.ssh_succeed(
         f"portablectl is-attached {shlex.quote(attached.raw(CONFINED_KEY))}"
     ).strip()
-    published = json.loads((BUILT / "manifest.json").read_text())["entries"][CONFINED_KEY]["key"]
-
     reported = attached.cluster.run(
         [str(CLI), "status", str(BUILT), "--only", CONFINED_KEY],
         env=delivery.command_env(dict(os.environ), attached.key),
     ).stdout.splitlines()
 
-    assert reported == [f"{CONFINED_KEY} image {printed} current"], reported
+    assert len(reported) == 1, reported
+    assert reported[0].startswith(f"{CONFINED_KEY} image {printed}"), (reported, printed)
     assert "absent" not in reported[0], reported
-    held = attached.attachment(CONFINED_KEY)["image"]
-    assert held.endswith(f"_{published}.raw"), (held, published)
 
 
 def test_the_image_is_attached_by_the_script_the_artifact_carries(attached: Run) -> None:
@@ -460,6 +466,141 @@ def test_an_image_built_for_another_architecture_is_refused(attached: Run) -> No
     for unit in attached.units_of(FOREIGN_KEY):
         loaded = attached.vm.ssh_succeed(f"systemctl show -P LoadState {unit}").strip()
         assert loaded == "not-found", loaded
+
+
+def _status(run: Run, root: Path, key: str) -> tuple[int, list[str]]:
+    """What `planner status` says about one entry of one build, and its exit status.
+
+    The command runs inside the cluster because a machine's address exists only
+    in the cluster's own net namespace, which is also why no test here drives the
+    reporting module in this process.
+    """
+    asked = run.cluster.run(
+        [str(CLI), "status", str(root), "--only", key],
+        env=delivery.command_env(dict(os.environ), run.key),
+        check=False,
+    )
+    return asked.returncode, asked.stdout.splitlines()
+
+
+def _listed_state(run: Run, key: str) -> str:
+    """The state the machine's own listing gives the image it holds for one entry."""
+    name = run.attachment(key)["name"]
+    listed = run.vm.ssh_succeed("portablectl list --no-legend")
+    rows = [line.split() for line in listed.splitlines() if line.strip()]
+    held = [columns[-1] for columns in rows if columns[0].startswith(f"{name}_")]
+    assert len(held) == 1, listed
+    return str(held[0])
+
+
+def test_a_machine_holding_this_build_is_reported_as_current(attached: Run) -> None:
+    """The identity the machine holds is the identity this build published.
+
+    An image carries its identity in its own file name, so the comparison is
+    identity equality and the machine names both halves of it: the image it has
+    attached, and the listing it prints of what it holds.
+    """
+    entry = attached.entry(CONFINED_KEY)
+
+    status, reported = _status(attached, BUILT, CONFINED_KEY)
+
+    assert status == 0, reported
+    assert len(reported) == 1, reported
+    assert reported[0].endswith(" current"), reported
+    assert attached.attachment(CONFINED_KEY)["image"].endswith(f"_{entry.digest}.raw")
+
+
+def test_a_machine_holding_an_older_build_is_reported_with_both_identities(
+    attached: Run,
+) -> None:
+    """This machine holds the first build, and the second build's report says so.
+
+    An interrupted apply leaves a fleet in exactly this state, and the report has
+    to tell it apart from a machine holding this build and from one holding
+    nothing at all.
+    """
+    held = attached.entry(CONFINED_KEY).digest
+    built = CHANGED_BUILD.entries[CONFINED_KEY].digest
+    assert held != built, (held, built)
+
+    status, reported = _status(attached, CHANGED, CONFINED_KEY)
+
+    state = _listed_state(attached, CONFINED_KEY)
+    assert reported == [f"{CONFINED_KEY} image {state} holds {held}, built {built}"], reported
+    assert "absent" not in reported[0], reported
+    assert status == 0, reported
+
+
+def test_an_image_the_machine_already_holds_attached_is_not_attached_twice(
+    attached: Run,
+) -> None:
+    """`portablectl` refuses an image it holds, so a second apply asks before attaching.
+
+    The attach script the artifact carries runs under `set -eu` and ends in
+    `portablectl attach`, so a run that took that step again would fail against a
+    machine that is already in the intended state.
+    """
+    entry = attached.entry(CONFINED_KEY)
+
+    again = attached.cluster.run(
+        [str(CLI), "apply", str(BUILT), "--only", CONFINED_KEY],
+        env=delivery.command_env(dict(os.environ), attached.key),
+    )
+
+    steps = [line for line in again.stdout.splitlines() if not line.startswith("  ")]
+    assert steps == [
+        f"copy {CONFINED_KEY} {entry.path} -> {USER}@{entry.address}",
+        f"attached {CONFINED_KEY} already on {USER}@{entry.address}",
+    ], again.stdout
+    for unit in attached.units_of(CONFINED_KEY):
+        assert attached.vm.ssh(f"systemctl is-active {unit}").stdout.strip() == "active"
+
+
+@pytest.fixture(scope="session")
+def stopped(attached: Run) -> Run:
+    """Phase 6: the units stopped, the image still attached.
+
+    The tool prints another word for an image whose units are not running, and a
+    report about an attached idle entry is a different line from a report about a
+    running one. Every test above this fixture needs the units running and the
+    detach below does not care, so nothing is restored: the file order is the
+    order.
+    """
+    if attached.observed.get("stopped"):
+        return attached
+
+    for unit in attached.units_of(CONFINED_KEY):
+        attached.vm.ssh_succeed(f"systemctl stop {unit}")
+    attached.observed["stopped"] = " ".join(attached.units_of(CONFINED_KEY))
+    return attached
+
+
+def test_an_attached_image_of_this_build_is_reported_as_current(stopped: Run) -> None:
+    """The verdict is beside the word the machine's own tool printed, not instead of it."""
+    printed = stopped.vm.ssh_succeed(
+        f"portablectl is-attached {shlex.quote(stopped.raw(CONFINED_KEY))}"
+    ).strip()
+
+    status, reported = _status(stopped, BUILT, CONFINED_KEY)
+
+    assert printed.startswith("attached"), printed
+    assert reported == [f"{CONFINED_KEY} image {printed} current"], reported
+    assert status == 0, reported
+
+
+def test_an_attached_image_from_an_earlier_build_is_not_reported_as_current(
+    stopped: Run,
+) -> None:
+    """An earlier build's image is attached, which is two facts and not one."""
+    held = stopped.entry(CONFINED_KEY).digest
+    built = CHANGED_BUILD.entries[CONFINED_KEY].digest
+
+    status, reported = _status(stopped, CHANGED, CONFINED_KEY)
+
+    state = _listed_state(stopped, CONFINED_KEY)
+    assert reported == [f"{CONFINED_KEY} image {state} holds {held}, built {built}"], reported
+    assert "current" not in reported[0], reported
+    assert status == 0, reported
 
 
 def test_detaching_removes_the_units_and_the_staging_directory(detached: Run) -> None:

@@ -163,9 +163,20 @@ built for `aarch64-linux` is refused by its own script on an `x86_64-linux` host
 removes the units and the staging directory attaching made while leaving the host file the image
 was shown.
 
+The folder also owns every claim this repository makes about `portablectl`, because it is the only
+place a real one runs. It builds the same deployment a second time as
+`planner-e2e-portable-image-changed`, attaches neither, and asks `planner status` three times: the
+machine holding this build is `current`, the machine read against the second build carries both
+identities, and an apply repeated over an attached entry says so instead of running the attach
+script again. One phase stops the units and leaves the image attached, because the tool prints
+another word for that and only the word for a detached image reads as absence.
+
 One test per scenario of
 [`realiser/portable-service-image/spec.md`](../openspec/changes/emit-systemd-portable-service-images/specs/realiser/portable-service-image/spec.md)
-that is about what a real machine does with a built image.
+that is about what a real machine does with a built image, plus the image scenarios of
+[`machine-report/spec.md`](../openspec/changes/answer-whether-a-machine-is-current/specs/operator/machine-report/spec.md)
+and the repeated-apply scenario of
+[`apply-command/spec.md`](../openspec/changes/make-an-apply-observable/specs/operator/apply-command/spec.md).
 
 ### `generated-secret` - three machines
 
