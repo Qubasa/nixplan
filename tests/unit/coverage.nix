@@ -232,6 +232,48 @@ let
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "deliver-a-secret-without-exposing-it/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
+    "hold-the-consumer-cardinality-a-provider-states/specs/planner/typed-edge/spec.md" =
+      "an unimplemented change: no task of hold-the-consumer-cardinality-a-provider-states has been done, so nothing in this package claims to satisfy it yet";
+    "keep-a-declaration-from-ending-an-evaluation/specs/planner/diagnostics/spec.md" =
+      "an unimplemented change: no task of keep-a-declaration-from-ending-an-evaluation has been done, so nothing in this package claims to satisfy it yet";
+    "keep-a-declaration-from-ending-an-evaluation/specs/planner/typed-edge/spec.md" =
+      "an unimplemented change: no task of keep-a-declaration-from-ending-an-evaluation has been done, so nothing in this package claims to satisfy it yet";
+    "keep-a-declaration-from-ending-an-evaluation/specs/tooling/nix-unit-suite/spec.md" =
+      "an unimplemented change: no task of keep-a-declaration-from-ending-an-evaluation has been done, so nothing in this package claims to satisfy it yet";
+    "keep-a-secret-out-of-a-process-table/specs/operator/apply-command/spec.md" =
+      "an unimplemented change: no task of keep-a-secret-out-of-a-process-table has been done, so nothing in this package claims to satisfy it yet";
+    "keep-a-secret-out-of-a-process-table/specs/realiser/secrets-configuration/spec.md" =
+      "an unimplemented change: no task of keep-a-secret-out-of-a-process-table has been done, so nothing in this package claims to satisfy it yet";
+    "open-a-configuration-file-to-its-reader/specs/delivery/real-cluster/spec.md" =
+      "an unimplemented change: no task of open-a-configuration-file-to-its-reader has been done, so nothing in this package claims to satisfy it yet";
+    "open-a-configuration-file-to-its-reader/specs/planner/plan-artifact/spec.md" =
+      "an unimplemented change: no task of open-a-configuration-file-to-its-reader has been done, so nothing in this package claims to satisfy it yet";
+    "open-a-configuration-file-to-its-reader/specs/planner/unit-vocabulary/spec.md" =
+      "an unimplemented change: no task of open-a-configuration-file-to-its-reader has been done, so nothing in this package claims to satisfy it yet";
+    "open-a-configuration-file-to-its-reader/specs/realiser/flakelet-artifact/spec.md" =
+      "an unimplemented change: no task of open-a-configuration-file-to-its-reader has been done, so nothing in this package claims to satisfy it yet";
+    "open-a-configuration-file-to-its-reader/specs/realiser/portable-service-image/spec.md" =
+      "an unimplemented change: no task of open-a-configuration-file-to-its-reader has been done, so nothing in this package claims to satisfy it yet";
+    "refuse-a-placement-onto-an-unaddressed-machine/specs/operator/deployment-build/spec.md" =
+      "an unimplemented change: no task of refuse-a-placement-onto-an-unaddressed-machine has been done, so nothing in this package claims to satisfy it yet";
+    "refuse-a-placement-onto-an-unaddressed-machine/specs/planner/diagnostics/spec.md" =
+      "an unimplemented change: no task of refuse-a-placement-onto-an-unaddressed-machine has been done, so nothing in this package claims to satisfy it yet";
+    "refuse-a-placement-onto-an-unaddressed-machine/specs/planner/machine-platform/spec.md" =
+      "an unimplemented change: no task of refuse-a-placement-onto-an-unaddressed-machine has been done, so nothing in this package claims to satisfy it yet";
+    "refuse-a-placement-onto-an-unaddressed-machine/specs/planner/plan-artifact/spec.md" =
+      "an unimplemented change: no task of refuse-a-placement-onto-an-unaddressed-machine has been done, so nothing in this package claims to satisfy it yet";
+    "refuse-a-value-a-unit-file-cannot-carry/specs/planner/diagnostics/spec.md" =
+      "an unimplemented change: no task of refuse-a-value-a-unit-file-cannot-carry has been done, so nothing in this package claims to satisfy it yet";
+    "refuse-a-value-a-unit-file-cannot-carry/specs/realiser/portable-service-image/spec.md" =
+      "an unimplemented change: no task of refuse-a-value-a-unit-file-cannot-carry has been done, so nothing in this package claims to satisfy it yet";
+    "reserve-what-a-machine-already-holds/specs/planner/diagnostics/spec.md" =
+      "an unimplemented change: no task of reserve-what-a-machine-already-holds has been done, so nothing in this package claims to satisfy it yet";
+    "reserve-what-a-machine-already-holds/specs/planner/machine-platform/spec.md" =
+      "an unimplemented change: no task of reserve-what-a-machine-already-holds has been done, so nothing in this package claims to satisfy it yet";
+    "type-a-port-claim-and-its-collision/specs/planner/diagnostics/spec.md" =
+      "an unimplemented change: no task of type-a-port-claim-and-its-collision has been done, so nothing in this package claims to satisfy it yet";
+    "type-a-port-claim-and-its-collision/specs/planner/plan-artifact/spec.md" =
+      "an unimplemented change: no task of type-a-port-claim-and-its-collision has been done, so nothing in this package claims to satisfy it yet";
   };
 
   isSpecFile = path: match ".*/spec\\.md" path != null;
