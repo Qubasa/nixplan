@@ -109,6 +109,7 @@ discipline and deduplication applied).
 | id | Raised when |
 | --- | --- |
 | `declaration-unknown-key` | a key this subset does not read; the row lists the ones it does |
+| `declaration-malformed` | a value the reading indexes into is not a record: the declaration itself, a port claim, a slot, a capability, a generator, a generated file's record, a pin or its `locked` half. The row names the module file and the site inside it, and the malformed value declares nothing rather than being defaulted into existence |
 | `declaration-excluded-key` | a key this subset deliberately excludes; the evidence is its trigger |
 | `module-declared-severity` (warning) | a module tried to set a row's severity |
 | `impl-missing` | the module declares no `impl` |
@@ -153,7 +154,7 @@ discipline and deduplication applied).
 | `members-unknown-member` | `members.<name>` names a member the instance's root does not own; the evidence lists the ones it does |
 | `member-and-slot-name-collide` | a root owns a member and a slot of the same name, so one `wire.<name>` key would address a member's own slots and a slot of every member at once |
 | `cut-member-named` | the deployment places, configures or wires a member the same deployment cuts with `members.<name>.enable = false`; a cut member takes no placement, needs no settings and fills no slot |
-| `binding-malformed` | a root binds a member's slot to something other than a capability off a sibling's handle, which carries the member it came from |
+| `binding-malformed` | a root binds a member's slot to something other than a capability off a sibling's handle, which carries the member it came from. A hand-written record naming a member and a capability and carrying no interface is not one of those handles, so it earns this row too and the slot is the deployment's to fill |
 | `binding-unknown-slot` | a root binds a slot the member does not declare; the evidence lists the ones it does |
 | `member-name-disagrees` | a root declares a member under one attribute key and the member names itself another. The key is the identity, since placement, the settings namespace and every plan key are read from it, and the second spelling is a member nothing else can address |
 
@@ -204,6 +205,7 @@ discipline and deduplication applied).
 | `wire-unknown-instance` | the wire names an instance the deployment does not declare |
 | `wire-unknown-capability` | the instance exposes no such capability |
 | `wire-capability-not-exposed` | the root provides it and the instance does not expose it; the row lists what is exposed |
+| `wire-capability-untyped` | the far end of a wire or a binding declares no interface value, so neither comparison an edge makes can be made; the row names the consuming entry, the slot and the capability, the slot is left absent from the consumer's results, and the module that declared the capability earns `capability-interface-missing` for the same absence |
 | `reach-one-placement-count` | `reach = "one"` against a capability with no placement or more than one; the row names the slot and the placements |
 | `reach-all-no-placement` | `reach = "all"` against a capability placed nowhere |
 | `provider-export-missing` | the published keyset lacks an export the interface declares |

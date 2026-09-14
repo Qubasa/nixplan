@@ -79,6 +79,17 @@ Recorded so the question is answered once.
 - `builtins.tryEval` catches a `throw` and a failed `assert`. It catches neither an abort nor a
   missing attribute, and both are documented as propagating. A missing attribute inside `lib/` is
   a bug that fails the suite loudly.
+- A guard is not a check. Because a type error and a missing attribute are uncatchable, every value
+  a declaration wrote is read for its kind before the reading indexes into it: `declaredRecord` in
+  `lib/module.nix` answers `{ value, rows }` with `{ }` as the fallback and one
+  `declaration-malformed` row naming the site, and the declaration itself, a port claim, a slot, a
+  capability, a generator, a generated file's record and a pin all pass through it. A reading that
+  indexed first and recovered afterwards would look total and would not be. The module's own
+  expression is the other half: `compose.service` applies it under the same `diag.guard` the
+  implementation gets, so a declaration that raises is `module-raised` plus the `impl-missing` its
+  empty fallback earns, and never a third identifier. A unit and a configuration file are the
+  implementation's half and keep `implementation-malformed`, which is the row the container and
+  each entry inside it already earn.
 - `mkPlan` realises nothing: no derivation, no filesystem read, no network, and every store path
   in a plan is a literal string.
 - A generator's `program` is recorded and never run, never read and never resolved. `lib/` checks
@@ -245,6 +256,13 @@ Recorded so the question is answered once.
   and settings, never of a wire. Do not add cycle detection.
 - A refused read leaves the slot absent from `results` - not `null`, not `{}`. `or [ ]` cannot be
   written, so it cannot silently succeed.
+- A wire's far end is read for an interface before either comparison, because `provides` reaches the
+  wire as the author's own record rather than as the validated reading, so the key the provider's own
+  `capability-interface-missing` names may be absent there. The consumer's row is
+  `wire-capability-untyped` and the provider's stands beside it: two entries have a problem, and the
+  slot is left absent. A binding is a capability handle only if it carries one, so a hand-written
+  record naming a member and a capability is `binding-malformed` and the slot is the deployment's to
+  fill.
 - An interface may own the fold of a set-valued read, and the planner applies it under `diag.guard`
   to the value the read already built. What the plan records is the entry-keyed set either way:
   only `results.<slot>` changes, so no plan field says whether a fold ran. A fold that raises
