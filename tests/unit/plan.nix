@@ -280,6 +280,27 @@ let
     };
   };
 
+  reserving =
+    machine: reserves:
+    support.machines
+    // {
+      ${machine} = support.machines.${machine} // {
+        inherit reserves;
+      };
+    };
+
+  holdsAValue = _: {
+    vars.hostKey.files."key".secrecy = "secret";
+    impl =
+      { vars, ... }:
+      {
+        units.only = {
+          command = "/bin/true";
+          env.KEYFILE = vars.hostKey."key".path;
+        };
+      };
+  };
+
   runtimeDirectory = planner.unitExtension {
     backend = "systemd";
     name = "systemd-service";
@@ -2363,6 +2384,280 @@ in
           true
           true
         ];
+      };
+    };
+
+  testAMachineThatReservesAPortKeysAsItDid =
+    let
+      planWith =
+        machines:
+        planOf {
+          inherit machines;
+          instances.svc = placedOn [ "one" ] (soleRoot {
+            module = holdsAValue;
+          });
+          varsState."svc:vars/hostKey@one"."key".present = true;
+        };
+      plain = planWith support.machines;
+      reserved = planWith (
+        reserving "one" {
+          ports.sshd = {
+            proto = "tcp";
+            number = 22;
+          };
+          paths = [ "/etc/ssh/sshd_config" ];
+        }
+      );
+    in
+    {
+      expr = {
+        rows = rowIds plain ++ rowIds reserved;
+        planned = [
+          (attrNames plain.plan)
+          (attrNames reserved.plan)
+        ];
+        moved = filter (key: plain.plan.${key}.key != reserved.plan.${key}.key) (attrNames plain.plan);
+        keys = keysOf reserved;
+      };
+      expected = {
+        rows = [ ];
+        planned = [
+          [
+            "machine:one"
+            "svc:only@one"
+            "svc:vars/hostKey@one"
+          ]
+          [
+            "machine:one"
+            "svc:only@one"
+            "svc:vars/hostKey@one"
+          ]
+        ];
+        moved = [ ];
+        keys = {
+          "machine:one" = "sha256-565f8656738015bf";
+          "svc:only@one" = "sha256-65f61292e813b2c7";
+          "svc:vars/hostKey@one" = "sha256-590e2fae1cb98d5a";
+        };
+      };
+    };
+
+  testAMachineReservesAPortAnEntryClaims =
+    let
+      id = "entry-port-claimed-twice";
+      result = planOf {
+        machines = reserving "one" {
+          ports.sshd = {
+            proto = "tcp";
+            number = 22;
+          };
+        };
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = claimsPort "tcp" 22;
+        });
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        count = countById id result;
+        severity = severityById id result;
+        subjects = subjectsById id result;
+        names = map (needle: hasInfix needle (said messageById id result)) [
+          "`machine:one`"
+          "`svc:only@one`"
+          "`tcp/22`"
+          "machine `one`"
+        ];
+        resolutionNamesBothDeclarations = map (needle: hasInfix needle (said resolutionById id result)) [
+          "`fixed` port other than `tcp/22`"
+          "`reserves.ports` of machine `one`"
+        ];
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ id ];
+        count = 1;
+        severity = "error";
+        subjects = [ "machine:one" ];
+        names = [
+          true
+          true
+          true
+          true
+        ];
+        resolutionNamesBothDeclarations = [
+          true
+          true
+        ];
+        applicable = false;
+      };
+    };
+
+  testAMachineReservesAPathAnEntryWrites =
+    let
+      id = "entry-host-path-claimed-twice";
+      result = planOf {
+        machines = reserving "one" { paths = [ "/etc/x.conf" ]; };
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = writesTo "/etc/x.conf";
+        });
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        severity = severityById id result;
+        subjects = subjectsById id result;
+        names = map (needle: hasInfix needle (said messageById id result)) [
+          "`machine:one`"
+          "`svc:only@one`"
+          "`/etc/x.conf`"
+          "machine `one`"
+        ];
+        resolutionNamesTheRegistry = hasInfix "`reserves.paths` of machine `one`" (
+          said resolutionById id result
+        );
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ id ];
+        severity = "error";
+        subjects = [ "machine:one" ];
+        names = [
+          true
+          true
+          true
+          true
+        ];
+        resolutionNamesTheRegistry = true;
+        applicable = false;
+      };
+    };
+
+  testAMachineAndTwoEntriesClaimOnePort =
+    let
+      id = "entry-port-claimed-twice";
+      result = planOf {
+        machines = reserving "one" {
+          ports.resolved = {
+            proto = "tcp";
+            number = 5432;
+          };
+        };
+        instances.svc = membersOn "one" {
+          alpha = claimsPort "tcp" 5432;
+          beta = claimsPort "tcp" 5432;
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        count = countById id result;
+        subjects = subjectsById id result;
+        names = map (needle: hasInfix needle (said messageById id result)) [
+          "`machine:one`"
+          "`svc:alpha@one`"
+          "`svc:beta@one`"
+        ];
+      };
+      expected = {
+        rows = [ id ];
+        count = 1;
+        subjects = [ "machine:one" ];
+        names = [
+          true
+          true
+          true
+        ];
+      };
+    };
+
+  testAMachineReservesAPortNothingClaims =
+    let
+      result = planOf {
+        machines = reserving "one" {
+          ports.sshd = {
+            proto = "tcp";
+            number = 22;
+          };
+          paths = [ "/etc/ssh/sshd_config" ];
+        };
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = claimsPort "tcp" 5432;
+        });
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ ];
+        applicable = true;
+      };
+    };
+
+  # The machine the reservation is on runs nothing, so it is in no plan and can
+  # be the subject of nothing. The claim it would have made is one an entry on
+  # the other machine makes.
+  testAReservationOnAMachineNoPlacementSelects =
+    let
+      result = planOf {
+        machines = reserving "two" {
+          ports.listen = {
+            proto = "tcp";
+            number = 5432;
+          };
+          paths = [ "/etc/x.conf" ];
+        };
+        instances.svc = membersOn "one" {
+          alpha = claimsPort "tcp" 5432;
+          beta = writesTo "/etc/x.conf";
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        planned = attrNames result.plan;
+        subjectedToIt = filter (row: row.subject == "machine:two") result.diagnostics;
+      };
+      expected = {
+        rows = [ ];
+        planned = [
+          "machine:one"
+          "svc:alpha@one"
+          "svc:beta@one"
+        ];
+        subjectedToIt = [ ];
+      };
+    };
+
+  testAReservedPortAndAClaimOnAnotherProtocol =
+    let
+      result = planOf {
+        machines = reserving "one" {
+          ports.listen = {
+            proto = "udp";
+            number = 5432;
+          };
+        };
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = claimsPort "tcp" 5432;
+        });
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ ];
+        applicable = true;
       };
     };
 }

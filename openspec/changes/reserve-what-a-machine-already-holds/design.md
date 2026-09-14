@@ -86,6 +86,16 @@ be noise. The comparison is against the keys of an entry's `configData` record
 had to read one; a port stated as `"22"` is then a row naming both kinds rather than a reservation
 that silently matches nothing.
 
+`number` is read as required for the same reason, and `proto` is not: a port record stating no
+number states a reservation nothing can compare, which is the case `declaration-field-missing`
+exists for, while a port stating no protocol compares as `"unstated/<number>"` against a claim that
+states none either. A port record that is not a record is one row and not three: the fields of a
+value the reading refused are not reported on top of it.
+
+The nested reads happen only where the machine stated a reservation. A machine stating none is one
+field read, which is what the cost bullet below claims, and its statement is the empty one whatever
+the key's absence or the row for a value of the wrong kind put there.
+
 Alternative rejected: a single flat list of strings, `reserves = [ "tcp/22" "/etc/ssh/sshd_config" ]`,
 matching the internal claim spelling exactly. It makes the reading one line and the declaration a
 puzzle, and it puts the planner's internal comparison key into a deployment's own text, where a

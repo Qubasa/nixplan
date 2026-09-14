@@ -46,6 +46,7 @@ let
     "system"
     "serviceManager"
     "microarchitecture"
+    "reserves"
   ];
 
   machineTargetKeys = [
@@ -79,6 +80,10 @@ let
     name = {
       what = "a name";
       is = builtins.isString;
+    };
+    number = {
+      what = "a number";
+      is = builtins.isInt;
     };
     flag = {
       what = "a boolean";
@@ -277,12 +282,109 @@ in
           inherit field shape fallback;
         };
 
+      # The host resources a machine states its own image already holds, read
+      # field by field like every other registry key. It is projected into a
+      # table of its own and into no machine record, so it enters no key. A
+      # machine stating none costs the one field read the rest of the registry
+      # costs: there is nothing inside it to read.
+      reservationOf =
+        name:
+        let
+          read =
+            {
+              where,
+              record,
+              field,
+              shape,
+              fallback,
+              required ? false,
+            }:
+            declaredField {
+              subject = machinesFile;
+              file = machinesFile;
+              inherit
+                where
+                record
+                field
+                shape
+                fallback
+                required
+                ;
+            };
+          inside = "the reservation of machine ${util.quote name}";
+          reserves = machineFieldOf name "reserves" shapes.record { };
+          ports = read {
+            where = inside;
+            record = reserves.value;
+            field = "ports";
+            shape = shapes.record;
+            fallback = { };
+          };
+          paths = read {
+            where = inside;
+            record = reserves.value;
+            field = "paths";
+            shape = shapes.names;
+            fallback = [ ];
+          };
+          portOf =
+            port: value:
+            let
+              where = "the reserved port ${util.quote port} of machine ${util.quote name}";
+              record = declaredRecord {
+                subject = machinesFile;
+                file = machinesFile;
+                inherit where value;
+              };
+              proto = read {
+                inherit where;
+                record = record.value;
+                field = "proto";
+                shape = shapes.name;
+                fallback = null;
+              };
+              number = read {
+                inherit where;
+                record = record.value;
+                field = "number";
+                shape = shapes.number;
+                fallback = null;
+                required = true;
+              };
+            in
+            {
+              value = {
+                proto = proto.value;
+                number = number.value;
+              };
+              rows = if record.rows == [ ] then proto.rows ++ number.rows else record.rows;
+            };
+          readPorts = mapAttrs portOf ports.value;
+        in
+        if reserves.value == { } then
+          {
+            value = {
+              ports = { };
+              paths = [ ];
+            };
+            inherit (reserves) rows;
+          }
+        else
+          {
+            value = {
+              ports = util.filterAttrs (_: port: port.number != null) (mapAttrs (_: port: port.value) readPorts);
+              paths = paths.value;
+            };
+            rows = ports.rows ++ paths.rows ++ concatLists (util.mapAttrsToList (_: port: port.rows) readPorts);
+          };
+
       machineFields = mapAttrs (name: _: {
         address = machineFieldOf name "address" shapes.name null;
         tags = machineFieldOf name "tags" shapes.names [ ];
         system = machineFieldOf name "system" shapes.name null;
         serviceManager = machineFieldOf name "serviceManager" shapes.name null;
         microarchitecture = machineFieldOf name "microarchitecture" shapes.name null;
+        reserves = reservationOf name;
       }) machines;
 
       machineFieldRows =
@@ -451,6 +553,10 @@ in
           };
 
       targets = mapAttrs (name: _: targetOf name) machines;
+
+      # The third projection of the machine reading, beside the record the plan
+      # keys and the target an entry is planned for. No key is derived from it.
+      machineReservations = mapAttrs (name: _: machineFields.${name}.reserves.value) machines;
 
       # The placement table of each instance, read once with its shape: the
       # instance's own rows and every member's selector come off one reading.
@@ -2050,6 +2156,7 @@ in
           util.filterAttrs (name: _: !(util.carriesKeySeparator name)) instances
         );
         machines = machineRecords;
+        reservations = machineReservations;
         interfaces = reachedInterfaces;
         usedMachines = selectedMachines;
         inherit storeDir;

@@ -730,8 +730,9 @@ Two files by convention: the machine registry and the instances.
 | `system` | the system string, elaborated into the platform record every entry's `target` carries — **required once a placement selects the machine** |
 | `serviceManager` | what runs the machine's units — **required once a placement selects the machine** |
 | `microarchitecture` | optional; becomes the record's `gcc.arch` and `gcc.tune`, **replacing** whatever codegen group the platform itself carries, and is recorded on the machine entry when declared |
+| `reserves` | optional; the host resources the machine already holds outside the deployment, `{ ports.<name> = { proto, number }; paths = [ … ]; }`, checked against what the entries placed on it claim and recorded in no plan field |
 
-A machine declares those five keys and nothing else. A machine a placement
+A machine declares those six keys and nothing else. A machine a placement
 selected that declares no `address`, no `system` or no `serviceManager` is
 `machine-target-incomplete`, whose row names the missing keys and how many
 entries the deployment places on it. Every placement onto such a machine is
@@ -744,6 +745,30 @@ that has not been provisioned yet.
 Completeness is read off the value the registry reading produced, so a machine
 declaring `address = 22` is as incomplete as one declaring nothing: it earns
 both `declaration-field-malformed` and `machine-target-incomplete`.
+
+`reserves` states the host resources the machine's own image already holds,
+outside the deployment entirely:
+
+```nix
+reserves = {
+  ports.sshd = {
+    proto = "tcp";
+    number = 22;
+  };
+  paths = [ "/etc/ssh/sshd_config" ];
+};
+```
+
+A reserved resource is a claimant of the collision index beside the entries
+placed on that machine, keyed `machine:<name>`: a port an entry claims with the
+same protocol and number earns `entry-port-claimed-twice`, and a path an entry
+writes a configuration file to earns `entry-host-path-claimed-twice`. An absent
+statement checks nothing, so a registry written before the key existed produces
+the plan and the table it always produced. No plan field records the statement
+and no realiser reads it: it opens no port, renders no socket unit and creates
+no file. The planner never reads the machine either, so a reservation is a
+declaration and never a probe, and a reserved path that does not exist is no
+row.
 
 `system` is elaborated once per distinct system and microarchitecture in the
 fleet rather than once per machine, and a system string nixpkgs cannot parse is

@@ -230,21 +230,28 @@ discipline and deduplication applied).
 | `declaration-field-missing` | a field of the deployment's own half - a machine, an instance, a member's placement or a wire - is absent where the reading needs one. A key the reading cannot default is reported rather than read as an empty value |
 | `declaration-field-malformed` | the same field carries a value of the wrong kind. The deployment's half is read with the tolerance the module's half is read with, so the rest of the deployment is still read |
 
-### What two entries of one machine both claim
+### What two claimants of one machine both claim
 
-A claim is read off what the plan already records, and a row is per machine, so
-one member placed on two machines claims its resources on each of them and
-collides with nothing. Two units of one entry recording one directory is one
-claim too: the claimant is the entry. Each row names every claimant, the machine
-and the resource, is reported once for one collision with the first of the
-colliding plan keys as its subject, and resolves to deriving the resource from
-`instance` and `member`, the pair the entry's own key is built from.
+A claimant is a placed entry or the machine's own record, which claims the
+resources the registry's `reserves` states its host image already holds. A claim
+is read off what the plan already records, and a row is per machine, so one
+member placed on two machines claims its resources on each of them and collides
+with nothing. Two units of one entry recording one directory is one claim too:
+the claimant is the entry. Each row names every claimant, the machine and the
+resource, is reported once for one collision with the first of the colliding
+plan keys as its subject, and resolves to deriving the resource from `instance`
+and `member`, the pair the entry's own key is built from. A machine's key enters
+the same sort the entry keys enter, so it is the subject exactly when it sorts
+first and a named claimant either way, and the resolution of a row it is a
+claimant of names the registry's reservation beside the entry's claim.
+A reservation earns no row on its own: a reserved resource no entry claims, and
+a reservation on a machine no placement selects, both leave the table as it was.
 
 | id | Raised when |
 | --- | --- |
-| `entry-host-path-claimed-twice` | two entries placed on one machine declare a configuration file at one host path, so the entry applied last is the one whose rendering survives |
-| `entry-port-claimed-twice` | two entries placed on one machine claim one fixed port with one protocol, so every entry after the first cannot bind. The protocol is part of the claim, so a TCP listener and a UDP listener on one number are two claims |
-| `entry-unit-directory-shared` (warning) | two entries placed on one machine record one unit directory name under `runtimeDirectory`, `stateDirectory` or `cacheDirectory`. A warning rather than an error: the service manager deletes a runtime directory when its unit restarts, and a shared state directory is a handoff a deployment may intend |
+| `entry-host-path-claimed-twice` | two entries placed on one machine declare a configuration file at one host path, so the entry applied last is the one whose rendering survives. A machine reserving that path is the second claimant where one entry declares the file |
+| `entry-port-claimed-twice` | two entries placed on one machine claim one fixed port with one protocol, so every entry after the first cannot bind. The protocol is part of the claim, so a TCP listener and a UDP listener on one number are two claims. A machine reserving that protocol and number is the second claimant where one entry claims it |
+| `entry-unit-directory-shared` (warning) | two entries placed on one machine record one unit directory name under `runtimeDirectory`, `stateDirectory` or `cacheDirectory`. A warning rather than an error: the service manager deletes a runtime directory when its unit restarts, and a shared state directory is a handoff a deployment may intend. This one has no reservation half, a unit directory name being in the service manager's own namespace rather than a host path the registry can state |
 
 ### Every row the deployment build can produce
 

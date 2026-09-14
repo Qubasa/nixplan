@@ -213,6 +213,8 @@ let
     "refuse-a-placement-onto-an-unaddressed-machine/specs/planner/plan-artifact/spec.md"
     "refuse-a-placement-onto-an-unaddressed-machine/specs/planner/diagnostics/spec.md"
     "refuse-a-placement-onto-an-unaddressed-machine/specs/operator/deployment-build/spec.md"
+    "reserve-what-a-machine-already-holds/specs/planner/machine-platform/spec.md"
+    "reserve-what-a-machine-already-holds/specs/planner/diagnostics/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -258,10 +260,6 @@ let
       "an unimplemented change: no task of refuse-a-value-a-unit-file-cannot-carry has been done, so nothing in this package claims to satisfy it yet";
     "refuse-a-value-a-unit-file-cannot-carry/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of refuse-a-value-a-unit-file-cannot-carry has been done, so nothing in this package claims to satisfy it yet";
-    "reserve-what-a-machine-already-holds/specs/planner/diagnostics/spec.md" =
-      "an unimplemented change: no task of reserve-what-a-machine-already-holds has been done, so nothing in this package claims to satisfy it yet";
-    "reserve-what-a-machine-already-holds/specs/planner/machine-platform/spec.md" =
-      "an unimplemented change: no task of reserve-what-a-machine-already-holds has been done, so nothing in this package claims to satisfy it yet";
     "type-a-port-claim-and-its-collision/specs/planner/diagnostics/spec.md" =
       "an unimplemented change: no task of type-a-port-claim-and-its-collision has been done, so nothing in this package claims to satisfy it yet";
     "type-a-port-claim-and-its-collision/specs/planner/plan-artifact/spec.md" =
