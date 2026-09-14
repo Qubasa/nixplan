@@ -49,17 +49,20 @@
 - [x] 3.6 `tests/e2e/newcomer/test_newcomer.py`: read the greeting path out of the plan the
   workstation built, with one more command on the workstation, and delete the `GREETING` constant.
   Verify `nix run .#planner-e2e newcomer` on a host with egress; verify it skips cleanly without.
-- [ ] 3.7 Verify the scan is green over the whole layer: `testADeploymentStatesAHostPath` and the
-  intersection check both report empty.
+- [x] 3.7 Verify the scan is green over the whole layer: `testADeploymentStatesAHostPath` and the
+  intersection check both report empty. Green on the integrated tree, once
+  `give-every-instance-its-own-database` brought `shared-postgres` to the rule.
 
 ## 4. Registration and verification
 
 - [x] 4.1 Move this change's two spec files from `excused` to `accountable` in
   `tests/unit/coverage.nix`, the excuse having expired with the first ticked task, and verify the
   cross-walk finds all six derived test names.
-- [ ] 4.2 Run `nix build .#checks.x86_64-linux.planner-tests` and verify every suite is green.
-- [ ] 4.3 Run `nix run .#planner-e2e` and verify all six folders pass; record which folders were
+- [x] 4.2 Run `nix build .#checks.x86_64-linux.planner-tests` and verify every suite is green.
+  507 tests, exit 0 on the integrated tree.
+- [x] 4.3 Run `nix run .#planner-e2e` and verify all six folders pass; record which folders were
   cold. No stage key moves in this change, so a cold run means a stage declaration was touched by
-  mistake.
+  mistake. 131 passed in 269.44s on the integrated tree. The one stage declaration that moved is
+  `shared-postgres`'s own `disk_gib`, from the change that lands beside this one.
 - [x] 4.4 Run `nix build .#checks.x86_64-linux.treefmt` and verify formatters, `ruff`, `mypy` and
   `vale` are green.
