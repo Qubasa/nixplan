@@ -1,6 +1,7 @@
 {
   postgresql,
   initScript,
+  bootstrapScript,
   version,
   postgresDatabase,
 }:
@@ -8,7 +9,14 @@
 { service, ... }:
 let
   cluster = service "cluster" {
-    module = import ./databases.nix { inherit postgresql initScript postgresDatabase; };
+    module = import ./databases.nix {
+      inherit
+        postgresql
+        initScript
+        bootstrapScript
+        postgresDatabase
+        ;
+    };
 
     defaults.databases = { };
 

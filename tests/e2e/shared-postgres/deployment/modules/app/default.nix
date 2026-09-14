@@ -4,6 +4,7 @@
   grouped,
   postgresql,
   initScript,
+  bootstrapScript,
   version,
 }:
 
@@ -13,7 +14,14 @@ let
   # needs, bound inside the module. The binding is the capability value off the
   # sibling's handle, so this file names no instance and no deployment.
   own = service "own" {
-    module = import ../postgresql/databases.nix { inherit postgresql initScript postgresDatabase; };
+    module = import ../postgresql/databases.nix {
+      inherit
+        postgresql
+        initScript
+        bootstrapScript
+        postgresDatabase
+        ;
+    };
 
     fixed.databases.private.owner = "app_private";
     defaults.port = 5432;

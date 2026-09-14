@@ -44,9 +44,16 @@ if [ "$reached" != yes ]; then
   exit 1
 fi
 
+# Doubling the quote is what SQL escapes a literal with, so a label carrying
+# one is one label rather than the end of a string and a statement after it.
+# The substitution is the shell's own: no external program sees the value.
+literal() {
+  printf "'%s'" "${1//\'/\'\'}"
+}
+
 ask <<ROW
 CREATE TABLE IF NOT EXISTS notes (label text PRIMARY KEY, written timestamptz NOT NULL DEFAULT now());
-INSERT INTO notes (label) VALUES ('$LABEL') ON CONFLICT (label) DO NOTHING;
+INSERT INTO notes (label) VALUES ($(literal "$LABEL")) ON CONFLICT (label) DO NOTHING;
 ROW
 
 labels="$(printf 'SELECT string_agg(label, %s ORDER BY label) FROM notes;\n' "','" | ask)"

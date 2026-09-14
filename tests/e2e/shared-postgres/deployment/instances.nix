@@ -1,6 +1,7 @@
 {
   cluster,
   app,
+  euOwner,
 }:
 
 {
@@ -10,7 +11,7 @@
     pg = {
       module = cluster.services.default;
       settings.cluster.databases = {
-        eu.owner = "app_eu";
+        eu.owner = euOwner;
         us.owner = "app_us";
       };
       placement.every.cluster = {
@@ -29,7 +30,9 @@
     near-app = {
       module = app.services.default;
       members.own.enable = false;
-      settings.client.label = "near";
+      # A label carrying a quote: what reaches the database is one label, and
+      # what proves it is the record the consumer reads back.
+      settings.client.label = "near's";
       placement.every.client = {
         tags = [ "near" ];
       };
