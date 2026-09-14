@@ -630,10 +630,11 @@ rec {
       }
     ) delivered;
 
-  # The three host resources the plan already records, and the row two entries of
-  # one machine claiming one of them earn. Two writers of one file and two
-  # listeners on one port are contradictions, while a shared directory is
-  # destructive for `runtimeDirectory` and a handoff a deployment may intend for
+  # The three host resources the plan already records, and the row two claimants
+  # of one machine claiming one of them earn. A claimant is a placed entry or the
+  # machine's own reservation. Two writers of one file and two listeners on one
+  # port are contradictions, while a shared directory is destructive for
+  # `runtimeDirectory` and a handoff a deployment may intend for
   # `stateDirectory`, so the third is a warning and the build still happens.
   hostResources = {
     paths = {
@@ -642,8 +643,15 @@ rec {
       what = name: "declare a configuration file at ${util.quote name}";
       evidence = "a host path holds one file, so the entry applied last is the one whose rendering survives and the others are overwritten with nothing saying so";
       resolution =
-        name:
-        "derive ${util.quote name} from the entry's own identity, which an implementation is handed as `instance` and `member`, or place the entries on different machines";
+        {
+          name,
+          machine,
+          reserved,
+        }:
+        if reserved then
+          "derive ${util.quote name} from the entry's own identity, which an implementation is handed as `instance` and `member`, or delete it from `reserves.paths` of machine ${util.quote machine} in the registry, which is where the machine states it holds the file"
+        else
+          "derive ${util.quote name} from the entry's own identity, which an implementation is handed as `instance` and `member`, or place the entries on different machines";
     };
     ports = {
       id = "entry-port-claimed-twice";
@@ -651,8 +659,15 @@ rec {
       what = name: "claim the port ${util.quote name}";
       evidence = "one machine carries one listener per protocol and port, so every entry after the first cannot bind and the failure names neither declaration";
       resolution =
-        name:
-        "claim a `fixed` port other than ${util.quote name} in one of them, derived from the entry's own identity an implementation is handed as `instance` and `member`, or place the entries on different machines";
+        {
+          name,
+          machine,
+          reserved,
+        }:
+        if reserved then
+          "claim a `fixed` port other than ${util.quote name}, derived from the entry's own identity an implementation is handed as `instance` and `member`, or delete it from `reserves.ports` of machine ${util.quote machine} in the registry, which is where the machine states it listens there"
+        else
+          "claim a `fixed` port other than ${util.quote name} in one of them, derived from the entry's own identity an implementation is handed as `instance` and `member`, or place the entries on different machines";
     };
     directories = {
       id = "entry-unit-directory-shared";
@@ -660,7 +675,7 @@ rec {
       what = name: "record the unit directory ${util.quote name}";
       evidence = "the service manager deletes a runtime directory when its unit restarts, so two entries sharing one lose each other's files, and a shared state directory is a handoff only where both declarations intend one";
       resolution =
-        name:
+        { name, ... }:
         "derive ${util.quote name} from the entry's own identity, which an implementation is handed as `instance` and `member`, or leave it shared where both entries intend the handoff";
     };
   };
@@ -696,16 +711,16 @@ rec {
     );
 
   # A port claim compares the protocol beside the number, so a TCP listener and a
-  # UDP listener on one number are two claims. `count` is recorded and not
-  # expanded: one claim still states one number in this subset.
+  # UDP listener on one number are two claims. A machine's own reservation is read
+  # into the same resource, so one change types both halves. `count` is recorded
+  # and not expanded: one claim still states one number in this subset.
+  portResource =
+    proto: number: "${if isString proto then proto else "unstated"}/${builtins.toJSON number}";
+
   portsOf =
     member:
     util.mapAttrsToList (
-      name: fixed:
-      let
-        proto = member.declaration.claims.ports.${name}.proto or null;
-      in
-      "${if isString proto then proto else "unstated"}/${builtins.toJSON fixed}"
+      name: fixed: portResource (member.declaration.claims.ports.${name}.proto or null) fixed
     ) member.alloc.ports;
 
   # One entry's claims, flat, each naming the claimant. Deduplication is per
@@ -725,7 +740,21 @@ rec {
         }) (util.uniqueStrings entry.claims.${kind})
       ) (builtins.attrNames hostResources);
 
-  # A host resource two entries of one machine both claim. The claims are one
+  # A machine's own claims: the host resources it states its image already holds.
+  # The key is the machine record's, which is a plan key and no entry's, so the
+  # reservation enters the same ordering without a rule of its own.
+  reservedBy =
+    machine: reserved:
+    let
+      claim = kind: name: {
+        key = "machine:${machine}";
+        inherit machine kind name;
+      };
+    in
+    map (port: claim "ports" (portResource port.proto port.number)) (attrValues reserved.ports)
+    ++ map (claim "paths") reserved.paths;
+
+  # A host resource two claimants of one machine both claim. The claims are one
   # flat list grouped twice, by machine and then by resource, so the check costs
   # the claims rather than their square, and one member placed on two machines
   # claims under two machines rather than against itself. The row is one row for
@@ -747,8 +776,11 @@ rec {
               resource.row {
                 inherit (resource) id evidence;
                 subject = head keys;
-                message = "entries ${util.quoteList keys} placed on ${util.quote machine} all ${resource.what name}";
-                resolution = resource.resolution name;
+                message = "${util.quoteList keys} all ${resource.what name} on machine ${util.quote machine}";
+                resolution = resource.resolution {
+                  inherit name machine;
+                  reserved = elem "machine:${machine}" keys;
+                };
               }
             )
           ) (builtins.groupBy (c: "${c.kind} ${c.name}") onMachine)
@@ -1095,6 +1127,10 @@ rec {
     {
       plan = machineEntries // listToAttrs varsEntries // listToAttrs serviceEntries;
       rows =
-        concatLists (map (e: e.rows) serviceEntries) ++ collisionRows (concatMap claimsOf serviceEntries);
+        concatLists (map (e: e.rows) serviceEntries)
+        ++ collisionRows (
+          concatMap claimsOf serviceEntries
+          ++ concatMap (machine: reservedBy machine resolved.reservations.${machine}) usedMachines
+        );
     };
 }
