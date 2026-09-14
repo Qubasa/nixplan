@@ -164,26 +164,39 @@ let
       hostPaths = imageReader.hostPaths { inherit key entry; };
       unassemblable =
         if realiser == "flakelet" then filter (p: !(flakeletReader.acceptsHostPath p)) hostPaths else [ ];
+
+      # The name rules are the stated realiser's own, asked of it rather than
+      # tested for by name, so a realiser publishing the two is asked by
+      # existing. An unknown realiser is asked nothing: the row that names it is
+      # the one below.
+      endpoint =
+        if !known then
+          null
+        else if realiser == "image" then
+          imageReader
+        else
+          flakeletReader;
+
       refusedNames =
-        if realiser == "flakelet" && !(flakeletReader.acceptsName name) then
+        if endpoint != null && !(endpoint.acceptsName name) then
           [
             {
               named = name;
               what = "the service name";
-              rule = flakeletReader.nameRule;
+              rule = endpoint.nameRule;
             }
           ]
         else
           [ ];
       refusedUnits =
-        if realiser == "flakelet" then
+        if endpoint == null then
+          [ ]
+        else
           map (file: {
             named = file;
             what = "the unit file";
-            rule = flakeletReader.unitRule name;
-          }) (filter (file: !(flakeletReader.acceptsUnit name file)) (unitFilesOf name (entry.units or { })))
-        else
-          [ ];
+            rule = endpoint.unitRule name;
+          }) (filter (file: !(endpoint.acceptsUnit name file)) (unitFilesOf name (entry.units or { })));
       denials =
         if confinement == null then
           [ ]
