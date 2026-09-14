@@ -137,6 +137,66 @@ let
     units.only.command = "${borgbackup}/bin/borg serve";
   };
 
+  # One configuration file whose record the store cannot carry, shown to a unit
+  # the caller gives an account, a group, or neither: a confining profile puts a
+  # unit that declares no account on a transient one.
+  shownAt =
+    {
+      owner ? null,
+      group ? null,
+      mode ? "0400",
+      groups ? [ ],
+      asUser ? "app",
+    }:
+    _: {
+      closure = [ borgbackup ];
+      configData."/etc/thing.conf" = {
+        inherit mode;
+        reload = [ "only" ];
+        render = [ { text = "value\n"; } ];
+      }
+      // (if owner == null then { } else { inherit owner; })
+      // (if group == null then { } else { inherit group; });
+      units.only = {
+        command = "${borgbackup}/bin/borg serve";
+      }
+      // (if asUser == null then { } else { user = asUser; })
+      // (
+        if groups == [ ] then
+          { }
+        else
+          {
+            extends = [
+              {
+                extension = groupedUnit;
+                values.supplementaryGroups = groups;
+              }
+            ];
+          }
+      );
+    };
+
+  # The same file whose record defaults to the one a store object carries, so a
+  # caller states only the field it wants to move off it.
+  carriedFile =
+    {
+      owner ? null,
+      group ? null,
+      mode ? "0444",
+      source ? null,
+    }:
+    _: {
+      closure = [ borgbackup ];
+      configData."/etc/thing.conf" = {
+        inherit mode;
+        reload = [ "only" ];
+      }
+      // (if source == null then { render = [ { text = "value\n"; } ]; } else { inherit source; })
+      // (if owner == null then { } else { inherit owner; })
+      // (if group == null then { } else { inherit group; });
+      units.only.command = "${borgbackup}/bin/borg serve";
+    };
+
   rebuilt =
     let
       deployment =
@@ -1520,5 +1580,355 @@ in
     {
       expr = hasInfix "SupplementaryGroups" rendered;
       expected = false;
+    };
+
+  testAUnitDeclaringADirectoryRendersBothDirectives =
+    let
+      declaring = readOf { } (_: {
+        closure = [ borgbackup ];
+        units.only = {
+          command = "${borgbackup}/bin/borg serve";
+          stateDirectory = [ "myapp" ];
+          stateDirectoryMode = "0700";
+        };
+      });
+      bare = readOf { } simple;
+    in
+    {
+      expr = {
+        directory = hasInfix "StateDirectory=myapp" (reader.renderUnit declaring "only");
+        mode = hasInfix "StateDirectoryMode=0700" (reader.renderUnit declaring "only");
+        inTheTable = [
+          reader.unitDirectives.stateDirectory
+          reader.unitDirectives.stateDirectoryMode
+        ];
+        digestMoved = declaring.version != bare.version;
+      };
+      expected = {
+        directory = true;
+        mode = true;
+        inTheTable = [
+          "StateDirectory"
+          "StateDirectoryMode"
+        ];
+        digestMoved = true;
+      };
+    };
+
+  testAConditionRenderedWithThePolarityStated =
+    let
+      conditioned =
+        field:
+        reader.renderUnit (readOf { } (_: {
+          closure = [ borgbackup ];
+          units.only = {
+            command = "${borgbackup}/bin/borg serve";
+            ${field} = "/var/lib/myapp/VERSION";
+          };
+        })) "only";
+      absent = conditioned "startIfPathAbsent";
+      present = conditioned "startIfPathPresent";
+    in
+    {
+      expr = {
+        negative = hasInfix "ConditionPathExists=!/var/lib/myapp/VERSION" absent;
+        positive = hasInfix "ConditionPathExists=/var/lib/myapp/VERSION" present;
+        # A condition is a [Unit] fact, so it is above the [Service] header.
+        inTheUnitSection = hasInfix "ConditionPathExists=!/var/lib/myapp/VERSION\n\n[Service]" absent;
+        theOtherPolarityIsNotRendered = hasInfix "=!" present;
+      };
+      expected = {
+        negative = true;
+        positive = true;
+        inTheUnitSection = true;
+        theOtherPolarityIsNotRendered = false;
+      };
+    };
+
+  # A vocabulary field is producible by a deployment and a directive table that
+  # does not name it is the builder's own defect, which is why the refusal keeps
+  # its recorded account rather than claiming a row above it.
+  testAVocabularyFieldWithNoDirectiveFailsTheBuild =
+    let
+      # A plan is data, so a field no table names is written into a record
+      # rather than declared: no deployment can produce one, which is the whole
+      # reason the refusal keeps its account instead of claiming a row.
+      recordCarrying =
+        field:
+        let
+          p = planned { } (_: {
+            closure = [ borgbackup ];
+            units.only = {
+              command = "${borgbackup}/bin/borg serve";
+              stateDirectory = [ "myapp" ];
+            };
+          });
+          entry = p.plan.${p.key};
+        in
+        p.plan
+        // {
+          ${p.key} = entry // {
+            units.only = removeAttrs entry.units.only [ "stateDirectory" ] // {
+              ${field} = [ "myapp" ];
+            };
+          };
+        };
+      readAs =
+        plan:
+        reader.read {
+          inherit plan;
+          key = "svc:only@one";
+          profile = "trusted";
+        };
+    in
+    {
+      expr = {
+        named = raises (readAs (recordCarrying "stateDirectory"));
+        unnamed = raises (readAs (recordCarrying "stateDirectoryQuota"));
+        directiveNames = length (attrNames reader.unitDirectives);
+        accounted = reader.accounts.unitFieldUnrendered.id;
+        because = hasInfix "defect of the builder" reader.accounts.unitFieldUnrendered.because;
+      };
+      expected = {
+        named = false;
+        unnamed = true;
+        directiveNames = 22;
+        accounted = null;
+        because = true;
+      };
+    };
+
+  testAConfigurationFileOnlyRootMayReadUnderAConfiningProfile =
+    let
+      denials =
+        profile:
+        filter (d: d ? path) (
+          reader.denials {
+            entry = (planned { } (shownAt { })).plan."svc:only@one";
+            inherit profile;
+          }
+        );
+      denied = builtins.head (denials "strict");
+    in
+    {
+      expr = {
+        count = length (denials "strict");
+        inherit (denied)
+          unit
+          path
+          record
+          account
+          access
+          ;
+        refused = raises (readOf { profile = "strict"; } (shownAt { }));
+      };
+      expected = {
+        count = 1;
+        unit = "only";
+        path = "/etc/thing.conf";
+        record = "root:root at mode 0400";
+        account = "app";
+        access = "a host file only root may read";
+        refused = true;
+      };
+    };
+
+  testAGroupReadableConfigurationFileUnderAConfiningProfile =
+    let
+      # The unit declares no account, which a confining profile puts on a
+      # transient one, and the group is what admits it.
+      grouped = shownAt {
+        group = "app";
+        mode = "0440";
+        groups = [ "app" ];
+        asUser = null;
+      };
+    in
+    {
+      expr = {
+        denials = reader.denials {
+          entry = (planned { } grouped).plan."svc:only@one";
+          profile = "strict";
+        };
+        built = raises (readOf { profile = "strict"; } grouped);
+      };
+      expected = {
+        denials = [ ];
+        built = false;
+      };
+    };
+
+  testAConfigurationFileUnderTheUnconfinedProfile = {
+    expr = {
+      denials = reader.denials {
+        entry = (planned { } (shownAt { })).plan."svc:only@one";
+        profile = "trusted";
+      };
+      built = raises (readOf { profile = "trusted"; } (shownAt { }));
+    };
+    expected = {
+      denials = [ ];
+      built = false;
+    };
+  };
+
+  testAFileWhoseRecordTheStoreCarriesIsShownFromTheStore =
+    let
+      fromLiterals = readOf { } (carriedFile { });
+      fromSource = readOf { } (carriedFile {
+        source = "${borgbackup}/share/thing.conf";
+      });
+      shown = image: builtins.head (filter (p: p.kind == "configuration-file") image.hostPaths);
+    in
+    {
+      expr = {
+        record = [
+          reader.storeRecord.owner
+          reader.storeRecord.group
+          reader.storeRecord.mode
+        ];
+        literalIsAStorePath = hasInfix "/nix/store/" (shown fromLiterals).from;
+        sourceIsItsOwnPath = (shown fromSource).from;
+        neitherIsInstalled = [
+          (shown fromLiterals).install
+          (shown fromSource).install
+        ];
+      };
+      expected = {
+        record = [
+          "root"
+          "root"
+          "0444"
+        ];
+        literalIsAStorePath = true;
+        sourceIsItsOwnPath = "${borgbackup}/share/thing.conf";
+        neitherIsInstalled = [
+          false
+          false
+        ];
+      };
+    };
+
+  testAFileStatingAnOwnershipIsInstalledOnTheHost =
+    let
+      image = readOf { } (carriedFile {
+        owner = "postgres";
+        group = "postgres";
+      });
+      shown = builtins.head (filter (p: p.kind == "configuration-file") image.hostPaths);
+      file = builtins.head image.configFiles;
+    in
+    {
+      expr = {
+        inherit (shown)
+          install
+          owner
+          group
+          mode
+          ;
+        from = shown.from;
+        # The bytes still travel with the artifact: a literal recipe is a store
+        # object the closure carries, and the script installs from it.
+        recipeIsStillLiteral = file.disposition;
+        bound = hasInfix "BindReadOnlyPaths=/run/portable-planner/svc-only/files/etc/thing.conf:/etc/thing.conf" (
+          reader.renderUnit image "only"
+        );
+      };
+      expected = {
+        install = true;
+        owner = "postgres";
+        group = "postgres";
+        mode = "0444";
+        from = "/run/portable-planner/svc-only/files/etc/thing.conf";
+        recipeIsStillLiteral = "literal";
+        bound = true;
+      };
+    };
+
+  testAFileStatingAModeTheStoreCannotCarryIsInstalledOnTheHost =
+    let
+      image = readOf { } (carriedFile {
+        mode = "0600";
+      });
+      shown = builtins.head (filter (p: p.kind == "configuration-file") image.hostPaths);
+    in
+    {
+      expr = {
+        inherit (shown) install mode;
+        from = shown.from;
+        isNotAStorePath = hasInfix "/nix/store/" shown.from;
+      };
+      expected = {
+        install = true;
+        mode = "0600";
+        from = "/run/portable-planner/svc-only/files/etc/thing.conf";
+        isNotAStorePath = false;
+      };
+    };
+
+  testAReferencedRecipeIsInstalledAtTheRecordItStates =
+    let
+      image = rebuilt.imageOf rebuilt.base rebuilt.key;
+      shown = builtins.head (filter (p: p.kind == "configuration-file") image.hostPaths);
+    in
+    {
+      expr = {
+        inherit (shown)
+          install
+          owner
+          group
+          mode
+          disposition
+          ;
+        needs = shown.needs;
+        from = shown.from;
+      };
+      expected = {
+        install = true;
+        owner = "root";
+        group = "root";
+        mode = "0400";
+        disposition = "reference";
+        needs = "/run/vars/svc/hostKey/key";
+        from = "/run/portable-planner/svc-only/files/etc/thing.conf";
+      };
+    };
+
+  # Every byte of one installed file passes through paths the unit is not shown,
+  # all three inside the staging directory detaching removes, so a run that
+  # stopped part way left nothing at the path an account could open.
+  testAnInterruptedInstallLeavesNoFileAtAWiderRecord =
+    let
+      image = readOf { } (carriedFile {
+        mode = "0600";
+      });
+      file = builtins.head image.configFiles;
+      shown = builtins.head (filter (p: p.kind == "configuration-file") image.hostPaths);
+    in
+    {
+      expr = {
+        shownIsStaged = shown.from == file.staged;
+        distinct = length (
+          planner.util.uniqueStrings [
+            file.staged
+            file.assembling
+            file.installing
+          ]
+        );
+        underTheStaging = map (p: hasInfix image.staging p) [
+          file.staged
+          file.assembling
+          file.installing
+        ];
+      };
+      expected = {
+        shownIsStaged = true;
+        distinct = 3;
+        underTheStaging = [
+          true
+          true
+          true
+        ];
+      };
     };
 }

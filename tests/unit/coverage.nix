@@ -205,6 +205,11 @@ let
     "refuse-two-entries-claiming-one-host-resource/specs/planner/plan-artifact/spec.md"
     "state-no-host-path-in-a-deployment/specs/tooling/repository-shape/spec.md"
     "state-no-host-path-in-a-deployment/specs/tooling/test-layers/spec.md"
+    "open-a-configuration-file-to-its-reader/specs/delivery/real-cluster/spec.md"
+    "open-a-configuration-file-to-its-reader/specs/planner/plan-artifact/spec.md"
+    "open-a-configuration-file-to-its-reader/specs/planner/unit-vocabulary/spec.md"
+    "open-a-configuration-file-to-its-reader/specs/realiser/flakelet-artifact/spec.md"
+    "open-a-configuration-file-to-its-reader/specs/realiser/portable-service-image/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -244,16 +249,6 @@ let
       "an unimplemented change: no task of keep-a-secret-out-of-a-process-table has been done, so nothing in this package claims to satisfy it yet";
     "keep-a-secret-out-of-a-process-table/specs/realiser/secrets-configuration/spec.md" =
       "an unimplemented change: no task of keep-a-secret-out-of-a-process-table has been done, so nothing in this package claims to satisfy it yet";
-    "open-a-configuration-file-to-its-reader/specs/delivery/real-cluster/spec.md" =
-      "an unimplemented change: no task of open-a-configuration-file-to-its-reader has been done, so nothing in this package claims to satisfy it yet";
-    "open-a-configuration-file-to-its-reader/specs/planner/plan-artifact/spec.md" =
-      "an unimplemented change: no task of open-a-configuration-file-to-its-reader has been done, so nothing in this package claims to satisfy it yet";
-    "open-a-configuration-file-to-its-reader/specs/planner/unit-vocabulary/spec.md" =
-      "an unimplemented change: no task of open-a-configuration-file-to-its-reader has been done, so nothing in this package claims to satisfy it yet";
-    "open-a-configuration-file-to-its-reader/specs/realiser/flakelet-artifact/spec.md" =
-      "an unimplemented change: no task of open-a-configuration-file-to-its-reader has been done, so nothing in this package claims to satisfy it yet";
-    "open-a-configuration-file-to-its-reader/specs/realiser/portable-service-image/spec.md" =
-      "an unimplemented change: no task of open-a-configuration-file-to-its-reader has been done, so nothing in this package claims to satisfy it yet";
     "refuse-a-placement-onto-an-unaddressed-machine/specs/operator/deployment-build/spec.md" =
       "an unimplemented change: no task of refuse-a-placement-onto-an-unaddressed-machine has been done, so nothing in this package claims to satisfy it yet";
     "refuse-a-placement-onto-an-unaddressed-machine/specs/planner/diagnostics/spec.md" =

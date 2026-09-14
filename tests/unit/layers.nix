@@ -713,7 +713,15 @@ let
       nixFilesOf folder
     );
 
-  statefulFolders = sorted (filter writesUnderAHome e2eNames);
+  # The other way a folder says it writes on the machine. A state directory is
+  # created by the service manager under the root its kind implies, so the
+  # declaration names no home and the bytes are still a stage's to hold.
+  declaresAStateDirectory =
+    folder: builtins.any (rel: hasInfix "stateDirectory" (textOf folder rel)) (nixFilesOf folder);
+
+  statefulFolders = sorted (
+    filter (folder: writesUnderAHome folder || declaresAStateDirectory folder) e2eNames
+  );
 
   statefulByADeletedKnob = sorted (
     filter (

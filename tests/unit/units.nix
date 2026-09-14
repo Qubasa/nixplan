@@ -968,7 +968,9 @@ in
       expected = {
         fields = [
           "computed"
+          "group"
           "mode"
+          "owner"
           "reload"
           "source"
         ];
@@ -1006,7 +1008,9 @@ in
         fields = [
           "computed"
           "contentHash"
+          "group"
           "mode"
+          "owner"
           "reload"
           "render"
         ];
@@ -1062,7 +1066,9 @@ in
       expected = {
         fields = [
           "computed"
+          "group"
           "mode"
+          "owner"
           "reload"
           "render"
           "structureHash"
@@ -1127,7 +1133,9 @@ in
         namesTheFile = hasInfix "`/etc/thing.conf`" (messageById "config-file-disposition" result);
         identity = removeAttrs file [
           "computed"
+          "group"
           "mode"
+          "owner"
           "reload"
         ];
         entryIsInThePlan = result.plan ? "svc:only@one";
@@ -1334,6 +1342,269 @@ in
           "command"
           "schedule"
         ];
+      };
+    };
+
+  testAUnitDeclaringAStateDirectoryAndItsMode =
+    let
+      result = placed [ "one" ] (_: {
+        units.web = {
+          command = "/bin/web";
+          stateDirectory = [ "myapp" ];
+          stateDirectoryMode = "0700";
+        };
+        units.plain.command = "/bin/plain";
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        declaring = entry.units.web;
+        silent = attrNames entry.units.plain;
+      };
+      expected = {
+        rows = [ ];
+        declaring = {
+          command = "/bin/web";
+          stateDirectory = [ "myapp" ];
+          stateDirectoryMode = "0700";
+        };
+        silent = [ "command" ];
+      };
+    };
+
+  testADirectoryModeWithNoDirectoryOfItsKind =
+    let
+      result = placed [ "one" ] (_: {
+        units.web = {
+          command = "/bin/web";
+          cacheDirectoryMode = "0700";
+        };
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        namesTheUnit = hasInfix "unit `web`" (messageById "unit-directory-mode-without-directory" result);
+        namesTheModule = hasInfix "the module of `only`" (
+          messageById "unit-directory-mode-without-directory" result
+        );
+        fields = attrNames entry.units.web;
+      };
+      expected = {
+        rows = [ "unit-directory-mode-without-directory" ];
+        namesTheUnit = true;
+        namesTheModule = true;
+        fields = [ "command" ];
+      };
+    };
+
+  testADirectoryNameThatIsNotRelative =
+    let
+      result = placed [ "one" ] (_: {
+        units.web = {
+          command = "/bin/web";
+          stateDirectory = [ "/var/lib/myapp" ];
+        };
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        namesTheField = hasInfix "`stateDirectory`" (messageById "unit-field-type-mismatch" result);
+        namesTheType = hasInfix "directoryName" (evidenceById "unit-field-type-mismatch" result);
+        fields = attrNames entry.units.web;
+      };
+      expected = {
+        rows = [ "unit-field-type-mismatch" ];
+        namesTheField = true;
+        namesTheType = true;
+        fields = [ "command" ];
+      };
+    };
+
+  # The key is a digest over the record, and a unit declaring none of the six
+  # carries none of them, so such an entry keys as it did before the vocabulary
+  # grew.
+  testAUnitDeclaringNoDirectoryKeepsItsKey =
+    let
+      bare = placed [ "one" ] (_: {
+        units.web.command = "/bin/web";
+      });
+      declaring = placed [ "one" ] (_: {
+        units.web = {
+          command = "/bin/web";
+          runtimeDirectory = [ "records" ];
+        };
+      });
+    in
+    {
+      expr = {
+        rows = rowIds bare;
+        fields = attrNames (entryOf bare "one").units.web;
+        keyMentionsADirectory = hasInfix "Directory" (toJSON (entryOf bare "one").units);
+        key = (entryOf bare "one").key == (entryOf declaring "one").key;
+      };
+      expected = {
+        rows = [ ];
+        fields = [ "command" ];
+        keyMentionsADirectory = false;
+        key = false;
+      };
+    };
+
+  testOneDirectoryKindDeclaredTwice =
+    let
+      result = placed [ "one" ] (_: {
+        units.web = {
+          command = "/bin/web";
+          stateDirectory = [ "myapp" ];
+          extends = [
+            {
+              extension = systemdService;
+              values.stateDirectory = "myapp";
+            }
+          ];
+        };
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        names = map (needle: hasInfix needle (messageById "unit-directory-declared-twice" result)) [
+          "the module of `only`"
+          "unit `web`"
+          "`stateDirectory`"
+        ];
+        fields = attrNames entry.units.web;
+        extended = attrNames entry.units.web.extends.systemd;
+      };
+      expected = {
+        rows = [ "unit-directory-declared-twice" ];
+        names = [
+          true
+          true
+          true
+        ];
+        fields = [
+          "command"
+          "extends"
+        ];
+        extended = [ ];
+      };
+    };
+
+  testAUnitThatStartsOnlyWhileAPathIsMissing =
+    let
+      result = placed [ "one" ] (_: {
+        units.bootstrap = {
+          command = "/bin/bootstrap";
+          startIfPathAbsent = "/var/lib/myapp/VERSION";
+        };
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        recorded = entry.units.bootstrap;
+        recordsNoDirective = hasInfix "Condition" (toJSON entry.units);
+      };
+      expected = {
+        rows = [ ];
+        recorded = {
+          command = "/bin/bootstrap";
+          startIfPathAbsent = "/var/lib/myapp/VERSION";
+        };
+        recordsNoDirective = false;
+      };
+    };
+
+  testAUnitThatStartsOnlyOnceAPathExists =
+    let
+      result = placed [ "one" ] (_: {
+        units.report = {
+          command = "/bin/report";
+          startIfPathPresent = "/var/lib/myapp/VERSION";
+        };
+        units.plain.command = "/bin/plain";
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        recorded = entry.units.report;
+        silent = attrNames entry.units.plain;
+      };
+      expected = {
+        rows = [ ];
+        recorded = {
+          command = "/bin/report";
+          startIfPathPresent = "/var/lib/myapp/VERSION";
+        };
+        silent = [ "command" ];
+      };
+    };
+
+  testAConditionThatContradictsItself =
+    let
+      result = placed [ "one" ] (_: {
+        units.web = {
+          command = "/bin/web";
+          startIfPathPresent = "/var/lib/myapp/VERSION";
+          startIfPathAbsent = "/var/lib/myapp/VERSION";
+        };
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        names = map (needle: hasInfix needle (messageById "unit-condition-contradicts-itself" result)) [
+          "the module of `only`"
+          "unit `web`"
+          "`/var/lib/myapp/VERSION`"
+        ];
+        fields = attrNames entry.units.web;
+      };
+      expected = {
+        rows = [ "unit-condition-contradicts-itself" ];
+        names = [
+          true
+          true
+          true
+        ];
+        fields = [ "command" ];
+      };
+    };
+
+  testAConditionPathThatIsNotAbsolute =
+    let
+      result = placed [ "one" ] (_: {
+        units.web = {
+          command = "/bin/web";
+          startIfPathPresent = "var/lib/myapp/VERSION";
+        };
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        namesTheField = hasInfix "`startIfPathPresent`" (messageById "unit-field-type-mismatch" result);
+        namesTheType = hasInfix "absolutePath" (evidenceById "unit-field-type-mismatch" result);
+        fields = attrNames entry.units.web;
+      };
+      expected = {
+        rows = [ "unit-field-type-mismatch" ];
+        namesTheField = true;
+        namesTheType = true;
+        fields = [ "command" ];
       };
     };
 }

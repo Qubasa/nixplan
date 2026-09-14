@@ -576,7 +576,9 @@
     "configData": {
       "/srv/borg/.ssh/authorized_keys": {
         "computed": false,
+        "group": "root",
         "mode": "0600",
+        "owner": "root",
         "reload": [
           "borgRepo"
         ],
