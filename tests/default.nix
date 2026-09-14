@@ -1,6 +1,10 @@
 {
   korora,
   systems,
+  # nixpkgs' own `lib`, for the one suite that reads a rendered script: the image
+  # builder takes it, and a suite handing it a restatement would measure the
+  # escaping against its own copy rather than against the one the build spends.
+  nixpkgsLib,
   platformSource,
   folder,
   libSource,
@@ -79,7 +83,14 @@ let
     units = import ./unit/units.nix { inherit planner support; };
     platform = import ./unit/platform.nix { inherit planner support systems; };
     closure = import ./unit/closure.nix { inherit planner support; };
-    image = import ./unit/image.nix { inherit planner support imageSource; };
+    image = import ./unit/image.nix {
+      inherit
+        planner
+        support
+        imageSource
+        nixpkgsLib
+        ;
+    };
     operator = import ./unit/operator.nix {
       inherit
         planner

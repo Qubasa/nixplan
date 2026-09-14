@@ -158,6 +158,22 @@ Recorded so the question is answered once.
   member is built from, and a member name that would make the pair ambiguous is refused before any
   key exists. A composed `entryKey` was rejected there, since a key carries the two separators a
   name may not, and nothing about the key input moves.
+- `unit-value-newline` is about every string a unit record carries at any depth - a plain field, an
+  element of a list, a value of an attribute set, and every field of every extension application -
+  and the scan walks the record rather than a list of fields, so a field added to the vocabulary or
+  declared by an extension author is covered by existing. One identifier covers every field because
+  two would ask a reader to learn which field belongs to which and would report one mistake twice
+  for a value written into two of them; the row names the field path instead. The nine fields whose
+  atoms are grammars refuse a line break as `unit-field-type-mismatch` and are never in the record,
+  so one fact still earns one row. `image/read.nix` scans the same record and refuses, because a
+  caller reaching it directly gets no table.
+- A configuration file's host path is held to the grammar one word of a rendered shell step can
+  carry, and that grammar's one home is `lib/util.nix` beside `keySeparators`: `secrets/read.nix`
+  reads it rather than stating it, because a widened grammar admitting a character in one rendered
+  script and refusing it in another is the defect the single home exists to prevent. The check is
+  the library's, so every realiser and every plan reader inherits it. A refused path is left out of
+  the record the way a name carrying a key separator is left out of every key: the path enters
+  `keyInput` through `configData`, and a reader may be handed a plan whose table it never read.
 
 ## Keys and identity
 
@@ -367,6 +383,25 @@ Recorded so the question is answered once.
   and nothing at all for a unit that is not running. The artifact's `bin/check` is the same
   comparison with no writes, which is what `status` asks to tell an entry whose image matches and
   whose shown bytes do not.
+- The attach script creates its whole staging tree in one `install -d -m 0711`, for the reason the
+  value directories are `0711`: a unit reaches a staged file by its full path through
+  `BindReadOnlyPaths`, so traversal is the only access any account needs, and a listable directory
+  publishes the configuration file names of every entry on the machine. Every component is named
+  rather than left to `install -d` to create along the way, because a component `install` creates
+  for itself is created at the attaching login's umask and not at the mode.
+- Every value a generated script interpolates is escaped as one word, in a message as well as in an
+  argument, and a unit list is escaped word by word rather than joined. The grammar above and the
+  escape fail independently: a grammar is a rule a future field can be added without, and the
+  escape is what holds for a value no rule has reached yet. `lib.escapeShellArg` leaves a
+  safe-looking word bare, which is why `image/default.nix` has a `quoted` of its own for the
+  messages.
+- Each realiser states its own name rule and its own unit rule as the sentence its refusal prints,
+  and `operator/read.nix` asks the stated realiser for the two rather than testing which realiser
+  it is, so a third publishing them is asked by existing. The image realiser's rule is the
+  intersection of three constraints it is already inside - nix's store name set, which every
+  derivation it builds spends, systemd's unit name grammar, and one shell word - and it is not the
+  library's, because which realiser realises an entry is a statement beside the deployment and the
+  union of two realisers' grammars refuses a name the stated one accepts.
 - Every profile except `trusted` carries `DynamicUser=yes` and `PrivateUsers=yes`.
 - A field missing from `systemdDirectives` in `image/read.nix` fails the build on purpose. An
   extension exists to add a field, so dropping one would make the extension a comment. The same

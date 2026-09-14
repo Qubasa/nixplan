@@ -858,8 +858,9 @@ in
       plan = removeAttrs result.plan [ "svc:x@one" ] // {
         "svc:vars/x@one" = result.plan."svc:x@one";
       };
-      # Stated as an image because `svc-vars/x` is a service name flakelet's own
-      # endpoint refuses, which is a row of its own and not this scenario's.
+      # Both endpoints refuse `svc-vars/x` as a service name, so the reading
+      # carries that row whichever realiser is stated. It is a row of its own and
+      # not this scenario's, which is about the record a key is classified by.
       reading = reader.read {
         inherit plan;
         realise.default = {
@@ -882,7 +883,7 @@ in
         entries = [ "svc:vars/x@one" ];
         values = [ ];
         service = "vars/x";
-        rows = [ ];
+        rows = [ "operator-entry-name-refused" ];
         read = true;
       };
     };
@@ -1272,6 +1273,97 @@ in
         statesTheRealisersOwnRule = true;
         theRealiserRaisesToo = false;
         refused = true;
+      };
+    };
+
+  testAUnitNameOutsideTheRuleIsRefusedNamingTheEntry =
+    let
+      # `?` is a store name nix admits and a shell glob, so nothing below this
+      # reading refuses it: the abort it earns names neither the entry nor the
+      # declaration.
+      result = planOf {
+        instances."sv?c" = {
+          module = soleRoot { module = _: { impl = simple; }; };
+          placement.every.only.machines = [ "one" ];
+        };
+      };
+      reading = readOf {
+        default = {
+          realiser = "image";
+          profile = "trusted";
+        };
+      } result;
+      row = builtins.head (rowsById "operator-entry-name-refused" reading);
+      raised = builtins.tryEval (
+        let
+          artifact = imageReader.read {
+            inherit (result) plan;
+            key = "sv?c:only@one";
+            profile = "trusted";
+          };
+        in
+        builtins.deepSeq artifact artifact
+      );
+    in
+    {
+      expr = {
+        thePlannerAllowsIt = map (r: r.id) result.diagnostics;
+        rows = idsOf reading;
+        subject = row.subject;
+        namesTheName = hasInfix "`sv?c-only`" row.message;
+        statesTheRealisersOwnRule = hasInfix imageReader.nameRule row.message;
+        theRealiserRaisesToo = raised.success;
+        # The reading refuses, so `operator/default.nix` builds the two tables
+        # and the artifact of no entry, while the entry itself is still read.
+        refused = reading.refused;
+        theEntryIsStillRead = reading.entries."sv?c:only@one".realised;
+      };
+      expected = {
+        thePlannerAllowsIt = [ ];
+        rows = [ "operator-entry-name-refused" ];
+        subject = "sv?c:only@one";
+        namesTheName = true;
+        statesTheRealisersOwnRule = true;
+        theRealiserRaisesToo = false;
+        refused = true;
+        theEntryIsStillRead = true;
+      };
+    };
+
+  testTheNameRefusalIsPrecededByItsRow =
+    let
+      result = planOf {
+        instances."sv?c" = {
+          module = soleRoot { module = _: { impl = simple; }; };
+          placement.every.only.machines = [ "one" ];
+        };
+      };
+      reading = readOf {
+        default = {
+          realiser = "image";
+          profile = "trusted";
+        };
+      } result;
+      row = builtins.head (rowsById "operator-entry-name-refused" reading);
+    in
+    {
+      expr = {
+        # The account each refusal carries names the row a producing layer
+        # builds, which is what `tests/unit/diagnostics.nix` crosses wholesale.
+        theServiceNameRefusalNamesARow = imageReader.accounts.nameRefused.id;
+        theUnitFileRefusalNamesTheSameRow = imageReader.accounts.unitRefused.id;
+        theRowIsProduced = row.id;
+        # One rule, asked of the realiser rather than restated: the row's own
+        # sentence is the realiser's string and not a copy of it.
+        theRowStatesTheRealisersRule = hasInfix imageReader.nameRule row.message;
+        andItIsNotFlakelets = imageReader.nameRule == flakeletReader.nameRule;
+      };
+      expected = {
+        theServiceNameRefusalNamesARow = "operator-entry-name-refused";
+        theUnitFileRefusalNamesTheSameRow = "operator-entry-name-refused";
+        theRowIsProduced = "operator-entry-name-refused";
+        theRowStatesTheRealisersRule = true;
+        andItIsNotFlakelets = false;
       };
     };
 

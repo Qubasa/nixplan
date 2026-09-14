@@ -47,7 +47,7 @@ import shlex
 import subprocess
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import pytest
@@ -1263,6 +1263,49 @@ def test_the_mode_does_not_depend_on_the_attaching_environment(assembling: Run) 
         {"600"},
         {"600"},
     ]
+
+
+def test_a_staged_file_is_readable_through_a_directory_nobody_may_list(assembling: Run) -> None:
+    """Traversal is the only access a unit needs, and it is the only one an account has.
+
+    A unit reaches a staged file by its full path through `BindReadOnlyPaths`, so
+    the directories above it are created traversable and not listable. What a
+    listable one would publish is the configuration file names of every entry on
+    the machine, to any account, which no declaration asked to be published.
+    """
+    staged, mode, _ = _staged()
+    root = "/run/planner-assembly/unlistable"
+    staging = assembling.attachment(CONFINED_KEY)["staging"]
+    leaf = str(PurePosixPath(staged).parent)
+
+    assembled = _probe(assembling, "unlistable", "000", shown=True)
+    assert assembled["staged"] == f"{int(mode, 8):o}", assembled
+
+    def unprivileged(command: str) -> str:
+        return f"su -s /bin/sh -c {shlex.quote(command)} nobody"
+
+    reported = assembling.vm.ssh_succeed(
+        "; ".join(
+            [
+                f'echo "entry=$(stat -c %a {root}{staging})"',
+                f'echo "leaf=$(stat -c %a {root}{leaf})"',
+                f"if {unprivileged(f'cat {root}{staged}')} > /dev/null 2>&1; "
+                'then echo "read=yes"; else echo "read=no"; fi',
+                f"if {unprivileged(f'ls {root}{leaf}')} > /dev/null 2>&1; "
+                'then echo "list=yes"; else echo "list=no"; fi',
+                f"if {unprivileged(f'ls {root}{staging}')} > /dev/null 2>&1; "
+                'then echo "listEntry=yes"; else echo "listEntry=no"; fi',
+            ]
+        ),
+        timeout=180,
+    )
+    answered = dict(line.split("=", 1) for line in reported.splitlines() if "=" in line)
+
+    assert answered["entry"] == "711", answered
+    assert answered["leaf"] == "711", answered
+    assert answered["read"] == "yes", answered
+    assert answered["list"] == "no", answered
+    assert answered["listEntry"] == "no", answered
 
 
 def test_detaching_removes_the_units_and_the_staging_directory(detached: Run) -> None:

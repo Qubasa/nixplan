@@ -205,6 +205,8 @@ let
     "refuse-two-entries-claiming-one-host-resource/specs/planner/plan-artifact/spec.md"
     "state-no-host-path-in-a-deployment/specs/tooling/repository-shape/spec.md"
     "state-no-host-path-in-a-deployment/specs/tooling/test-layers/spec.md"
+    "refuse-a-value-a-unit-file-cannot-carry/specs/planner/diagnostics/spec.md"
+    "refuse-a-value-a-unit-file-cannot-carry/specs/realiser/portable-service-image/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -262,10 +264,6 @@ let
       "an unimplemented change: no task of refuse-a-placement-onto-an-unaddressed-machine has been done, so nothing in this package claims to satisfy it yet";
     "refuse-a-placement-onto-an-unaddressed-machine/specs/planner/plan-artifact/spec.md" =
       "an unimplemented change: no task of refuse-a-placement-onto-an-unaddressed-machine has been done, so nothing in this package claims to satisfy it yet";
-    "refuse-a-value-a-unit-file-cannot-carry/specs/planner/diagnostics/spec.md" =
-      "an unimplemented change: no task of refuse-a-value-a-unit-file-cannot-carry has been done, so nothing in this package claims to satisfy it yet";
-    "refuse-a-value-a-unit-file-cannot-carry/specs/realiser/portable-service-image/spec.md" =
-      "an unimplemented change: no task of refuse-a-value-a-unit-file-cannot-carry has been done, so nothing in this package claims to satisfy it yet";
     "reserve-what-a-machine-already-holds/specs/planner/diagnostics/spec.md" =
       "an unimplemented change: no task of reserve-what-a-machine-already-holds has been done, so nothing in this package claims to satisfy it yet";
     "reserve-what-a-machine-already-holds/specs/planner/machine-platform/spec.md" =
