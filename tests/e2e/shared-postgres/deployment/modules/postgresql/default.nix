@@ -11,11 +11,11 @@ let
     module = import ./databases.nix { inherit postgresql initScript postgresDatabase; };
 
     defaults.databases = { };
-    defaults.dataDir = "/var/lib/postgresql/data";
 
-    # Both are fixed because the data source this module publishes is built from
-    # them, and lib/module.nix allocates no port.
-    fixed.port = 5432;
+    # A port is an address, of the same class as a machine's, so a deployment
+    # placing a second instance beside this one states its own number. The
+    # version is fixed because the data source this module publishes carries it.
+    defaults.port = 5432;
     fixed.version = version;
   };
 in

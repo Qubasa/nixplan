@@ -692,10 +692,30 @@ let
     )
   );
 
-  # A module declaring a data directory is a service that writes state on the
-  # machine, and the space that needs is its own folder's stage's rather than
-  # the shared image's, which every other folder's cut is keyed on.
-  statefulFolders = sorted (
+  homeOf =
+    line:
+    let
+      m = match " *home = \"([^\"]*)\";" line;
+    in
+    if m == null then null else head m;
+
+  # Nothing in a plan creates an account, so the home a service keeps its state
+  # under is the shared guest image's own declaration. A module writing inside
+  # one is a service that writes state on the machine, and the space that needs
+  # is its own folder's stage's rather than the image's, which every other
+  # folder's cut is keyed on. The settings knob that used to say so is gone:
+  # every host path is derived where the entry's identity is.
+  declaredHomes = filter (home: home != null) (map homeOf guestLines);
+
+  writesUnderAHome =
+    folder:
+    builtins.any (rel: builtins.any (home: hasInfix "${home}/" (textOf folder rel)) declaredHomes) (
+      nixFilesOf folder
+    );
+
+  statefulFolders = sorted (filter writesUnderAHome e2eNames);
+
+  statefulByADeletedKnob = sorted (
     filter (
       folder: builtins.any (rel: hasInfix "dataDir" (textOf folder rel)) (nixFilesOf folder)
     ) e2eNames
@@ -703,6 +723,31 @@ let
 
   declaresSpace =
     folder: builtins.any (rel: hasInfix "disk_gib" (textOf folder rel)) (testFilesOf folder);
+
+  # The space and the stage are one declaration: a figure written anywhere else
+  # would key no cut.
+  declaresSpaceBesideItsStage =
+    folder:
+    builtins.any (
+      rel:
+      let
+        text = textOf folder rel;
+      in
+      hasInfix "cluster_stage" text && hasInfix "disk_gib" text
+    ) (testFilesOf folder);
+
+  spaceAwayFromTheStage = sorted (
+    map (folder: "tests/e2e/${folder} declares its space away from its own stage") (
+      filter (folder: !(declaresSpaceBesideItsStage folder)) statefulFolders
+    )
+  );
+
+  # The folder that instantiates one module twice, once shared and once owned.
+  instancingFolder = "shared-postgres";
+
+  databaseModules = sorted (
+    filter (rel: match ".*databases\\.nix" rel != null) (nixFilesOf instancingFolder)
+  );
 
   undeclaredSpace = sorted (
     map (folder: "tests/e2e/${folder} writes state on the machine and its stage declares no space") (
@@ -927,6 +972,47 @@ in
       stateful = [ "shared-postgres" ];
       perFolder = true;
       forwarded = true;
+    };
+  };
+
+  testAFolderWritingStateIsRecognisedByWhatItDeclares = {
+    expr = {
+      recognised = statefulFolders;
+      byADeletedKnob = statefulByADeletedKnob;
+      covered = map declaresSpace statefulFolders;
+    };
+    expected = {
+      recognised = [ "shared-postgres" ];
+      byADeletedKnob = [ ];
+      covered = [ true ];
+    };
+  };
+
+  testAStatefulFolderDeclaresItsSpaceOnItsOwnStage = {
+    expr = {
+      elsewhere = spaceAwayFromTheStage;
+      inTheImage = builtins.any (line: hasInfix "disk_gib" line) guestLines;
+    };
+    expected = {
+      elsewhere = [ ];
+      inTheImage = false;
+    };
+  };
+
+  testOneModuleFileBacksBothInstances = {
+    expr = {
+      copies = databaseModules;
+      composed = hasInfix "postgresql/databases.nix" (
+        textOf instancingFolder "deployment/modules/app/default.nix"
+      );
+      shared = hasInfix "databases.nix" (
+        textOf instancingFolder "deployment/modules/postgresql/default.nix"
+      );
+    };
+    expected = {
+      copies = [ "deployment/modules/postgresql/databases.nix" ];
+      composed = true;
+      shared = true;
     };
   };
 }

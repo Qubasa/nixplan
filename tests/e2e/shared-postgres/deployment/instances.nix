@@ -29,10 +29,7 @@
     near-app = {
       module = app.services.default;
       members.own.enable = false;
-      settings.client = {
-        label = "near";
-        recordPath = "/run/shared-postgres/near.json";
-      };
+      settings.client.label = "near";
       placement.every.client = {
         tags = [ "near" ];
       };
@@ -45,10 +42,7 @@
     far-app = {
       module = app.services.default;
       members.own.enable = false;
-      settings.client = {
-        label = "far";
-        recordPath = "/run/shared-postgres/far.json";
-      };
+      settings.client.label = "far";
       placement.every.client = {
         tags = [ "far" ];
       };
@@ -58,18 +52,18 @@
       };
     };
 
-    # The same module, uncut: it runs the database it owns and wires nothing.
+    # The same module, uncut: it runs the database it owns and wires nothing. Both
+    # of its members are on the machine the shared cluster is already on, so the
+    # deployment states the port its own listener takes and nothing else.
     own-app = {
       module = app.services.default;
-      settings.client = {
-        label = "own";
-        recordPath = "/run/shared-postgres-own/own.json";
-      };
+      settings.client.label = "own";
+      settings.own.port = 5433;
       placement.every.client = {
-        tags = [ "far" ];
+        tags = [ "private" ];
       };
       placement.every.own = {
-        tags = [ "far" ];
+        tags = [ "private" ];
       };
     };
   };
