@@ -42,7 +42,6 @@ let
 
       claims.ports.sql = {
         proto = "tcp";
-        count = 1;
         fixed = 5432;
       };
 

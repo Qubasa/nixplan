@@ -205,6 +205,8 @@ let
     "refuse-two-entries-claiming-one-host-resource/specs/planner/plan-artifact/spec.md"
     "state-no-host-path-in-a-deployment/specs/tooling/repository-shape/spec.md"
     "state-no-host-path-in-a-deployment/specs/tooling/test-layers/spec.md"
+    "type-a-port-claim-and-its-collision/specs/planner/diagnostics/spec.md"
+    "type-a-port-claim-and-its-collision/specs/planner/plan-artifact/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -270,10 +272,6 @@ let
       "an unimplemented change: no task of reserve-what-a-machine-already-holds has been done, so nothing in this package claims to satisfy it yet";
     "reserve-what-a-machine-already-holds/specs/planner/machine-platform/spec.md" =
       "an unimplemented change: no task of reserve-what-a-machine-already-holds has been done, so nothing in this package claims to satisfy it yet";
-    "type-a-port-claim-and-its-collision/specs/planner/diagnostics/spec.md" =
-      "an unimplemented change: no task of type-a-port-claim-and-its-collision has been done, so nothing in this package claims to satisfy it yet";
-    "type-a-port-claim-and-its-collision/specs/planner/plan-artifact/spec.md" =
-      "an unimplemented change: no task of type-a-port-claim-and-its-collision has been done, so nothing in this package claims to satisfy it yet";
   };
 
   isSpecFile = path: match ".*/spec\\.md" path != null;

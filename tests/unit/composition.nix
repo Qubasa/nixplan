@@ -8,6 +8,8 @@ let
     planOf
     publicString
     publicUrl
+    resolutionById
+    root
     rowIds
     rowsById
     severityById
@@ -33,6 +35,9 @@ let
     "member-not-placed"
     "exposes-unknown-capability"
     "port-claim-not-fixed"
+    "port-claim-not-a-port"
+    "port-claim-protocol-unknown"
+    "port-claim-address-malformed"
     "wire-capability-not-exposed"
     "wire-unknown-capability"
     "wire-unknown-instance"
@@ -51,7 +56,6 @@ let
   portLeaf = fixed: _: {
     claims.ports.ssh = {
       proto = "tcp";
-      count = 1;
     }
     // (if fixed == null then { } else { inherit fixed; });
     impl =
@@ -60,6 +64,46 @@ let
         units.main.command = "/bin/sshd -p ${toString (alloc.ports.ssh or "-")}";
       };
   };
+
+  # A leaf whose whole claim the test writes, for the fields `portLeaf` has no
+  # shape for.
+  claimLeaf = claim: _: {
+    claims.ports.ssh = claim;
+    impl =
+      { alloc, ... }:
+      {
+        units.main.command = "/bin/sshd -p ${toString (alloc.ports.ssh or "-")}";
+      };
+  };
+
+  claimed =
+    claim:
+    planOf {
+      sources = bothFiles;
+      instances.i = {
+        module = soleRoot { module = claimLeaf claim; };
+        placement.every.only.machines = [ "one" ];
+      };
+    };
+
+  # Two members of one instance on one machine, the shortest deployment in which
+  # two claims can contend.
+  claimedBoth =
+    first: second:
+    planOf {
+      instances.i = {
+        module = root {
+          members = {
+            first.module = claimLeaf first;
+            second.module = claimLeaf second;
+          };
+        };
+        placement.every = {
+          first.machines = [ "one" ];
+          second.machines = [ "one" ];
+        };
+      };
+    };
 
   twoCapProvider = _: {
     provides.identity.interface = identity;
@@ -214,7 +258,6 @@ let
     {
       claims.ports.ssh = {
         proto = "tcp";
-        count = 1;
         fixed = settings.port;
       };
       impl =
@@ -832,6 +875,306 @@ in
         allocated = false;
         received = "/bin/sshd -p -";
         applicable = false;
+      };
+    };
+
+  # A number written as text is not the number it spells, so the claim is not
+  # recorded and the entry claiming the same number as an integer contends with
+  # nobody.
+  testAPortNumberWrittenAsAString =
+    let
+      id = "port-claim-not-a-port";
+      result =
+        claimedBoth
+          {
+            proto = "tcp";
+            fixed = "2222";
+          }
+          {
+            proto = "tcp";
+            fixed = 2222;
+          };
+    in
+    {
+      expr = {
+        rows = countById id result;
+        severity = severityById id result;
+        namesClaim = hasInfix "port claim `ssh`" (messageById id result);
+        namesTheValue = hasInfix "\"2222\"" (messageById id result);
+        namesTheRange = hasInfix "1 to 65535" (evidenceById id result);
+        allocated = result.plan."i:first@one" ? alloc;
+        theOtherClaimIsRecorded = result.plan."i:second@one".alloc.ports;
+        collisions = countById "entry-port-claimed-twice" result;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = 1;
+        severity = "error";
+        namesClaim = true;
+        namesTheValue = true;
+        namesTheRange = true;
+        allocated = false;
+        theOtherClaimIsRecorded.ssh = 2222;
+        collisions = 0;
+        applicable = false;
+      };
+    };
+
+  testAPortNumberOutsideTheRange =
+    let
+      id = "port-claim-not-a-port";
+      outside =
+        map
+          (
+            fixed:
+            claimed {
+              proto = "tcp";
+              inherit fixed;
+            }
+          )
+          [
+            0
+            (-1)
+            65536
+          ];
+      inside = claimed {
+        proto = "tcp";
+        fixed = 65535;
+      };
+    in
+    {
+      expr = {
+        rows = map (result: countById id result) outside;
+        severity = map (result: severityById id result) outside;
+        namesTheRange = map (result: hasInfix "1 to 65535" (evidenceById id result)) outside;
+        allocated = map (result: result.plan."i:only@one" ? alloc) outside;
+        applicable = map (result: result.applicable) outside;
+        theBoundIsAdmitted = {
+          rows = rowIds inside;
+          alloc = inside.plan."i:only@one".alloc.ports;
+        };
+      };
+      expected = {
+        rows = [
+          1
+          1
+          1
+        ];
+        severity = [
+          "error"
+          "error"
+          "error"
+        ];
+        namesTheRange = [
+          true
+          true
+          true
+        ];
+        allocated = [
+          false
+          false
+          false
+        ];
+        applicable = [
+          false
+          false
+          false
+        ];
+        theBoundIsAdmitted = {
+          rows = [ ];
+          alloc.ssh = 65535;
+        };
+      };
+    };
+
+  testAPortClaimDeclaringCount =
+    let
+      id = "declaration-unknown-key";
+      result = claimed {
+        proto = "tcp";
+        fixed = 8000;
+        count = 4;
+      };
+    in
+    {
+      expr = {
+        rows = countById id result;
+        severity = severityById id result;
+        namesClaim = hasInfix "port claim `ssh`" (messageById id result);
+        namesTheKey = hasInfix "declares `count`" (messageById id result);
+        namesWhatAClaimReads = hasInfix "`proto`, `fixed`, `address`" (messageById id result);
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = 1;
+        severity = "error";
+        namesClaim = true;
+        namesTheKey = true;
+        namesWhatAClaimReads = true;
+        applicable = false;
+      };
+    };
+
+  testAClaimWhoseProtocolIsRefusedKeepsItsNumber =
+    let
+      id = "port-claim-protocol-unknown";
+      result = claimed {
+        proto = "TCP";
+        fixed = 5432;
+      };
+      entry = result.plan."i:only@one";
+    in
+    {
+      expr = {
+        rows = countById id result;
+        severity = severityById id result;
+        alloc = entry.alloc.ports;
+        received = entry.units.main.command;
+        recordedFields = attrNames entry.alloc;
+      };
+      expected = {
+        rows = 1;
+        severity = "error";
+        alloc.ssh = 5432;
+        received = "/bin/sshd -p 5432";
+        recordedFields = [ "ports" ];
+      };
+    };
+
+  testAProtocolOutsideTheDomain =
+    let
+      id = "port-claim-protocol-unknown";
+      result = claimed {
+        proto = "sctp";
+        fixed = 5432;
+      };
+    in
+    {
+      expr = {
+        rows = countById id result;
+        severity = severityById id result;
+        namesClaim = hasInfix "port claim `ssh`" (messageById id result);
+        namesTheValue = hasInfix "\"sctp\"" (messageById id result);
+        namesTheDomain = hasInfix "`tcp`, `udp`" (evidenceById id result);
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = 1;
+        severity = "error";
+        namesClaim = true;
+        namesTheValue = true;
+        namesTheDomain = true;
+        applicable = false;
+      };
+    };
+
+  testAnAddressSpelledAsTheWildcard =
+    let
+      id = "port-claim-address-malformed";
+      spellings =
+        map
+          (
+            address:
+            claimed {
+              proto = "tcp";
+              fixed = 5432;
+              inherit address;
+            }
+          )
+          [
+            "0.0.0.0"
+            "::"
+            "[::]"
+            "*"
+          ];
+    in
+    {
+      expr = {
+        rows = map (result: countById id result) spellings;
+        severity = map (result: severityById id result) spellings;
+        resolutionNamesOmittingTheField = map (
+          result: hasInfix "omit the key for every address of the machine" (resolutionById id result)
+        ) spellings;
+        numberRecorded = map (result: result.plan."i:only@one".alloc.ports.ssh) spellings;
+      };
+      expected = {
+        rows = [
+          1
+          1
+          1
+          1
+        ];
+        severity = [
+          "error"
+          "error"
+          "error"
+          "error"
+        ];
+        resolutionNamesOmittingTheField = [
+          true
+          true
+          true
+          true
+        ];
+        numberRecorded = [
+          5432
+          5432
+          5432
+          5432
+        ];
+      };
+    };
+
+  # A refused address widens the claim rather than narrowing it, which is
+  # observable as the contention the second claim still earns.
+  testAnAddressOutsideTheAddressGrammar =
+    let
+      id = "port-claim-address-malformed";
+      notAString = claimed {
+        proto = "tcp";
+        fixed = 5432;
+        address = [ ];
+      };
+      refusedGrammar = claimed {
+        proto = "tcp";
+        fixed = 5432;
+        address = "10.0.0.11:5432/tcp";
+      };
+      widened =
+        claimedBoth
+          {
+            proto = "tcp";
+            fixed = 5432;
+            address = [ ];
+          }
+          {
+            proto = "tcp";
+            fixed = 5432;
+            address = "10.0.0.11";
+          };
+    in
+    {
+      expr = {
+        rows = map (result: countById id result) [
+          notAString
+          refusedGrammar
+        ];
+        severity = severityById id notAString;
+        namesClaim = hasInfix "port claim `ssh`" (messageById id notAString);
+        namesTheGrammar = hasInfix "letters, digits and `:._%-`" (evidenceById id notAString);
+        numberRecorded = notAString.plan."i:only@one".alloc.ports.ssh;
+        comparedAsEveryAddress = countById "entry-port-claimed-twice" widened;
+      };
+      expected = {
+        rows = [
+          1
+          1
+        ];
+        severity = "error";
+        namesClaim = true;
+        namesTheGrammar = true;
+        numberRecorded = 5432;
+        comparedAsEveryAddress = 1;
       };
     };
 
