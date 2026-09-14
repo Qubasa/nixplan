@@ -44,7 +44,7 @@ let
       platform
       ;
   };
-  plan = import ./plan.nix { inherit util diag; };
+  plan = import ./plan.nix { inherit util diag module; };
 
   defaultSources = {
     deployment = "deployment/instances.nix";

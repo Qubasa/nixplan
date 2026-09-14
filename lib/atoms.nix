@@ -90,4 +90,15 @@ korora
   userName = korora.typedef "userName" (
     v: isString v && match "[a-z_][0-9a-z_-]{0,30}[$]?" v != null
   );
+
+  # A directory a service manager creates for a unit, named relative to the root
+  # its kind implies. A name stating a root of its own fails this rather than
+  # earning an identifier: the kind decides where the directory lives.
+  directoryName = korora.typedef "directoryName" (
+    v: isString v && match "[0-9A-Za-z_][0-9A-Za-z_.-]*(/[0-9A-Za-z_][0-9A-Za-z_.-]*)*" v != null
+  );
+
+  # A path on the machine as a unit states it. Relative resolves against nothing
+  # a plan records, and whitespace is what a directive line cannot carry.
+  absolutePath = korora.typedef "absolutePath" (v: isString v && match "/[^[:space:]]*" v != null);
 }
