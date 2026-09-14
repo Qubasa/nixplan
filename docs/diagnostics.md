@@ -128,6 +128,9 @@ discipline and deduplication applied).
 | `vars-reads-cycle` | a generator transitively reads itself; the recorded reads of every generator in the cycle are dropped |
 | `capability-consumers-malformed` | a capability's `consumers` is neither `one` nor `many`; the value is not recorded and the capability is taken by any number of slots |
 | `port-claim-not-fixed` | a port claim with no `fixed`; this subset allocates nothing |
+| `port-claim-not-a-port` | a port claim's `fixed` is not an integer of 1 to 65535. The claim is recorded nowhere, so nothing compares it, and a number written as text is not read as the number it spells |
+| `port-claim-protocol-unknown` | a port claim's `proto` is outside `tcp` / `udp`; the row names the domain, the number is still recorded and the claim is compared as though it stated no protocol |
+| `port-claim-address-malformed` | a port claim's `address` is not one address, a wildcard spelling included. The absence of the key is already every address of the machine, the number is still recorded and the claim is compared as though it stated no address |
 | `vars-program-malformed` | a generator's `program` is not exactly one store path. Omitting the key is no row at all: a program is recorded as a literal string, neither run nor read here |
 | `name-carries-key-separator` | a machine, an instance, a member or a generator is named with `/`, `@` or `:`. A plan key is `<instance>:<member>@<machine>` and a generated value's is `<instance>:vars/<generator>@<machine>`, so such a name produces a key that takes apart into parts nothing declared. The named thing is left out of every key the plan builds |
 
@@ -236,12 +239,14 @@ collides with nothing. Two units of one entry recording one directory is one
 claim too: the claimant is the entry. Each row names every claimant, the machine
 and the resource, is reported once for one collision with the first of the
 colliding plan keys as its subject, and resolves to deriving the resource from
-`instance` and `member`, the pair the entry's own key is built from.
+`instance` and `member`, the pair the entry's own key is built from. A port
+resolves to that or to stating the `address` each listener binds, two addresses
+of one machine being two listeners.
 
 | id | Raised when |
 | --- | --- |
 | `entry-host-path-claimed-twice` | two entries placed on one machine declare a configuration file at one host path, so the entry applied last is the one whose rendering survives |
-| `entry-port-claimed-twice` | two entries placed on one machine claim one fixed port with one protocol, so every entry after the first cannot bind. The protocol is part of the claim, so a TCP listener and a UDP listener on one number are two claims |
+| `entry-port-claimed-twice` | two entries placed on one machine claim one number whose protocols and whose addresses both overlap, so every entry after the first cannot bind. Two protocols overlap when they are the same or either claim states none, an unstated protocol claiming the number on every protocol of the domain; two addresses overlap when they are the same or either claim states none, an unstated address being every address of the machine. Two claims of one number binding two different addresses are two listeners that run, and are no row. Overlap is not equality, so one claim can take part in more than one collision and each row names its own claimants, protocol and address |
 | `entry-unit-directory-shared` (warning) | two entries placed on one machine record one unit directory name under `runtimeDirectory`, `stateDirectory` or `cacheDirectory`. A warning rather than an error: the service manager deletes a runtime directory when its unit restarts, and a shared state directory is a handoff a deployment may intend |
 
 ### Every row the deployment build can produce

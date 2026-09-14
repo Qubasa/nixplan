@@ -140,19 +140,33 @@ Recorded so the question is answered once.
   identifiers the table owes a reader while still raising. Merging the two makes the purity scan
   report a realiser's own `throw` as a defect, which is how the lists first came apart.
 - A host resource two entries of one machine both claim is a row, and the three claims are read off
-  what the plan already records: a `configData` host path, a `claims.ports.<name>` protocol and
-  fixed number, and a unit directory an extension application records under `runtimeDirectory`,
-  `stateDirectory` or `cacheDirectory` - the last read by name the way `supplementaryGroups` is,
-  which names no realiser. `entry-host-path-claimed-twice` and `entry-port-claimed-twice` are
-  errors, because two writers of one file and two listeners on one port are contradictions where
-  neither declaration can be honoured. `entry-unit-directory-shared` is a warning, because the
-  destructive case is `runtimeDirectory`, which the service manager deletes when its unit restarts,
-  while a shared `stateDirectory` is a handoff two entries of one instance may intend: the row names
-  it and the build still happens. A claim carries the field it was recorded under, so a state
-  directory and a runtime directory of one name are two claims. The index is built in `entries`,
-  which is the only site holding every placed entry, from claims each `placedEntry` returns off its
-  pre-pruned records, and it is two `groupBy` passes over one flat list - machine, then resource -
-  rather than a comparison of each entry against the others.
+  what the plan already records: a `configData` host path, a `claims.ports.<name>` record, and a
+  unit directory an extension application records under `runtimeDirectory`, `stateDirectory` or
+  `cacheDirectory` - the last read by name the way `supplementaryGroups` is, which names no
+  realiser. `entry-host-path-claimed-twice` and `entry-port-claimed-twice` are errors, because two
+  writers of one file and two listeners on one port are contradictions where neither declaration
+  can be honoured. `entry-unit-directory-shared` is a warning, because the destructive case is
+  `runtimeDirectory`, which the service manager deletes when its unit restarts, while a shared
+  `stateDirectory` is a handoff two entries of one instance may intend: the row names it and the
+  build still happens. A claim carries the field it was recorded under, so a state directory and a
+  runtime directory of one name are two claims. The index is built in `entries`, which is the only
+  site holding every placed entry, from claims each `placedEntry` returns off its pre-pruned
+  records, and it is two `groupBy` passes over one flat list - machine, then resource - rather than
+  a comparison of each entry against the others.
+- A port claim has three typed fields and the reading normalises it before anything compares it:
+  `fixed` is a `port` atom, `proto` is a `protocol` over `domains.protocol`, and `address` is a
+  `bindAddress`. An unstated protocol is every protocol of the domain and an unstated address is
+  every address of the machine, because the question the index answers is whether two listeners
+  could contend and "the author did not say" answers yes. The wildcard therefore has no spelling:
+  `0.0.0.0` and `::` are refused, two spellings of one reading being what `toJSON` gave the number
+  before it was typed. A refused protocol or address widens the claim, since the number is still
+  good and dropping the claim would make a refusal check less than no refusal; a refused number
+  drops the claim, there being nothing left to record. Neither field reaches `alloc`, which stays
+  `mapAttrs (_: claim: claim.fixed)`, so neither is in `keyInput.alloc` and a claim that adopts an
+  address keys as it did. An address a deployment varies still re-keys, through
+  `keyInput.settings`. Overlap is not equality, so the ports group is bucketed by spelling and its
+  buckets compared pairwise inside one `(machine, number)` group rather than by one grouping key,
+  and one claim may earn more than one row.
 - `implArgs` hands an implementation `member` beside `instance` and `machine`, so a module can name
   a resource after its own entry rather than after itself: the pair is what every plan key of that
   member is built from, and a member name that would make the pair ambiguous is refused before any
