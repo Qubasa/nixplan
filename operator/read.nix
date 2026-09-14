@@ -164,6 +164,11 @@ let
       hostPaths = imageReader.hostPaths { inherit key entry; };
       unassemblable =
         if realiser == "flakelet" then filter (p: !(flakeletReader.acceptsHostPath p)) hostPaths else [ ];
+      uninstallable =
+        if realiser == "flakelet" then
+          filter (p: flakeletReader.acceptsHostPath p && !(flakeletReader.acceptsRecord p)) hostPaths
+        else
+          [ ];
       refusedNames =
         if realiser == "flakelet" && !(flakeletReader.acceptsName name) then
           [
@@ -302,6 +307,16 @@ let
                 resolution = "state ${quote "image"} for ${quote key}, or stop declaring the ${p.kind} the path is assembled from";
               }
             ) unassemblable
+            ++ map (
+              p:
+              planner.error {
+                id = "operator-entry-path-not-installable";
+                subject = key;
+                message = "entry ${quote key} is stated to be realised by ${quote realiser} and is shown the host path ${quote p.path}, whose declaration states ${quote (imageReader.recordOf p)}, and ${flakeletReader.recordRule}";
+                evidence = "a realisation statement decides which realiser meets the entry, and this one binds a store object rather than installing a file on the machine";
+                resolution = "state ${quote (imageReader.recordOf imageReader.storeRecord)} on ${quote p.path} in the module, or state ${quote "image"} for ${quote key}";
+              }
+            ) uninstallable
             ++ map (
               f:
               planner.error {

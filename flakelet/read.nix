@@ -40,6 +40,7 @@ let
     nameRefused.id = "operator-entry-name-refused";
     unitRefused.id = "operator-entry-name-refused";
     pathNotAssembled.id = "operator-entry-path-not-assembled";
+    pathNotInstallable.id = "operator-entry-path-not-installable";
   };
 
   fail = _account: message: throw "planner flakelet: ${message}";
@@ -131,6 +132,15 @@ let
       p.disposition == "source" || p.disposition == "literal"
     else
       p.from == p.path;
+
+  # The second half, over the record rather than the bytes. A unit binds a store
+  # object here, and a store object carries one ownership and one mode, so a file
+  # whose declaration asks for another is a file only a realiser that installs on
+  # the machine can show. A generated file's record is the delivery's and not
+  # this realiser's, which is why only a configuration file is asked.
+  recordRule = "a configuration file this realiser shows carries the record a store object carries, ${reader.recordOf reader.storeRecord}, because it binds store objects and runs no step on the machine to install another";
+
+  acceptsRecord = p: p.kind != "configuration-file" || !p.install;
 in
 {
   inherit
@@ -139,9 +149,11 @@ in
     nameRule
     unitRule
     pathRule
+    recordRule
     acceptsName
     acceptsUnit
     acceptsHostPath
+    acceptsRecord
     accounts
     ;
 
@@ -158,6 +170,10 @@ in
       refusedUnits = filter (file: !(acceptsUnit image.name file)) (filesOf image);
 
       shownPaths = sort (a: b: a.path < b.path) (filter (p: !(acceptsHostPath p)) image.hostPaths);
+
+      shownRecords = sort (a: b: a.path < b.path) (
+        filter (p: acceptsHostPath p && !(acceptsRecord p)) image.hostPaths
+      );
     in
     if !(acceptsName image.name) then
       fail accounts.nameRefused "entry ${quote key} derives the service name ${quote image.name}, which the endpoint refuses: ${nameRule}"
@@ -170,6 +186,11 @@ in
       fail accounts.pathNotAssembled "entry ${quote key} is shown the host path ${quote first.path}, whose recipe reads ${
         quote (first.needs or first.from)
       }: ${pathRule}"
+    else if shownRecords != [ ] then
+      let
+        first = head shownRecords;
+      in
+      fail accounts.pathNotInstallable "entry ${quote key} is shown the host path ${quote first.path}, whose declaration states ${quote (reader.recordOf first)}: ${recordRule}"
     else
       image;
 
