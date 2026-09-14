@@ -12,7 +12,6 @@
 
   claims.ports.http = {
     proto = "tcp";
-    count = 1;
     fixed = settings.port;
   };
 
