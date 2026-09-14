@@ -228,6 +228,22 @@ discipline and deduplication applied).
 | `declaration-field-missing` | a field of the deployment's own half - a machine, an instance, a member's placement or a wire - is absent where the reading needs one. A key the reading cannot default is reported rather than read as an empty value |
 | `declaration-field-malformed` | the same field carries a value of the wrong kind. The deployment's half is read with the tolerance the module's half is read with, so the rest of the deployment is still read |
 
+### What two entries of one machine both claim
+
+A claim is read off what the plan already records, and a row is per machine, so
+one member placed on two machines claims its resources on each of them and
+collides with nothing. Two units of one entry recording one directory is one
+claim too: the claimant is the entry. Each row names every claimant, the machine
+and the resource, is reported once for one collision with the first of the
+colliding plan keys as its subject, and resolves to deriving the resource from
+`instance` and `member`, the pair the entry's own key is built from.
+
+| id | Raised when |
+| --- | --- |
+| `entry-host-path-claimed-twice` | two entries placed on one machine declare a configuration file at one host path, so the entry applied last is the one whose rendering survives |
+| `entry-port-claimed-twice` | two entries placed on one machine claim one fixed port with one protocol, so every entry after the first cannot bind. The protocol is part of the claim, so a TCP listener and a UDP listener on one number are two claims |
+| `entry-unit-directory-shared` (warning) | two entries placed on one machine record one unit directory name under `runtimeDirectory`, `stateDirectory` or `cacheDirectory`. A warning rather than an error: the service manager deletes a runtime directory when its unit restarts, and a shared state directory is a handoff a deployment may intend |
+
 ### Every row the deployment build can produce
 
 These are the rows about the realisation statement, and about the statement

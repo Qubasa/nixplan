@@ -199,6 +199,8 @@ let
     "take-effect-on-a-second-apply/specs/operator/machine-report/spec.md"
     "take-effect-on-a-second-apply/specs/realiser/flakelet-artifact/spec.md"
     "take-effect-on-a-second-apply/specs/realiser/portable-service-image/spec.md"
+    "refuse-two-entries-claiming-one-host-resource/specs/planner/diagnostics/spec.md"
+    "refuse-two-entries-claiming-one-host-resource/specs/planner/plan-artifact/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed

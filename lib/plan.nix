@@ -630,6 +630,132 @@ rec {
       }
     ) delivered;
 
+  # The three host resources the plan already records, and the row two entries of
+  # one machine claiming one of them earn. Two writers of one file and two
+  # listeners on one port are contradictions, while a shared directory is
+  # destructive for `runtimeDirectory` and a handoff a deployment may intend for
+  # `stateDirectory`, so the third is a warning and the build still happens.
+  hostResources = {
+    paths = {
+      id = "entry-host-path-claimed-twice";
+      row = diag.error;
+      what = name: "declare a configuration file at ${util.quote name}";
+      evidence = "a host path holds one file, so the entry applied last is the one whose rendering survives and the others are overwritten with nothing saying so";
+      resolution =
+        name:
+        "derive ${util.quote name} from the entry's own identity, which an implementation is handed as `instance` and `member`, or place the entries on different machines";
+    };
+    ports = {
+      id = "entry-port-claimed-twice";
+      row = diag.error;
+      what = name: "claim the port ${util.quote name}";
+      evidence = "one machine carries one listener per protocol and port, so every entry after the first cannot bind and the failure names neither declaration";
+      resolution =
+        name:
+        "claim a `fixed` port other than ${util.quote name} in one of them, derived from the entry's own identity an implementation is handed as `instance` and `member`, or place the entries on different machines";
+    };
+    directories = {
+      id = "entry-unit-directory-shared";
+      row = diag.warning;
+      what = name: "record the unit directory ${util.quote name}";
+      evidence = "the service manager deletes a runtime directory when its unit restarts, so two entries sharing one lose each other's files, and a shared state directory is a handoff only where both declarations intend one";
+      resolution =
+        name:
+        "derive ${util.quote name} from the entry's own identity, which an implementation is handed as `instance` and `member`, or leave it shared where both entries intend the handoff";
+    };
+  };
+
+  # A unit directory is whatever an extension application records under these
+  # three keys, under any backend, read the way a unit's declared groups are. The
+  # claim carries the field it was recorded under, because a state directory and
+  # a runtime directory of one name are two paths on the machine.
+  directoryFields = [
+    "cacheDirectory"
+    "runtimeDirectory"
+    "stateDirectory"
+  ];
+
+  directoriesOf =
+    unit:
+    concatLists (
+      util.mapAttrsToList (
+        _: fields:
+        concatMap (
+          field:
+          let
+            declared = fields.${field} or null;
+          in
+          if isList declared then
+            map (name: "${field}/${name}") (filter isString declared)
+          else if isString declared then
+            [ "${field}/${declared}" ]
+          else
+            [ ]
+        ) directoryFields
+      ) (unit.extends or { })
+    );
+
+  # A port claim compares the protocol beside the number, so a TCP listener and a
+  # UDP listener on one number are two claims. `count` is recorded and not
+  # expanded: one claim still states one number in this subset.
+  portsOf =
+    member:
+    util.mapAttrsToList (
+      name: fixed:
+      let
+        proto = member.declaration.claims.ports.${name}.proto or null;
+      in
+      "${if isString proto then proto else "unstated"}/${builtins.toJSON fixed}"
+    ) member.alloc.ports;
+
+  # One entry's claims, flat, each naming the claimant. Deduplication is per
+  # entry and happens here rather than after the collision test: two units of one
+  # entry recording one directory is one claim, the claimant being the entry.
+  claimsOf =
+    entry:
+    if !(entry ? claims) then
+      [ ]
+    else
+      concatMap (
+        kind:
+        map (name: {
+          key = entry.name;
+          inherit (entry.claims) machine;
+          inherit kind name;
+        }) (util.uniqueStrings entry.claims.${kind})
+      ) (builtins.attrNames hostResources);
+
+  # A host resource two entries of one machine both claim. The claims are one
+  # flat list grouped twice, by machine and then by resource, so the check costs
+  # the claims rather than their square, and one member placed on two machines
+  # claims under two machines rather than against itself. The row is one row for
+  # one collision, subjected to the first claimant in plan key order.
+  collisionRows =
+    claims:
+    concatLists (
+      util.mapAttrsToList (
+        machine: onMachine:
+        concatLists (
+          util.mapAttrsToList (
+            _: claimants:
+            let
+              keys = util.sortStrings (util.uniqueStrings (map (c: c.key) claimants));
+              resource = hostResources.${(head claimants).kind};
+              name = (head claimants).name;
+            in
+            util.optional (builtins.length keys > 1) (
+              resource.row {
+                inherit (resource) id evidence;
+                subject = head keys;
+                message = "entries ${util.quoteList keys} placed on ${util.quote machine} all ${resource.what name}";
+                resolution = resource.resolution name;
+              }
+            )
+          ) (builtins.groupBy (c: "${c.kind} ${c.name}") onMachine)
+        )
+      ) (builtins.groupBy (c: c.machine) claims)
+    );
+
   # The key hashes the instance, the service, the machine, the target, the pin, the
   # units, the store paths the entry declares, the values it was handed and the
   # keys it depends on.
@@ -678,6 +804,14 @@ rec {
     in
     {
       name = subject;
+      # The records the entry claims on its machine, taken from the pre-pruned
+      # values rather than from the plan, which drops an empty one.
+      claims = {
+        inherit machine;
+        paths = builtins.attrNames configData.record;
+        ports = portsOf member;
+        directories = concatMap directoriesOf (attrValues units);
+      };
       rows =
         let
           sites = mentionSites {
@@ -960,6 +1094,7 @@ rec {
     in
     {
       plan = machineEntries // listToAttrs varsEntries // listToAttrs serviceEntries;
-      rows = concatLists (map (e: e.rows) serviceEntries);
+      rows =
+        concatLists (map (e: e.rows) serviceEntries) ++ collisionRows (concatMap claimsOf serviceEntries);
     };
 }

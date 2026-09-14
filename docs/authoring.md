@@ -320,12 +320,13 @@ a missing `locked` or a field that is not a string is `pin-malformed`.
 ### The `impl` argument
 
 ```nix
-impl = { instance, machine, target, settings, vars, alloc, results }: { … };
+impl = { instance, member, machine, target, settings, vars, alloc, results }: { … };
 ```
 
 | Field | Is |
 | --- | --- |
 | `instance` | the instance name this placement belongs to |
+| `member` | the member name this placement is, which is the attribute key its composing root declared it under. The pair `instance` and `member` is what every plan key of this member is built from, so a path or a directory named after the two is unique among the entries of one machine by construction - which is what `entry-host-path-claimed-twice`, `entry-port-claimed-twice` and `entry-unit-directory-shared` resolve to |
 | `machine` | the machine name, or `null` at a member no placement selected |
 | `target` | `{ system, serviceManager, address }` — the reduced platform record of the machine's system, the service manager that runs its units, and the address it is reached at. Each field is present only where the registry declared it. **Absent** at a member no placement selected |
 | `settings` | resolved settings: defaults, then the deployment, then `fixed` |
@@ -333,7 +334,7 @@ impl = { instance, machine, target, settings, vars, alloc, results }: { … };
 | `alloc.ports.<claim>` | the fixed port the claim declared |
 | `results.<slot>` | **only the slots that delivered** (see below) |
 
-Those seven and nothing else. `target` is **absent** rather than null where
+Those eight and nothing else. `target` is **absent** rather than null where
 there is no placement to have a target, so an `impl` that destructures
 `{ target, ... }` or reads `args.target` unconditionally raises at an unplaced
 member — and that raise propagates for the same reason a refused read's does

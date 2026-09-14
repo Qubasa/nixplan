@@ -75,6 +75,41 @@ let
     };
   };
 
+  # A leaf naming a host path after the pair its own entry key is built from,
+  # which is the whole point of being handed the member it is.
+  namesItsOwnPath = _: {
+    impl =
+      { instance, member, ... }:
+      {
+        configData."/etc/${instance}-${member}.conf" = {
+          mode = "0644";
+          render = [ { text = "one\n"; } ];
+        };
+        units.only.command = "/bin/true";
+      };
+  };
+
+  ignorant = _: {
+    impl = _: {
+      units.only.command = "/bin/true";
+    };
+  };
+
+  partsOf =
+    key:
+    let
+      m = builtins.match "([^:]+):([^@]+)@(.*)" key;
+    in
+    {
+      instance = builtins.elemAt m 0;
+      member = builtins.elemAt m 1;
+    };
+
+  # The entry's configuration files, read through `pruned`: an entry recording
+  # none carries no field at all, so an implementation that produced nothing
+  # compares as an empty list rather than ending the evaluation.
+  pathsOf = result: key: builtins.attrNames (result.plan.${key}.configData or { });
+
   # The consumer records the names of what it received, so a refused slot is
   # observable without the test touching it and aborting the suite.
   consumer =
@@ -1291,13 +1326,13 @@ in
           reads = [ "publicKey" ];
         };
         impl =
-          { results, ... }:
+          { instance, results, ... }:
           {
             units.only = {
               command = "/bin/true";
               env.FOLDED = builtins.toJSON results.far;
             };
-            configData."/etc/identity" = {
+            configData."/etc/${instance}-identity" = {
               mode = "0444";
               reload = [ "only" ];
               render = [ { text = render results.far; } ];
@@ -1342,8 +1377,8 @@ in
       };
       authzUnit = result.plan."authz:only@one".units.only;
       hostsUnit = result.plan."hosts:only@one".units.only;
-      authzFile = result.plan."authz:only@one".configData."/etc/identity";
-      hostsFile = result.plan."hosts:only@one".configData."/etc/identity";
+      authzFile = result.plan."authz:only@one".configData."/etc/authz-identity";
+      hostsFile = result.plan."hosts:only@one".configData."/etc/hosts-identity";
     in
     {
       expr = {
@@ -2418,6 +2453,120 @@ in
           true
         ];
         applicable = false;
+      };
+    };
+
+  testAnImplementationDerivesANameFromItsOwnEntry =
+    let
+      result = planOf {
+        instances.svc = {
+          module = soleRoot { module = namesItsOwnPath; };
+          placement.every.only.machines = [ "one" ];
+        };
+      };
+      parts = partsOf "svc:only@one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        recorded = pathsOf result "svc:only@one";
+        fromItsPlanKey = [ "/etc/${parts.instance}-${parts.member}.conf" ];
+      };
+      expected = {
+        rows = [ ];
+        recorded = [ "/etc/svc-only.conf" ];
+        fromItsPlanKey = [ "/etc/svc-only.conf" ];
+      };
+    };
+
+  testTwoMembersOfOneInstanceDeriveTwoNames =
+    let
+      result = planOf {
+        instances.svc = {
+          module =
+            { service, ... }:
+            {
+              services = {
+                first = service "first" { module = namesItsOwnPath; };
+                second = service "second" { module = namesItsOwnPath; };
+              };
+            };
+          placement.every = {
+            first.machines = [ "one" ];
+            second.machines = [ "one" ];
+          };
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        first = pathsOf result "svc:first@one";
+        second = pathsOf result "svc:second@one";
+        differ = pathsOf result "svc:first@one" != pathsOf result "svc:second@one";
+      };
+      expected = {
+        rows = [ ];
+        first = [ "/etc/svc-first.conf" ];
+        second = [ "/etc/svc-second.conf" ];
+        differ = true;
+      };
+    };
+
+  testTheMemberHandedIsTheAttributeKeyOfTheMember =
+    let
+      result = planOf {
+        instances.svc = {
+          module =
+            { service, ... }:
+            {
+              services.pg = service "postgres" { module = namesItsOwnPath; };
+            };
+          placement.every.pg.machines = [ "one" ];
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        recorded = pathsOf result "svc:pg@one";
+      };
+      expected = {
+        rows = [ "member-name-disagrees" ];
+        recorded = [ "/etc/svc-pg.conf" ];
+      };
+    };
+
+  # The keys on the right were recorded before `member` was an argument, against
+  # a deployment whose modules read neither it nor the instance.
+  testAModuleThatIgnoresTheArgumentPlansAsItDid =
+    let
+      result = planOf {
+        instances = {
+          svc = {
+            module = soleRoot { module = ignorant; };
+            placement.every.only.machines = [ "one" ];
+          };
+          other = {
+            module = soleRoot { module = ignorant; };
+            placement.every.only.machines = [ "two" ];
+          };
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        keys = builtins.mapAttrs (_: entry: entry.key) result.plan;
+      };
+      expected = {
+        rows = [ ];
+        keys = {
+          "machine:one" = "sha256-565f8656738015bf";
+          "machine:two" = "sha256-37a3730f286e1675";
+          "other:only@two" = "sha256-b5ae99c220af2984";
+          "svc:only@one" = "sha256-ebcda56674bd296b";
+        };
       };
     };
 }

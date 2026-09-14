@@ -33,10 +33,12 @@ let
 
   inherit (support)
     countById
+    evidenceById
     hasInfix
     messageById
     planOf
     publicString
+    resolutionById
     root
     rowIds
     rowsById
@@ -246,6 +248,74 @@ let
     (placedOn machines module) // { settings.only = knobs; };
 
   keysOf = result: mapAttrs (_: entry: entry.key) result.plan;
+
+  # One instance whose members are all placed on one machine, which is the
+  # shortest deployment with two entries claiming anything of one host.
+  membersOn = machine: leaves: {
+    module =
+      { service, ... }:
+      {
+        services = mapAttrs (name: leaf: service name { module = leaf; }) leaves;
+      };
+    placement.every = mapAttrs (_: _: { machines = [ machine ]; }) leaves;
+  };
+
+  writesTo = path: _: {
+    impl = _: {
+      configData.${path} = {
+        mode = "0644";
+        render = [ { text = "one\n"; } ];
+      };
+      units.only.command = "/bin/true";
+    };
+  };
+
+  claimsPort = proto: fixed: _: {
+    claims.ports.listen = {
+      inherit proto fixed;
+      count = 1;
+    };
+    impl = _: {
+      units.only.command = "/bin/true";
+    };
+  };
+
+  runtimeDirectory = planner.unitExtension {
+    backend = "systemd";
+    name = "systemd-service";
+    fields.runtimeDirectory = {
+      type = planner.korora.string;
+    };
+  };
+
+  keepsRecordsIn = units: _: {
+    impl = _: {
+      units = builtins.listToAttrs (
+        map (unit: {
+          name = unit;
+          value = {
+            command = "/bin/true";
+            extends = [
+              {
+                extension = runtimeDirectory;
+                values.runtimeDirectory = "records";
+              }
+            ];
+          };
+        }) units
+      );
+    };
+  };
+
+  # A row's own text, or the empty string where the table carries no such row, so
+  # that a missing row is a comparison that failed rather than a coercion that
+  # ended the evaluation of every other test.
+  said =
+    field: id: result:
+    let
+      text = field id result;
+    in
+    if text == null then "" else text;
 in
 {
   testThePlanSerialises = {
@@ -2075,6 +2145,223 @@ in
           "machine:two"
           "svc:app@one"
           "svc:sidecar@one"
+        ];
+      };
+    };
+
+  testTwoEntriesOnOneMachineWriteOneHostPath =
+    let
+      result = planOf {
+        instances.svc = membersOn "one" {
+          first = writesTo "/etc/x.conf";
+          second = writesTo "/etc/x.conf";
+        };
+      };
+      id = "entry-host-path-claimed-twice";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        count = countById id result;
+        severity = severityById id result;
+        subjects = subjectsById id result;
+        names = map (needle: hasInfix needle (said messageById id result)) [
+          "`svc:first@one`"
+          "`svc:second@one`"
+          "`one`"
+          "`/etc/x.conf`"
+        ];
+        resolutionNamesTheEntrysIdentity = hasInfix "`instance` and `member`" (resolutionById id result);
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ id ];
+        count = 1;
+        severity = "error";
+        subjects = [ "svc:first@one" ];
+        names = [
+          true
+          true
+          true
+          true
+        ];
+        resolutionNamesTheEntrysIdentity = true;
+        applicable = false;
+      };
+    };
+
+  # The protocol is part of the claim, so the second deployment below claims one
+  # number twice and collides with nobody.
+  testTwoEntriesOnOneMachineClaimOnePort =
+    let
+      id = "entry-port-claimed-twice";
+      shared = planOf {
+        instances.svc = membersOn "one" {
+          first = claimsPort "tcp" 5432;
+          second = claimsPort "tcp" 5432;
+        };
+      };
+      crossProtocol = planOf {
+        instances.svc = membersOn "one" {
+          first = claimsPort "tcp" 5432;
+          second = claimsPort "udp" 5432;
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds shared;
+        severity = severityById id shared;
+        subjects = subjectsById id shared;
+        names = map (needle: hasInfix needle (said messageById id shared)) [
+          "`svc:first@one`"
+          "`svc:second@one`"
+          "`one`"
+          "`tcp/5432`"
+        ];
+        acrossProtocols = rowIds crossProtocol;
+        applicable = [
+          shared.applicable
+          crossProtocol.applicable
+        ];
+      };
+      expected = {
+        rows = [ id ];
+        severity = "error";
+        subjects = [ "svc:first@one" ];
+        names = [
+          true
+          true
+          true
+          true
+        ];
+        acrossProtocols = [ ];
+        applicable = [
+          false
+          true
+        ];
+      };
+    };
+
+  testTwoEntriesOnOneMachineShareOneUnitDirectory =
+    let
+      id = "entry-unit-directory-shared";
+      result = planOf {
+        instances.svc = membersOn "one" {
+          first = keepsRecordsIn [ "only" ];
+          second = keepsRecordsIn [ "only" ];
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        severity = severityById id result;
+        subjects = subjectsById id result;
+        names = map (needle: hasInfix needle (said messageById id result)) [
+          "`svc:first@one`"
+          "`svc:second@one`"
+          "`one`"
+          "`runtimeDirectory/records`"
+        ];
+        evidenceNamesTheRestart = hasInfix "deletes a runtime directory" (said evidenceById id result);
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ id ];
+        severity = "warning";
+        subjects = [ "svc:first@one" ];
+        names = [
+          true
+          true
+          true
+          true
+        ];
+        evidenceNamesTheRestart = true;
+        applicable = true;
+      };
+    };
+
+  testOneMemberPlacedOnTwoMachinesClaimsItsPathOnEach =
+    let
+      result = planOf {
+        instances.svc = placedOn [ "one" "two" ] (soleRoot {
+          module = writesTo "/etc/x.conf";
+        });
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        recorded = map (key: attrNames result.plan.${key}.configData) [
+          "svc:only@one"
+          "svc:only@two"
+        ];
+      };
+      expected = {
+        rows = [ ];
+        recorded = [
+          [ "/etc/x.conf" ]
+          [ "/etc/x.conf" ]
+        ];
+      };
+    };
+
+  testTwoUnitsOfOneEntryShareItsDirectory =
+    let
+      result = planOf {
+        instances.svc = membersOn "one" {
+          only = keepsRecordsIn [
+            "first"
+            "second"
+          ];
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        units = attrNames result.plan."svc:only@one".units;
+      };
+      expected = {
+        rows = [ ];
+        units = [
+          "first"
+          "second"
+        ];
+      };
+    };
+
+  testACollisionIsReportedOnceAndNamesBothEntries =
+    let
+      id = "entry-port-claimed-twice";
+      result = planOf {
+        instances.svc = membersOn "one" {
+          alpha = claimsPort "tcp" 5432;
+          beta = claimsPort "tcp" 5432;
+          gamma = claimsPort "tcp" 5432;
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        count = countById id result;
+        subjects = subjectsById id result;
+        names = map (needle: hasInfix needle (said messageById id result)) [
+          "`svc:alpha@one`"
+          "`svc:beta@one`"
+          "`svc:gamma@one`"
+        ];
+      };
+      expected = {
+        rows = [ id ];
+        count = 1;
+        subjects = [ "svc:alpha@one" ];
+        names = [
+          true
+          true
+          true
         ];
       };
     };
