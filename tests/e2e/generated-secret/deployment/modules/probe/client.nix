@@ -4,8 +4,7 @@
   attestation,
 }:
 
-{ settings, ... }:
-{
+_: {
   platforms = [ "x86_64-linux" ];
 
   uses.api = {
@@ -22,7 +21,17 @@
   };
 
   impl =
-    { results, ... }:
+    {
+      instance,
+      member,
+      results,
+      ...
+    }:
+    let
+      # Derived from the entry's own identity, and from nothing the generator
+      # answered, so the two plans this folder builds agree on it.
+      record = "/run/${instance}-${member}.json";
+    in
     {
       closure = [
         python3
@@ -36,7 +45,7 @@
           # A secret export resolves to its reference record, so the path is asked
           # for by name. Interpolating the export itself raises.
           TOKEN_FILE = results.api.secret.path;
-          RECORD_PATH = settings.recordPath;
+          RECORD_PATH = record;
         };
         # Oneshot and remaining after exit, so "the credential worked" is a unit state.
         oneShot = true;

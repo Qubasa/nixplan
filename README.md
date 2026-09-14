@@ -19,6 +19,13 @@ Main design goals:
 - Multiple instances having their own postgresql should be possible.
 - Multiple instance sharing a postgresql should be possible.
 
+A deployment declares intent and never plumbing. Instantiating a service twice is what the rule
+serves: a host path a unit needs is derived by the module that needs it, out of the identity of
+its own entry, or reaches that module through an export and a wire, so the second instance gets a
+path of its own instead of a collision. Two consequences are checked rather than remembered: no
+deployment declaration carries a host path, and a test that has to assert one reads it off the
+plan.
+
 ## What is where
 
 ```

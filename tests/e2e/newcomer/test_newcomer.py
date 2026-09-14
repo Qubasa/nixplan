@@ -86,7 +86,6 @@ MACHINES = (WORKSTATION, *TARGETS)
 
 ENTRY = "greeter:greet"
 UNIT = "greeter-greet-say.service"
-GREETING = "/run/hello.greeting"
 REALISER = "flakelet"
 
 # Where the workstation keeps the two things it is handed. The template becomes a
@@ -514,6 +513,21 @@ def built(workstation: Workstation) -> tuple[str, dict[str, Reported]]:
 
 
 @pytest.fixture(scope="session")
+def greeting(workstation: Workstation, built: tuple[str, dict[str, Reported]]) -> str:
+    """The host path the greeter writes, read off the plan the workstation built.
+
+    One more command on that machine rather than a constant here: the module
+    derives the path from the identity of its entry, and the workstation is where
+    the plan exists.
+    """
+    root, entries = built
+    plan = json.loads(workstation.vm.ssh_succeed(f"cat {root}/plan.json", timeout=BRIEF))
+    written = {str(plan[key]["units"]["say"]["env"]["GREET_PATH"]) for key in entries}
+    assert len(written) == 1, written
+    return written.pop()
+
+
+@pytest.fixture(scope="session")
 def applied(workstation: Workstation, built: tuple[str, dict[str, Reported]]) -> tuple[str, ...]:
     """The steps of the one apply this walk runs, as the command reported them."""
     assert built[1], "there was nothing to apply"
@@ -614,7 +628,10 @@ def test_the_documented_smallest_example_is_built(
 
 
 def test_one_apply_reaches_both_machines(
-    booted: Any, built: tuple[str, dict[str, Reported]], applied: tuple[str, ...]
+    booted: Any,
+    built: tuple[str, dict[str, Reported]],
+    applied: tuple[str, ...],
+    greeting: str,
 ) -> None:
     """One command run on the workstation, and both machines run what it built."""
     _, entries = built
@@ -626,12 +643,12 @@ def test_one_apply_reaches_both_machines(
 
         vm = booted.cluster.vm(name)
         assert vm.ssh_succeed(f"systemctl is-active {UNIT}", timeout=BRIEF).strip() == "active"
-        greeted = vm.ssh_succeed(f"cat {GREETING}", timeout=BRIEF).strip()
+        greeted = vm.ssh_succeed(f"cat {greeting}", timeout=BRIEF).strip()
         assert greeted == f"hello world from {entry.address}", greeted
 
 
 def test_the_machine_that_built_it_runs_none_of_it(
-    workstation: Workstation, applied: tuple[str, ...]
+    workstation: Workstation, applied: tuple[str, ...], greeting: str
 ) -> None:
     """The workstation deployed the plan and is not in it, so it runs nothing.
 
@@ -642,7 +659,7 @@ def test_the_machine_that_built_it_runs_none_of_it(
     assert applied, applied
     vm = workstation.vm
     assert vm.ssh(f"systemctl is-active {UNIT}", timeout=BRIEF).returncode != 0
-    assert vm.ssh(f"test -e {GREETING}", timeout=BRIEF).returncode != 0
+    assert vm.ssh(f"test -e {greeting}", timeout=BRIEF).returncode != 0
 
 
 def test_the_workstation_asks_both_machines_what_they_hold(

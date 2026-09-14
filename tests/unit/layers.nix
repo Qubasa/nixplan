@@ -756,6 +756,116 @@ let
   );
 
   deliveryText = readFile (e2eRoot + "/delivery.py");
+
+  # The roots a machine owns. A literal whose first segment is one of them is a
+  # host path; anything else beginning with a slash is a URL path, a path relative
+  # to the folder or a name of something else.
+  hostRoots = [
+    "etc"
+    "home"
+    "nix"
+    "opt"
+    "root"
+    "run"
+    "srv"
+    "tmp"
+    "usr"
+    "var"
+  ];
+
+  # A line split on the quote. The fragments between quotes are the string
+  # literals, and a quoted attribute name is one of them, which is how
+  # `configData."/etc/x"` is written and the one shape a scan over code alone
+  # would miss.
+  fragmentsOf = line: filter isString (split "\"" line);
+
+  hostRootOf =
+    fragment:
+    let
+      m = match "/([^/]+)(/.*)?" fragment;
+    in
+    if m == null then null else head m;
+
+  # Written out in full means nothing was interpolated into it. A path built from
+  # the identity of the entry that uses it carries the interpolation and passes.
+  hostPathsOfLine =
+    line:
+    filter (fragment: elem (hostRootOf fragment) hostRoots && !(hasInfix "\${" fragment)) (
+      fragmentsOf line
+    );
+
+  hostPathSitesOf =
+    folder: rels:
+    concatLists (
+      map (
+        rel:
+        concatLists (
+          map (
+            numbered:
+            map (path: {
+              inherit rel path;
+              inherit (numbered) line;
+            }) (hostPathsOfLine numbered.text)
+          ) (numberedLines (textOf folder rel))
+        )
+      ) rels
+    );
+
+  # The template a consumer copies is read with the folders' own: it is the first
+  # deployment a reader outside this repository writes from.
+  deploymentFilesOf =
+    folder:
+    filter (rel: match "(template/)?deployment/.*\\.nix" rel != null) (
+      filesUnder (e2eRoot + "/${folder}")
+    );
+
+  statedHostPaths = sorted (
+    concatLists (
+      map (
+        folder:
+        map (site: "tests/e2e/${folder}/${site.rel}:${toString site.line}: ${site.path}") (
+          hostPathSitesOf folder (deploymentFilesOf folder)
+        )
+      ) e2eNames
+    )
+  );
+
+  # A path both halves of a folder carry is the test agreeing with the deployment
+  # about a convention rather than reading what the deployment produced. A path
+  # only the test names is its own claim and is outside this.
+  restatementsBetween =
+    folder: declared: asserted:
+    concatLists (
+      map (
+        site:
+        map (other: "tests/e2e/${folder}: ${site.path} is in ${other.rel} and in ${site.rel}") (
+          filter (other: other.path == site.path) declared
+        )
+      ) asserted
+    );
+
+  restatementsIn =
+    folder:
+    restatementsBetween folder (hostPathSitesOf folder (deploymentFilesOf folder)) (
+      hostPathSitesOf folder (testFilesOf folder)
+    );
+
+  restatedHostPaths = uniqueNames (concatLists (map restatementsIn e2eNames));
+
+  ruleSentences = [
+    "A deployment declares intent and never plumbing"
+    "derived by the module that needs it"
+    "no deployment declaration carries a host path"
+    "reads it off the plan"
+  ];
+
+  # A sentence wraps, so the document is read with its line breaks flattened: the
+  # rule is a claim in words rather than in a line.
+  flattened = text: concatStringsSep " " (filter isString (split "[[:space:]]+" text));
+
+  ruleUnstated = map (needle: "README.md does not say ${needle}") (
+    filter (needle: !(hasInfix needle (flattened rootDocument))) ruleSentences
+  );
 in
 {
   testTheTestTreeIsRead = {
@@ -1013,6 +1123,100 @@ in
       copies = [ "deployment/modules/postgresql/databases.nix" ];
       composed = true;
       shared = true;
+    };
+  };
+
+  # The two halves are reported together, so a folder that fails is told which of
+  # them it failed and where.
+  testADeploymentStatesAHostPath = {
+    expr = {
+      stated = statedHostPaths;
+      restated = restatedHostPaths;
+    };
+    expected = {
+      stated = [ ];
+      restated = [ ];
+    };
+  };
+
+  testAUrlPathIsNotAHostPath = {
+    expr = {
+      classified = hostPathsOfLine "      destination = \"/index.html\";";
+      carried = builtins.any (line: hasInfix "\"/index.html\"" line) (
+        lines (textOf "wired-pair" "deployment/default.nix")
+      );
+    };
+    expected = {
+      classified = [ ];
+      carried = true;
+    };
+  };
+
+  testADerivedPathIsPermitted = {
+    expr = {
+      derived = hostPathsOfLine "      marker = \"/run/\${instance}-\${member}.ran\";";
+      stated = hostPathsOfLine "      marker = \"/run/cluster-sweep.ran\";";
+      quoted = hostPathsOfLine "      configData.\"/etc/postgresql/postgresql.conf\" = {";
+    };
+    expected = {
+      derived = [ ];
+      stated = [ "/run/cluster-sweep.ran" ];
+      quoted = [ "/etc/postgresql/postgresql.conf" ];
+    };
+  };
+
+  # The intersection over one folder's two halves. A deployment at the rule carries
+  # no full literal for a test to agree with, so the declared half of the failing
+  # case is written here rather than read off a folder.
+  testATestRestatesAPathItsDeploymentCarries = {
+    expr =
+      restatementsBetween "wired-pair"
+        [
+          {
+            rel = "deployment/modules/sweep/job.nix";
+            line = 11;
+            path = "/run/cluster-sweep.ran";
+          }
+        ]
+        [
+          {
+            rel = "test_wired_pair.py";
+            line = 95;
+            path = "/run/cluster-sweep.ran";
+          }
+        ];
+    expected = [
+      "tests/e2e/wired-pair: /run/cluster-sweep.ran is in deployment/modules/sweep/job.nix and in test_wired_pair.py"
+    ];
+  };
+
+  # Two folders whose test names a path of its own: a fake root one of them
+  # assembles under, and a path the other expects a machine to refuse.
+  testATestCarriesAPathOfItsOwn = {
+    expr =
+      let
+        pathsOf = folder: map (site: site.path) (hostPathSitesOf folder (testFilesOf folder));
+      in
+      {
+        fakeRoot = elem "/run/planner-assembly/stop-here" (pathsOf "portable-image");
+        refused = elem "/opt/vendor/greeter" (pathsOf "newcomer");
+        restated = restatementsIn "portable-image" ++ restatementsIn "newcomer";
+      };
+    expected = {
+      fakeRoot = true;
+      refused = true;
+      restated = [ ];
+    };
+  };
+
+  testTheRootDocumentStatesHowAPathReachesAUnit = {
+    expr = {
+      present = hasRootDocument;
+      unstated = ruleUnstated;
+    };
+    expected = {
+      present = true;
+      unstated = [ ];
     };
   };
 }

@@ -65,7 +65,6 @@ IDLE_MACHINE = "gamma"
 ISSUER_UNIT = "issuer-api-serve.service"
 PROBE_UNIT = "probe-client-fetch.service"
 IDLE_UNIT = "idle-job-mark.service"
-RECORD_PATH = "/run/secret-delivery-probe.json"
 MACHINES = (ISSUER_MACHINE, PROBE_MACHINE, IDLE_MACHINE)
 ATTRIBUTE = "planner-e2e-secret-delivery"
 USER = "root"
@@ -98,6 +97,11 @@ FLAKE = _env_path("PLANNER_E2E_FLAKE")
 GUEST_IMAGE = _env_path("PLANNER_E2E_GUEST_IMAGE")
 KEY = delivery.ssh_key(delivery.state_root(), _env_path("PLANNER_E2E_SSH_KEY"))
 DEPLOYMENT = _build(f"{FLAKE}#{ATTRIBUTE}")
+
+# The path the probe's own unit writes, read off the plan rather than restated:
+# the module derives it from the identity of its entry, so this is what a machine
+# will look at.
+RECORD_PATH = str(DEPLOYMENT.plan[PROBE_KEY]["units"]["fetch"]["env"]["RECORD_PATH"])
 
 
 def _value_source(root: Path, deployment: manifest.Deployment, token: str) -> Path:

@@ -696,6 +696,38 @@ silently unobserved.
   `flakelet` and `keyset`.
 - Build the individual check. Never `nix flake check` the whole flake.
 
+## No host path in a deployment
+
+- A deployment declares intent and never plumbing. A host path a unit needs is derived by the
+  module that needs it, out of the `instance` and `member` of its own entry, or reaches that
+  module through an export and a wire. `README.md` states the rule beside the design goal it
+  serves, and `layers.testTheRootDocumentStatesHowAPathReachesAUnit` reads four of its phrases
+  back off the document with its line breaks flattened, so deleting the sentence fails a check
+  naming the document and rewrapping the paragraph does not.
+- Two checks hold it, both in `tests/unit/layers.nix` and both reported by
+  `testADeploymentStatesAHostPath`, so a folder that fails is told which of them it failed. The
+  scan reads every `.nix` file under `tests/e2e/*/deployment/` and
+  `tests/e2e/*/template/deployment/`, splits each line on the quote and refuses a fragment
+  beginning with `/` whose first segment is one of `etc var run srv opt tmp usr home root nix`
+  and which carries no `${`. Splitting on the quote is what catches a quoted attribute name,
+  which is how `configData."/etc/..."` is written. The intersection refuses a path a folder's
+  `test_*.py` and its own deployment both carry: a test asserting a path reads it off the plan
+  it built, so the assertion is about where the deployment put it rather than about two files
+  agreeing.
+- A derived default is impossible, which is why the `recordPath`, `markerPath` and
+  `greetingPath` knobs were deleted rather than defaulted. A default is written in the composing
+  root, which is handed no instance (`lib/compose.nix:30-31`), so the path is built inside `impl`
+  where `instance` and `member` are.
+- Two exemptions. A path only a test knows is the test's own claim and stays:
+  `portable-image`'s `/run/planner-assembly` fake root and `newcomer`'s `/opt/vendor/greeter`.
+  And `fixtures/` and the unit suites' own deployments are outside the rule, because they
+  exercise the library's reading, are placed once by construction and have their paths compared
+  against goldens, so deriving one there would move a golden without claiming anything about a
+  machine.
+- The suite is nix-unit inside a pure evaluation, so the scan is a text scan and never
+  `ast-grep`. It reads string fragments rather than whole lines, or a comment naming `/etc`
+  fails it.
+
 ## End-to-end layer
 
 - `tests/e2e/guest.nix` restates the invariants of rookery's `nix/base-image-configuration.nix`.

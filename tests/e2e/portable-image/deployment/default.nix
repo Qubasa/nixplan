@@ -1,21 +1,16 @@
 # One deployment, two images: the entry this host attaches and the entry it
 # cannot, because no machine here runs its architecture.
 #
-# The two host paths and the report script are facts about this fixture and stay
-# here. So does the realisation statement: nothing in a plan says whether an
-# entry wants an image or a flakelet artifact, and this folder wants images.
+# The report script is a fact about this fixture and stays here. So does the
+# realisation statement: nothing in a plan says whether an entry wants an image
+# or a flakelet artifact, and this folder wants images. The host paths are the
+# watching module's own, derived there from the identity of its entry.
 {
   pkgs,
   planner,
   operator,
 }:
 let
-  paths = {
-    shown = "/var/lib/planner-portable/upstream.txt";
-    assembled = "/etc/planner-portable/report.conf";
-    quiet = "/etc/planner-portable/quiet.conf";
-  };
-
   reportOf =
     delivery:
     pkgs.writeShellScript "planner-portable-report" ''
@@ -56,7 +51,7 @@ let
   reportModuleOf = delivery: {
     services.default = import ./modules/report/default.nix {
       report = "${reportOf delivery}";
-      inherit reportFile paths grouped;
+      inherit reportFile grouped;
     };
   };
 

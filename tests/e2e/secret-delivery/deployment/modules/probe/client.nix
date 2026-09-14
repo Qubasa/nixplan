@@ -4,8 +4,7 @@
   tokenEndpoint,
 }:
 
-{ settings, ... }:
-{
+_: {
   platforms = [ "x86_64-linux" ];
 
   uses.api = {
@@ -22,7 +21,17 @@
   };
 
   impl =
-    { results, ... }:
+    {
+      instance,
+      member,
+      results,
+      ...
+    }:
+    let
+      # Derived from the entry's own identity, so two of these on one machine
+      # write two records rather than overwriting each other.
+      record = "/run/${instance}-${member}.json";
+    in
     {
       closure = [
         python3
@@ -37,7 +46,7 @@
           # for by name. Interpolating the export itself raises.
           TOKEN_FILE = results.api.token.path;
           CA_CERT = results.api.caCert;
-          RECORD_PATH = settings.recordPath;
+          RECORD_PATH = record;
         };
         # Oneshot and remaining after exit, so "the credential worked" is a unit state.
         oneShot = true;
