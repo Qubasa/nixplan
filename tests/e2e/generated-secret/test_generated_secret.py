@@ -38,6 +38,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -147,6 +148,31 @@ def _files_in(root: Path) -> list[Path]:
     return found
 
 
+def _emptied(root: Path) -> Path:
+    """Return ``root`` holding nothing, whatever an earlier run of this folder left.
+
+    The state root outlives a run, so a directory that is measured for residue
+    is emptied before the step that writes into it rather than after.
+    """
+    if root.exists():
+        shutil.rmtree(root)
+    root.mkdir(parents=True)
+    return root
+
+
+def _deploy_step(configuration: dict[str, Any]) -> Path:
+    """The delivery step `secrets/backend.nix` rendered for this plan, as a program.
+
+    The configuration records a derivation, because a configuration is written
+    before anything is realised, so what the tool runs is that derivation's own
+    output: the script beneath the wrapper that puts the operator's `ssh` and
+    `install` on its `PATH`.
+    """
+    remote = configuration["backends"]["store"]["age"]["deploy"]["remote"]
+    assert isinstance(remote, str) and remote.endswith(".drv"), remote
+    return _built(f"{remote}^out")
+
+
 @dataclass
 class Run:
     """The cluster, the tool, the backend the values live in, and the plan of them."""
@@ -169,6 +195,9 @@ class Run:
     output: str = ""
     steps: list[str] = field(default_factory=list)
     observed: dict[str, Any] = field(default_factory=dict)
+    # The directory the deploy step's temporaries are made in, emptied before the
+    # step runs so that what is in it afterwards is the step's own residue.
+    deploy_tmp: Path = Path()
 
     def vm(self, machine: str) -> Any:
         return self.cluster.vm(machine)
@@ -327,11 +356,13 @@ def delivered(generated: Run) -> Run:
     if run.observed.get("delivered"):
         return run
 
+    run.deploy_tmp = _emptied(run.root / "deploy-tmp")
     run.cluster.run(
         generation.deploy_argv(run.tool, CONFIGURATION),
         env={
             **os.environ,
             **run.env,
+            "TMPDIR": str(run.deploy_tmp),
             generation.SSH_OPTIONS_VARIABLE: delivery.guest_ssh_options(KEY),
         },
     )
@@ -519,3 +550,72 @@ def test_the_delivered_bytes_were_generated_not_written(delivered: Run) -> None:
     for machine in MACHINES:
         assert run.vm(machine).ssh(f"test -e {run.value_path(ROOT_VALUE, 'key')}").returncode != 0
     assert run.vm(IDLE_MACHINE).ssh("test -e /run/vars/issuer").returncode != 0
+
+
+def _delivered_secret(run: Run) -> str:
+    """The bytes of the delivered secret, read back off the machines that hold it."""
+    held = {
+        machine: run.vm(machine).ssh_succeed(f"cat {run.value_path(TOKEN_VALUE, 'secret')}").strip()
+        for machine in (ISSUER_MACHINE, PROBE_MACHINE)
+    }
+    assert held[ISSUER_MACHINE] == held[PROBE_MACHINE]
+    secret = held[ISSUER_MACHINE]
+    assert isinstance(secret, str) and HEX.match(secret), secret
+    return secret
+
+
+def test_a_completed_delivery_leaves_no_plaintext(delivered: Run) -> None:
+    """The step that delivered every pair left nothing of them where it fetched them.
+
+    `TMPDIR` of the deploy invocation is a directory of this run's own, emptied
+    before the step ran, so what is in it afterwards is the step's own residue.
+    Before the trap it held one plaintext file per pair per recipient machine.
+    """
+    run = delivered
+    secret = _delivered_secret(run)
+
+    left = _files_in(run.deploy_tmp)
+    for file in left:
+        assert secret not in file.read_text(errors="replace"), file
+    assert [file.name for file in left] == []
+
+
+def test_a_delivery_the_machine_refuses_leaves_no_plaintext(delivered: Run) -> None:
+    """A refused send exits the step non-zero and takes the file it fetched with it.
+
+    The fetch answers real bytes, the `get` the step names being this run's own
+    `age` backend, and the refusal is the operator's own `ssh`: this runs in the
+    pytest process rather than through the cluster, where the machine's address
+    resolves for nobody and `BatchMode` turns that into an exit rather than a
+    prompt. Nothing stands in for a program here - a verdict measured against an
+    invented `ssh` would be no verdict - and `ConnectTimeout` is the bound on
+    silence the command itself appends for the same reason.
+
+    That is the path `set -eu` leaves before any command written after the send,
+    which is why the removal is a trap rather than a trailing line.
+    """
+    run = delivered
+    secret = _delivered_secret(run)
+    into = _emptied(run.root / "refused")
+
+    ran = subprocess.run(
+        [str(_deploy_step(run.configuration))],
+        input=f"{run.names[TOKEN_VALUE]} secret\n",
+        env={
+            **os.environ,
+            **run.env,
+            "TMPDIR": str(into),
+            generation.SSH_OPTIONS_VARIABLE: (
+                f"{delivery.guest_ssh_options(KEY)} -o ConnectTimeout=5"
+            ),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert ran.returncode != 0, ran.stdout
+    left = _files_in(into)
+    for file in left:
+        assert secret not in file.read_text(errors="replace"), file
+    assert [file.name for file in left] == []
