@@ -1003,13 +1003,7 @@ rec {
             }
         );
 
-      unprintable = filter (
-        key:
-        let
-          value = record.env.${key};
-        in
-        builtins.isString value && builtins.match ".*[\n\r].*" value != null
-      ) (attrNames (record.env or { }));
+      unprintable = filter (found: util.carriesLineBreak found.value) (util.stringsDeep record);
 
       rows =
         map (
@@ -1064,13 +1058,13 @@ rec {
         )
         ++ builtins.concatLists (map (e: e.rows) extends)
         ++ map (
-          key:
+          found:
           diag.error {
             inherit subject;
-            id = "unit-env-value-newline";
-            message = "${where} sets ${util.quote key} to a value containing a line break";
-            evidence = "a unit file is line oriented, so an environment assignment has no second line to put the rest on";
-            resolution = "write ${util.quote key} as one line in ${module}, or write the bytes to a file the unit reads";
+            id = "unit-value-newline";
+            message = "${where} sets ${util.quote found.path} to a value containing a line break";
+            evidence = "a unit file is line oriented, so a value it carries has no second line to put the rest on, whatever field the value sits at";
+            resolution = "write ${util.quote found.path} as one line in ${module}, or write the bytes to a file the unit reads";
           }
         ) unprintable
         ++ util.optional delayWithoutPolicy (
@@ -1185,6 +1179,13 @@ rec {
         attrNames configFileTypes
       );
 
+      # The path is held to the grammar a rendered step can carry as one word,
+      # because three consumers read it and one renders it into a shell script.
+      # A refused path is left out of the record the way a name carrying a key
+      # separator is left out of every key it would have entered: a reader may
+      # be handed a plan whose table it never read.
+      refused = util.unrenderable path;
+
       rows =
         map (
           key:
@@ -1194,6 +1195,15 @@ rec {
             id = "implementation-unknown-key";
           }
         ) (util.extraKeys configFileKeys file)
+        ++ util.optional refused (
+          diag.error {
+            inherit subject;
+            id = "config-file-path-refused";
+            message = "${where} is at a host path this plan cannot record: a rendered step carries a path as one shell word of ASCII letters, digits, ${util.wordAdmits} and nothing else";
+            evidence = "the path reaches a generated shell script of the realisation, where a word outside the grammar is a word that ends the one it was written into; the file is not recorded";
+            resolution = "write the file at a path of ASCII letters, digits, ${util.wordAdmits} in ${subject}";
+          }
+        )
         ++ util.optional (builtins.length given != 1) (
           diag.error {
             inherit subject;
@@ -1262,6 +1272,7 @@ rec {
     in
     {
       inherit rows;
+      kept = !refused;
       record = {
         mode = if file ? mode && isString file.mode then file.mode else null;
         owner = if elem "owner" statedOwnership then file.owner else "root";

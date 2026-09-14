@@ -58,9 +58,10 @@ rather than written out, so a realiser is accounted for by existing, and the pai
 rather than a fragment of a message, so rewording a refusal changes nothing.
 
 A reading asks each realiser for the rules only it knows - `acceptsName`, `acceptsUnit`,
-`acceptsHostPath`, `confinement` and `backend` of `flakelet/read.nix`, `profileNames`, `denials`,
-`hostPaths` and `versionFor` of `image/read.nix`, `unrenderable` and `fail` of `secrets/read.nix` -
-and one rule therefore has one home, with the row and the raise saying the same thing.
+`acceptsHostPath`, `confinement` and `backend` of `flakelet/read.nix`, `acceptsName`,
+`acceptsUnit`, `profileNames`, `denials`, `hostPaths` and `versionFor` of `image/read.nix`,
+`unrenderable` and `fail` of `secrets/read.nix` - and one rule therefore has one home, with the row
+and the raise saying the same thing.
 
 `row`, `error` and `warning` are exported from the library, and every producer
 of a row uses them: they are what applies `util.oneLine` to a message, an
@@ -177,7 +178,7 @@ discipline and deduplication applied).
 | `unit-extension-unknown-field` | `values` assigns a key the extension does not declare |
 | `unit-extension-type-mismatch` | an assigned value fails its field's type |
 | `unit-extension-backend-mismatch` | the extension's `backend` is not the target machine's `serviceManager`; the fields are still recorded under that backend |
-| `unit-env-value-newline` | a unit's environment value carries a line break, which a unit file has no line to put |
+| `unit-value-newline` | a value a unit record carries at any depth holds a line break, which a unit file has no line to put; the row names the field path |
 | `unit-restart-delay-without-policy` | a unit declares `restartSec` and no `restart`, so the delay changes nothing; the delay is not recorded |
 | `unit-restart-contradicts-one-shot` | a `oneShot` unit declares `restart = "always"`, which restarts it for as long as it keeps succeeding; the policy is not recorded |
 | `unit-restart-on-scheduled` | a unit declares a `schedule` and a restart policy other than `no`, which is a second schedule nobody declared; the policy is not recorded |
@@ -189,6 +190,7 @@ discipline and deduplication applied).
 | `config-file-render-item` | a `render` item is neither one public literal nor one reference |
 | `config-file-disposition` | a file declares both `source` and `render`, or neither |
 | `config-file-ownership-malformed` | a configuration file's `owner` or `group` fails its type; the failing value is not recorded and the default is installed |
+| `config-file-path-refused` | a configuration file's host path carries a character outside the grammar a rendered step can carry as one shell word; the file is not recorded |
 
 ### Closures and pins
 

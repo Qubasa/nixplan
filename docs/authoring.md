@@ -420,6 +420,13 @@ that declared the unit it names, so no module can order itself against a unit a
 stranger may rename. A key outside the vocabulary — a service manager's raw
 stanza, for instance — is `implementation-unknown-key`.
 
+**A unit file is line oriented.** A value carrying a line break is
+`unit-value-newline`, wherever the record holds it: a command, an environment
+value, an element of a list, a field of an extension. The row names the field
+path, and the rule is over the record rather than over a list of fields, so a
+field added later is covered by it. A space, a quote and a backslash are facts a
+unit file can carry and are no row: escaping them is the renderer's work.
+
 **The restart domain is four values, not a service manager's seven.** The other
 three systemd carries are meaningless without a `Type=` or a `WatchdogSec=` this
 vocabulary does not carry, so a renderer maps these four to whatever its own
@@ -558,6 +565,13 @@ running as an account the record does not admit is
 imposed account is the image realiser's denial, and a realiser that binds store
 objects rather than installing files refuses a record a store object cannot
 carry (`operator-entry-path-not-installable`).
+
+**A host path is one shell word.** The attribute name reaches a generated shell
+script of the realisation, so it is held to ASCII letters, digits and
+`_`, `.`, `/`, `:`, `@`, `%`, `+`, `=`, `,`, `~`, `-`. A path outside that is
+`config-file-path-refused` and the file is left out of the entry record, the way
+a name carrying a key separator is left out of every key it would have entered.
+It is the same grammar the delivery step's paths and addresses are held to.
 
 A recipe's items are `{ text = <public literal>; }` or `{ ref = <path>; }`,
 exactly one of the two per item; anything else is `config-file-render-item`.

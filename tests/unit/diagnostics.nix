@@ -549,6 +549,42 @@ let
     )
   );
 
+  # The grammar of one word a rendered step can carry, as the literal a second
+  # statement of it would have to spell, and every file that could hold one:
+  # the library, the reading beside it, and the readings of the three realisers
+  # that render or refuse such a word.
+  wordGrammar = "[a-zA-Z0-9_./:@%+=,~-]";
+
+  grammarSources =
+    map (rel: {
+      label = "lib/${rel}";
+      file = libSource + "/${rel}";
+    }) libraryFiles
+    ++ [
+      {
+        label = "operator/read.nix";
+        file = operatorSource + "/read.nix";
+      }
+      {
+        label = "secrets/read.nix";
+        file = secretsSource + "/read.nix";
+      }
+      {
+        label = "image/read.nix";
+        file = imageSource + "/read.nix";
+      }
+      {
+        label = "flakelet/read.nix";
+        file = flakeletSource + "/read.nix";
+      }
+    ];
+
+  statingTheGrammar = sortStrings (
+    map (source: source.label) (
+      filter (source: hasInfix wordGrammar (builtins.readFile source.file)) grammarSources
+    )
+  );
+
   documentLines = support.lines (builtins.readFile (repoSource + "/docs/diagnostics.md"));
 
   documentedIds = sortStrings (
@@ -2253,7 +2289,7 @@ in
         unaccounted = [ ];
         namedByNoProducer = [ ];
         unexamined = [ ];
-        readSomeRefusals = 37;
+        readSomeRefusals = 39;
         readSomeProducers = true;
         theReadingProducesThem = [ ];
       };
@@ -2464,6 +2500,65 @@ in
           "vault-repo:server@vault"
         ];
         raised = [ ];
+      };
+    };
+
+  testOneGrammarAnswersForBothRenderedSteps =
+    let
+      words = [
+        "/run/vars/a/b/c"
+        "/etc/a b"
+        "/etc/a\"b"
+        "/etc/a$(b)"
+      ];
+      refusesPath =
+        path:
+        elem "config-file-path-refused" (
+          rowIds (planOf {
+            instances.svc = {
+              module = soleRoot {
+                module = _: {
+                  impl = _: {
+                    configData.${path} = {
+                      mode = "0644";
+                      render = [ { text = "one\n"; } ];
+                    };
+                    units.only.command = "/bin/true";
+                  };
+                };
+              };
+              placement.every.only.machines = [ "one" ];
+            };
+          })
+        );
+    in
+    {
+      expr = {
+        statedIn = statingTheGrammar;
+        theLibraryAnswers = map planner.util.unrenderable words;
+        theDeliveryReadingAnswers = map secretsReader.unrenderable words;
+        aConfigurationFilePathIsHeldToIt = map refusesPath words;
+      };
+      expected = {
+        statedIn = [ "lib/util.nix" ];
+        theLibraryAnswers = [
+          false
+          true
+          true
+          true
+        ];
+        theDeliveryReadingAnswers = [
+          false
+          true
+          true
+          true
+        ];
+        aConfigurationFilePathIsHeldToIt = [
+          false
+          true
+          true
+          true
+        ];
       };
     };
 

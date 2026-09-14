@@ -9,6 +9,7 @@
 let
   inherit (builtins)
     all
+    any
     attrNames
     concatLists
     concatStringsSep
@@ -1402,21 +1403,282 @@ in
     {
       expr = {
         rows = rowIds result;
-        severity = severityById "unit-env-value-newline" result;
-        subjects = subjectsById "unit-env-value-newline" result;
-        namesTheUnit = hasInfix "`say`" (messageById "unit-env-value-newline" result);
-        namesTheVariable = hasInfix "`MOTD`" (messageById "unit-env-value-newline" result);
+        severity = severityById "unit-value-newline" result;
+        subjects = subjectsById "unit-value-newline" result;
+        namesTheUnit = hasInfix "`say`" (messageById "unit-value-newline" result);
+        namesTheVariable = hasInfix "`env.MOTD`" (messageById "unit-value-newline" result);
         applicable = result.applicable;
         theEntryIsStillRead = attrNames result.plan."svc:only@one".units;
       };
       expected = {
-        rows = [ "unit-env-value-newline" ];
+        rows = [ "unit-value-newline" ];
         severity = "error";
         subjects = [ "svc:only@one" ];
         namesTheUnit = true;
         namesTheVariable = true;
         applicable = false;
         theEntryIsStillRead = [ "say" ];
+      };
+    };
+
+  testANewlineInACommandIsARow =
+    let
+      id = "unit-value-newline";
+      result = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = _: {
+            impl = _: {
+              units.say.command = "/bin/true\nUser=root";
+              units.quiet.command = "/bin/false";
+            };
+          };
+        });
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        severity = severityById id result;
+        subjects = subjectsById id result;
+        namesTheUnit = hasInfix "`say`" (said messageById id result);
+        namesTheField = hasInfix "`command`" (said messageById id result);
+        saysEnvironment = hasInfix "environment" (said evidenceById id result);
+        applicable = result.applicable;
+        theRestIsStillRead = attrNames result.plan."svc:only@one".units;
+      };
+      expected = {
+        rows = [ id ];
+        severity = "error";
+        subjects = [ "svc:only@one" ];
+        namesTheUnit = true;
+        namesTheField = true;
+        saysEnvironment = false;
+        applicable = false;
+        theRestIsStillRead = [
+          "quiet"
+          "say"
+        ];
+      };
+    };
+
+  testANewlineInAnExtensionValueIsTheSameRow =
+    let
+      id = "unit-value-newline";
+      result = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = _: {
+            impl = _: {
+              units.say = {
+                command = "/bin/true";
+                extends = [
+                  {
+                    extension = runtimeDirectory;
+                    values.runtimeDirectory = "records\nUser=root";
+                  }
+                ];
+              };
+            };
+          };
+        });
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        namesTheField = hasInfix "`extends.systemd.runtimeDirectory`" (said messageById id result);
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ id ];
+        namesTheField = true;
+        applicable = false;
+      };
+    };
+
+  testANewlineInAUserNameIsReportedOnceByItsType =
+    let
+      result = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = _: {
+            impl = _: {
+              units.say = {
+                command = "/bin/true";
+                user = "root\nPrivateUsers=no";
+              };
+            };
+          };
+        });
+      };
+      unit = result.plan."svc:only@one".units.say;
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        namesTheField = hasInfix "`user`" (said messageById "unit-field-type-mismatch" result);
+        recorded = unit ? user;
+        fields = attrNames unit;
+      };
+      expected = {
+        rows = [ "unit-field-type-mismatch" ];
+        namesTheField = true;
+        recorded = false;
+        fields = [ "command" ];
+      };
+    };
+
+  testAValueCarryingASpaceAndAQuoteIsNoRow =
+    let
+      value = ''one "two" three\four'';
+      result = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = _: {
+            impl = _: {
+              units.say = {
+                command = "/bin/true ${value}";
+                env.MOTD = value;
+              };
+            };
+          };
+        });
+      };
+      unit = result.plan."svc:only@one".units.say;
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        applicable = result.applicable;
+        command = unit.command;
+        motd = unit.env.MOTD;
+      };
+      expected = {
+        rows = [ ];
+        applicable = true;
+        command = "/bin/true ${value}";
+        motd = value;
+      };
+    };
+
+  testANewlineInAConfigurationFilePathIsARow =
+    let
+      id = "config-file-path-refused";
+      result = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = writesTo "/etc/one\n/etc/two";
+        });
+      };
+      entry = result.plan."svc:only@one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        severity = severityById id result;
+        subjects = subjectsById id result;
+        namesThePath = hasInfix "/etc/one" (said messageById id result);
+        namesWhatIsAdmitted = hasInfix "`~`" (said messageById id result);
+        configData = entry.configData or { };
+      };
+      expected = {
+        rows = [ id ];
+        severity = "error";
+        subjects = [ "svc:only@one" ];
+        namesThePath = true;
+        namesWhatIsAdmitted = true;
+        configData = { };
+      };
+    };
+
+  testAConfigurationFilePathCarryingAShellMetacharacterIsARow =
+    let
+      id = "config-file-path-refused";
+      result = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = writesTo "/etc/x$(id -u).conf";
+        });
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        applicable = result.applicable;
+        namesThePath = hasInfix "/etc/x$(id -u).conf" (said messageById id result);
+      };
+      expected = {
+        rows = [ id ];
+        applicable = false;
+        namesThePath = true;
+      };
+    };
+
+  testAConfigurationFilePathCarryingAQuoteIsARow =
+    let
+      id = "config-file-path-refused";
+      result = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = writesTo "/etc/a\"b.conf";
+        });
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        subjects = subjectsById id result;
+        theSubjectIsAPlanKey = subjectsById id result == [ "svc:only@one" ];
+        namesThePath = hasInfix "/etc/a\"b.conf" (said messageById id result);
+      };
+      expected = {
+        rows = [ id ];
+        subjects = [ "svc:only@one" ];
+        theSubjectIsAPlanKey = true;
+        namesThePath = true;
+      };
+    };
+
+  testARefusedPathIsLeftOutOfTheEntryRecord =
+    let
+      result = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = _: {
+            impl = _: {
+              configData."/etc/kept.conf" = {
+                mode = "0644";
+                render = [ { text = "one\n"; } ];
+              };
+              configData."/etc/x;rm -rf /.conf" = {
+                mode = "0644";
+                render = [ { text = "two\n"; } ];
+              };
+              units.only.command = "${openssh}/bin/ssh";
+              closure = [ openssh ];
+            };
+          };
+        });
+      };
+      entry = result.plan."svc:only@one";
+      mentions =
+        node:
+        if isAttrs node then
+          any (name: hasInfix "rm -rf" name || mentions node.${name}) (attrNames node)
+        else if isList node then
+          any mentions node
+        else if isString node then
+          hasInfix "rm -rf" node
+        else
+          false;
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        configData = attrNames entry.configData;
+        units = attrNames entry.units;
+        closure = entry.closure;
+        anywhereInThePlan = mentions result.plan;
+      };
+      expected = {
+        rows = [ "config-file-path-refused" ];
+        configData = [ "/etc/kept.conf" ];
+        units = [ "only" ];
+        closure = [ openssh ];
+        anywhereInThePlan = false;
       };
     };
 

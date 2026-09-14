@@ -4,6 +4,7 @@ let
   # flake's default.nix warns instead.
   korora = import "${inputs.korora}/types.nix";
   systems = inputs.nixpkgs.lib.systems;
+  nixpkgsLib = inputs.nixpkgs.lib;
   platformSource = inputs.nixpkgs.rev;
   folder = ./fixtures/minimal-typed-edge;
   planner = import ./lib { inherit korora systems platformSource; };
@@ -17,6 +18,7 @@ let
     inherit
       korora
       systems
+      nixpkgsLib
       platformSource
       folder
       changesRoot
@@ -75,6 +77,7 @@ in
         import ${./tests} {
           korora = import ${inputs.korora}/types.nix;
           systems = (import ${inputs.nixpkgs}/lib).systems;
+          nixpkgsLib = import ${inputs.nixpkgs}/lib;
           platformSource = "${platformSource}";
           folder = ${folder};
           libSource = ${./lib};

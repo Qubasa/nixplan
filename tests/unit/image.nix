@@ -2,13 +2,19 @@
   planner,
   support,
   imageSource,
+  nixpkgsLib,
 }:
 let
   inherit (builtins)
     attrNames
+    concatStringsSep
     elem
+    elemAt
     filter
+    genList
+    isString
     length
+    split
     tryEval
     ;
 
@@ -29,6 +35,111 @@ let
   assemble = name: text: "/nix/store/${planner.util.shortHash text}-${name}";
 
   reader = import (imageSource + "/read.nix") { inherit planner assemble; };
+
+  # The builder over that reading, so a suite can read the shell scripts it
+  # renders. Every derivation is answered by the same keyed fake path
+  # `assemble` answers with, except a script, which is answered by its own text:
+  # a script is a string this evaluation already holds and the derivation over
+  # it carries nothing else. `nixpkgsLib` is the real one the build spends, so
+  # what a test reads is what a machine runs.
+  fakeDrv =
+    name: text:
+    let
+      path = "/nix/store/${planner.util.shortHash text}-${name}";
+    in
+    {
+      inherit name;
+      outPath = path;
+    };
+
+  builderPkgs = {
+    lib = nixpkgsLib;
+    writeText = name: text: fakeDrv name text;
+    writeTextFile = { name, text }: fakeDrv name text;
+    writeShellScript = _name: text: text;
+    runCommand =
+      name: attrs: text:
+      fakeDrv name text // attrs // (attrs.passthru or { });
+    closureInfo = { rootPaths }: fakeDrv "closure-info" (toString rootPaths);
+    squashfsTools = fakeDrv "squashfs-tools" "";
+  };
+
+  builder = import imageSource {
+    inherit planner;
+    inherit (builderPkgs) lib;
+    pkgs = builderPkgs;
+  };
+
+  builtFrom =
+    {
+      profile ? "trusted",
+      key ? "svc:only@one",
+    }:
+    result:
+    builder.build {
+      plan = result.plan;
+      inherit key profile;
+    };
+
+  # The pieces of a script that sit between an odd and an even double quote,
+  # which is where a value the renderer interpolated bare would be a `$(…)` the
+  # machine runs.
+  insideDoubleQuotes =
+    text:
+    let
+      pieces = filter isString (split "\"" text);
+    in
+    map (i: elemAt pieces i) (filter (i: i - (i / 2) * 2 == 1) (genList (i: i) (length pieces)));
+
+  namedInsideQuotes = needle: text: filter (piece: hasInfix needle piece) (insideDoubleQuotes text);
+
+  # One entry with a staged configuration file, a reloading unit and a scheduled
+  # one, built, so what these tests read is the script text a machine runs.
+  staged =
+    let
+      result = planOf {
+        instances.svc = {
+          module = soleRoot {
+            module = _: {
+              vars.hostKey.files."key".secrecy = "secret";
+              impl =
+                { vars, ... }:
+                {
+                  closure = [ borgbackup ];
+                  units.only = {
+                    command = "${borgbackup}/bin/borg serve";
+                    reloadCommand = "${borgbackup}/bin/borg reload";
+                  };
+                  units.sweep = {
+                    command = "${borgbackup}/bin/borg prune";
+                    schedule = "daily";
+                  };
+                  configData."/etc/thing.conf" = {
+                    mode = "0400";
+                    reload = [ "only" ];
+                    render = [
+                      { text = "value = one\n"; }
+                      { ref = vars.hostKey."key".path; }
+                    ];
+                  };
+                };
+            };
+          };
+          placement.every.only.machines = [ "one" ];
+        };
+        varsState."svc:vars/hostKey@one"."key" = {
+          present = true;
+          content = "PRIVATE-KEY-BYTES";
+        };
+      };
+      built = builtFrom { } result;
+    in
+    {
+      inherit (built) attach detach check;
+      inherit (built.image) staging;
+      units = built.attachment.units;
+      path = "/etc/thing.conf";
+    };
 
   laptopMachines = support.machines // {
     laptop = support.laptop;
@@ -716,17 +827,55 @@ in
       expr = {
         refused = raises (withValue "-----BEGIN-----\nbytes\n-----END-----");
         oneLineOfTheSameBytesBuilds = raises (withValue "-----BEGIN----- bytes -----END-----");
-        # The planner reports the same condition first, and says which variable.
+        # The planner reports the same condition first, and says which field.
         theRowAboveTheRaise = support.rowIds broken;
-        namesTheVariable = hasInfix "`PEM`" (support.messageById "unit-env-value-newline" broken);
+        namesTheVariable = hasInfix "`env.PEM`" (support.messageById "unit-value-newline" broken);
         oneLineIsNoRow = support.rowIds whole;
       };
       expected = {
         refused = true;
         oneLineOfTheSameBytesBuilds = false;
-        theRowAboveTheRaise = [ "unit-env-value-newline" ];
+        theRowAboveTheRaise = [ "unit-value-newline" ];
         namesTheVariable = true;
         oneLineIsNoRow = [ ];
+      };
+    };
+
+  testACommandCarriesANewline =
+    let
+      withCommand =
+        value:
+        readOf { } (_: {
+          closure = [ borgbackup ];
+          units.web.command = value;
+        });
+      plannedWith =
+        value:
+        planned { } (_: {
+          closure = [ borgbackup ];
+          units.web.command = value;
+        });
+      smuggled = "${borgbackup}/bin/borg serve\nUser=root";
+      broken = (plannedWith smuggled).result;
+    in
+    {
+      expr = {
+        refused = raises (withCommand smuggled);
+        # The refusal is what stops the directive the module wrote from being a
+        # line of the file, so the rendering is the thing that has to raise.
+        noSecondDirective = raises (reader.renderUnit (withCommand smuggled) "web");
+        oneLineBuilds = raises (withCommand "${borgbackup}/bin/borg serve --foo");
+        theRowAboveTheRaise = support.rowIds broken;
+        namesTheUnit = hasInfix "`web`" (support.messageById "unit-value-newline" broken);
+        namesTheField = hasInfix "`command`" (support.messageById "unit-value-newline" broken);
+      };
+      expected = {
+        refused = true;
+        noSecondDirective = true;
+        oneLineBuilds = false;
+        theRowAboveTheRaise = [ "unit-value-newline" ];
+        namesTheUnit = true;
+        namesTheField = true;
       };
     };
 
@@ -1929,6 +2078,121 @@ in
           true
           true
         ];
+      };
+    };
+
+  testANameTheRuleAdmitsBuilds =
+    let
+      image = readOf { } (_: {
+        closure = [ borgbackup ];
+        units."borg-repo.v2" = {
+          command = "${borgbackup}/bin/borg serve";
+          schedule = "daily";
+        };
+      });
+      files = [
+        image.units."borg-repo.v2".file
+        image.units."borg-repo.v2".timer
+      ];
+    in
+    {
+      expr = {
+        read = raises image;
+        theNameIsAdmitted = reader.acceptsName image.name;
+        theFilesAreAdmitted = map (file: reader.acceptsUnit image.name file) files;
+        theRenderedNames = files;
+        # Every derived name this repository already carries.
+        inTheTree = map reader.acceptsName [
+          "vault-repo-server"
+          "watch-file"
+          "mirror-copy"
+        ];
+      };
+      expected = {
+        read = false;
+        theNameIsAdmitted = true;
+        theFilesAreAdmitted = [
+          true
+          true
+        ];
+        theRenderedNames = [
+          "svc-only-borg-repo.v2.service"
+          "svc-only-borg-repo.v2.timer"
+        ];
+        inTheTree = [
+          true
+          true
+          true
+        ];
+      };
+    };
+
+  testEveryPathAGeneratedScriptNamesIsEscaped = {
+    expr = {
+      # The scripts do name it, so the scan below is not a scan of nothing.
+      theAttachNamesIt = hasInfix staged.path staged.attach;
+      theCheckNamesIt = hasInfix staged.path staged.check;
+      bareInTheAttach = namedInsideQuotes staged.path staged.attach;
+      bareInTheCheck = namedInsideQuotes staged.path staged.check;
+      bareInTheDetach = namedInsideQuotes staged.path staged.detach;
+    };
+    expected = {
+      theAttachNamesIt = true;
+      theCheckNamesIt = true;
+      bareInTheAttach = [ ];
+      bareInTheCheck = [ ];
+      bareInTheDetach = [ ];
+    };
+  };
+
+  testAUnitListIsEscapedWordByWord =
+    let
+      wordByWord = concatStringsSep " " (map (unit: "'${unit}'") staged.units);
+      joined = concatStringsSep " " staged.units;
+    in
+    {
+      expr = {
+        theListIsMoreThanOneWord = length staged.units > 1;
+        stopped = hasInfix "systemctl stop ${wordByWord}" staged.attach;
+        started = hasInfix "systemctl start ${wordByWord}" staged.attach;
+        detached = hasInfix "systemctl stop ${wordByWord}" staged.detach;
+        joinedInTheAttach = hasInfix "systemctl stop ${joined}" staged.attach;
+        joinedInTheDetach = hasInfix "systemctl stop ${joined}" staged.detach;
+      };
+      expected = {
+        theListIsMoreThanOneWord = true;
+        stopped = true;
+        started = true;
+        detached = true;
+        joinedInTheAttach = false;
+        joinedInTheDetach = false;
+      };
+    };
+
+  testTheStagingDirectoryIsTraversableAndNotListable =
+    let
+      created = filter (line: hasInfix "install -d " line) (support.lines staged.attach);
+    in
+    {
+      expr = {
+        # One line creates the whole tree, so no component is left at the umask
+        # of whoever ran the script.
+        creating = length created;
+        atThatMode = map (line: hasInfix "install -d -m 0711 " line) created;
+        theEntrysOwnDirectory = map (line: hasInfix staged.staging line) created;
+        theFilesDirectory = map (line: hasInfix "${staged.staging}/files/etc" line) created;
+        nothingWidensIt = filter (line: hasInfix "0755" line) (support.lines staged.attach);
+        # The file's own mode is still the declaration's, set after the 0600
+        # the install creates it at.
+        theFileKeepsItsMode = hasInfix "chmod 0400 " staged.attach;
+      };
+      expected = {
+        creating = 1;
+        atThatMode = [ true ];
+        theEntrysOwnDirectory = [ true ];
+        theFilesDirectory = [ true ];
+        nothingWidensIt = [ ];
+        theFileKeepsItsMode = true;
       };
     };
 }

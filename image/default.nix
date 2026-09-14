@@ -137,6 +137,20 @@ in
 
       description = pkgs.writeText "${image.name}-attachment.json" (builtins.toJSON attachment);
 
+      # One shell word, quoted whether or not this value happens to need it.
+      # `lib.escapeShellArg`, which every argument below spends, leaves a word
+      # of safe-looking characters bare, and a rendering that quotes only what
+      # looks dangerous is one a reader cannot check by reading it.
+      quoted = value: "'${builtins.replaceStrings [ "'" ] [ "'\\''" ] value}'";
+
+      # What a message says a value is. The double-quoted string the message is
+      # written in is closed around the word, because a `$(…)` inside double
+      # quotes is a command substitution whatever the quoting within them. A
+      # grammar refuses such a value one layer above and this holds
+      # independently of it: the escape is what covers a value that reaches a
+      # script before its rule does.
+      escapedWord = value: "\"${quoted value}\"";
+
       # The literals and the references of one recipe, concatenated into a file the
       # caller created owner-only. Both the assembly and the staleness check go
       # through this, so the bytes a report compares are the bytes an attach writes.
@@ -151,7 +165,7 @@ in
               ''
             else
               ''
-                [ -e "$root"${lib.escapeShellArg item.ref} ] || fail "the reference ${item.ref} that ${file.path} is assembled from is not on this machine"
+                [ -e "$root"${lib.escapeShellArg item.ref} ] || fail "the reference ${escapedWord item.ref} that ${escapedWord file.path} is assembled from is not on this machine"
                 cat "$root"${lib.escapeShellArg item.ref} >> ${target}
               ''
           ) (if file.render == null then [ ] else file.render)
@@ -189,13 +203,10 @@ in
           candidate = if file.source != null then lib.escapeShellArg file.source else partial;
           ownership = lib.escapeShellArg "${file.owner}:${file.group}";
         in
-        ''
-          install -d -m 0755 "$root$(dirname ${lib.escapeShellArg file.staged})"
-        ''
-        + (
+        (
           if file.source != null then
             ''
-              [ -e ${lib.escapeShellArg file.source} ] || fail "the source of ${file.path} is not on this machine: ${file.source}"
+              [ -e ${lib.escapeShellArg file.source} ] || fail "the source of ${escapedWord file.path} is not on this machine: "${quoted file.source}
             ''
           else
             ''
@@ -212,7 +223,7 @@ in
             chown ${ownership} ${installing}
             chmod ${lib.escapeShellArg file.mode} ${installing}
             mv ${installing} ${staged}
-            echo "assembled ${file.path}"
+            echo "assembled "${quoted file.path}
             changed=1
             changed_${toString index}=1
           fi
@@ -236,6 +247,33 @@ in
       # store object the image already holds, so staging it would copy a store path
       # to `/run` to bind it back.
       staged = filter (f: f.computed && f.install) image.configFiles;
+
+      # Every directory the staging tree needs, each named rather than left to
+      # `install -d` to create along the way: a component install creates for
+      # itself is created at the umask and not at the mode, so a mode named for
+      # the leaf alone leaves the tree above it listable. The chain starts at
+      # the parent of the image's own directory, which holds one directory per
+      # attached entry, and stops there: `/run` is the machine's.
+      stagingDirectories =
+        let
+          under =
+            file:
+            let
+              parts = filter (p: p != "") (
+                lib.splitString "/" (lib.removePrefix image.staging (builtins.dirOf file.staged))
+              );
+            in
+            lib.genList (i: "${image.staging}/${concatStringsSep "/" (lib.take (i + 1) parts)}") (
+              builtins.length parts
+            );
+        in
+        lib.unique (
+          [
+            (builtins.dirOf image.staging)
+            image.staging
+          ]
+          ++ builtins.concatLists (map under staged)
+        );
 
       preamble = ''
         set -eu
@@ -267,7 +305,7 @@ in
       # rather than a directory of half-assembled files.
       references = concatStringsSep "" (
         map (path: ''
-          [ -e "$root"${lib.escapeShellArg path} ] || fail "the host file ${path} this entry is assembled from is not on this machine yet"
+          [ -e "$root"${lib.escapeShellArg path} ] || fail "the host file ${escapedWord path} this entry is assembled from is not on this machine yet"
         '') (map (g: g.path) (filter (g: g.kind == "generated-file") attachment.hostPaths))
       );
 
@@ -314,12 +352,18 @@ in
         ) staged
       );
 
+      # The unit list as one escaped word per unit rather than one joined
+      # string, so a name carrying a shell metacharacter is a word the command
+      # refuses instead of a pattern the shell expands. `echo` joins its
+      # arguments with a space, which is what the message below spends.
+      unitWords = concatStringsSep " " (map quoted attachment.units);
+
       attach = pkgs.writeShellScript "${image.name}-attach" (
         preamble
         + guards
         + concatStringsSep "" (
           map (f: ''
-            fail "the configuration file ${f.path} of ${image.key} is recorded as not computed, so there is nothing to assemble"
+            fail "the configuration file ${escapedWord f.path} of ${escapedWord image.key} is recorded as not computed, so there is nothing to assemble"
           '') incomplete
         )
         + references
@@ -328,7 +372,9 @@ in
         ''
         + reloader
         + ''
-          install -d -m 0755 "$root"${lib.escapeShellArg image.staging}
+          install -d -m 0711 ${
+            concatStringsSep " " (map (d: ''"$root"'' + lib.escapeShellArg d) stagingDirectories)
+          }
         ''
         + concatStringsSep "" (lib.imap0 assemble staged)
         + ''
@@ -336,7 +382,7 @@ in
           # builds of one entry render the same unit file names.
           held="$(systemctl show -P RootImage ${lib.escapeShellArg firstUnit} 2> /dev/null || true)"
           if [ -n "$held" ] && [ "$held" != ${raw}/${attachment.image} ]; then
-            systemctl stop ${concatStringsSep " " attachment.units}
+            systemctl stop ${unitWords}
             portablectl detach "$held" > /dev/null
             echo "replaced $held"
             changed=1
@@ -348,8 +394,8 @@ in
           if [ "$(portablectl is-attached ${raw}/${attachment.image} 2> /dev/null || echo detached)" = detached ]; then
             portablectl attach --profile=${lib.escapeShellArg image.profile} ${raw}/${attachment.image} > /dev/null
             echo "attached ${attachment.image}"
-            systemctl start ${concatStringsSep " " attachment.units}
-            echo "started ${concatStringsSep " " attachment.units}"
+            systemctl start ${unitWords}
+            echo "started "${unitWords}
             changed=1
           fi
         ''
@@ -364,7 +410,7 @@ in
       detach = pkgs.writeShellScript "${image.name}-detach" (
         preamble
         + ''
-          systemctl stop ${concatStringsSep " " attachment.units}
+          systemctl stop ${unitWords}
           portablectl detach ${raw}/${attachment.image}
           rm -rf "$root"${lib.escapeShellArg image.staging}
         ''
@@ -402,12 +448,12 @@ in
               if ${if refs == [ ] then "true" else present}; then
               ${built}
                 if [ -e ${stagedPath} ] && cmp -s "$part" ${stagedPath}; then
-                  echo "config ${file.path} current"
+                  echo "config ${escapedWord file.path} current"
                 else
-                  echo "config ${file.path} stale"
+                  echo "config ${escapedWord file.path} stale"
                 fi
               else
-                echo "config ${file.path} unreadable"
+                echo "config ${escapedWord file.path} unreadable"
               fi
               rm -f "$part"
             ''

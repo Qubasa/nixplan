@@ -32,6 +32,8 @@ let
     quote
     quoteList
     sortStrings
+    unrenderable
+    wordAdmits
     ;
 
   # The character the projection joins on. `safe-name` admits it, which is what
@@ -50,25 +52,6 @@ let
     "-"
   ];
 
-  # A path and an address are rendered into single-quoted words of the deploy
-  # step, so one carrying a quote would be one that closes it. The rule lives
-  # here rather than beside the rendering because the rows half reports it and
-  # `backend.nix` is what imports this file.
-  wordRule = "[a-zA-Z0-9_./:@%+=,~-]+";
-  wordAdmits = quoteList [
-    "_"
-    "."
-    "/"
-    ":"
-    "@"
-    "%"
-    "+"
-    "="
-    ","
-    "~"
-    "-"
-  ];
-
   # The name the tool keeps for its own provenance record.
   reservedFile = ".nixos-secrets-metadata";
 
@@ -80,7 +63,6 @@ let
   carriesSeparator = value: match ".*${separator}.*" value != null;
   outsideComponentRule = value: match componentRule value == null;
   outsideFileRule = name: match fileRule name == null;
-  unrenderable = value: match wordRule value == null;
 
   # One statement per condition: `id` names the row that reports it, and `says`
   # is the sentence the row and the refusal both state, so the two cannot drift.
@@ -592,8 +574,9 @@ in
     ;
 
   # `backend.nix` renders what the contract's deploy step cannot carry, so the
-  # rule it holds an address and a path to is this file's and so is the refusal
-  # it states: one condition, one description, one account.
+  # refusal it states is this file's. The rule itself is `planner.util`'s, read
+  # here rather than restated, because the image attach script renders a word by
+  # the same grammar: one condition, one description, one account.
   inherit unrenderable fail;
 
   # What this plan would be refused for, as rows and without raising. `user` is

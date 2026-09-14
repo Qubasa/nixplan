@@ -38,6 +38,8 @@ let
     substring
     ;
   inherit (planner.util)
+    carriesLineBreak
+    escapeRegex
     mapAttrsToList
     quote
     quoteList
@@ -45,6 +47,7 @@ let
     sortStrings
     storePathsDeep
     storePathsIn
+    stringsDeep
     subtractList
     uniqueStrings
     ;
@@ -174,7 +177,9 @@ let
     closureRootOutsideStore.id = "closure-root-outside-store";
     closureRootIsReference.id = "closure-root-is-delivered";
     accessDenied.id = "operator-entry-access-denied";
-    unitEnvNewline.id = "unit-env-value-newline";
+    unitValueNewline.id = "unit-value-newline";
+    nameRefused.id = "operator-entry-name-refused";
+    unitRefused.id = "operator-entry-name-refused";
     hostPathUnassembled = {
       id = null;
       because = "a configuration file whose bytes the plan holds is written by whoever is building, and both builders hand this reading an assembly; a reading asked only about the plan answers about its dispositions and renders nothing";
@@ -238,6 +243,25 @@ let
 
   unitFileName = name: unit: "${name}-${unit}.service";
   timerFileName = name: unit: "${name}-${unit}.timer";
+
+  # This builder's own name rule, written as the sentence its refusal prints so
+  # the rule and the message cannot drift apart. It is the intersection of three
+  # constraints the builder is already inside: nix's store name set, which every
+  # derivation here spends, systemd's unit name grammar, and one shell word of
+  # the scripts below.
+  nameRule = "a derived name starts with an ASCII alphanumeric and carries only ASCII alphanumerics, `_`, `-` and `.` after it";
+
+  acceptsName = name: match "[A-Za-z0-9][A-Za-z0-9_.-]*" name != null;
+
+  # The unit half takes the prefix as given, because `acceptsName` is what
+  # answers for it: a name outside the rule is then one sentence about one
+  # declaration rather than one per file it would have been rendered into.
+  unitRule =
+    unitsOf:
+    "a unit file name is ${quote "${unitsOf}-<unit>.service"} or ${quote "${unitsOf}-<unit>.timer"}, where the unit carries only ASCII alphanumerics, `_`, `-` and `.`";
+
+  acceptsUnit =
+    name: unit: match "${escapeRegex name}-[A-Za-z0-9_.-]+\\.(service|timer)" unit != null;
 
   # Where the host holds what it shows one image. One directory per image, so
   # detaching removes what attaching created and nothing else.
@@ -503,6 +527,10 @@ rec {
     timerFileName
     stagingOf
     stagedPath
+    nameRule
+    acceptsName
+    unitRule
+    acceptsUnit
     accounts
     ;
 
@@ -681,25 +709,36 @@ rec {
       };
 
       # A unit file is line-oriented, so a newline in a value is a fact the file
-      # cannot carry. Spaces and quotes can be: they are escaped at render.
+      # cannot carry. Spaces and quotes can be: they are escaped at render. The
+      # record is what both this and the row above it read, so a field added to
+      # the vocabulary or to an extension is covered by existing.
       unprintable = concatLists (
         map (
           u:
-          map
-            (k: {
-              unit = u;
-              name = k;
-            })
-            (
-              filter (k: match ".*[\n\r].*" (units.${u}.env.${k} or "") != null) (
-                attrNames (units.${u}.env or { })
-              )
-            )
+          map (found: { unit = u; } // found) (
+            filter (found: carriesLineBreak found.value) (stringsDeep units.${u})
+          )
         ) (attrNames units)
       );
+
+      # Every name this builder derives, before a store name is built from one.
+      # A name outside the rule is refused here rather than left to whatever the
+      # build system makes of it, which names neither the entry nor the
+      # declaration.
+      unitFiles = concatLists (
+        map (
+          u: [ (unitFileName name u) ] ++ (if units.${u} ? schedule then [ (timerFileName name u) ] else [ ])
+        ) (attrNames units)
+      );
+
+      refusedUnits = filter (file: !(acceptsUnit name file)) unitFiles;
     in
-    if !(isAttrs units) || units == { } then
+    if !(acceptsName name) then
+      fail accounts.nameRefused "entry ${quote key} derives the service name ${quote name}, which this builder refuses: ${nameRule}"
+    else if !(isAttrs units) || units == { } then
       fail accounts.entryRealisesNothing "entry ${quote key} records no unit, so there is nothing to attach"
+    else if refusedUnits != [ ] then
+      fail accounts.unitRefused "entry ${quote key} renders the unit file ${quote (builtins.head (sortStrings refusedUnits))}, which this builder refuses: ${unitRule name}"
     else if serviceManager != backend then
       fail accounts.serviceManagerMismatch "entry ${quote key} is planned for a machine running ${quote serviceManager}, and this builder emits images for ${quote backend}"
     else if rootsOutsideTheStore != [ ] then
@@ -720,7 +759,7 @@ rec {
       let
         first = builtins.head unprintable;
       in
-      fail accounts.unitEnvNewline "entry ${quote key} unit ${quote first.unit} sets ${quote first.name} to a value containing a newline, which a unit file has no line to put"
+      fail accounts.unitValueNewline "entry ${quote key} unit ${quote first.unit} sets ${quote first.path} to a value containing a newline, which a unit file has no line to put"
     else
       {
         inherit
