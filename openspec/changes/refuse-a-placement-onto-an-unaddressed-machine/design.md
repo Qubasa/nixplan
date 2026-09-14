@@ -105,6 +105,28 @@ deliberately: it means "the selector matched nothing", and a member whose machin
 gets one row about the registry rather than two rows contradicting each other about whose fault it
 is.
 
+Implemented with one refinement this argument did not foresee: the predicate the tag index is built
+with cannot be the one that drops. `machinesByTag` (`lib/resolve.nix:286-296`) filters the registry
+through `placeable` before grouping, so a completeness clause there would take the machine out of
+`tagged` and out of the requested form too, which is the eaten row above by another route. The
+predicate is therefore split: `selectable` is registry membership plus the name grammar and is what
+the tag index and the requested form use, and `placeable` is `selectable` plus completeness and is
+the one clause both a named and a tagged machine are dropped by.
+
+**The unplaced reading of a member is produced only where the selector matched nothing.** A member
+whose every placement was dropped has `placements == [ ]`, and the member's rows were
+`memberRows ++ (if placements == [ ] then unplaced.rows else [ ])` (`lib/resolve.nix:1123`). That
+condition had to move to the requested form as well, and for a reason this design found only by
+running its own acceptance case: the unplaced reading hands `impl` no `target` at all
+(`lib/resolve.nix:1214-1222`), so reading a module there that renders `target.address` ends the
+evaluation with `function 'impl' called without required argument 'target'` - a third failure
+`builtins.tryEval` does not catch, measured rather than assumed. Reading the module in a context the
+deployment never wrote would therefore turn the registry's mistake straight back into the
+uncatchable failure this change exists to remove. `lib/plan.nix` still emits the unplaced entry off
+`placements`, so the plan shows what was asked for; what is not produced is the row set of an entry
+that does not exist. A member the deployment placed nowhere is unaffected: its requested form is
+empty too.
+
 **A machine the deployment selected keeps its `machine:<name>` record even when no entry survives.**
 `usedMachines` is the selected set (`lib/resolve.nix:1990`, `lib/plan.nix:1076-1093`), and reading
 it off the requested form keeps the promise `emit-systemd-portable-service-images` made for the
