@@ -150,13 +150,36 @@ Alternative rejected: **suppressing the consumer's row when the provider's exist
 operator filtering the table to one entry's key would then see an entry with a slot that never
 resolved and no row explaining it. Two entries have a problem.
 
+### The unit half keeps its filters and `implementation-malformed`
+
+Recorded against the proposal's own reading of `lib/resolve.nix:1234` and `:1253`, which said those
+filters drop a non-record unit and a non-record configuration file silently. They do not. Each filter
+selects the records the reading is handed, and `malformed` (`:1278-1284` at the base commit) reports
+the complement, so `units.web = 5` already earns `implementation-malformed` naming `unit "web"` and the
+entry declares no such unit. Measured at `b7dd7e1`: the table carries
+`implementation-malformed :: bad:only@two` and the deployment is still planned.
+
+What did end the evaluation is the container: `units = 5` reaches `util.filterAttrs` and aborts with
+`expected a set but found an integer: 5`. That is the fourth abort of this family, found by the
+probes, and it is fixed the way the other three are - a kind read before the index, with
+`unitsDeclared` and `configDeclared` falling back to `{ }` and `malformed` gaining `the unit set` and
+`the configuration data` as sites.
+
+`readUnit` and `readConfigFile` are therefore not routed through `declaredRecord`. They are handed
+only records by construction, so the branch would be unreachable, and the row for this half is
+`implementation-malformed` - the identifier the spec's fourth scenario asks the declaration half to
+read the same as. A second identifier for the same site, reachable from nothing, is worse than the
+filter it would replace.
+
 ### `binding-malformed` widens rather than gaining a sibling
 
 `bindingOf` (`lib/resolve.nix:1009`) tests `given ? member && given ? capability`. A hand-written
 record satisfying both is still not "a capability value off a sibling's handle", which is exactly what
 the row's own message and evidence say (`:1050-1051`). Requiring `interface` as well is the same
 condition read more completely, so the identifier, the message and the resolution are unchanged and
-`docs/diagnostics.md:156` gains one clause rather than a row.
+`docs/diagnostics.md:156` gains one clause rather than a row. `member` and `capability` are also read
+for being strings rather than for being present, because the line below indexes `memberKeyOf` with the
+first of them and a non-string key is the same uncatchable type error this change is about.
 
 Alternative rejected: **a `binding-untyped` identifier.** It would split one condition in two and
 oblige an author to learn which of the two their typo earns.
@@ -203,9 +226,3 @@ reading that dropped the declaration silently, which is why each probe's expecta
   because a row needs a subject and a caller's argument has no plan key and no deployment file to
   name, which is a naming decision this change does not want to take silently. The alternative - a
   fourth surface with rows subjected to an issue identifier - is a separate proposal.
-- **Should `readUnit` and `readConfigFile` keep their upstream filters?** `lib/resolve.nix:1234` and
-  `:1253` drop a non-record unit and a non-record configuration file before the reading sees them, so
-  they never raise and never report. With the record reading in place the filter is a silent drop
-  where a row is now available. This change routes both through the reading so the drop becomes a row;
-  whether the filters themselves are then dead is a question the implementer answers by reading what
-  else forces those attrsets.

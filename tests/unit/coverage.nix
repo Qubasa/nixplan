@@ -206,6 +206,9 @@ let
     "state-no-host-path-in-a-deployment/specs/tooling/repository-shape/spec.md"
     "state-no-host-path-in-a-deployment/specs/tooling/test-layers/spec.md"
     "hold-the-consumer-cardinality-a-provider-states/specs/planner/typed-edge/spec.md"
+    "keep-a-declaration-from-ending-an-evaluation/specs/planner/diagnostics/spec.md"
+    "keep-a-declaration-from-ending-an-evaluation/specs/planner/typed-edge/spec.md"
+    "keep-a-declaration-from-ending-an-evaluation/specs/tooling/nix-unit-suite/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -233,12 +236,6 @@ let
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "deliver-a-secret-without-exposing-it/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
-    "keep-a-declaration-from-ending-an-evaluation/specs/planner/diagnostics/spec.md" =
-      "an unimplemented change: no task of keep-a-declaration-from-ending-an-evaluation has been done, so nothing in this package claims to satisfy it yet";
-    "keep-a-declaration-from-ending-an-evaluation/specs/planner/typed-edge/spec.md" =
-      "an unimplemented change: no task of keep-a-declaration-from-ending-an-evaluation has been done, so nothing in this package claims to satisfy it yet";
-    "keep-a-declaration-from-ending-an-evaluation/specs/tooling/nix-unit-suite/spec.md" =
-      "an unimplemented change: no task of keep-a-declaration-from-ending-an-evaluation has been done, so nothing in this package claims to satisfy it yet";
     "keep-a-secret-out-of-a-process-table/specs/operator/apply-command/spec.md" =
       "an unimplemented change: no task of keep-a-secret-out-of-a-process-table has been done, so nothing in this package claims to satisfy it yet";
     "keep-a-secret-out-of-a-process-table/specs/realiser/secrets-configuration/spec.md" =

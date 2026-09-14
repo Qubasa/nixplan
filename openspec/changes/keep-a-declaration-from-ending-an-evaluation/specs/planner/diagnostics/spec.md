@@ -36,8 +36,11 @@ nothing, and none of the three SHALL be defaulted into existence. A malformed va
 dropped silently either, and SHALL NOT earn a row about some other condition that its absence would
 have produced.
 
-One identifier SHALL serve the whole family, because the condition is one, and the row SHALL name
-which site it is about rather than leaving that to the identifier.
+One identifier SHALL serve the whole family a declaration writes, because the condition is one, and
+the row SHALL name which site it is about rather than leaving that to the identifier. The half an
+implementation writes - a unit, a configuration file and the two records holding them - SHALL keep the
+identifier it already earns for a value of the wrong kind, which is the row the fourth scenario below
+holds the declaration half to, and SHALL name its site the same way.
 
 #### Scenario: A port claim is not a record
 

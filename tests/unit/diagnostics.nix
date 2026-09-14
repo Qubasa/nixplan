@@ -658,6 +658,200 @@ let
       };
     };
 
+  # The module's own half, one malformed value at a time, beside an instance that
+  # is well formed. The leaf files are named so that each row's subject is the
+  # module file a reader has to edit rather than a plan key.
+  leafSources.leaves = {
+    bad.only = "modules/bad.nix";
+    good.only = "modules/good.nix";
+  };
+
+  badLeaf =
+    module:
+    planOf {
+      sources = leafSources;
+      instances = {
+        good = placedOn "one" (soleRoot {
+          module = quiet;
+        });
+        bad = placedOn "two" (soleRoot {
+          inherit module;
+        });
+      };
+    };
+
+  # What a well-formed instance of these probes is planned into, so each probe
+  # asserts the rest of the deployment rather than only its own row.
+  plannedWhole = result: attrNames result.plan."good:only@one".units;
+
+  # One malformed value per shape a module's declaration has, each planned.
+  shapeProbes = {
+    claim = badLeaf (_: {
+      claims.ports.api = 5432;
+      impl = _: {
+        units.main.command = "/bin/run";
+      };
+    });
+    slot = badLeaf (_: {
+      uses.far = "identity";
+      impl = _: {
+        units.main.command = "/bin/run";
+      };
+    });
+    capability = badLeaf (_: {
+      provides.thing = 5;
+      impl = _: {
+        units.main.command = "/bin/run";
+      };
+    });
+    generator = badLeaf (_: {
+      vars.token = 5;
+      impl = _: {
+        units.main.command = "/bin/run";
+      };
+    });
+    declaration = badLeaf (_: 5);
+  };
+
+  # The same capability, re-exported and wired, so that "addressable by no wire"
+  # is observed rather than assumed.
+  untypedCapabilityWired = planOf {
+    sources.leaves = {
+      good.only = "modules/good.nix";
+      bad.only = "modules/bad.nix";
+      app.only = "modules/app.nix";
+    };
+    instances = {
+      good = placedOn "one" (soleRoot {
+        module = quiet;
+      });
+      bad = exposedOn [ "one" ] (soleRoot {
+        module = _: {
+          provides.thing = 5;
+          impl = _: {
+            units.main.command = "/bin/run";
+          };
+        };
+        provides = [ "thing" ];
+      });
+      app = wiredTo "two" "bad" (soleRoot {
+        module = consumerOfPub;
+      });
+    };
+  };
+
+  raisingDeclaration = badLeaf (_: {
+    uses.far = {
+      interface = pub;
+      reads = [ (throw "the module could not decide what it reads") ];
+    };
+    impl = _: {
+      units.main.command = "/bin/run";
+    };
+  });
+
+  # A root binding one member's slot to a record it wrote by hand rather than to
+  # the capability value off its sibling's handle.
+  handWrittenBinding =
+    { service, ... }:
+    {
+      services = {
+        backend = service "backend" {
+          module = pubProvider;
+        };
+        app = service "app" {
+          module = consumerOfPub;
+          wire.slot = {
+            member = "backend";
+            capability = "thing";
+          };
+        };
+      };
+    };
+
+  # Every shape at once, beside one instance that is well formed: five malformed
+  # records, a declaration that raises, a wire to an untyped capability and a
+  # binding nobody took off a handle.
+  everyMalformedShapeArgs = {
+    inherit (support) machines;
+    sources.leaves = {
+      good.only = "modules/good.nix";
+      claim.only = "modules/claim.nix";
+      slot.only = "modules/slot.nix";
+      capability.only = "modules/capability.nix";
+      generator.only = "modules/generator.nix";
+      whole.only = "modules/whole.nix";
+      raising.only = "modules/raising.nix";
+      consumer.only = "modules/consumer.nix";
+      bound.app = "modules/bound-app.nix";
+      bound.backend = "modules/bound-backend.nix";
+    };
+    instances = {
+      good = placedOn "one" (soleRoot {
+        module = quiet;
+      });
+      claim = placedOn "one" (soleRoot {
+        module = _: {
+          claims.ports.api = 5432;
+          impl = _: {
+            units.main.command = "/bin/run";
+          };
+        };
+      });
+      slot = placedOn "one" (soleRoot {
+        module = _: {
+          uses.far = "identity";
+          impl = _: {
+            units.main.command = "/bin/run";
+          };
+        };
+      });
+      capability = exposedOn [ "one" ] (soleRoot {
+        module = _: {
+          provides.thing = 5;
+          impl = _: {
+            units.main.command = "/bin/run";
+          };
+        };
+        provides = [ "thing" ];
+      });
+      generator = placedOn "one" (soleRoot {
+        module = _: {
+          vars.token = 5;
+          impl = _: {
+            units.main.command = "/bin/run";
+          };
+        };
+      });
+      whole = placedOn "one" (soleRoot {
+        module = _: 5;
+      });
+      raising = placedOn "one" (soleRoot {
+        module = _: {
+          uses.far = {
+            interface = pub;
+            reads = [ (throw "the module could not decide what it reads") ];
+          };
+          impl = _: {
+            units.main.command = "/bin/run";
+          };
+        };
+      });
+      consumer = wiredTo "two" "capability" (soleRoot {
+        module = consumerOfPub;
+      });
+      bound = {
+        module = handWrittenBinding;
+        placement.every.backend.machines = [ "one" ];
+        placement.every.app.machines = [ "two" ];
+      };
+    };
+  };
+
+  everyMalformedShape = planner.mkPlan everyMalformedShapeArgs;
+
+  located = result: map (r: "${r.id} :: ${r.subject}") result.diagnostics;
+
   # An interface whose exports are not atoms, imported by two modules and listed
   # by no deployment: the rows it earns are the rows a listed one earns.
   untyped = {
@@ -1123,6 +1317,243 @@ in
         namespace = true;
         instance = true;
         machine = true;
+      };
+    };
+
+  testAPortClaimIsNotARecord =
+    let
+      result = shapeProbes.claim;
+      entry = result.plan."bad:only@two";
+    in
+    {
+      expr = {
+        rows = ids result;
+        count = countById "declaration-malformed" result;
+        severity = severityById "declaration-malformed" result;
+        subjects = subjectsById "declaration-malformed" result;
+        namesTheClaim = hasInfix "port claim `api` of modules/bad.nix" (
+          messageById "declaration-malformed" result
+        );
+        namesTheKind = hasInfix "a value of type int" (messageById "declaration-malformed" result);
+        claimed = entry ? alloc;
+        theRestIsPlanned = plannedWhole result;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ "declaration-malformed" ];
+        count = 1;
+        severity = "error";
+        subjects = [ "modules/bad.nix" ];
+        namesTheClaim = true;
+        namesTheKind = true;
+        claimed = false;
+        theRestIsPlanned = [ "only" ];
+        applicable = false;
+      };
+    };
+
+  testASlotIsNotARecord =
+    let
+      result = shapeProbes.slot;
+      entry = result.plan."bad:only@two";
+    in
+    {
+      expr = {
+        rows = ids result;
+        count = countById "declaration-malformed" result;
+        subjects = subjectsById "declaration-malformed" result;
+        namesTheSlot = hasInfix "slot `far` of modules/bad.nix" (
+          messageById "declaration-malformed" result
+        );
+        namesTheKind = hasInfix "`identity`" (messageById "declaration-malformed" result);
+        wired = entry ? reads;
+        theRestIsPlanned = plannedWhole result;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ "declaration-malformed" ];
+        count = 1;
+        subjects = [ "modules/bad.nix" ];
+        namesTheSlot = true;
+        namesTheKind = true;
+        wired = false;
+        theRestIsPlanned = [ "only" ];
+        applicable = false;
+      };
+    };
+
+  testACapabilityIsNotARecord =
+    let
+      result = shapeProbes.capability;
+      entry = result.plan."bad:only@two";
+      wired = untypedCapabilityWired;
+    in
+    {
+      expr = {
+        rows = ids result;
+        subjects = subjectsById "declaration-malformed" result;
+        namesTheCapability = hasInfix "capability `thing` of modules/bad.nix" (
+          messageById "declaration-malformed" result
+        );
+        publishes = entry ? provides;
+        theRestIsPlanned = plannedWhole result;
+        addressed = {
+          rows = ids wired;
+          delivered = wired.plan."app:only@two".reads.slot.delivered;
+          read = wired.plan."app:only@two".reads.slot ? entry;
+        };
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ "declaration-malformed" ];
+        subjects = [ "modules/bad.nix" ];
+        namesTheCapability = true;
+        publishes = false;
+        theRestIsPlanned = [ "only" ];
+        addressed = {
+          rows = [
+            "declaration-malformed"
+            "wire-capability-untyped"
+          ];
+          delivered = false;
+          read = false;
+        };
+        applicable = false;
+      };
+    };
+
+  testAModuleReturnsSomethingOtherThanARecord =
+    let
+      result = shapeProbes.declaration;
+    in
+    {
+      expr = {
+        rows = ids result;
+        subjects = {
+          malformed = subjectsById "declaration-malformed" result;
+          missing = subjectsById "impl-missing" result;
+        };
+        namesTheModule = hasInfix "modules/bad.nix is declared as a value of type int" (
+          messageById "declaration-malformed" result
+        );
+        theOtherHalfReadsTheSame = messageById "implementation-malformed" (
+          badLeaf (_: {
+            impl = _: 5;
+          })
+        );
+        theRestIsPlanned = plannedWhole result;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [
+          "declaration-malformed"
+          "impl-missing"
+        ];
+        subjects = {
+          malformed = [ "modules/bad.nix" ];
+          missing = [ "modules/bad.nix" ];
+        };
+        namesTheModule = true;
+        theOtherHalfReadsTheSame = "the implementation of modules/bad.nix returned a value that is not an attribute set";
+        theRestIsPlanned = [ "only" ];
+        applicable = false;
+      };
+    };
+
+  testAModuleRaisesWhileComputingItsDeclaration =
+    let
+      result = raisingDeclaration;
+    in
+    {
+      expr = {
+        rows = ids result;
+        subjects = {
+          raised = subjectsById "module-raised" result;
+          missing = subjectsById "impl-missing" result;
+        };
+        namesWhatWasForced = messageById "module-raised" result;
+        theRestIsPlanned = plannedWhole result;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [
+          "impl-missing"
+          "module-raised"
+        ];
+        subjects = {
+          raised = [ "member:only" ];
+          missing = [ "modules/bad.nix" ];
+        };
+        namesWhatWasForced = "the declaration of member `only` raised a catchable error, so its value is recorded as not computed";
+        theRestIsPlanned = [ "only" ];
+        applicable = false;
+      };
+    };
+
+  testAProbePlansEveryMalformedShapeAtOnce =
+    let
+      forced = builtins.tryEval (builtins.deepSeq everyMalformedShape everyMalformedShape);
+    in
+    {
+      expr = {
+        completed = forced.success;
+        rows = located everyMalformedShape;
+        wellFormed = attrNames everyMalformedShape.plan."good:only@one".units;
+        twice = located (planner.mkPlan everyMalformedShapeArgs) == located everyMalformedShape;
+        applicable = everyMalformedShape.applicable;
+      };
+      expected = {
+        completed = true;
+        rows = [
+          "binding-malformed :: bound:app"
+          "declaration-malformed :: modules/capability.nix"
+          "declaration-malformed :: modules/claim.nix"
+          "declaration-malformed :: modules/generator.nix"
+          "declaration-malformed :: modules/slot.nix"
+          "declaration-malformed :: modules/whole.nix"
+          "impl-missing :: modules/raising.nix"
+          "impl-missing :: modules/whole.nix"
+          "module-raised :: member:only"
+          "slot-unwired :: bound:app"
+          "wire-capability-untyped :: consumer:only"
+        ];
+        wellFormed = [ "only" ];
+        twice = true;
+        applicable = false;
+      };
+    };
+
+  # What each probe above asserts: the row's identifier beside its subject. The
+  # second half is the same assertion against a table the row was taken out of,
+  # which is what a reading that dropped the declaration would have produced: it
+  # still completes and it names nothing, so completion is not the claim.
+  testAProbeNamesTheDeclarationItPlanned =
+    let
+      named =
+        table: map (r: "${r.id} :: ${r.subject}") (filter (r: r.id == "declaration-malformed") table);
+      dropped = result: filter (r: r.id != "declaration-malformed") result.diagnostics;
+      silent = result: {
+        completed = builtins.deepSeq (dropped result) true;
+        named = named (dropped result);
+      };
+    in
+    {
+      expr = {
+        claimed = builtins.mapAttrs (_: result: named result.diagnostics) shapeProbes;
+        silent = builtins.mapAttrs (_: silent) shapeProbes;
+      };
+      expected = {
+        claimed = {
+          capability = [ "declaration-malformed :: modules/bad.nix" ];
+          claim = [ "declaration-malformed :: modules/bad.nix" ];
+          declaration = [ "declaration-malformed :: modules/bad.nix" ];
+          generator = [ "declaration-malformed :: modules/bad.nix" ];
+          slot = [ "declaration-malformed :: modules/bad.nix" ];
+        };
+        silent = builtins.mapAttrs (_: _: {
+          completed = true;
+          named = [ ];
+        }) shapeProbes;
       };
     };
 

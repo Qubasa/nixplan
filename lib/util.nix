@@ -129,6 +129,11 @@ rec {
 
   quoteList = xs: if xs == [ ] then "none" else concatStringsSep ", " (map quote xs);
 
+  # How a row shows a value whose kind is the mistake. A string is quoted and any
+  # other value is named by its type, so no row interpolates bytes a caller wrote
+  # into a sentence about their shape.
+  shownValue = v: if isString v then quote v else "a value of type ${builtins.typeOf v}";
+
   joinLines = concatStringsSep "\n";
 
   escapeRegex = replaceStrings regexMeta (map (c: "\\${c}") regexMeta);

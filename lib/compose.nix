@@ -8,7 +8,14 @@
   diag,
 }:
 let
-  inherit (builtins) attrNames;
+  inherit (builtins) attrNames isAttrs;
+
+  # Composition indexes the value a module returned before the module reading
+  # sees it, and `attrNames` on a value of another kind ends the evaluation. The
+  # row for that value is the reading's, so the shape is all that is needed here.
+  recordOf = value: if isAttrs value then value else { };
+
+  slotsOf = declaration: attrNames ((recordOf declaration).uses or { });
 
   serviceKeys = [
     "module"
@@ -28,7 +35,18 @@ rec {
       defaults = args.defaults or { };
       fixed = args.fixed or { };
       settings = settingsOf { inherit name defaults fixed; };
-      declaration = module { settings = settings.values; };
+
+      # The module's own expression, forced under the recovery its implementation
+      # already gets: a module that raises while computing its declaration is one
+      # row naming the member, and the empty record it falls back to degrades into
+      # the `impl-missing` the reading already writes.
+      computed = diag.guard {
+        subject = "member:${name}";
+        what = "the declaration of member ${util.quote name}";
+        fallback = { };
+        value = module { settings = settings.values; };
+      };
+      declaration = computed.value;
 
       # Whether the deployment moved anything at all. With no deployment knob the
       # member's own values are `settings.values` by construction, so the second
@@ -44,8 +62,10 @@ rec {
         what = "the slots of member ${util.quote name} under its own values";
         fallback = null;
         value = {
-          resolved = attrNames (declaration.uses or { });
-          own = attrNames ((module { settings = defaults // fixed; }).uses or { });
+          resolved = slotsOf declaration;
+          own = slotsOf (module {
+            settings = defaults // fixed;
+          });
         };
       };
     in
@@ -64,15 +84,19 @@ rec {
       # member it came from, so no root ever names an instance.
       wire = args.wire or { };
       slotSet = if configured then observed.value else null;
+      declarationRows = computed.rows;
       unknownKeys = util.extraKeys serviceKeys args;
+      # A capability of the wrong kind stays a key the root can re-export, and
+      # carries no interface: the module earns the reading's row and a wire to it
+      # earns the untyped one, where indexing the value would end the evaluation.
       provides = builtins.mapAttrs (
         capability: declared:
-        declared
+        recordOf declared
         // {
           member = name;
           inherit capability;
         }
-      ) (declaration.provides or { });
+      ) ((recordOf declaration).provides or { });
     };
 
   # A root is a function of { service, ... } and nothing else. A root that wants a

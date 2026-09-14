@@ -1267,6 +1267,70 @@ in
       };
     };
 
+  # A record naming a member and a capability is not a capability off a sibling's
+  # handle, and the interface is what a wire compares.
+  testARootBindsASlotToARecordCarryingNoInterface =
+    let
+      result = planOf {
+        sources = pairFiles;
+        interfaces = interfaceFiles;
+        instances.pair = {
+          module =
+            { service, ... }:
+            {
+              services = {
+                backend = service "backend" { module = twoCapProvider; };
+                app = service "app" {
+                  module = slotConsumer;
+                  wire.far = {
+                    member = "backend";
+                    capability = "identity";
+                  };
+                };
+              };
+            };
+          placement.every.backend.machines = [ "one" ];
+          placement.every.app.machines = [ "two" ];
+        };
+      };
+      entry = result.plan."pair:app@two";
+      row = builtins.head (rowsById "binding-malformed" result);
+      unwired = builtins.head (rowsById "slot-unwired" result);
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        inherit (row) subject severity;
+        namesTheRootTheMemberAndTheSlot = hasInfix "the root of instance `pair` binds slot `far` of member `app`" row.message;
+        namesTheHandle = hasInfix "off a sibling's handle" row.evidence;
+        theDeploymentsToFill = hasInfix "write `wire.far = { instance = <instance>;" unwired.resolution;
+        delivered = entry.reads.far.delivered;
+        received = entry.units.main.env.KEY;
+        everyOtherEntry = attrNames result.plan;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [
+          "binding-malformed"
+          "slot-unwired"
+        ];
+        subject = "pair:app";
+        severity = "error";
+        namesTheRootTheMemberAndTheSlot = true;
+        namesTheHandle = true;
+        theDeploymentsToFill = true;
+        delivered = false;
+        received = "";
+        everyOtherEntry = [
+          "machine:one"
+          "machine:two"
+          "pair:app@two"
+          "pair:backend@one"
+        ];
+        applicable = false;
+      };
+    };
+
   testABindingToACapabilityPlacedTwiceAgainstASingleValuedSlot =
     let
       result = planOf {
