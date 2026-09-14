@@ -826,6 +826,13 @@ The count is over wires across the whole deployment, so a consumer placed on
 twelve machines is one consumer, and two capabilities of one instance taken by
 two consumers is no row.
 
+The cardinality is a property of the capability the member declared, and it is
+read by that member's own capability name. What an instance root's `provides`
+decides is which name a wire may address; how many wires may take the capability
+stays the member's statement. Re-exposing it under another name, or under two
+names at once, therefore admits the same number of consumers, and a wire naming
+any of those names counts against that one capability.
+
 ## Generated files
 
 `varsState` tells the planner which generated files exist, keyed by the entry of

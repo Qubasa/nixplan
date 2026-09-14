@@ -200,7 +200,7 @@ discipline and deduplication applied).
 | --- | --- |
 | `slot-unwired` | no deployment wires the slot; it resolves to no value at all |
 | `wire-names-bound-slot` | the deployment wires a slot the instance's own root binds to a member it keeps, so the two statements disagree about what the composition is; the binding resolves the slot |
-| `capability-consumers-exceeded` | a capability declaring `consumers = "one"` is wired by more than one slot; the count is over wires, so one consumer placed on twelve machines is one consumer |
+| `capability-consumers-exceeded` | a capability declaring `consumers = "one"` is wired by more than one slot; the count is over wires, so one consumer placed on twelve machines is one consumer. The cardinality is read by the member's own capability name, so exposing the capability under another name, or under two names, changes which name a wire may address and never how many wires may take it |
 | `wire-unknown-instance` | the wire names an instance the deployment does not declare |
 | `wire-unknown-capability` | the instance exposes no such capability |
 | `wire-capability-not-exposed` | the root provides it and the instance does not expose it; the row lists what is exposed |

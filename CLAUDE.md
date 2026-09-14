@@ -240,7 +240,10 @@ Recorded so the question is answered once.
 - `consumers` is counted over wires, deployment-wide, and a binding is a wire the module wrote. A
   consumer placed on twelve machines is one consumer, and the row is per capability rather than per
   consumer, so two slots taking one `consumers = "one"` capability produce one sentence naming
-  both.
+  both. The declared cardinality is read by the member's own capability name and never by the name
+  a wire addressed: a root's `provides` decides what a wire may address and not how many wires may
+  take the capability, so one capability exposed under two names is one capability and the wires to
+  both names are counted together.
 - Two instances wiring each other is not a cycle: a capability's exports are a function of module
   and settings, never of a wire. Do not add cycle detection.
 - A refused read leaves the slot absent from `results` - not `null`, not `{}`. `or [ ]` cannot be
