@@ -416,6 +416,11 @@ Recorded so the question is answered once.
   therefore the only thing that ever states a path: the external side never has to agree about
   one. That step carries no bytes: every file is fetched from the store backend's own `get` at run
   time.
+- The temporary that step fetches into is one for the whole run, and it is removed by a `trap`
+  installed before the first fetch. A trailing `rm` is not the fix: `set -eu` exits the step where
+  a send is refused, which is the case that matters, and no trailing command runs on a signal
+  either. Each fetch truncates the one file rather than making another, so `mktemp`'s `0600` is
+  what every fetch writes into and the plaintext of at most one file exists at a time.
 - Which realiser realises an entry is stated beside the deployment, never inferred: no plan field
   records it and the same entry can legitimately be both, which `portable-image` and `wired-pair`
   demonstrate between them. The statement is read by plan key, then by the `<instance>:<service>`
@@ -529,6 +534,14 @@ Recorded so the question is answered once.
   entry reads a value and never which of its units opens the file - and `try-restart` because
   whether a unit runs at all is the activation's answer and never this step's, so a unit an operator
   stopped stays stopped and a unit the activation just started is not restarted twice.
+- The bytes of a write travel on the step's input stream and enter no argv on either host: the
+  script is a function of the record, `Subprocess` hands the payload to `subprocess.run(input=…)`,
+  and the machine's own command line is the element of the local vector carrying that script. The
+  channel is therefore bytes in and text out, decoded once with `errors="replace"`, because a
+  secret is arbitrary bytes and a machine's answer may be too. The harness's recorder records the
+  argv and drops the payload on purpose: a recorded copy of the bytes would move the leak into a
+  test file, and the property asserted is that two payloads of one length produce equal vectors
+  rather than that one known needle is absent.
 - A value lives under `/run` (`lib/resolve.nix`), so a reboot loses every one of them while the
   endpoint brings the entries back. That is what the report's `value <key> missing on <machine>`
   lines are for: one question per machine, about presence only, one line per value however many of

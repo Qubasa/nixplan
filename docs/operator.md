@@ -526,6 +526,13 @@ process that is about to write the bytes, and neither the bytes nor a digest of 
 is reported is that the file moved, never what it moved to. That answer is what decides the restart
 steps at the end of the run.
 
+The bytes travel on the step's own input stream. The argument vector of a write is the path, the
+mode and the ownership the plan records, which is what the step line already prints, so a process
+table on either host shows a write by the file it writes and never by what it writes there: the
+vector the command hands its channel is the vector `execve` publishes, and the machine's own command
+line is the element of it carrying the script. Two runs delivering different bytes of one length to
+one path therefore run identical vectors.
+
 Nothing in this repository generates those bytes. The directory is where a generator hands them
 over, and `apply` cannot tell a minted secret from one an operator wrote by hand.
 
