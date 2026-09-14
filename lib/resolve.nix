@@ -1576,10 +1576,15 @@ in
             if capability == null then null else targetInstance.members.${capability.member} or null;
           placements = if providerMember == null then [ ] else providerMember.placements;
 
-          # The provider's own reading of the capability, which is where its
-          # consumer cardinality is stated and checked.
+          # The provider's own reading of the capability, where its consumer
+          # cardinality is stated and checked. Read by the member's own
+          # capability name: the name a root exposed, which the wire carries,
+          # decides what a wire may address and not how many may take it.
           providerDeclared =
-            if providerMember == null then null else providerMember.declaration.provides.${capName} or null;
+            if providerMember == null then
+              null
+            else
+              providerMember.declaration.provides.${capability.capability} or null;
 
           slotClaim = if slot.interface == null then null else interface.identityOf slot.interface;
           capabilityClaim = if capability == null then null else interface.identityOf capability.interface;
