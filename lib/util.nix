@@ -8,6 +8,7 @@ let
     elem
     elemAt
     filter
+    genList
     hashString
     head
     isAttrs
@@ -80,6 +81,28 @@ rec {
   ];
 
   carriesKeySeparator = name: isString name && match ".*[@:/].*" name != null;
+
+  # The grammar of one word a rendered shell step can carry. A path and an
+  # address are rendered into single-quoted words, so one carrying a quote would
+  # be one that closes it. Two steps of this repository render such a word, the
+  # secrets delivery and the image attach script, so the rule has one home here
+  # and neither reading states it again.
+  wordRule = "[a-zA-Z0-9_./:@%+=,~-]+";
+  wordAdmits = quoteList [
+    "_"
+    "."
+    "/"
+    ":"
+    "@"
+    "%"
+    "+"
+    "="
+    ","
+    "~"
+    "-"
+  ];
+
+  unrenderable = value: match wordRule value == null;
 
   sortStrings = sort (a: b: a < b);
 
@@ -178,6 +201,33 @@ rec {
           [ ];
     in
     deep;
+
+  # Every string a value carries at any depth, beside the field path it sits at.
+  # storePathsDeep's traversal, keeping the path so a caller can name the field
+  # rather than the record, and iterating the value rather than a list of fields
+  # so a field added anywhere inside it is covered by existing.
+  stringsDeep =
+    let
+      deep =
+        path: value:
+        if isString value then
+          [
+            {
+              inherit path value;
+            }
+          ]
+        else if isList value then
+          concatLists (genList (i: deep "${path}[${toString i}]" (elemAt value i)) (length value))
+        else if isAttrs value then
+          concatLists (mapAttrsToList (name: deep (if path == "" then name else "${path}.${name}")) value)
+        else
+          [ ];
+    in
+    deep "";
+
+  # A line-oriented file cannot carry a line break inside a value. A space, a
+  # quote and a backslash it can: those are escaped where the value is rendered.
+  carriesLineBreak = value: isString value && match ".*[\n\r].*" value != null;
 
   isVarsFile = value: isAttrs value && (value.__varsFile or false);
 
