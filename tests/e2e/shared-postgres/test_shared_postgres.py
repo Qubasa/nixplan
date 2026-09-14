@@ -81,6 +81,7 @@ CLUSTER_MACHINE = "alpha"
 NEAR_MACHINE = "alpha"
 PRIVATE_MACHINE = "alpha"
 FAR_MACHINE = "beta"
+BOOTSTRAP_UNIT = "pg-cluster-bootstrap.service"
 INIT_UNIT = "pg-cluster-init.service"
 SERVER_UNIT = "pg-cluster-server.service"
 NEAR_UNIT = "near-app-client-write.service"
@@ -90,6 +91,7 @@ OWN_INIT_UNIT = "own-app-own-init.service"
 OWN_SERVER_UNIT = "own-app-own-server.service"
 MACHINES = (CLUSTER_MACHINE, FAR_MACHINE)
 ATTRIBUTE = "planner-e2e-shared-postgres"
+CHANGED_ATTRIBUTE = "planner-e2e-shared-postgres-changed"
 
 # Two clusters write two data directories the image has no room for beside two
 # delivered closures, and the figure is the stage's rather than the shared
@@ -126,6 +128,7 @@ FLAKE = _env_path("PLANNER_E2E_FLAKE")
 GUEST_IMAGE = _env_path("PLANNER_E2E_GUEST_IMAGE")
 KEY = delivery.ssh_key(delivery.state_root(), _env_path("PLANNER_E2E_SSH_KEY"))
 DEPLOYMENT = _build(f"{FLAKE}#{ATTRIBUTE}")
+CHANGED = _build(f"{FLAKE}#{CHANGED_ATTRIBUTE}")
 
 
 def _value_source(root: Path, deployment: manifest.Deployment, secrets_of: dict[str, str]) -> Path:
@@ -216,13 +219,41 @@ class Run:
         """The file one consumer entry writes its record to."""
         return self.unit_env(key, "write", "RECORD_PATH")
 
+    def label(self, key: str) -> str:
+        """The label one consumer entry writes, as its own declaration resolved it."""
+        return self.unit_env(key, "write", "LABEL")
+
     def config_path(self, key: str) -> str:
-        """The one configuration file path one entry's own `configData` names."""
+        """The configuration file one entry's own server command names."""
+        command = self.unit_command(key, "server")
+        named = [
+            word.removeprefix("config_file=")
+            for word in command.split()
+            if word.startswith("config_file=")
+        ]
+        assert len(named) == 1, command
+        assert named[0] in self.deployment.plan[key]["configData"], named
+        return named[0]
+
+    def hba_path(self, key: str) -> str:
+        """The authentication file: the other configuration file the entry declares."""
         declared = sorted(self.deployment.plan[key]["configData"])
-        assert len(declared) == 1, declared
-        path = declared[0]
-        assert isinstance(path, str), path
-        return path
+        other = [path for path in declared if path != self.config_path(key)]
+        assert len(other) == 1, declared
+        assert isinstance(other[0], str), other
+        return other[0]
+
+    def unit_command(self, key: str, unit: str) -> str:
+        """The command the plan recorded for one unit of one entry."""
+        command = self.deployment.plan[key]["units"][unit]["command"]
+        assert isinstance(command, str), command
+        return command
+
+    def directory_mode(self, key: str, unit: str) -> str:
+        """The mode one unit's declaration states its state directory is created at."""
+        mode = self.deployment.plan[key]["units"][unit]["stateDirectoryMode"]
+        assert isinstance(mode, str), mode
+        return mode
 
     def port(self, key: str) -> int:
         """The port one entry claimed."""
@@ -618,8 +649,16 @@ def test_every_path_a_unit_uses_comes_from_the_plan(run: Run) -> None:
     everything, and none of them appears in the folder's own declarations.
     """
     derived = {
-        CLUSTER_KEY: (run.state_dir(CLUSTER_KEY), run.config_path(CLUSTER_KEY)),
-        OWN_DB_KEY: (run.state_dir(OWN_DB_KEY), run.config_path(OWN_DB_KEY)),
+        CLUSTER_KEY: (
+            run.state_dir(CLUSTER_KEY),
+            run.config_path(CLUSTER_KEY),
+            run.hba_path(CLUSTER_KEY),
+        ),
+        OWN_DB_KEY: (
+            run.state_dir(OWN_DB_KEY),
+            run.config_path(OWN_DB_KEY),
+            run.hba_path(OWN_DB_KEY),
+        ),
         NEAR_KEY: (run.record_path(NEAR_KEY),),
         FAR_KEY: (run.record_path(FAR_KEY),),
         OWN_KEY: (run.record_path(OWN_KEY),),
@@ -685,7 +724,7 @@ def test_each_application_reaches_the_database_it_wired(applied: Run) -> None:
     assert there["far_identifier"] == here["shared_identity"], (here, there)
     assert here["own_identifier"] == here["private_identity"], here
 
-    assert here["eu_rows"] == "near", here
+    assert here["eu_rows"] == run.label(NEAR_KEY), here
     assert here["us_rows"] == "far", here
     assert here["private_rows"] == "own", here
 
@@ -832,8 +871,8 @@ def test_data_written_before_a_restart_is_readable_after_it(applied: Run) -> Non
         timeout=300,
     )
 
-    assert answered["rows_before"] == "near", answered
-    assert answered["rows_after"] == "near", answered
+    assert answered["rows_before"] == run.label(NEAR_KEY), answered
+    assert answered["rows_after"] == run.label(NEAR_KEY), answered
     assert answered["server_state"] == "active", answered
     assert answered["server_after"] != answered["server_before"], answered
     assert answered["init_after"] == answered["init_before"], answered
@@ -989,3 +1028,345 @@ def test_each_service_reads_its_own_credential(applied: Run) -> None:
     # The group is what admits it: the same account without that group cannot.
     assert far["reads"] == "yes", far
     assert far["root_only"] == "no", far
+
+
+def test_the_init_step_creates_no_directory_of_its_own(applied: Run) -> None:
+    """The data directory is the service manager's, and the step makes nothing.
+
+    The declaration is what the unit carries, so the evidence is the directive
+    on the unit, the directory it produced and the step's own text carrying no
+    command that creates one. All three are read off the plan and the machine.
+    """
+    run = applied
+    state = run.state_dir(CLUSTER_KEY)
+    declared = run.deployment.plan[CLUSTER_KEY]["units"]["init"]["stateDirectory"]
+    assert len(declared) == 1, declared
+    assert state.endswith(f"/{declared[0]}"), (state, declared)
+
+    answered = run.observe(
+        CLUSTER_MACHINE,
+        f"printf 'owner=%s\\n' \"$(stat -c %U:%G {shlex.quote(state)})\"",
+        f"printf 'declares=%s\\n' \"$(systemctl show -P StateDirectory {shlex.quote(INIT_UNIT)})\"",
+        f"printf 'creates=%s\\n' \"$(grep -cE 'install -d|mkdir' "
+        f'{shlex.quote(run.unit_command(CLUSTER_KEY, "init"))} || true)"',
+    )
+    assert answered["declares"] == declared[0], answered
+    assert answered["owner"] == "postgres:postgres", answered
+    assert answered["creates"] == "0", answered
+
+
+def test_the_data_directory_arrives_at_the_mode_the_server_requires(applied: Run) -> None:
+    """The mode is the declaration's, and the server started against it.
+
+    `stat` prints no leading zero, so the comparison is against the declared
+    mode without it. The server refuses a data directory wider than `0750` by
+    name, so the absence of that sentence in its own journal is the second half.
+    """
+    run = applied
+    state = run.state_dir(CLUSTER_KEY)
+    mode = run.directory_mode(CLUSTER_KEY, "server")
+    assert {run.directory_mode(CLUSTER_KEY, unit) for unit in ("bootstrap", "init")} == {mode}
+
+    psql = shlex.quote(run.psql())
+    answered = run.observe(
+        CLUSTER_MACHINE,
+        f"printf 'mode=%s\\n' \"$(stat -c %a {shlex.quote(state)})\"",
+        f"printf 'owner=%s\\n' \"$(stat -c %U:%G {shlex.quote(state)})\"",
+        f"printf 'state=%s\\n' \"$(systemctl is-active {SERVER_UNIT})\"",
+        f"printf 'refused=%s\\n' \"$(journalctl -u {SERVER_UNIT} --no-pager"
+        " | grep -cE 'invalid permissions|group or world access' || true)\"",
+        f"printf 'alive=%s\\n' \"$({psql} -h {shlex.quote(state)} -p {run.port(CLUSTER_KEY)}"
+        " -U postgres -d postgres -tAc 'SELECT 1')\"",
+    )
+    assert answered["mode"] == mode.removeprefix("0"), (answered, mode)
+    assert answered["owner"] == "postgres:postgres", answered
+    assert answered["state"] == "active", answered
+    assert answered["refused"] == "0", answered
+    assert answered["alive"] == "1", answered
+
+
+def test_the_authentication_file_arrives_as_a_declared_file(applied: Run) -> None:
+    """The bytes are the build's, at the path the module derived, and the server read it.
+
+    The digest is compared inside the unit's own mount namespace, the way the
+    configuration file's is: `BindReadOnlyPaths=` is the unit's, and the host
+    holds the empty mount point systemd made for it. `SHOW hba_file` is
+    superuser-only, so it is asked over the socket the module derived.
+    """
+    run = applied
+    hba = run.hba_path(CLUSTER_KEY)
+    carried = run.deployment.entries[CLUSTER_KEY].path
+    assert carried is not None
+    built = (carried / f"files{hba}").read_bytes()
+    digest = hashlib.sha256(built).hexdigest()
+
+    psql = shlex.quote(run.psql())
+    inside = (
+        f'nsenter --mount --target "$(systemctl show -P MainPID {SERVER_UNIT})"'
+        f" sha256sum {shlex.quote(hba)} | cut -d' ' -f1"
+    )
+    answered = run.observe(
+        CLUSTER_MACHINE,
+        f"printf 'inside=%s\\n' \"$({inside})\"",
+        f"printf 'onTheHost=%s\\n' \"$(stat -c %s {shlex.quote(hba)})\"",
+        f"printf 'named=%s\\n' \"$({psql} -h {shlex.quote(run.state_dir(CLUSTER_KEY))}"
+        f" -p {run.port(CLUSTER_KEY)} -U postgres -d postgres -tAc 'SHOW hba_file')\"",
+    )
+    assert answered["inside"] == digest, answered
+    assert answered["onTheHost"] == "0", answered
+    assert answered["named"] == hba, answered
+
+    # The path is the plan's: a key of the entry's own `configData`, and the
+    # configuration file the module declares beside it is what names it.
+    assert hba in run.deployment.plan[CLUSTER_KEY]["configData"]
+    conf = run.deployment.entries[CLUSTER_KEY].path
+    assert conf is not None
+    assert hba in (conf / f"files{run.config_path(CLUSTER_KEY)}").read_text()
+
+
+def test_one_file_decides_how_a_password_is_hashed(applied: Run) -> None:
+    """The stored verifier's method is the declared file's, and no flag states one.
+
+    The verifier is read as the superuser over the socket, because `pg_authid`
+    answers a database owner with nothing. Its first `$`-separated field is the
+    method the server hashed with, and the control is the same role reaching the
+    published port over the network.
+    """
+    run = applied
+    carried = run.deployment.entries[CLUSTER_KEY].path
+    assert carried is not None
+    declared = (carried / f"files{run.config_path(CLUSTER_KEY)}").read_text()
+    stated = [
+        line.split("=", 1)[1].strip()
+        for line in declared.splitlines()
+        if line.startswith("password_encryption")
+    ]
+    assert len(stated) == 1, declared
+
+    owner = run.exports("eu")["username"]["value"]
+    verifier = f"SELECT split_part(rolpassword, '$', 1) FROM pg_authid WHERE rolname = '{owner}'"
+    psql = shlex.quote(run.psql())
+    state = shlex.quote(run.state_dir(CLUSTER_KEY))
+    port = run.port(CLUSTER_KEY)
+
+    answered = run.observe(
+        CLUSTER_MACHINE,
+        f"printf 'method=%s\\n' \"$({psql} -h {state} -p {port} -U postgres -d postgres"
+        f' -tAc {shlex.quote(verifier)})"',
+        f"printf 'setting=%s\\n' \"$({psql} -h {state} -p {port} -U postgres -d postgres"
+        " -tAc 'SHOW password_encryption')\"",
+        f"printf 'flags=%s\\n' \"$(grep -c -- '--auth'"
+        f' {shlex.quote(run.unit_command(CLUSTER_KEY, "bootstrap"))} || true)"',
+        f"printf 'network=%s\\n' \"$(PGPASSWORD={shlex.quote(run.passwords[EU_VALUE])} {psql}"
+        f" -h {run.address(CLUSTER_MACHINE)} -p {port} -U {owner} -d eu -tAc 'SELECT 1')\"",
+    )
+    assert answered["setting"] == stated[0], (answered, stated)
+    assert answered["method"].lower() == stated[0].lower(), (answered, stated)
+    assert answered["flags"] == "0", answered
+    assert answered["network"] == "1", answered
+
+
+def test_an_identifier_carrying_a_quote_is_not_sql(applied: Run) -> None:
+    """One consumer's label carries a quote, and what reached the database is one label.
+
+    The label is read off the plan rather than written here, so the declaration
+    and the assertion cannot drift. The step reporting no syntax error is the
+    other half: a quote that was parsed rather than escaped ends the statement.
+    """
+    run = applied
+    label = run.label(NEAR_KEY)
+    assert "'" in label, label
+
+    psql = shlex.quote(run.psql())
+    rows = "SELECT string_agg(label, ',' ORDER BY label) FROM notes"
+    answered = run.observe(
+        CLUSTER_MACHINE,
+        f"sed 's/^/near_/' {shlex.quote(run.record_path(NEAR_KEY))}",
+        f"printf 'unit=%s\\n' \"$(systemctl is-active {NEAR_UNIT})\"",
+        f"printf 'stored=%s\\n' \"$(PGPASSWORD={shlex.quote(run.passwords[EU_VALUE])} {psql}"
+        f" -h {run.address(CLUSTER_MACHINE)} -p {run.port(CLUSTER_KEY)}"
+        f' -U {run.exports("eu")["username"]["value"]} -d eu -tAc {shlex.quote(rows)})"',
+        f"printf 'errors=%s\\n' \"$(journalctl -u {NEAR_UNIT} --no-pager"
+        " | grep -ci 'syntax error' || true)\"",
+    )
+    assert answered["near_label"] == label, answered
+    assert answered["stored"] == label, answered
+    assert answered["unit"] == "active", answered
+    assert answered["errors"] == "0", answered
+
+
+def _cluster_state(run: Run) -> dict[str, str]:
+    """The bootstrap's own verdict, the DDL step's last start, and the cluster's identity.
+
+    One ssh command, because the guest's sshd is per-connection socket
+    activated. `ConditionResult` is the service manager's answer about whether
+    it ran the unit at all, which is the fact the declaration replaced a shell
+    test on the same path with.
+    """
+    version = f"{run.state_dir(CLUSTER_KEY)}/PG_VERSION"
+    identity = "SELECT system_identifier FROM pg_control_system()"
+    return run.observe(
+        CLUSTER_MACHINE,
+        f"printf 'condition=%s\\n' \"$(systemctl show -P ConditionResult {BOOTSTRAP_UNIT})\"",
+        f"printf 'bootstrap_state=%s\\n' \"$(systemctl show -P ActiveState {BOOTSTRAP_UNIT})\"",
+        f"printf 'bootstrap_status=%s\\n' \"$(systemctl show -P ExecMainStatus {BOOTSTRAP_UNIT})\"",
+        f"printf 'init_started=%s\\n' \"$(systemctl show -P"
+        f' ExecMainStartTimestampMonotonic {INIT_UNIT})"',
+        f"printf 'init_state=%s\\n' \"$(systemctl show -P ActiveState {INIT_UNIT})\"",
+        f"printf 'version=%s\\n' \"$(test -e {shlex.quote(version)}"
+        ' && echo present || echo absent)"',
+        f"printf 'identity=%s\\n' \"$({shlex.quote(run.psql())}"
+        f" -h {shlex.quote(run.state_dir(CLUSTER_KEY))} -p {run.port(CLUSTER_KEY)}"
+        f' -U postgres -d postgres -tAc {shlex.quote(identity)})"',
+    )
+
+
+@dataclass
+class Again:
+    """One machine either side of a second apply, and the build the second applied."""
+
+    run: Run
+    before: dict[str, str]
+    after: dict[str, str]
+
+
+@pytest.fixture(scope="session")
+def reapplied(applied: Run) -> Again:
+    """A second apply, of the same deployment with one declaration moved.
+
+    What moved is the declared owner of one database, so this apply has to
+    converge a database that already exists rather than create one. The cluster
+    is read either side of the apply, because "ran once and was skipped after"
+    is a comparison and the apply is between its halves.
+    """
+    first = applied
+    before = _cluster_state(first)
+
+    run = Run(
+        cluster=first.cluster,
+        deployment=CHANGED,
+        key=first.key,
+        passwords=first.passwords,
+        source=first.source,
+    )
+    reported = run.cluster.run(
+        [str(CLI), "apply", str(run.deployment.root), "--values", str(run.source)],
+        env=delivery.command_env(dict(os.environ), run.key),
+    )
+    run.steps.extend(reported.stdout.splitlines())
+
+    cluster = run.vm(CLUSTER_MACHINE)
+    cluster.wait_for_unit(INIT_UNIT, timeout=300)
+    cluster.wait_for_unit(SERVER_UNIT, timeout=300)
+    cluster.wait_until_succeeds(f"ss -ltn | grep -q ':{run.port(CLUSTER_KEY)}'", timeout=120)
+    cluster.wait_for_unit(NEAR_UNIT, timeout=300)
+    run.vm(FAR_MACHINE).wait_for_unit(FAR_UNIT, timeout=300)
+
+    return Again(run=run, before=before, after=_cluster_state(run))
+
+
+def test_the_bootstrap_runs_once_and_is_skipped_after(reapplied: Again) -> None:
+    """The initialisation happened once; the step that converges happened twice.
+
+    Whether an activation restarts a unit whose file did not move is the
+    endpoint's own business, so the skip is asked of the service manager after
+    the second apply rather than inferred from it. Restarting a unit two others
+    require stops them, so the cluster is started again in the same command:
+    the tests after this one read the server, and the identity it then reports
+    is what says the skip left the data alone.
+    """
+    run = reapplied.run
+    before, after = reapplied.before, reapplied.after
+    identity = "SELECT system_identifier FROM pg_control_system()"
+    reads = (
+        f"{shlex.quote(run.psql())} -h {shlex.quote(run.state_dir(CLUSTER_KEY))}"
+        f" -p {run.port(CLUSTER_KEY)} -U postgres -d postgres -tAc {shlex.quote(identity)}"
+    )
+
+    assert before["condition"] == "yes", before
+    assert before["bootstrap_state"] == "active", before
+    assert before["bootstrap_status"] == "0", before
+    assert before["version"] == "present", before
+    assert before["identity"].isdigit(), before
+
+    assert after["init_started"] != before["init_started"], (before, after)
+    assert after["init_state"] == "active", after
+
+    asked = run.observe(
+        CLUSTER_MACHINE,
+        f"systemctl restart {BOOTSTRAP_UNIT}",
+        f"printf 'condition=%s\\n' \"$(systemctl show -P ConditionResult {BOOTSTRAP_UNIT})\"",
+        f"printf 'state=%s\\n' \"$(systemctl show -P ActiveState {BOOTSTRAP_UNIT})\"",
+        f"systemctl start {SERVER_UNIT}",
+        f"for _ in $(seq 1 60); do {reads} >/dev/null 2>&1 && break; sleep 2; done",
+        f"printf 'identity=%s\\n' \"$({reads})\"",
+        f"printf 'server=%s\\n' \"$(systemctl is-active {SERVER_UNIT})\"",
+        timeout=300,
+    )
+    assert asked["condition"] == "no", asked
+    assert asked["state"] == "inactive", asked
+    assert asked["server"] == "active", asked
+    assert asked["identity"] == before["identity"], (before, asked)
+
+
+def test_a_changed_database_owner_takes_effect_on_a_second_apply(reapplied: Again) -> None:
+    """The database the first apply created is owned by the role the second names.
+
+    The two owners are read off the two builds' own plans, so the test states
+    neither. The rows written under the previous owner are read back through the
+    new one, which is what makes the handover a handover rather than a rename.
+    """
+    run = reapplied.run
+    was = DEPLOYMENT.plan[CLUSTER_KEY]["provides"]["eu"]["exports"]["username"]["value"]
+    now = run.exports("eu")["username"]["value"]
+    assert was != now, (was, now)
+
+    psql = shlex.quote(run.psql())
+    state = shlex.quote(run.state_dir(CLUSTER_KEY))
+    port = run.port(CLUSTER_KEY)
+    owner = "SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_database WHERE datname = 'eu'"
+    rows = "SELECT string_agg(label, ',' ORDER BY label) FROM notes"
+
+    answered = run.observe(
+        CLUSTER_MACHINE,
+        f"printf 'owner=%s\\n' \"$({psql} -h {state} -p {port} -U postgres -d postgres"
+        f' -tAc {shlex.quote(owner)})"',
+        f"printf 'rows=%s\\n' \"$(PGPASSWORD={shlex.quote(run.passwords[EU_VALUE])} {psql}"
+        f" -h {run.address(CLUSTER_MACHINE)} -p {port} -U {now} -d eu"
+        f' -tAc {shlex.quote(rows)})"',
+        f"printf 'consumer=%s\\n' \"$(systemctl is-active {NEAR_UNIT})\"",
+    )
+    assert answered["owner"] == now, answered
+    assert answered["rows"] == run.label(NEAR_KEY), answered
+    assert answered["consumer"] == "active", answered
+
+
+def test_a_role_the_deployment_no_longer_names_cannot_log_in(reapplied: Again) -> None:
+    """The superseded role keeps everything it owned and loses only its login."""
+    run = reapplied.run
+    gone = DEPLOYMENT.plan[CLUSTER_KEY]["provides"]["eu"]["exports"]["username"]["value"]
+    assert gone not in {run.exports(name)["username"]["value"] for name in ("eu", "us")}
+
+    psql = shlex.quote(run.psql())
+    state = shlex.quote(run.state_dir(CLUSTER_KEY))
+    address = run.address(CLUSTER_MACHINE)
+    port = run.port(CLUSTER_KEY)
+    eu = shlex.quote(run.passwords[EU_VALUE])
+    login = f"SELECT rolcanlogin FROM pg_roles WHERE rolname = '{gone}'"
+    holds = "SELECT tableowner FROM pg_tables WHERE tablename = 'notes'"
+
+    answered = run.observe(
+        CLUSTER_MACHINE,
+        f"printf 'refused=%s\\n' \"$(PGPASSWORD={eu} {psql} -h {address} -p {port} -U {gone}"
+        " -d eu -tAc 'SELECT 1' 2>&1 | tr '\\n' ' ')\"",
+        f"printf 'status=%s\\n' \"$(PGPASSWORD={eu} {psql} -h {address} -p {port} -U {gone}"
+        " -d eu -tAc 'SELECT 1' >/dev/null 2>&1; echo $?)\"",
+        f"printf 'login=%s\\n' \"$({psql} -h {state} -p {port} -U postgres -d postgres"
+        f' -tAc {shlex.quote(login)})"',
+        f"printf 'holds=%s\\n' \"$({psql} -h {state} -p {port} -U postgres -d eu"
+        f' -tAc {shlex.quote(holds)})"',
+    )
+    assert answered["status"] != "0", answered
+    assert "not permitted to log in" in answered["refused"], answered
+    assert answered["login"] == "f", answered
+    assert answered["holds"] == gone, answered

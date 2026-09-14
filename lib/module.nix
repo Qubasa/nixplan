@@ -69,6 +69,23 @@ let
     reloadCommand = atoms.string;
     restart = atoms.restartPolicy;
     restartSec = atoms.duration;
+    stateDirectory = atoms.listOf atoms.directoryName;
+    runtimeDirectory = atoms.listOf atoms.directoryName;
+    cacheDirectory = atoms.listOf atoms.directoryName;
+    stateDirectoryMode = atoms.fileMode;
+    runtimeDirectoryMode = atoms.fileMode;
+    cacheDirectoryMode = atoms.fileMode;
+    startIfPathPresent = atoms.absolutePath;
+    startIfPathAbsent = atoms.absolutePath;
+  };
+
+  # The three kinds of directory a service manager creates for a unit and owns on
+  # its behalf, each with the mode that kind is applied at. A mode is per kind
+  # because that is the grain a service manager applies one at.
+  directoryKinds = {
+    stateDirectory = "stateDirectoryMode";
+    runtimeDirectory = "runtimeDirectoryMode";
+    cacheDirectory = "cacheDirectoryMode";
   };
 
   unitKeys = attrNames unitVocabulary ++ [ "extends" ];
@@ -89,10 +106,20 @@ let
 
   configFileKeys = [
     "mode"
+    "owner"
+    "group"
     "reload"
     "source"
     "render"
   ];
+
+  # What a configuration file's record may say about who reads it, the two fields
+  # a generated value's file record already carries. `mode` is beside them and
+  # already required, so a configuration file defaults around ownership alone.
+  configFileTypes = {
+    owner = atoms.userName;
+    group = atoms.groupName;
+  };
 
   dispositions = [
     "source"
@@ -154,6 +181,7 @@ in
 rec {
   inherit
     unitVocabulary
+    directoryKinds
     unitKeys
     unitReferenceKeys
     implKeys
@@ -889,7 +917,9 @@ rec {
 
       withheld =
         util.optional (contradictsOneShot || onScheduled) "restart"
-        ++ util.optional (contradictsOneShot || onScheduled || delayWithoutPolicy) "restartSec";
+        ++ util.optional (contradictsOneShot || onScheduled || delayWithoutPolicy) "restartSec"
+        ++ withheldDirectories
+        ++ (if contradictedPaths == [ ] then [ ] else conditionPolarities);
 
       recorded = util.subtractList typed withheld;
 
@@ -922,6 +952,37 @@ rec {
 
       grouped = builtins.groupBy (e: e.backend) applied;
 
+      extended = mapAttrs (_: es: builtins.foldl' (acc: e: acc // e.values) { } es) grouped;
+
+      kinds = attrNames directoryKinds;
+
+      # One kind stated in the vocabulary and again in a backend extension
+      # application. Neither statement is recorded, and the kind's mode goes with
+      # them: a mode beside no directory is what the row below refuses.
+      declaredTwice = filter (
+        kind: elem kind typed && builtins.any (fields: fields ? ${kind}) (builtins.attrValues extended)
+      ) kinds;
+
+      modeWithoutDirectory = filter (kind: elem directoryKinds.${kind} typed && !(elem kind typed)) kinds;
+
+      # A unit that starts only while a path is absent and only once the same
+      # path exists never starts, so neither condition is recorded.
+      conditionPolarities = [
+        "startIfPathPresent"
+        "startIfPathAbsent"
+      ];
+
+      contradictedPaths =
+        if
+          all (k: elem k typed) conditionPolarities && unit.startIfPathPresent == unit.startIfPathAbsent
+        then
+          [ unit.startIfPathPresent ]
+        else
+          [ ];
+
+      withheldDirectories =
+        declaredTwice ++ map (kind: directoryKinds.${kind}) (declaredTwice ++ modeWithoutDirectory);
+
       ordering = listToAttrs (
         map (k: {
           name = k;
@@ -938,7 +999,7 @@ rec {
             { }
           else
             {
-              extends = mapAttrs (_: es: builtins.foldl' (acc: e: acc // e.values) { } es) grouped;
+              extends = mapAttrs (_: fields: removeAttrs fields declaredTwice) extended;
             }
         );
 
@@ -1038,7 +1099,39 @@ rec {
             evidence = "the timer is what decides when a scheduled unit runs, so a restart policy beside it is a second schedule nobody declared";
             resolution = "drop the policy in ${module}, or drop the schedule and let the unit run continuously; the policy is not recorded";
           }
-        );
+        )
+        ++ map (
+          kind:
+          diag.error {
+            inherit subject;
+            id = "unit-directory-mode-without-directory";
+            message = "${where} declares ${util.quote directoryKinds.${kind}} and no ${util.quote kind}";
+            evidence = "a mode is the mode a service manager creates a directory of that kind at, and a unit given no directory of it has nothing to apply the mode to";
+            resolution = "declare ${util.quote kind} beside it in ${module}, or drop ${
+              util.quote directoryKinds.${kind}
+            }; the mode is not recorded";
+          }
+        ) modeWithoutDirectory
+        ++ map (
+          kind:
+          diag.error {
+            inherit subject;
+            id = "unit-directory-declared-twice";
+            message = "${where} declares ${util.quote kind} in the vocabulary and again in a backend extension application";
+            evidence = "a renderer handed two statements about one directory has no way to choose between them, and the deployment can say it once";
+            resolution = "drop ${util.quote kind} from the extension the unit applies in ${module}, or from the unit's own fields; neither declaration is recorded";
+          }
+        ) declaredTwice
+        ++ map (
+          path:
+          diag.error {
+            inherit subject;
+            id = "unit-condition-contradicts-itself";
+            message = "${where} starts only while ${util.quote path} is absent and only once it is present";
+            evidence = "both conditions hold together, so the unit is skipped whether the path is there or not and never runs at all";
+            resolution = "keep one of `startIfPathPresent` and `startIfPathAbsent` in ${module}, or name two paths; neither condition is recorded";
+          }
+        ) contradictedPaths;
     in
     {
       inherit record rows;
@@ -1080,6 +1173,17 @@ rec {
         else
           [ ];
       renderOk = renderIsList && malformedItems == [ ];
+
+      typedOwnership = filter (k: file ? ${k}) (attrNames configFileTypes);
+
+      # The record every reader sees, so one function decides the defaults and
+      # nothing downstream writes `or "root"`, the way `fileRecord` does for a
+      # generated value's file. `stated` names what enters the entry's key, and
+      # `mode` is always in it: a configuration file's mode is required, so a
+      # file stating no ownership keys exactly as it did.
+      statedOwnership = filter (k: file ? ${k} && configFileTypes.${k}.verify file.${k} == null) (
+        attrNames configFileTypes
+      );
 
       rows =
         map (
@@ -1134,6 +1238,18 @@ rec {
           }
         )
         ++ map (
+          key:
+          diag.error {
+            inherit subject;
+            id = "config-file-ownership-malformed";
+            message = "${where} declares ${util.quote key} with a value that fails its field's type";
+            evidence = "the record declares ${key} as ${
+              util.quote configFileTypes.${key}.name
+            }, and korora reports: ${toString (configFileTypes.${key}.verify file.${key})}";
+            resolution = "write a value of that type in ${subject}; the failing value is not recorded and the default is installed";
+          }
+        ) (filter (k: configFileTypes.${k}.verify file.${k} != null) typedOwnership)
+        ++ map (
           r:
           diag.error {
             inherit subject;
@@ -1148,6 +1264,9 @@ rec {
       inherit rows;
       record = {
         mode = if file ? mode && isString file.mode then file.mode else null;
+        owner = if elem "owner" statedOwnership then file.owner else "root";
+        group = if elem "group" statedOwnership then file.group else "root";
+        stated = util.sortStrings ([ "mode" ] ++ statedOwnership);
         reload = util.sortStrings reloadSplit.right;
         disposition =
           if builtins.length given != 1 then

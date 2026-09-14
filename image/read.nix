@@ -112,8 +112,30 @@ let
     after = "After";
     requires = "Requires";
     schedule = "OnCalendar";
+    stateDirectory = "StateDirectory";
+    runtimeDirectory = "RuntimeDirectory";
+    cacheDirectory = "CacheDirectory";
+    stateDirectoryMode = "StateDirectoryMode";
+    runtimeDirectoryMode = "RuntimeDirectoryMode";
+    cacheDirectoryMode = "CacheDirectoryMode";
+    # One directive with the polarity in the value, which is systemd's own
+    # spelling of the negative: the planner states which condition holds.
+    startIfPathPresent = "ConditionPathExists";
+    startIfPathAbsent = "ConditionPathExists";
     extends = null;
   };
+
+  # The six directory fields, each rendered the same way, in the order the unit
+  # file carries them. The table above is what fails the build for a vocabulary
+  # field no directive names; this is the order the named ones are emitted in.
+  directoryFields = [
+    "cacheDirectory"
+    "cacheDirectoryMode"
+    "runtimeDirectory"
+    "runtimeDirectoryMode"
+    "stateDirectory"
+    "stateDirectoryMode"
+  ];
 
   backend = "systemd";
 
@@ -249,16 +271,63 @@ let
       ) (entry.vars or { })
     );
 
+  # The one record a store object carries. A bind shows the source's ownership and
+  # mode, so a configuration file stating anything else is a file this realiser
+  # installs on the host rather than binds.
+  storeRecord = {
+    owner = "root";
+    group = "root";
+    mode = "0444";
+  };
+
+  recordOf = f: "${f.owner}:${f.group} at mode ${f.mode}";
+
+  carriedByStore =
+    file:
+    file.owner == storeRecord.owner && file.group == storeRecord.group && file.mode == storeRecord.mode;
+
+  configRecordsOf =
+    entry:
+    mapAttrsToList (
+      path: file:
+      let
+        disposition = dispositionOf file;
+      in
+      {
+        inherit path disposition;
+        inherit (file)
+          mode
+          owner
+          group
+          reload
+          computed
+          ;
+        source = file.source or null;
+        render = file.render or null;
+        # Who puts the bytes at the path, beside the disposition, which says
+        # where they come from. A store object carries one record, so a file
+        # stating another is installed here, and a recipe naming a reference is
+        # installed whatever its record: its bytes are a path the machine holds.
+        install = disposition == reference || !(carriedByStore file);
+      }
+    ) (entry.configData or { });
+
+  # Every path a byte of one configuration file can be at, all three under the
+  # entry's own staging directory, which detaching removes. `staged` is the path
+  # the unit is shown; a recipe is concatenated into `assembling` and the
+  # candidate is owned and chmodded at `installing` before it is moved onto
+  # `staged`, so a run that stopped part way left nothing the unit could open.
   configFilesOf =
     name: entry:
-    mapAttrsToList (path: file: {
-      inherit path;
-      inherit (file) mode reload computed;
-      source = file.source or null;
-      render = file.render or null;
-      staged = stagedPath name path;
-      disposition = dispositionOf file;
-    }) (entry.configData or { });
+    map (
+      f:
+      f
+      // {
+        staged = stagedPath name f.path;
+        assembling = "${stagedPath name f.path}.assembling";
+        installing = "${stagedPath name f.path}.installing";
+      }
+    ) (configRecordsOf entry);
 
   # A projected file record carries `render = null` where the plan recorded a
   # source, so every reader of a recipe goes through this rather than `or [ ]`.
@@ -297,17 +366,18 @@ let
       )
     }";
 
-  # Where the bytes the bind reads come from. A store path arrives with the
-  # entry's closure, a delivered file arrives at its own path, and only a recipe
-  # naming a reference is staged by a step on the machine.
+  # Where the bytes the bind reads come from. A file this realiser installs is
+  # read from the path it installed it at, whatever the recipe; a file the store
+  # can carry as declared is read from the store object itself, which arrives
+  # with the entry's closure. A delivered file arrives at its own path.
   fromOf =
     name: f:
-    if f.disposition == "source" then
+    if f.install then
+      f.staged
+    else if f.disposition == "source" then
       f.source
-    else if f.disposition == "literal" then
-      (if assemble == null then null else assemble (assembledName name f.path) (literalsOf f))
     else
-      f.staged;
+      (if assemble == null then null else assemble (assembledName name f.path) (literalsOf f));
 
   hostPathsOf =
     { name, entry }:
@@ -317,7 +387,13 @@ let
         path = f.path;
         from = fromOf name f;
         kind = "configuration-file";
-        inherit (f) mode disposition;
+        inherit (f)
+          mode
+          owner
+          group
+          disposition
+          install
+          ;
       }
       // (
         let
@@ -372,11 +448,16 @@ let
     || (elem g.group (groupsOf unit) && opens (substring 2 1 g.mode))
     || opens (substring 3 1 g.mode);
 
+  # The files whose record a profile compares against the account it imposes: a
+  # delivered generated file, and every configuration file the entry declares.
+  # Both reach a unit at a host path, so a profile denying a host file only root
+  # may read denies either one whose record admits no other account.
   denialsOf =
     {
       denies,
       units,
       generated,
+      configFiles,
     }:
     map
       (u: {
@@ -394,13 +475,13 @@ let
             inherit (g) path;
             # The record and the account, so the row and the refusal name the
             # facts a deployment can change rather than the file's secrecy.
-            record = "${g.owner}:${g.group} at mode ${g.mode}";
+            record = recordOf g;
             account = if units.${u} ? user then units.${u}.user else "a transient account";
           }) (filter (u: !(admits units.${u} g)) (attrNames units))
         )
         (
           if elem "a host file only root may read" denies then
-            filter (g: g.deploy && g.inPlan == reference) generated
+            filter (g: g.deploy && g.inPlan == reference) generated ++ filter (f: isString f.mode) configFiles
           else
             [ ]
         )
@@ -414,6 +495,8 @@ rec {
     unitDirectives
     dispositionOf
     literalsOf
+    storeRecord
+    recordOf
     backend
     nameOf
     unitFileName
@@ -442,6 +525,7 @@ rec {
         inherit (profiles.${profile}) denies;
         units = entry.units or { };
         generated = generatedOf entry;
+        configFiles = configRecordsOf entry;
       };
 
   # The digest the endpoint stores for an artifact, over the artifact's own
@@ -593,6 +677,7 @@ rec {
       denied = denialsOf {
         inherit (profileRecord) denies;
         inherit units generated;
+        configFiles = configRecordsOf entry;
       };
 
       # A unit file is line-oriented, so a newline in a value is a fact the file
@@ -685,6 +770,20 @@ rec {
       extensionLines = map (f: "${u.directives.${f}.directive}=${u.directives.${f}.value}") (
         sortStrings (attrNames u.directives)
       );
+
+      # A condition goes in [Unit], and the negative polarity is the directive's
+      # own `!` prefix rather than a second directive name.
+      conditions =
+        optional (unit ? startIfPathPresent) [
+          "${unitDirectives.startIfPathPresent}=${unit.startIfPathPresent}"
+        ]
+        ++ optional (unit ? startIfPathAbsent) [
+          "${unitDirectives.startIfPathAbsent}=!${unit.startIfPathAbsent}"
+        ];
+
+      directoryLines = concatLists (
+        map (f: optional (unit ? ${f}) [ "${unitDirectives.${f}}=${spell unit.${f}}" ]) directoryFields
+      );
     in
     if unassembled != [ ] then
       fail accounts.hostPathUnassembled "entry ${quote image.key} is shown the host path ${quote (builtins.head unassembled).path} whose bytes this reading was handed no way to assemble"
@@ -696,6 +795,7 @@ rec {
         ]
         ++ optional (unit ? after) (map (r: "${unitDirectives.after}=${prefixed r}") unit.after)
         ++ optional (unit ? requires) (map (r: "${unitDirectives.requires}=${prefixed r}") unit.requires)
+        ++ conditions
         ++ [
           ""
           "[Service]"
@@ -711,6 +811,7 @@ rec {
         ++ optional (unit ? restart) [ "${unitDirectives.restart}=${unit.restart}" ]
         ++ optional (unit ? restartSec) [ "${unitDirectives.restartSec}=${unit.restartSec}" ]
         ++ optional (unit ? user) [ "${unitDirectives.user}=${unit.user}" ]
+        ++ directoryLines
         ++ environment
         ++ binds
         ++ extensionLines

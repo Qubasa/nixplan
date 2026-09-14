@@ -161,10 +161,10 @@ in
       # store, a render list is concatenated from its literals and reference paths.
       # Neither needs an evaluator or the daemon, which is why it happens here.
       #
-      # `install -m` is what puts the file where the unit reads it, and it creates its
-      # destination owner-only before it writes a byte and chmods to the declared mode
-      # after, so the file is never readable by anyone the declaration excludes. A
-      # render is concatenated into an owner-only file beside it first, because the
+      # A candidate is installed at `0600` beside the declared path, owned and then
+      # chmodded to the record, and moved into place, so the file is never readable by
+      # anyone the declaration excludes and a run that stopped part way left nothing at
+      # the path. A render is concatenated into an owner-only file first, because the
       # declared mode may carry no write bit and appending to a `0444` file is a
       # privilege rather than a right.
       #
@@ -174,7 +174,7 @@ in
       #
       # The candidate is compared against what the machine already holds and installed
       # only where they differ, so a second run of this script writes nothing and the
-      # units a file names are reloaded exactly when its bytes moved. The mode is
+      # units a file names are reloaded exactly when its bytes moved. The record is
       # re-applied either way: an unchanged file at a widened mode is still wrong.
       #
       # $root is PORTABLE_PLANNER_ROOT, empty on a machine attaching its own images and
@@ -184,8 +184,10 @@ in
         index: file:
         let
           staged = ''"$root"'' + lib.escapeShellArg file.staged;
-          partial = ''"$root"'' + lib.escapeShellArg "${file.staged}.assembling";
+          partial = ''"$root"'' + lib.escapeShellArg file.assembling;
+          installing = ''"$root"'' + lib.escapeShellArg file.installing;
           candidate = if file.source != null then lib.escapeShellArg file.source else partial;
+          ownership = lib.escapeShellArg "${file.owner}:${file.group}";
         in
         ''
           install -d -m 0755 "$root$(dirname ${lib.escapeShellArg file.staged})"
@@ -203,9 +205,13 @@ in
         )
         + ''
           if [ -e ${staged} ] && cmp -s ${candidate} ${staged}; then
+            chown ${ownership} ${staged}
             chmod ${lib.escapeShellArg file.mode} ${staged}
           else
-            install -m ${lib.escapeShellArg file.mode} ${candidate} ${staged}
+            install -m 0600 ${candidate} ${installing}
+            chown ${ownership} ${installing}
+            chmod ${lib.escapeShellArg file.mode} ${installing}
+            mv ${installing} ${staged}
             echo "assembled ${file.path}"
             changed=1
             changed_${toString index}=1
@@ -224,11 +230,12 @@ in
       # attaching refuses rather than writing an empty file over what the service reads.
       incomplete = filter (f: !f.computed) image.configFiles;
 
-      # Only a recipe that reads a path on the machine is assembled here. A source
-      # file and a recipe of nothing but literals are store objects the image
-      # already carries, so staging them would copy a store path to `/run` to bind
-      # it back.
-      staged = filter (f: f.computed && f.disposition == "reference") image.configFiles;
+      # Every file this realiser puts at a host path rather than binding from the
+      # store: a recipe that reads a path on the machine, and any file whose record
+      # a store object cannot carry. A file the store can carry as declared is a
+      # store object the image already holds, so staging it would copy a store path
+      # to `/run` to bind it back.
+      staged = filter (f: f.computed && f.install) image.configFiles;
 
       preamble = ''
         set -eu
@@ -379,12 +386,21 @@ in
               stagedPath = ''"$root"'' + lib.escapeShellArg file.staged;
               refs = map (i: i.ref) (filter (i: i ? ref) (if file.render == null then [ ] else file.render));
               present = concatStringsSep " && " (map (ref: ''[ -e "$root"${lib.escapeShellArg ref} ]'') refs);
+              # A file the store carries the bytes of is compared against that
+              # store object, which is the candidate the attach step installs.
+              built =
+                if file.source != null then
+                  ''
+                    cat ${lib.escapeShellArg file.source} > "$part"
+                  ''
+                else
+                  appends file ''"$part"'';
             in
             ''
               part="$(mktemp)"
               chmod 0600 "$part"
               if ${if refs == [ ] then "true" else present}; then
-              ${appends file ''"$part"''}
+              ${built}
                 if [ -e ${stagedPath} ] && cmp -s "$part" ${stagedPath}; then
                   echo "config ${file.path} current"
                 else

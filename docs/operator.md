@@ -254,6 +254,7 @@ therefore reached only by a caller that never asked the reading:
 | `operator-plan-record-unclassified` | a plan record is none of the three shapes the reading knows | teach the reading the shape, or stop emitting the record |
 | `operator-entry-realises-nothing` | the statement names an entry that declares no unit | remove it from `realise`, or declare a unit |
 | `operator-entry-path-not-assembled` | the stated realiser runs no step that could assemble a host path the entry is shown | state `image`, or stop declaring the configuration file |
+| `operator-entry-path-not-installable` | the stated realiser binds a store object, and a configuration file the entry is shown states a record a store object does not carry | state the store's own record on that file, or state `image` for that key |
 | `operator-entry-service-manager-mismatch` | the entry's machine runs another service manager | place it on a machine the realiser emits for |
 | `operator-entry-name-refused` | the stated realiser's endpoint refuses a name the entry derives | rename the instance or the service |
 | `operator-entry-access-denied` | a unit needs an access the stated profile denies | state a profile that allows it, or stop needing it |

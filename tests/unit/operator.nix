@@ -212,6 +212,21 @@ let
     };
   };
 
+  # A configuration file whose record a store object cannot carry: its bytes are
+  # literals the builder writes, so the only thing wrong with it is the account
+  # the declaration opens it to.
+  ownedConfigFile = _: {
+    closure = [ borgbackup ];
+    units.only.command = "${borgbackup}/bin/borg serve";
+    configData."/etc/agent.conf" = {
+      owner = "postgres";
+      group = "postgres";
+      mode = "0440";
+      reload = [ "only" ];
+      render = [ { text = "listen = yes\n"; } ];
+    };
+  };
+
   # A generator declaring no files, planned rather than written out: the plan is
   # what the planner produces, and the pruned copy beside it is the plan a reader
   # written before `files` was always recorded would be handed.
@@ -1097,6 +1112,42 @@ in
         namesTheReference = true;
         namesTheRealiser = true;
         statesTheRealisersOwnRule = true;
+        refused = true;
+      };
+    };
+
+  # The other half of the same question: the bytes exist before activation and
+  # the record does not, so the deployment is inapplicable and every entry of it
+  # is still read. No artifact of it is built, which is what refusal means here.
+  testAConfigurationFileMeetsARealiserThatInstallsNothing =
+    let
+      reading = readOf { } (deployment ownedConfigFile);
+      row = builtins.head (rowsById "operator-entry-path-not-installable" reading);
+    in
+    {
+      expr = {
+        rows = idsOf reading;
+        subject = row.subject;
+        severity = row.severity;
+        namesThePath = hasInfix "`/etc/agent.conf`" row.message;
+        namesTheRecordStated = hasInfix "postgres:postgres at mode 0440" row.message;
+        namesTheStoresOwn = hasInfix "root:root at mode 0444" row.message;
+        statesTheRealisersOwnRule = hasInfix flakeletReader.recordRule row.message;
+        resolutionNamesBothWaysOut =
+          hasInfix "root:root at mode 0444" row.resolution && hasInfix "`image`" row.resolution;
+        everyEntryStillRead = attrNames reading.entries;
+        refused = reading.refused;
+      };
+      expected = {
+        rows = [ "operator-entry-path-not-installable" ];
+        subject = oneKey;
+        severity = "error";
+        namesThePath = true;
+        namesTheRecordStated = true;
+        namesTheStoresOwn = true;
+        statesTheRealisersOwnRule = true;
+        resolutionNamesBothWaysOut = true;
+        everyEntryStillRead = [ oneKey ];
         refused = true;
       };
     };

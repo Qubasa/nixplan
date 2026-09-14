@@ -397,6 +397,14 @@ empty".
 | `reloadCommand` | string | what reloads it |
 | `restart` | `restartPolicy` | what the service manager does when it stops: `no`, `on-failure`, `on-abnormal`, `always` |
 | `restartSec` | `duration` | how long to wait before restarting; recordable only beside a `restart` |
+| `stateDirectory` | list of `directoryName` | directories the service manager creates and keeps, relative to the root that kind implies |
+| `runtimeDirectory` | list of `directoryName` | the same, deleted when the unit restarts |
+| `cacheDirectory` | list of `directoryName` | the same, a cache the machine may drop |
+| `stateDirectoryMode` | `fileMode` | the mode those state directories are created at; recordable only beside one |
+| `runtimeDirectoryMode` | `fileMode` | the same for `runtimeDirectory` |
+| `cacheDirectoryMode` | `fileMode` | the same for `cacheDirectory` |
+| `startIfPathPresent` | `absolutePath` | it runs only while that path exists |
+| `startIfPathAbsent` | `absolutePath` | it runs only while that path does not |
 | `extends` | list | typed extensions, below |
 
 **Each unit carries its own `env`.** Two units of one service needing different
@@ -428,6 +436,28 @@ unit declaring a `schedule` and any policy but `no` is
 `restartSec` with no `restart` is `unit-restart-delay-without-policy`. In each
 case the field is not recorded, so no renderer is handed two statements about
 when the unit runs.
+
+**A directory is declared, not made.** The three kinds are the three a service
+manager creates for a unit and owns on its behalf, and a mode is per kind
+because that is the grain one is applied at. A name is relative to the root its
+kind implies, so a name stating a root of its own fails `directoryName` and is
+`unit-field-type-mismatch` rather than earning an identifier: the kind decides
+where the directory lives. A mode beside no directory of its kind is
+`unit-directory-mode-without-directory`, the shape
+`unit-restart-delay-without-policy` already has, and the mode is not recorded.
+One kind declared both here and in a backend extension application is
+`unit-directory-declared-twice` and neither statement is recorded: a renderer
+handed two statements about one directory has no way to choose. A directory is a
+claim against the machine either way, so two entries of one machine recording
+one of them is `entry-unit-directory-shared` whichever site declared it.
+
+**A condition is one path and a polarity.** `startIfPathPresent` and
+`startIfPathAbsent` are what replaces a shell test inside the unit's own
+command, so a step that runs once is a declaration the service manager honours.
+One path stated as both is `unit-condition-contradicts-itself` - the unit would
+be skipped whether the path is there or not - and neither condition is recorded.
+A relative path fails `absolutePath` and is `unit-field-type-mismatch`: a
+relative path resolves against nothing the plan records.
 
 ### Unit extensions
 
@@ -503,6 +533,8 @@ A configuration file names its bytes and never carries them.
 | Key | Shape |
 | --- | --- |
 | `mode` | required, a string of octal digits — the mode a file is shown to a service with is a fact of the deployment and not of whoever wrote the bytes |
+| `owner` | a `userName`, defaulting to `root` |
+| `group` | a `groupName`, defaulting to `root` |
 | `reload` | the units **this module declared** that this file is for; a file that names no unit reloads none |
 | `source` | the store path holding the rendered file |
 | `render` | the ordered recipe the machine concatenates |
@@ -512,6 +544,20 @@ A configuration file names its bytes and never carries them.
 `config-file-mode-missing`, a `reload` that is not a list is
 `config-file-reload-malformed`, and a `reload` entry naming a unit this module
 did not declare is `unit-reference-unknown`.
+
+**The record is the same three fields a generated value's file record carries**,
+with the same rule about the key: only the fields a declaration actually stated
+enter the entry's own key, so a file stating no ownership keys exactly as it did
+before the two fields existed. `mode` is always in it, being required. A value
+failing either type is `config-file-ownership-malformed`, and the record then
+carries the default rather than the failing value.
+
+The ownership is read wherever the file meets an account. A unit of the entry
+running as an account the record does not admit is
+`entry-config-file-unreadable-by-user`; the same comparison against a profile's
+imposed account is the image realiser's denial, and a realiser that binds store
+objects rather than installing files refuses a record a store object cannot
+carry (`operator-entry-path-not-installable`).
 
 A recipe's items are `{ text = <public literal>; }` or `{ ref = <path>; }`,
 exactly one of the two per item; anything else is `config-file-render-item`.

@@ -185,6 +185,57 @@ let
     };
   };
 
+  # A configuration file of literals whose record defaults to the one a store
+  # object carries, so a caller states only the field that moves off it.
+  statingRecord =
+    {
+      owner ? null,
+      group ? null,
+      mode ? "0444",
+    }:
+    _: {
+      closure = [ borgbackup ];
+      units.web.command = "${borgbackup}/bin/borg serve";
+      configData."/etc/thing.conf" = {
+        inherit mode;
+        reload = [ "web" ];
+        render = [ { text = "value\n"; } ];
+      }
+      // (if owner == null then { } else { inherit owner; })
+      // (if group == null then { } else { inherit group; });
+    };
+
+  # A delivered generated file whose record names an account other than the
+  # superuser: the delivery installs it, not this realiser.
+  shownAnOwnedGeneratedFile = planOf {
+    instances.svc = {
+      module = soleRoot {
+        module = _: {
+          vars.hostKey.files."key" = {
+            secrecy = "secret";
+            owner = "postgres";
+            group = "postgres";
+            mode = "0440";
+          };
+          impl =
+            { vars, ... }:
+            {
+              closure = [ borgbackup ];
+              units.web = {
+                command = "${borgbackup}/bin/borg serve";
+                env.KEYFILE = vars.hostKey."key".path;
+              };
+            };
+        };
+      };
+      placement.every.only.machines = [ "one" ];
+    };
+    varsState."svc:vars/hostKey@one"."key" = {
+      present = true;
+      content = "PRIVATE-KEY-BYTES";
+    };
+  };
+
   suffixOf =
     file:
     let
@@ -716,6 +767,202 @@ in
       expected = {
         hostPaths = [ ];
         files = [ "svc-only-web.service" ];
+      };
+    };
+
+  testAFlakeletUnitCarriesTheDirectoryAndConditionDirectives =
+    let
+      declaring = _: {
+        closure = [ borgbackup ];
+        units.web = {
+          command = "${borgbackup}/bin/borg serve";
+          stateDirectory = [ "myapp" ];
+          stateDirectoryMode = "0700";
+          startIfPathAbsent = "/var/lib/myapp/VERSION";
+        };
+      };
+      text = reader.renderUnit (readOf { } declaring) "web";
+    in
+    {
+      expr = {
+        directives = map (needle: support.hasInfix needle text) [
+          "StateDirectory=myapp"
+          "StateDirectoryMode=0700"
+          "ConditionPathExists=!/var/lib/myapp/VERSION"
+        ];
+        install = lastSection text;
+        # No second mapping here: the directive names come from the one table.
+        table = [
+          reader.reader.unitDirectives.stateDirectory
+          reader.reader.unitDirectives.startIfPathAbsent
+        ];
+      };
+      expected = {
+        directives = [
+          true
+          true
+          true
+        ];
+        install = [
+          "[Unit]"
+          "[Service]"
+          "[Install]"
+        ];
+        table = [
+          "StateDirectory"
+          "ConditionPathExists"
+        ];
+      };
+    };
+
+  testAUnitDeclaringNoneOfTheNewFieldsIsByteIdentical =
+    let
+      text = reader.renderUnit (readOf { } simple) "web";
+    in
+    {
+      expr = {
+        inherit text;
+        names = map (needle: support.hasInfix needle text) [
+          "Directory"
+          "Condition"
+        ];
+      };
+      expected = {
+        text = ''
+          [Unit]
+          Description=svc:only web
+
+          [Service]
+          ExecStart=${borgbackup}/bin/borg serve
+
+          [Install]
+          WantedBy=multi-user.target
+        '';
+        names = [
+          false
+          false
+        ];
+      };
+    };
+
+  testAnEntryShownAConfigurationFileStatingAnOwnership =
+    let
+      owned = statingRecord {
+        owner = "postgres";
+        group = "postgres";
+      };
+      rows = (build.read { plan = (planned { } owned).plan; }).rows;
+      row = builtins.head rows;
+    in
+    {
+      expr = {
+        refused = raises (readOf { } owned);
+        rowAbove = map (r: r.id) rows;
+        names = map (needle: support.hasInfix needle row.message) [
+          "svc:only@one"
+          "/etc/thing.conf"
+          "postgres:postgres at mode 0444"
+          "root:root at mode 0444"
+        ];
+        resolutionNamesBothWaysOut = map (needle: support.hasInfix needle row.resolution) [
+          "root:root at mode 0444"
+          "state `image`"
+        ];
+      };
+      expected = {
+        refused = true;
+        rowAbove = [ "operator-entry-path-not-installable" ];
+        names = [
+          true
+          true
+          true
+          true
+        ];
+        resolutionNamesBothWaysOut = [
+          true
+          true
+        ];
+      };
+    };
+
+  testAnEntryShownAFileAtAModeNoStoreObjectHas =
+    let
+      closed = statingRecord { mode = "0600"; };
+      rows = (build.read { plan = (planned { } closed).plan; }).rows;
+      row = builtins.head rows;
+    in
+    {
+      expr = {
+        refused = raises (readOf { } closed);
+        rowAbove = map (r: r.id) rows;
+        names = map (needle: support.hasInfix needle row.message) [
+          "svc:only@one"
+          "/etc/thing.conf"
+          "root:root at mode 0600"
+          "root:root at mode 0444"
+        ];
+      };
+      expected = {
+        refused = true;
+        rowAbove = [ "operator-entry-path-not-installable" ];
+        names = [
+          true
+          true
+          true
+          true
+        ];
+      };
+    };
+
+  testAnEntryShownAFileWhoseRecordTheStoreCarries =
+    let
+      carried = statingRecord { };
+      image = readOf { } carried;
+      shown = builtins.head image.hostPaths;
+    in
+    {
+      expr = {
+        rowAbove = rowsAbove { } carried;
+        accepted = !(raises image);
+        install = shown.install;
+        boundFromTheArtifact = support.hasInfix "BindReadOnlyPaths=${shown.from}:/etc/thing.conf" (
+          reader.renderUnit image "web"
+        );
+        fromTheStore = support.hasInfix "/nix/store/" shown.from;
+      };
+      expected = {
+        rowAbove = [ ];
+        accepted = true;
+        install = false;
+        boundFromTheArtifact = true;
+        fromTheStore = true;
+      };
+    };
+
+  # A generated file's record is installed by whoever delivers the bytes, and its
+  # bytes arrive before activation, so this realiser is asked neither question.
+  testADeliveredFilesRecordIsNotThisRealisersToInstall =
+    let
+      image = reader.read {
+        plan = shownAnOwnedGeneratedFile.plan;
+        key = "svc:only@one";
+      };
+      shown = builtins.head image.hostPaths;
+    in
+    {
+      expr = {
+        accepted = !(raises image);
+        kind = shown.kind;
+        isItsOwnSource = shown.from == shown.path;
+        record = builtins.head (map (g: "${g.owner}:${g.group} at mode ${g.mode}") image.generated);
+        recordIsAsked = reader.acceptsRecord shown;
+      };
+      expected = {
+        accepted = true;
+        kind = "generated-file";
+        isItsOwnSource = true;
+        record = "postgres:postgres at mode 0440";
+        recordIsAsked = true;
       };
     };
 }

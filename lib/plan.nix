@@ -4,6 +4,7 @@
 {
   util,
   diag,
+  module,
 }:
 let
   inherit (builtins)
@@ -114,7 +115,12 @@ rec {
     }
     // (if file.present then { } else { bytes = "absent"; });
 
-  fileKeyInput = file: removeAttrs (fileRecord file) (util.subtractList ownershipKeys file.stated);
+  # The ownership keys a record states, and the projection that removes the ones
+  # a declaration did not state. One rule for the two file records this library
+  # carries: a plan written before a field existed keys as it did.
+  withoutUnstated = record: stated: removeAttrs record (util.subtractList ownershipKeys stated);
+
+  fileKeyInput = file: withoutUnstated (fileRecord file) file.stated;
 
   ownershipKeys = [
     "owner"
@@ -390,6 +396,36 @@ rec {
         ) edge.entryVarsFiles
     ) member.edges;
 
+  # A unit that cannot open a configuration file its own entry shows it. The same
+  # predicate as the row above and a second identifier, because the subject and
+  # the resolution differ: one names a slot and a provider's generator, this one
+  # names the entry's own declaration. A file the reading recorded no mode for is
+  # `config-file-mode-missing` already, and there is no record to compare.
+  configUnreadableRows =
+    {
+      subject,
+      units,
+      configData,
+    }:
+    util.concatMapAttrsToList (
+      path: file:
+      if !isString file.mode then
+        [ ]
+      else
+        util.concatMapAttrsToList (
+          unitName: unit:
+          util.optional (!(admits unit file)) (
+            diag.error {
+              inherit subject;
+              id = "entry-config-file-unreadable-by-user";
+              message = "unit ${util.quote unitName} of ${util.quote subject} runs as ${util.quote unit.user} and is shown ${util.quote path}, whose record is ${util.quote "${file.owner}:${file.group}"} at mode ${util.quote file.mode}";
+              evidence = "the mode admits its owner, a member of its group where the unit declares that group, and nobody else, so the unit starts and fails with `EACCES` on ${util.quote path}";
+              resolution = "declare `owner`, `group` or `mode` on that configuration file so ${util.quote unit.user} may open it, or run the unit as ${util.quote file.owner}";
+            }
+          )
+        ) units
+    ) configData;
+
   # A configuration file names its bytes and never carries them. A digest covers
   # only material the plan itself holds, and a file rendered over a set with an
   # absent entry is recorded as not computed rather than hashed over the rest.
@@ -429,30 +465,41 @@ rec {
         value = mapAttrs (
           _: file:
           {
-            inherit (file) mode reload;
+            inherit (file)
+              mode
+              owner
+              group
+              reload
+              ;
             computed = true;
           }
           // fileIdentity file
         ) placement.configData;
       };
+
+      record =
+        if complete then
+          guarded.value
+        else
+          mapAttrs (_: file: {
+            inherit (file)
+              mode
+              owner
+              group
+              reload
+              ;
+            computed = false;
+            row = {
+              id = "set-entry-absent";
+              inherit subject;
+            };
+          }) placement.configData;
     in
-    if complete then
-      {
-        record = guarded.value;
-        rows = guarded.rows;
-      }
-    else
-      {
-        record = mapAttrs (_: file: {
-          inherit (file) mode reload;
-          computed = false;
-          row = {
-            id = "set-entry-absent";
-            inherit subject;
-          };
-        }) placement.configData;
-        rows = [ ];
-      };
+    {
+      inherit record;
+      rows = if complete then guarded.rows else [ ];
+      keyInput = mapAttrs (path: file: withoutUnstated file placement.configData.${path}.stated) record;
+    };
 
   settingsRecord =
     member:
@@ -683,34 +730,32 @@ rec {
     };
   };
 
-  # A unit directory is whatever an extension application records under these
-  # three keys, under any backend, read the way a unit's declared groups are. The
+  # A unit directory is a claim however it was declared: the three fields the unit
+  # vocabulary carries, and whatever an extension application records under the
+  # same names, under any backend, read the way a unit's declared groups are. The
   # claim carries the field it was recorded under, because a state directory and
   # a runtime directory of one name are two paths on the machine.
-  directoryFields = [
-    "cacheDirectory"
-    "runtimeDirectory"
-    "stateDirectory"
-  ];
+  directoryFields = util.sortStrings (builtins.attrNames module.directoryKinds);
+
+  claimedUnder =
+    fields: field:
+    let
+      declared = fields.${field} or null;
+    in
+    if isList declared then
+      map (name: "${field}/${name}") (filter isString declared)
+    else if isString declared then
+      [ "${field}/${declared}" ]
+    else
+      [ ];
 
   directoriesOf =
     unit:
-    concatLists (
-      util.mapAttrsToList (
-        _: fields:
-        concatMap (
-          field:
-          let
-            declared = fields.${field} or null;
-          in
-          if isList declared then
-            map (name: "${field}/${name}") (filter isString declared)
-          else if isString declared then
-            [ "${field}/${declared}" ]
-          else
-            [ ]
-        ) directoryFields
-      ) (unit.extends or { })
+    concatMap (claimedUnder unit) directoryFields
+    ++ concatLists (
+      util.mapAttrsToList (_: fields: concatMap (claimedUnder fields) directoryFields) (
+        unit.extends or { }
+      )
     );
 
   # How a port claim reads in a row. A field the claim leaves unstated is every
@@ -940,7 +985,7 @@ rec {
           pin
           ;
         storeDir = resolved.storeDir;
-        configData = configData.record;
+        configData = configData.keyInput;
         settings = member.settings.values;
         alloc = member.alloc.ports;
       };
@@ -984,6 +1029,10 @@ rec {
         }
         ++ unreadableRows {
           inherit subject member units;
+        }
+        ++ configUnreadableRows {
+          inherit subject units;
+          configData = configData.record;
         };
       value =
         pruned {

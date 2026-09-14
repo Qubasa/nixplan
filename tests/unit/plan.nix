@@ -344,6 +344,65 @@ let
     };
   };
 
+  groupedUnit = planner.unitExtension {
+    backend = "systemd";
+    name = "systemd-service";
+    fields.supplementaryGroups = {
+      type = planner.korora.listOf planner.korora.string;
+    };
+  };
+
+  # One configuration file, whose record the caller states and whose unit the
+  # caller may give an account and a group, so the readability comparison has
+  # both halves to be made of.
+  ownedFileAt =
+    {
+      path ? "/etc/thing.conf",
+      owner ? null,
+      group ? null,
+      asUser ? null,
+      groups ? [ ],
+    }:
+    _: {
+      impl = _: {
+        configData.${path} = {
+          mode = "0440";
+          reload = [ "only" ];
+          render = [ { text = "value\n"; } ];
+        }
+        // (if owner == null then { } else { inherit owner; })
+        // (if group == null then { } else { inherit group; });
+        units.only = {
+          command = "/bin/true";
+        }
+        // (if asUser == null then { } else { user = asUser; })
+        // (
+          if groups == [ ] then
+            { }
+          else
+            {
+              extends = [
+                {
+                  extension = groupedUnit;
+                  values.supplementaryGroups = groups;
+                }
+              ];
+            }
+        );
+      };
+    };
+
+  declaresDirectory = field: name: _: {
+    impl = _: {
+      units.only = {
+        command = "/bin/true";
+      }
+      // {
+        ${field} = [ name ];
+      };
+    };
+  };
+
   # A row's own text, or the empty string where the table carries no such row, so
   # that a missing row is a comparison that failed rather than a coercion that
   # ended the evaluation of every other test.
@@ -689,7 +748,9 @@ in
     expr = workedPlan."vault-repo:server@vault".configData."/srv/borg/.ssh/authorized_keys";
     expected = {
       computed = false;
+      group = "root";
       mode = "0600";
+      owner = "root";
       reload = [ "borgRepo" ];
       row = {
         id = "set-entry-absent";
@@ -1803,14 +1864,18 @@ in
         rows = [ ];
         storeKeys = [
           "computed"
+          "group"
           "mode"
+          "owner"
           "reload"
           "source"
         ];
         literalKeys = [
           "computed"
           "contentHash"
+          "group"
           "mode"
+          "owner"
           "reload"
           "render"
         ];
@@ -1868,7 +1933,9 @@ in
         rows = [ ];
         keys = [
           "computed"
+          "group"
           "mode"
+          "owner"
           "reload"
           "render"
           "structureHash"
@@ -2405,6 +2472,292 @@ in
           true
           true
           true
+        ];
+      };
+    };
+
+  testAConfigurationFileStatingAnOwnerAndAGroup =
+    let
+      owned = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = ownedFileAt {
+            owner = "postgres";
+            group = "postgres";
+          };
+        });
+      };
+      plain = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = ownedFileAt { };
+        });
+      };
+    in
+    {
+      expr = {
+        rows = rowIds owned;
+        record = owned.plan."svc:only@one".configData."/etc/thing.conf";
+        keyMoved = owned.plan."svc:only@one".key != plain.plan."svc:only@one".key;
+      };
+      expected = {
+        rows = [ ];
+        record = {
+          computed = true;
+          contentHash = "sha256-1e1f2c881ae0608e";
+          group = "postgres";
+          mode = "0440";
+          owner = "postgres";
+          reload = [ "only" ];
+          render = [ { text = "value\n"; } ];
+        };
+        keyMoved = true;
+      };
+    };
+
+  testAConfigurationFileStatingNoOwnership =
+    let
+      result = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = ownedFileAt { };
+        });
+      };
+      record = result.plan."svc:only@one".configData."/etc/thing.conf";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        owner = record.owner;
+        group = record.group;
+        statedAsFields = [
+          (record ? owner)
+          (record ? group)
+        ];
+      };
+      expected = {
+        rows = [ ];
+        owner = "root";
+        group = "root";
+        statedAsFields = [
+          true
+          true
+        ];
+      };
+    };
+
+  # The projection removes the ownership keys the declaration did not state, so a
+  # deployment that states none keys exactly as it did before the record could
+  # carry one. The fixture is the evidence for the whole worked plan; these two
+  # entries are the evidence that stating one moves one key and no other.
+  testOnlyTheOwnershipStatedEntersTheKey =
+    let
+      twoFiles =
+        ownership:
+        planOf {
+          instances.svc = membersOn "one" {
+            first = ownedFileAt (ownership // { path = "/etc/first.conf"; });
+            second = ownedFileAt { path = "/etc/second.conf"; };
+          };
+        };
+      plain = twoFiles { };
+      grouped = twoFiles { group = "borg"; };
+    in
+    {
+      expr = {
+        rows = rowIds grouped;
+        fixtureKeyHeld = workedPlan."vault-repo:server@vault".key;
+        moved = plain.plan."svc:first@one".key != grouped.plan."svc:first@one".key;
+        theOtherHeld = plain.plan."svc:second@one".key == grouped.plan."svc:second@one".key;
+      };
+      expected = {
+        rows = [ ];
+        fixtureKeyHeld = "sha256-a090a60d56683eba";
+        moved = true;
+        theOtherHeld = true;
+      };
+    };
+
+  testAnOwnershipThatFailsItsType =
+    let
+      id = "config-file-ownership-malformed";
+      result = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = ownedFileAt { owner = "Postgres Admin"; };
+        });
+      };
+      record = result.plan."svc:only@one".configData."/etc/thing.conf";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        names = map (needle: hasInfix needle (said messageById id result)) [
+          "the module of `only`"
+          "`/etc/thing.conf`"
+          "`owner`"
+        ];
+        namesTheType = hasInfix "userName" (said evidenceById id result);
+        owner = record.owner;
+      };
+      expected = {
+        rows = [ id ];
+        names = [
+          true
+          true
+          true
+        ];
+        namesTheType = true;
+        owner = "root";
+      };
+    };
+
+  testAUnitThatCannotOpenItsOwnConfigurationFile =
+    let
+      id = "entry-config-file-unreadable-by-user";
+      result = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = ownedFileAt { asUser = "app"; };
+        });
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        severity = severityById id result;
+        subjects = subjectsById id result;
+        names = map (needle: hasInfix needle (said messageById id result)) [
+          "unit `only`"
+          "`app`"
+          "`/etc/thing.conf`"
+          "`root:root`"
+          "`0440`"
+        ];
+        resolutionNamesBoth = map (needle: hasInfix needle (said resolutionById id result)) [
+          "declare `owner`, `group` or `mode`"
+          "run the unit as `root`"
+        ];
+      };
+      expected = {
+        rows = [ id ];
+        severity = "error";
+        subjects = [ "svc:only@one" ];
+        names = [
+          true
+          true
+          true
+          true
+          true
+        ];
+        resolutionNamesBoth = [
+          true
+          true
+        ];
+      };
+    };
+
+  testAUnitAdmittedByTheFilesGroup =
+    let
+      result = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = ownedFileAt {
+            asUser = "app";
+            group = "app";
+            groups = [ "app" ];
+          };
+        });
+      };
+      record = result.plan."svc:only@one".configData."/etc/thing.conf";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        group = record.group;
+        mode = record.mode;
+      };
+      expected = {
+        rows = [ ];
+        group = "app";
+        mode = "0440";
+      };
+    };
+
+  testAUnitThatDeclaresNoAccount =
+    let
+      result = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = ownedFileAt { };
+        });
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        unitDeclaresNoUser = result.plan."svc:only@one".units.only ? user;
+        mode = result.plan."svc:only@one".configData."/etc/thing.conf".mode;
+      };
+      expected = {
+        rows = [ ];
+        unitDeclaresNoUser = false;
+        mode = "0440";
+      };
+    };
+
+  testTwoEntriesSharingADirectoryDeclaredThroughTheVocabulary =
+    let
+      id = "entry-unit-directory-shared";
+      result = planOf {
+        instances.svc = membersOn "one" {
+          first = declaresDirectory "runtimeDirectory" "records";
+          second = declaresDirectory "runtimeDirectory" "records";
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        severity = severityById id result;
+        subjects = subjectsById id result;
+        names = map (needle: hasInfix needle (said messageById id result)) [
+          "`svc:first@one`"
+          "`svc:second@one`"
+          "`one`"
+          "`runtimeDirectory/records`"
+        ];
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ id ];
+        severity = "warning";
+        subjects = [ "svc:first@one" ];
+        names = [
+          true
+          true
+          true
+          true
+        ];
+        applicable = true;
+      };
+    };
+
+  testAStateDirectoryAndARuntimeDirectoryOfOneName =
+    let
+      result = planOf {
+        instances.svc = membersOn "one" {
+          first = declaresDirectory "stateDirectory" "records";
+          second = declaresDirectory "runtimeDirectory" "records";
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        recorded = [
+          result.plan."svc:first@one".units.only.stateDirectory
+          result.plan."svc:second@one".units.only.runtimeDirectory
+        ];
+      };
+      expected = {
+        rows = [ ];
+        recorded = [
+          [ "records" ]
+          [ "records" ]
         ];
       };
     };

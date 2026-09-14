@@ -116,22 +116,31 @@ derivation is instantiated either.
 | a derived service name the endpoint would reject | `validate_name` (`manager.rs:1301-1312`): at most 128 characters, first an ASCII alphanumeric, then alphanumerics, `-` and `_`; no dots |
 | a unit file name outside the service's namespace | `validate_units` (`manager.rs:1314-1326`): the base is the service name or begins with `<name>-`, with at most one `@` |
 | an entry shown a host file whose bytes exist on no machine yet | this realiser runs no step on the machine, so a recipe reading a delivered path has nothing to assemble it; the image realiser's attach script does (`image/default.nix:101-133`) |
+| an entry shown a configuration file whose record a store object cannot carry | a bind shows the ownership and the mode of what it binds, and a store object is `root:root` at `0444`; installing another is a step on the machine this realiser does not run |
 
 The name refusals are the endpoint's own rules, restated where the deployment can be told about
-them. The host-file refusal is this realiser's own limit, and what it is applied to is **when a
-path's bytes exist** rather than what kind of file it is:
+them. The host-file refusals are this realiser's own limits, and they are two questions rather
+than one: **when a path's bytes exist**, and **what record the declaration states**.
 
 | Shown path | Carried how |
 | --- | --- |
-| a delivered generated file | its own source, so `from` equals `path`; the bytes arrive by delivery before the entry is activated |
+| a delivered generated file | its own source, so `from` equals `path`; the bytes arrive by delivery before the entry is activated, and the record is installed by whoever delivers them rather than by a realiser, so it is accepted whatever its ownership |
 | a configuration file recorded as a `source` store path | shown from that store path, which the artifact's closure reaches |
 | a configuration file whose `render` list holds `text` items only | assembled at build time, carried in the artifact beside `meta.json` and `units/`, and shown from that path |
+| a configuration file stating the record a store object carries | shown from the store object itself, whichever of the two dispositions it has |
+| a configuration file stating any other record | **refused**, naming the entry, the path, the record stated and the store's own. The resolution names both ways out: state the store's record, or state the realiser that installs files on the machine |
 | a configuration file whose `render` list carries a `ref` | **refused**, naming the entry, the host path and the reference: those bytes exist on no machine until that path is written |
+
+The planner reports the record refusal first, as `operator-entry-path-not-installable`, so a
+deployment stating this realiser for such an entry is inapplicable and its table says why before
+any artifact is evaluated.
 
 The worked deployment's `vault-repo:server` renders a file of literals, so this realiser could
 carry it; the fixture still states an image for it, because that is where the reading of an image
 entry is exercised. `tests/e2e/shared-postgres/` is the folder that proves the carried file on a
-machine, and a recipe reading a delivered secret is the remaining refusal (design.md D7).
+machine - two of them, one of which states the store's record explicitly because it declares the
+authentication file a server reads - and a recipe reading a delivered secret is the remaining
+refusal (design.md D7).
 
 A delivered value's bytes are also why the artifact holds none of them. `image/read.nix` refuses
 an environment value carrying a newline and quotes every other one, so what the unit records is a

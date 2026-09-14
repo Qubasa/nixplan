@@ -22,9 +22,14 @@ let
     runtimeInputs = [
       postgresql
       pkgs.coreutils
-      pkgs.gnused
     ];
     text = builtins.readFile ./init.sh;
+  };
+
+  bootstrapScript = pkgs.writeShellApplication {
+    name = "shared-postgres-bootstrap";
+    runtimeInputs = [ postgresql ];
+    text = builtins.readFile ./bootstrap.sh;
   };
 
   consumeScript = pkgs.writeShellApplication {
@@ -40,6 +45,7 @@ let
     services.default = import ./modules/postgresql/default.nix {
       postgresql = "${postgresql}";
       initScript = "${initScript}";
+      bootstrapScript = "${bootstrapScript}";
       inherit (postgresql) version;
       inherit postgresDatabase;
     };
@@ -66,61 +72,73 @@ let
       consumeScript = "${consumeScript}";
       postgresql = "${postgresql}";
       initScript = "${initScript}";
+      bootstrapScript = "${bootstrapScript}";
       inherit (postgresql) version;
       inherit postgresDatabase grouped;
     };
   };
 
-  deployment = import ./instances.nix {
-    cluster = clusterModule;
-    app = appModule;
-  };
   registry = import ./machines.nix;
-in
-{
-  default = operator.mkDeployment {
-    inherit pkgs planner;
 
-    args = {
-      inherit (deployment) instances;
-      inherit (registry) machines;
-
-      interfaces = {
-        "interfaces/default.nix" = interfaces;
+  # Two builds of one deployment, differing in one declaration: the second apply
+  # has to converge a database that already exists onto the owner the deployment
+  # now names, which a first apply of anything cannot show.
+  built =
+    euOwner:
+    let
+      deployment = import ./instances.nix {
+        cluster = clusterModule;
+        app = appModule;
+        inherit euOwner;
       };
+    in
+    operator.mkDeployment {
+      inherit pkgs planner;
 
-      # Both passwords are the operator's own bytes, minted by the run and
-      # written into its value source. Neither generator names a program, so
-      # neither is produced by the external tool.
-      varsState = {
-        "pg:vars/password-eu".password = {
-          present = true;
-        };
-        "pg:vars/password-us".password = {
-          present = true;
-        };
-        "own-app:vars/password-private".password = {
-          present = true;
-        };
-      };
+      args = {
+        inherit (deployment) instances;
+        inherit (registry) machines;
 
-      sources = {
-        deployment = "instances.nix";
-        machines = "machines.nix";
-        modules = {
-          pg = "postgresql/default.nix";
-          near-app = "app/default.nix";
-          far-app = "app/default.nix";
-          own-app = "app/default.nix";
+        interfaces = {
+          "interfaces/default.nix" = interfaces;
         };
-        leaves = {
-          pg.cluster = "postgresql/databases.nix";
-          near-app.client = "app/client.nix";
-          far-app.client = "app/client.nix";
-          own-app.client = "app/client.nix";
-          own-app.own = "postgresql/databases.nix";
+
+        # Both passwords are the operator's own bytes, minted by the run and
+        # written into its value source. Neither generator names a program, so
+        # neither is produced by the external tool.
+        varsState = {
+          "pg:vars/password-eu".password = {
+            present = true;
+          };
+          "pg:vars/password-us".password = {
+            present = true;
+          };
+          "own-app:vars/password-private".password = {
+            present = true;
+          };
+        };
+
+        sources = {
+          deployment = "instances.nix";
+          machines = "machines.nix";
+          modules = {
+            pg = "postgresql/default.nix";
+            near-app = "app/default.nix";
+            far-app = "app/default.nix";
+            own-app = "app/default.nix";
+          };
+          leaves = {
+            pg.cluster = "postgresql/databases.nix";
+            near-app.client = "app/client.nix";
+            far-app.client = "app/client.nix";
+            own-app.client = "app/client.nix";
+            own-app.own = "postgresql/databases.nix";
+          };
         };
       };
     };
-  };
+in
+{
+  default = built "app_eu";
+  changed = built "app_eu_next";
 }
