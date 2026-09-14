@@ -177,10 +177,14 @@ discipline and deduplication applied).
 | `unit-restart-delay-without-policy` | a unit declares `restartSec` and no `restart`, so the delay changes nothing; the delay is not recorded |
 | `unit-restart-contradicts-one-shot` | a `oneShot` unit declares `restart = "always"`, which restarts it for as long as it keeps succeeding; the policy is not recorded |
 | `unit-restart-on-scheduled` | a unit declares a `schedule` and a restart policy other than `no`, which is a second schedule nobody declared; the policy is not recorded |
+| `unit-directory-mode-without-directory` | a unit declares a directory mode for a kind it declares no directory of, and a mode alone creates nothing; the mode is not recorded |
+| `unit-directory-declared-twice` | a unit declares one directory kind in the vocabulary and again in a backend extension application, and a renderer handed two statements about one directory has no way to choose; neither is recorded |
+| `unit-condition-contradicts-itself` | a unit states one path as both `startIfPathPresent` and `startIfPathAbsent`, so it is skipped whether the path is there or not; neither condition is recorded |
 | `config-file-mode-missing` | a configuration file declares no `mode` |
 | `config-file-reload-malformed` | `reload` is not a list of this module's unit names |
 | `config-file-render-item` | a `render` item is neither one public literal nor one reference |
 | `config-file-disposition` | a file declares both `source` and `render`, or neither |
+| `config-file-ownership-malformed` | a configuration file's `owner` or `group` fails its type; the failing value is not recorded and the default is installed |
 
 ### Closures and pins
 
@@ -212,6 +216,7 @@ discipline and deduplication applied).
 | `export-secret-not-a-reference` | an export declared `secret` publishes something other than a generated file, so its bytes would be in the plan rather than its path |
 | `slot-reads-undeployed-value` | a `reads` entry names a secret export backed by a `deploy = false` generator, so the path it names resolves to nothing at run time |
 | `slot-reads-value-unreadable-by-user` | a unit runs as an account the recorded ownership and mode of a file backing one of the entry's reads do not admit, so the unit starts and fails with `EACCES` |
+| `entry-config-file-unreadable-by-user` | a unit runs as an account the record of a configuration file its own entry shows it does not admit, so the unit starts and fails with `EACCES`. The same comparison as the row above, over the entry's own declaration rather than another entry's delivered value |
 | `interface-fold-raised` | the interface's `fold` raised while combining the set the slot collected; the slot is then absent from `results`, and the row renders only where no implementation forces that slot |
 | `interface-fold-refused` | the interface's `fold` returned `{ refused = "<why>"; }`; the fold states the message and the planner states the identifier, the consuming entry as subject and the severity. The slot is absent from `results`, so a consumer reading it under `results ? <slot>` renders the row and one reading it unconditionally ends the evaluation of the whole table with a missing attribute |
 | `module-raised` | a module's own code raised a catchable error; its value is recorded as not computed and the rest of the plan is still produced |
@@ -260,6 +265,7 @@ caller reads them in the same table as the planner's own.
 | `operator-plan-record-unclassified` | a plan record is neither a generated value, a service entry nor a machine record |
 | `operator-entry-realises-nothing` | a statement names an entry that declares no unit, so there is nothing to realise |
 | `operator-entry-path-not-assembled` | the stated realiser runs no step that could assemble a host path the entry is shown, and the path's bytes do not exist before the entry is activated |
+| `operator-entry-path-not-installable` | the stated realiser binds a store object rather than installing a file on the machine, and a configuration file the entry is shown states a record a store object does not carry. The resolution names both ways out: state the store's record, or state the realiser that installs |
 | `operator-entry-extension-field-unrendered` | a unit records an extension field the stated realiser's own directive table has no rendering for |
 | `operator-entry-service-manager-mismatch` | the entry's machine runs one service manager and the stated realiser emits for another |
 | `operator-entry-name-refused` | the endpoint of the stated realiser refuses the service name or a unit file name the entry derives |

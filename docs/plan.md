@@ -74,7 +74,7 @@ field, and the table below says why.
 | `dependsOn` | keys that appear elsewhere **in the same plan**, each carrying the depended-on entry's own key hash |
 | `units.<name>` | one unit: `command` and whichever other vocabulary fields it declared, its own `env`, and `extends.<backend>` for the typed extensions it applied |
 | `env` | the variables **every unit of the entry agrees on**, and nothing else. A unit's environment lives on the unit, so two units disagreeing about a variable is two records and no row |
-| `configData."<path>"` | `{ mode, reload, computed }` plus the file's identity, below |
+| `configData."<path>"` | `{ mode, owner, group, reload, computed }` plus the file's identity, below. The three permission fields are the three a generated value's file record carries, and only the ones a declaration actually stated enter the entry's key: `owner` and `group` default to `root`, so a file stating no ownership keys as it did before the two fields existed, while `mode` is required and always in the key |
 | `settings.<member>.<knob>` | `{ value, source }` where source is `defaults`, `deployment` or `fixed` — every resolved value records where it came from |
 | `vars.<gen>.files.<file>` | `{ path, secrecy, inPlan, deploy, owner, group, mode }`, plus `bytes: "absent"` when the generator has not run. The path is the same on every machine that receives the value, and `deploy` is what tells a realiser whether bytes arrive at it: a realiser shows a path to a unit only where they do |
 | `alloc.ports.<claim>` | the fixed port |
