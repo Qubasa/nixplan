@@ -209,6 +209,10 @@ let
     "keep-a-declaration-from-ending-an-evaluation/specs/planner/diagnostics/spec.md"
     "keep-a-declaration-from-ending-an-evaluation/specs/planner/typed-edge/spec.md"
     "keep-a-declaration-from-ending-an-evaluation/specs/tooling/nix-unit-suite/spec.md"
+    "refuse-a-placement-onto-an-unaddressed-machine/specs/planner/machine-platform/spec.md"
+    "refuse-a-placement-onto-an-unaddressed-machine/specs/planner/plan-artifact/spec.md"
+    "refuse-a-placement-onto-an-unaddressed-machine/specs/planner/diagnostics/spec.md"
+    "refuse-a-placement-onto-an-unaddressed-machine/specs/operator/deployment-build/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -250,14 +254,6 @@ let
       "an unimplemented change: no task of open-a-configuration-file-to-its-reader has been done, so nothing in this package claims to satisfy it yet";
     "open-a-configuration-file-to-its-reader/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of open-a-configuration-file-to-its-reader has been done, so nothing in this package claims to satisfy it yet";
-    "refuse-a-placement-onto-an-unaddressed-machine/specs/operator/deployment-build/spec.md" =
-      "an unimplemented change: no task of refuse-a-placement-onto-an-unaddressed-machine has been done, so nothing in this package claims to satisfy it yet";
-    "refuse-a-placement-onto-an-unaddressed-machine/specs/planner/diagnostics/spec.md" =
-      "an unimplemented change: no task of refuse-a-placement-onto-an-unaddressed-machine has been done, so nothing in this package claims to satisfy it yet";
-    "refuse-a-placement-onto-an-unaddressed-machine/specs/planner/machine-platform/spec.md" =
-      "an unimplemented change: no task of refuse-a-placement-onto-an-unaddressed-machine has been done, so nothing in this package claims to satisfy it yet";
-    "refuse-a-placement-onto-an-unaddressed-machine/specs/planner/plan-artifact/spec.md" =
-      "an unimplemented change: no task of refuse-a-placement-onto-an-unaddressed-machine has been done, so nothing in this package claims to satisfy it yet";
     "refuse-a-value-a-unit-file-cannot-carry/specs/planner/diagnostics/spec.md" =
       "an unimplemented change: no task of refuse-a-value-a-unit-file-cannot-carry has been done, so nothing in this package claims to satisfy it yet";
     "refuse-a-value-a-unit-file-cannot-carry/specs/realiser/portable-service-image/spec.md" =

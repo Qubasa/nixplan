@@ -76,9 +76,10 @@ Recorded so the question is answered once.
   non-space character is `#`, so prose may name a raising call, but a trailing comment on a line
   of code counts as code and fails the scan.
 - korora's `verify` is the only entry point the library uses. `check` raises.
-- `builtins.tryEval` catches a `throw` and a failed `assert`. It catches neither an abort nor a
-  missing attribute, and both are documented as propagating. A missing attribute inside `lib/` is
-  a bug that fails the suite loudly.
+- `builtins.tryEval` catches a `throw` and a failed `assert`. It catches neither an abort, nor a
+  missing attribute, nor a function called without an argument its pattern requires, and all three
+  are documented as propagating. A missing attribute inside `lib/` is a bug that fails the suite
+  loudly.
 - A guard is not a check. Because a type error and a missing attribute are uncatchable, every value
   a declaration wrote is read for its kind before the reading indexes into it: `declaredRecord` in
   `lib/module.nix` answers `{ value, rows }` with `{ }` as the fallback and one
@@ -182,6 +183,23 @@ Recorded so the question is answered once.
   reading of each, before any key exists, so no delivery set is ever derived from an ambiguous
   key. It is a denylist of the three separators rather than an allowlist, which would refuse names
   existing deployments legitimately use.
+- A machine a placement selects must declare an `address`, a `system` and a `serviceManager`, and a
+  placement onto one that does not is dropped rather than planned. The rule is the same shape as
+  the separator one and for the same reason: a module may render any of the three, a field the
+  target does not carry is a missing attribute, and `builtins.tryEval` catches neither that nor a
+  function called without a required argument, so a row cannot make the declaration safe and the
+  declaration has to leave every later stratum. The selection is therefore read twice - what the
+  selector matched, which `machine-target-incomplete`, `placementsOn`, `usedMachines` and
+  `member-not-placed` are computed over, and what survived the drop, which is what `lib/plan.nix`
+  plans - because a check computed over the survivors would remove its own subject and its own
+  row. Completeness is read off the value the registry reading produced rather than off the
+  presence of the key, so `address = 22` is as incomplete as no address and earns both rows. A
+  machine no placement selects declares whatever it likes.
+- The rows of the unplaced reading of a member are produced only where the selector matched
+  nothing. A member whose every placement was dropped is still recorded as unplaced, but its
+  implementation is not read in a context the deployment never wrote: the unplaced reading hands
+  `impl` no `target` at all, so reading it there would turn the registry's mistake back into the
+  uncatchable failure this rule exists to remove.
 - A member's identity is its attribute key in the root, and nothing else. Placement, the settings
   namespace and every plan key read that key, so `name` inside the member is a second spelling
   nothing can address, and a member naming itself something else is `member-name-disagrees`.
@@ -421,11 +439,12 @@ Recorded so the question is answered once.
   and one description per condition: `rows` and `generation` answer a table and raise nothing,
   `store`, `configuration` and `deliveriesOf` refuse with the sentence that row states, and
   `operator.mkGeneration` writes `diagnostics.json` and `diagnostics.txt` into the generation farm
-  and refuses through `planner.render` of the whole table. Four of its conditions are reachable
+  and refuses through `planner.render` of the whole table. Three of its conditions are reachable
   from a plan the planner calls applicable: a value recording no `program`, a file name outside the
-  contract's grammar, a recipient machine with no address, and an address the rendered step cannot
-  carry as one shell word. A missing address is an error there and a warning of a deployment build,
-  because the rendered step is the one build artifact that carries an address.
+  contract's grammar, and an address the rendered step cannot carry as one shell word. A recipient
+  machine with no address is no longer one of them, the planner refusing that registry before a
+  plan exists, and it stays an error here because the rendered step is the one build artifact that
+  carries an address.
 - The secrets realiser projects a value's key onto `<instance>:<generator>`, and onto
   `<instance>:<generator>:<machine>` for a per-placement value. A colon is what the contract's
   `safe-name` admits and `/` and `@` are not, and a hash would make the tool's own listing and its
@@ -458,9 +477,11 @@ Recorded so the question is answered once.
   and `diagnostics.txt` are always there, no artifact of any entry is, the tree carries no marker
   of its own, and `passthru.entries.<key>` of such a deployment is the raise that carries
   `planner.render` of the table.
-- `operator-entry-machine-no-address` is a warning. An address is read by the step that dials a
-  machine and by no step that builds one, so the record carries the absence and every artifact is
-  built; refusing to dial belongs to the command, under "The command refuses before it dials".
+- The deployment build produces no row about a missing address. `machine-target-incomplete` holds
+  that fact one stratum up, so a row here would restate a decision about a plan the planner cannot
+  emit; the deployment record still carries `address` as an explicit absence, because a record is
+  an interface a hand-written plan arrives through, and refusing to dial stays with the command,
+  under "The command refuses before it dials".
 - The per-entry identity `manifest.json` publishes is the artifact's own version digest, which is
   what the endpoint stores as `settings_hash`. The plan entry key stays in `plan.json`: an address
   edit moves it and no byte of any artifact, so publishing it would present every entry on that

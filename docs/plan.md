@@ -68,7 +68,7 @@ field, and the table below says why.
 | `key` | a hash over instance, service, machine, that machine's key, the target it was planned for, its pin, its units, its declared closure, the store directory, its configuration data, its resolved reads, its settings and its allocated ports. Two evaluations of one input produce equal keys; an unrelated edit moves nothing |
 | `placement` | `reason` plus the `machines` or `tags` that selected it |
 | `storeDir` | the store directory the entry's paths are read against and the one a consumer populates, so a machine whose store lives elsewhere is planned under its own |
-| `target` | `{ system, serviceManager, address }`: the reduced platform record of the machine's system, what runs its units, and the address it is reached at. Each field is present only where the registry declared it, and the whole record is absent at an entry no placement selected |
+| `target` | `{ system, serviceManager, address }`: the reduced platform record of the machine's system, what runs its units, and the address it is reached at. All three are present wherever the record is, and the whole record is absent at an entry no placement selected |
 | `closure` | the store path roots the implementation **declared**, as literal strings. The planner's scan verifies them and never produces them |
 | `pin` | `{ key, locked }`, the lock entry the resolver handed the module. Recorded, never verified; absent when the module declares none |
 | `dependsOn` | keys that appear elsewhere **in the same plan**, each carrying the depended-on entry's own key hash |

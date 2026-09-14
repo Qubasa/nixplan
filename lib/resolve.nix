@@ -49,6 +49,7 @@ let
   ];
 
   machineTargetKeys = [
+    "address"
     "system"
     "serviceManager"
   ];
@@ -209,7 +210,18 @@ in
       badMachineNames = filter util.carriesKeySeparator machineNames;
       badInstanceNames = filter util.carriesKeySeparator instanceNames;
 
-      placeable = machine: machines ? ${machine} && !(util.carriesKeySeparator machine);
+      selectable = machine: machines ? ${machine} && !(util.carriesKeySeparator machine);
+
+      # A target a module reads a field of has to be total, and a missing
+      # attribute is neither a raise nor an assertion, so a machine the registry
+      # left incomplete is dropped from what is planned rather than reported and
+      # then handed over. What a selector matched is kept beside it, because the
+      # row and `member-not-placed` are about the declaration and not about what
+      # survived it.
+      missingTargetKeys =
+        machine: filter (k: machineFields.${machine}.${k}.value == null) machineTargetKeys;
+
+      placeable = machine: selectable machine && missingTargetKeys machine == [ ];
 
       nameRows =
         map (
@@ -287,7 +299,7 @@ in
         concatLists (
           util.mapAttrsToList (
             machine: _:
-            if placeable machine then
+            if selectable machine then
               map (tag: { inherit tag machine; }) machineFields.${machine}.tags.value
             else
               [ ]
@@ -353,7 +365,7 @@ in
                 map (machine: {
                   inherit machine;
                   entry = "${iname}:${mname}";
-                }) m.placements
+                }) m.requested
               ) inst.members
             )
           ) resolved.instances
@@ -381,9 +393,9 @@ in
             subject = machinesFile;
             id = "machine-target-incomplete";
             message = "machine ${util.quote incomplete.name} declares no ${util.quoteList incomplete.missing}, and a placement on it has no derivable target";
-            evidence = "a machine declares the system it runs and the service manager that runs its units, and ${
+            evidence = "a machine declares the address it is reached at, the system it runs and the service manager that runs its units, all three of which a module may render, and the deployment places ${
               util.countNoun (length (placementsOn incomplete.name)) "entry" "entries"
-            } are placed on it";
+            } on it";
             resolution = "declare ${util.quoteList incomplete.missing} for ${util.quote incomplete.name} in ${machinesFile}";
           }
         ) incompleteMachines
@@ -393,7 +405,7 @@ in
       incompleteMachines = filter (m: m.missing != [ ]) (
         map (name: {
           inherit name;
-          missing = filter (k: !(machines.${name} ? ${k})) machineTargetKeys;
+          missing = missingTargetKeys name;
         }) selectedMachines
       );
 
@@ -430,12 +442,13 @@ in
           serviceManager = if fields == null then null else fields.serviceManager.value;
           address = if fields == null then null else fields.address.value;
         in
-        if platformRecord == null && serviceManager == null then
+        if platformRecord == null || serviceManager == null || address == null then
           null
         else
-          (if platformRecord == null then { } else { system = platformRecord; })
-          // (if serviceManager == null then { } else { inherit serviceManager; })
-          // (if address == null then { } else { inherit address; });
+          {
+            system = platformRecord;
+            inherit serviceManager address;
+          };
 
       targets = mapAttrs (name: _: targetOf name) machines;
 
@@ -862,7 +875,8 @@ in
           named = namedField.value;
           tags = taggedField.value;
           unknownMachines = filter (m: !(machines ? ${m})) named;
-          placements = util.uniqueStrings (filter placeable (named ++ concatLists (map tagged tags)));
+          requested = util.uniqueStrings (filter selectable (named ++ concatLists (map tagged tags)));
+          placements = filter placeable requested;
 
           placementRecord = {
             reason = "every";
@@ -897,7 +911,7 @@ in
                 resolution = "add ${util.quote m} to ${machinesFile}, or name a registered machine in ${deploymentFile}";
               }
             ) unknownMachines
-            ++ util.optional (placements == [ ] && unplaced.units != { }) (
+            ++ util.optional (requested == [ ] && unplaced.units != { }) (
               diag.error {
                 inherit subject;
                 id = "member-not-placed";
@@ -1125,13 +1139,14 @@ in
             settings
             alloc
             placements
+            requested
             placementRecord
             edges
             results
             subject
             unplaced
             ;
-          rows = memberRows ++ (if placements == [ ] then unplaced.rows else [ ]);
+          rows = memberRows ++ (if requested == [ ] then unplaced.rows else [ ]);
           placed = builtins.listToAttrs (
             map (machine: {
               name = machine;

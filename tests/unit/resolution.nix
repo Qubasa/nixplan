@@ -874,13 +874,9 @@ in
     let
       reader = _: {
         impl =
-          { machine, target, ... }:
+          { target, ... }:
           {
-            units.only.command =
-              if target ? address then
-                "/bin/serve ${target.address}"
-              else
-                throw "machine ${machine} carries no address";
+            units.only.command = "/bin/serve ${target.address}";
           };
       };
       result = planOf {
@@ -894,30 +890,32 @@ in
         };
       };
       declared = result.plan."svc:only@one";
-      undeclared = result.plan."svc:only@bare";
     in
     {
       expr = {
         presentWhenDeclared = declared.target.address;
-        absentWhenNotDeclared = undeclared.target ? address;
-        targetFields = builtins.attrNames undeclared.target;
+        targetFields = builtins.attrNames declared.target;
         command = declared.units.only.command;
+        theEntryOnTheUnaddressedMachine = result.plan ? "svc:only@bare";
+        itsMachineIsStillRecorded = result.plan ? "machine:bare";
         rows = rowIds result;
-        subjects = subjectsById "module-raised" result;
-        namesTheEntryAndTheMachine = hasInfix "svc:only@bare" (messageById "module-raised" result);
-        severity = severityById "module-raised" result;
+        subjects = subjectsById "machine-target-incomplete" result;
+        namesTheMachine = hasInfix "`bare`" (messageById "machine-target-incomplete" result);
+        severity = severityById "machine-target-incomplete" result;
       };
       expected = {
         presentWhenDeclared = "one.example:22";
-        absentWhenNotDeclared = false;
         targetFields = [
+          "address"
           "serviceManager"
           "system"
         ];
         command = "/bin/serve one.example:22";
-        rows = [ "module-raised" ];
-        subjects = [ "svc:only@bare" ];
-        namesTheEntryAndTheMachine = true;
+        theEntryOnTheUnaddressedMachine = false;
+        itsMachineIsStillRecorded = true;
+        rows = [ "machine-target-incomplete" ];
+        subjects = [ "deployment/machines.nix" ];
+        namesTheMachine = true;
         severity = "error";
       };
     };

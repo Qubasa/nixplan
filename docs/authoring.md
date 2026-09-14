@@ -328,7 +328,7 @@ impl = { instance, member, machine, target, settings, vars, alloc, results }: { 
 | `instance` | the instance name this placement belongs to |
 | `member` | the member name this placement is, which is the attribute key its composing root declared it under. The pair `instance` and `member` is what every plan key of this member is built from, so a path or a directory named after the two is unique among the entries of one machine by construction - which is what `entry-host-path-claimed-twice`, `entry-port-claimed-twice` and `entry-unit-directory-shared` resolve to |
 | `machine` | the machine name, or `null` at a member no placement selected |
-| `target` | `{ system, serviceManager, address }` — the reduced platform record of the machine's system, the service manager that runs its units, and the address it is reached at. Each field is present only where the registry declared it. **Absent** at a member no placement selected |
+| `target` | `{ system, serviceManager, address }` — the reduced platform record of the machine's system, the service manager that runs its units, and the address it is reached at. All three are present at every placed entry. **Absent** at a member no placement selected |
 | `settings` | resolved settings: defaults, then the deployment, then `fixed` |
 | `vars.<gen>.<file>` | `{ present, secrecy, path, content }` — `content` is `null` for a secret or an ungenerated file |
 | `alloc.ports.<claim>` | the fixed port the claim declared |
@@ -339,15 +339,14 @@ there is no placement to have a target, so an `impl` that destructures
 `{ target, ... }` or reads `args.target` unconditionally raises at an unplaced
 member — and that raise propagates for the same reason a refused read's does
 (below). Read it under `machine != null`, or write the module so only a placed
-member forces the value. A machine that declares neither `system` nor
-`serviceManager` has no target either, and that case is
-`machine-target-incomplete` on the registry.
+member forces the value. A machine that declares no `address`, no `system` or
+no `serviceManager` has no derivable target, and that case is
+`machine-target-incomplete` on the registry: the placement onto such a machine
+is dropped rather than planned, so no `impl` is handed a partial target.
 
-A machine that declares no `address` yields a target **without that field**, so
-a module publishing its own endpoint is refused rather than handed an empty
-string. Read it under `target ? address` where a deployment may leave it out:
-an unguarded `target.address` on such a machine is a missing attribute, which
-propagates.
+A planned entry's target therefore carries all three fields. Read
+`target.address` plainly: there is no machine a placement selected for which it
+is absent, and `target ? address` guards nothing.
 
 `address` is in the target rather than beside it because a unit may be rendered
 from it and a target is what an entry's key hashes. Changing one machine's
@@ -726,18 +725,25 @@ Two files by convention: the machine registry and the instances.
 
 | Key | Is |
 | --- | --- |
-| `address` | how a consumer reaches the machine, and what an `impl` on it receives as `target.address` |
+| `address` | how a consumer reaches the machine, and what an `impl` on it receives as `target.address` — **required once a placement selects the machine** |
 | `tags` | what a placement selects on |
 | `system` | the system string, elaborated into the platform record every entry's `target` carries — **required once a placement selects the machine** |
 | `serviceManager` | what runs the machine's units — **required once a placement selects the machine** |
 | `microarchitecture` | optional; becomes the record's `gcc.arch` and `gcc.tune`, **replacing** whatever codegen group the platform itself carries, and is recorded on the machine entry when declared |
 
 A machine declares those five keys and nothing else. A machine a placement
-selected that declares no `system` or no `serviceManager` is
+selected that declares no `address`, no `system` or no `serviceManager` is
 `machine-target-incomplete`, whose row names the missing keys and how many
-entries are placed on it: a placement on such a machine has no derivable
-target, so no `impl` on it is handed one. A machine nobody is placed on may
-declare neither and produces no row.
+entries the deployment places on it. Every placement onto such a machine is
+dropped rather than planned, because a module reading a field of a partial
+target is a missing attribute the planner can neither catch nor report, and the
+machine's own record is still in the plan. A machine nobody is placed on may
+declare none of the three and produces no row, so a registry may list a machine
+that has not been provisioned yet.
+
+Completeness is read off the value the registry reading produced, so a machine
+declaring `address = 22` is as incomplete as one declaring nothing: it earns
+both `declaration-field-malformed` and `machine-target-incomplete`.
 
 `system` is elaborated once per distinct system and microarchitecture in the
 fleet rather than once per machine, and a system string nixpkgs cannot parse is

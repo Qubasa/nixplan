@@ -67,6 +67,13 @@ let
     }
     // extra;
   };
+
+  unaddressed = extra: {
+    host = {
+      tags = [ "everywhere" ];
+    }
+    // extra;
+  };
 in
 {
   testAFullyDeclaredMachine =
@@ -95,6 +102,66 @@ in
       };
     };
 
+  testAMachineOmitsItsAddress =
+    let
+      result = on (unaddressed {
+        system = "x86_64-linux";
+        serviceManager = "systemd";
+      }) { machines = [ "host" ]; };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        namesTheMachine = hasInfix "`host`" (messageById "machine-target-incomplete" result);
+        namesTheKey = hasInfix "`address`" (messageById "machine-target-incomplete" result);
+        subjects = support.subjectsById "machine-target-incomplete" result;
+        planKeys = attrNames result.plan;
+        theEntryOnTheMachine = result.plan ? "svc:only@host";
+      };
+      expected = {
+        rows = [ "machine-target-incomplete" ];
+        namesTheMachine = true;
+        namesTheKey = true;
+        subjects = [ "deployment/machines.nix" ];
+        planKeys = [
+          "machine:host"
+          "svc:only"
+        ];
+        theEntryOnTheMachine = false;
+      };
+    };
+
+  testAMachineDeclaresAnAddressThatIsNotAName =
+    let
+      result = on (machinesWith {
+        address = 22;
+        system = "x86_64-linux";
+        serviceManager = "systemd";
+      }) { machines = [ "host" ]; };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        namesTheKey = hasInfix "`address`" (messageById "machine-target-incomplete" result);
+        malformedNamesTheValue = hasInfix "type int" (messageById "declaration-field-malformed" result);
+        planKeys = attrNames result.plan;
+        theEntryOnTheMachine = result.plan ? "svc:only@host";
+      };
+      expected = {
+        rows = [
+          "declaration-field-malformed"
+          "machine-target-incomplete"
+        ];
+        namesTheKey = true;
+        malformedNamesTheValue = true;
+        planKeys = [
+          "machine:host"
+          "svc:only"
+        ];
+        theEntryOnTheMachine = false;
+      };
+    };
+
   testAMachineOmitsItsSystem =
     let
       result = on (machinesWith { serviceManager = "systemd"; }) { machines = [ "host" ]; };
@@ -106,7 +173,7 @@ in
         namesTheKey = hasInfix "`system`" (messageById "machine-target-incomplete" result);
         subjects = support.subjectsById "machine-target-incomplete" result;
         planKeys = attrNames result.plan;
-        target = result.plan."svc:only@host".target;
+        theEntryOnTheMachine = result.plan ? "svc:only@host";
       };
       expected = {
         rows = [ "machine-target-incomplete" ];
@@ -115,12 +182,9 @@ in
         subjects = [ "deployment/machines.nix" ];
         planKeys = [
           "machine:host"
-          "svc:only@host"
+          "svc:only"
         ];
-        target = {
-          address = "host.example:22";
-          serviceManager = "systemd";
-        };
+        theEntryOnTheMachine = false;
       };
     };
 
@@ -133,19 +197,18 @@ in
         rows = rowIds result;
         namesTheKey = hasInfix "`serviceManager`" (messageById "machine-target-incomplete" result);
         planKeys = attrNames result.plan;
-        recordedTargetFields = attrNames result.plan."svc:only@host".target;
+        theEntryOnTheMachine = result.plan ? "svc:only@host";
+        theMachinesOwnRecord = result.plan."machine:host".serviceManager or null;
       };
       expected = {
         rows = [ "machine-target-incomplete" ];
         namesTheKey = true;
         planKeys = [
           "machine:host"
-          "svc:only@host"
+          "svc:only"
         ];
-        recordedTargetFields = [
-          "address"
-          "system"
-        ];
+        theEntryOnTheMachine = false;
+        theMachinesOwnRecord = null;
       };
     };
 
@@ -684,6 +747,220 @@ in
           "settings"
         ];
         rows = [ "member-not-placed" ];
+      };
+    };
+
+  testATagSelectsOneUnaddressedMachineBesideTwoAddressedOnes =
+    let
+      result = planOf {
+        machines = {
+          alpha = {
+            address = "alpha.example";
+            tags = [ "fleet" ];
+            system = "x86_64-linux";
+            serviceManager = "systemd";
+          };
+          beta = {
+            address = "beta.example";
+            tags = [ "fleet" ];
+            system = "x86_64-linux";
+            serviceManager = "systemd";
+          };
+          gamma = {
+            tags = [ "fleet" ];
+            system = "x86_64-linux";
+            serviceManager = "systemd";
+          };
+        };
+        instances.svc = {
+          module = soleRoot {
+            module = quiet;
+          };
+          placement.every.only.tags = [ "fleet" ];
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        rowCount = countById "machine-target-incomplete" result;
+        namesTheMachine = hasInfix "`gamma`" (messageById "machine-target-incomplete" result);
+        planned = filter (key: match "machine:.*" key == null) (attrNames result.plan);
+        theOthersAreWhole = [
+          (attrNames result.plan."svc:only@alpha".target)
+          (attrNames result.plan."svc:only@beta".target)
+        ];
+      };
+      expected = {
+        rows = [ "machine-target-incomplete" ];
+        rowCount = 1;
+        namesTheMachine = true;
+        planned = [
+          "svc:only@alpha"
+          "svc:only@beta"
+        ];
+        theOthersAreWhole = [
+          [
+            "address"
+            "serviceManager"
+            "system"
+          ]
+          [
+            "address"
+            "serviceManager"
+            "system"
+          ]
+        ];
+      };
+    };
+
+  testAMemberPlacedOnlyOntoAnUnaddressedMachine =
+    let
+      result = on (unaddressed {
+        system = "x86_64-linux";
+        serviceManager = "systemd";
+      }) { machines = [ "host" ]; };
+      entry = result.plan."svc:only";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        namesTheMachine = hasInfix "`host`" (messageById "machine-target-incomplete" result);
+        subjects = support.subjectsById "machine-target-incomplete" result;
+        theSelectorItWrote = entry.placement;
+        fields = attrNames entry;
+      };
+      expected = {
+        rows = [ "machine-target-incomplete" ];
+        namesTheMachine = true;
+        subjects = [ "deployment/machines.nix" ];
+        theSelectorItWrote = {
+          machines = [ "host" ];
+          reason = "every";
+        };
+        fields = [
+          "key"
+          "placement"
+          "settings"
+        ];
+      };
+    };
+
+  testAMachineNobodyPlacesOnDeclaresNoAddress =
+    let
+      result = planOf {
+        machines = support.machines // {
+          spare = {
+            tags = [ "not-yet" ];
+            system = "x86_64-linux";
+          };
+        };
+        instances.svc = {
+          module = soleRoot {
+            module = quiet;
+          };
+          placement.every.only.machines = [ "one" ];
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        applicable = result.applicable;
+        planKeys = attrNames result.plan;
+      };
+      expected = {
+        rows = [ ];
+        applicable = true;
+        planKeys = [
+          "machine:one"
+          "svc:only@one"
+        ];
+      };
+    };
+
+  testEveryPlannedEntryRecordsATargetWithEveryField =
+    let
+      result = planOf {
+        machines = support.machines // {
+          laptop = support.laptop;
+        };
+        instances = {
+          fleet = {
+            module = soleRoot {
+              module = quiet;
+            };
+            placement.every.only.tags = [ "everywhere" ];
+          };
+          single = {
+            module = soleRoot {
+              module = quiet;
+            };
+            placement.every.only.machines = [ "two" ];
+          };
+        };
+      };
+      targeted = filter (key: result.plan.${key} ? target) (attrNames result.plan);
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        entries = targeted;
+        fields = map (key: attrNames result.plan.${key}.target) targeted;
+      };
+      expected = {
+        rows = [ ];
+        entries = [
+          "fleet:only@laptop"
+          "fleet:only@one"
+          "fleet:only@two"
+          "single:only@two"
+        ];
+        fields = builtins.genList (_: [
+          "address"
+          "serviceManager"
+          "system"
+        ]) 4;
+      };
+    };
+
+  testAModuleNeedsNoGuardToRenderAnAddress =
+    let
+      result = planOf {
+        machines = support.machines // {
+          laptop = support.laptop;
+        };
+        instances.svc = {
+          module = soleRoot {
+            module = _: {
+              impl =
+                { target, ... }:
+                {
+                  units.only.command = "/bin/serve ${target.address}";
+                };
+            };
+          };
+          placement.every.only.tags = [ "everywhere" ];
+        };
+      };
+      commandOn = machine: result.plan."svc:only@${machine}".units.only.command;
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        rendered = map commandOn [
+          "laptop"
+          "one"
+          "two"
+        ];
+      };
+      expected = {
+        rows = [ ];
+        rendered = [
+          "/bin/serve laptop.example:22"
+          "/bin/serve one.example:22"
+          "/bin/serve two.example:22"
+        ];
       };
     };
 }
