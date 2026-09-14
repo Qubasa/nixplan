@@ -2344,4 +2344,157 @@ in
       applicable = false;
     };
   };
+
+  testTheRowOutlivesThePlacementsItDropped =
+    let
+      result = planOf {
+        machines.bare = {
+          tags = [ "fleet" ];
+          system = "x86_64-linux";
+          serviceManager = "systemd";
+        };
+        instances.svc = {
+          module = soleRoot {
+            module = quiet;
+          };
+          placement.every.only.tags = [ "fleet" ];
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        namesTheMachine = hasInfix "`bare`" (messageById "machine-target-incomplete" result);
+        subjects = subjectsById "machine-target-incomplete" result;
+        countsThePlacements = hasInfix "places one entry on it" (
+          evidenceById "machine-target-incomplete" result
+        );
+        planned = filter (key: !hasInfix "machine:" key) (attrNames result.plan);
+      };
+      expected = {
+        rows = [ "machine-target-incomplete" ];
+        namesTheMachine = true;
+        subjects = [ "deployment/machines.nix" ];
+        countsThePlacements = true;
+        planned = [ "svc:only" ];
+      };
+    };
+
+  testOneRowForOneMachineHoweverManyPlacementsSelectedIt =
+    let
+      result = planOf {
+        machines.bare = {
+          tags = [ "fleet" ];
+          system = "x86_64-linux";
+          serviceManager = "systemd";
+        };
+        instances = {
+          first = {
+            module = twoQuiet;
+            placement.every = {
+              keeper.tags = [ "fleet" ];
+              gone.machines = [ "bare" ];
+            };
+          };
+          second = {
+            module = soleRoot {
+              module = quiet;
+            };
+            placement.every.only.machines = [ "bare" ];
+          };
+        };
+      };
+    in
+    {
+      expr = {
+        rows = ids result;
+        count = countById "machine-target-incomplete" result;
+        countsEveryPlacement = hasInfix "places three entries on it" (
+          evidenceById "machine-target-incomplete" result
+        );
+      };
+      expected = {
+        rows = [ "machine-target-incomplete" ];
+        count = 1;
+        countsEveryPlacement = true;
+      };
+    };
+
+  testTheRowNamesTheKeysTheMachineDidNotDeclare =
+    let
+      result = planOf {
+        machines.bare = {
+          tags = [ ];
+          system = "x86_64-linux";
+        };
+        instances.svc = {
+          module = soleRoot {
+            module = quiet;
+          };
+          placement.every.only.machines = [ "bare" ];
+        };
+      };
+      message = messageById "machine-target-incomplete" result;
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        namesBothKeys = hasInfix "declares no `address`, `serviceManager`" message;
+        namesNeitherDeclaredKey = hasInfix "`system`" message;
+        theResolutionNamesTheFile = resolutionById "machine-target-incomplete" result;
+      };
+      expected = {
+        rows = [ "machine-target-incomplete" ];
+        namesBothKeys = true;
+        namesNeitherDeclaredKey = false;
+        theResolutionNamesTheFile = "declare `address`, `serviceManager` for `bare` in deployment/machines.nix";
+      };
+    };
+
+  testADroppedPlacementProducesNoModuleRow =
+    let
+      result = planOf {
+        machines = support.machines // {
+          bare = {
+            tags = [ ];
+            system = "x86_64-linux";
+            serviceManager = "systemd";
+          };
+        };
+        instances.svc = {
+          module = soleRoot {
+            module = _: {
+              impl =
+                { target, ... }:
+                {
+                  units.only.command = "/bin/serve ${target.address}";
+                };
+            };
+          };
+          placement.every.only.machines = [
+            "one"
+            "bare"
+          ];
+        };
+      };
+      forced = builtins.tryEval (
+        builtins.deepSeq {
+          inherit (result) plan diagnostics;
+        } true
+      );
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        forcingBothSucceeds = forced.success && forced.value;
+        rendered = result.plan."svc:only@one".units.only.command;
+        theDroppedEntry = result.plan ? "svc:only@bare";
+      };
+      expected = {
+        rows = [ "machine-target-incomplete" ];
+        forcingBothSucceeds = true;
+        rendered = "/bin/serve one.example:22";
+        theDroppedEntry = false;
+      };
+    };
 }

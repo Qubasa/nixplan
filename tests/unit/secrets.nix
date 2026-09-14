@@ -692,8 +692,8 @@ in
       expr = {
         severity = (oneRow "secrets-delivery-machine-no-address" addressless).severity;
         subjects = map (row: row.subject) (rowsById "secrets-delivery-machine-no-address" addressless);
-        # The same absence, read as a deployment: a warning, and every entry is
-        # still realised, because no build step dials a machine.
+        # The same absence, read as a deployment: no row at all, and every entry
+        # is still realised, because no build step dials a machine.
         deploymentSeverities = map (row: row.severity) deploymentBuild.rows;
         deploymentRows = map (row: row.id) deploymentBuild.rows;
         deploymentRefused = deploymentBuild.refused;
@@ -707,8 +707,8 @@ in
           "issuer:vars/host@two"
           "issuer:vars/session"
         ];
-        deploymentSeverities = [ "warning" ];
-        deploymentRows = [ "operator-entry-machine-no-address" ];
+        deploymentSeverities = [ ];
+        deploymentRows = [ ];
         deploymentRefused = false;
         everyEntryIsRealised = [
           true

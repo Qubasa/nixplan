@@ -1357,28 +1357,65 @@ in
   testAMachineOfAPlacedEntryDeclaresNoAddress =
     let
       bare = reader.read { plan = addressless; };
-      row = builtins.head (rowsById "operator-entry-machine-no-address" bare);
     in
     {
       expr = {
         ids = idsOf bare;
-        severity = row.severity;
-        namesTheEntry = hasInfix "`svc:only@bare`" row.message;
-        namesTheMachine = hasInfix "`bare`" row.message;
         recordsTheAbsence = bare.manifest.entries."svc:only@bare" ? address;
         address = bare.manifest.entries."svc:only@bare".address;
         artifact = bare.manifest.entries."svc:only@bare".path;
         refused = bare.refused;
       };
       expected = {
-        ids = [ "operator-entry-machine-no-address" ];
-        severity = "warning";
-        namesTheEntry = true;
-        namesTheMachine = true;
+        ids = [ ];
         recordsTheAbsence = true;
         address = null;
         artifact = "entries/svc-only-bare";
         refused = false;
+      };
+    };
+
+  testABuildOfADeploymentTheRegistryMadeInapplicable =
+    let
+      result = planOf {
+        machines.bare = {
+          tags = [ ];
+          system = "x86_64-linux";
+          serviceManager = "systemd";
+        };
+        instances.svc = {
+          module = soleRoot { module = _: { impl = simple; }; };
+          placement.every.only.machines = [ "bare" ];
+        };
+      };
+      reading = reader.read { inherit (result) plan diagnostics; };
+    in
+    {
+      expr = {
+        applicable = result.applicable;
+        refused = reading.refused;
+        ownRows = idsOf reading;
+        # plan.json, diagnostics.json and diagnostics.txt are the three files the
+        # farm carries whatever the reading answers; an entry artifact is linked
+        # only for an entry the reading names, and there is none.
+        thePlanIsPublished = attrNames result.plan;
+        theTableIsPublished = map (r: r.id) reading.diagnostics;
+        noEntryArtifact = attrNames reading.manifest.entries;
+        namesTheMachine = hasInfix "`bare`" reading.refusal;
+        namesTheRegistryFile = hasInfix "deployment/machines.nix" reading.refusal;
+      };
+      expected = {
+        applicable = false;
+        refused = true;
+        ownRows = [ ];
+        thePlanIsPublished = [
+          "machine:bare"
+          "svc:only"
+        ];
+        theTableIsPublished = [ "machine-target-incomplete" ];
+        noEntryArtifact = [ ];
+        namesTheMachine = true;
+        namesTheRegistryFile = true;
       };
     };
 
