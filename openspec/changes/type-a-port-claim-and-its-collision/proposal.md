@@ -106,9 +106,11 @@ for whole classes of input because the value it compares is never typed.
   number claimed in the fixture and in `perf/` is already an integer. The task list verifies that
   rather than asserting it, with `nix eval --json .#debug.worked.plan | jq -S .` against
   `fixtures/minimal-typed-edge/plan/*` as committed.
-- `tests/unit/{module,plan,composition}.nix` gain the scenarios; `tests/unit/coverage.nix` moves this
-  change's two spec files from `excused` to `accountable`; `docs/tooling.md`'s per-suite figures move
-  with the test counts.
+- `tests/unit/{composition,plan}.nix` gain the scenarios. There is no `tests/unit/module.nix`, which
+  an earlier draft of this list named: the module reading is exercised through `composition`, whose
+  deployments are what a claim is written in. `tests/unit/coverage.nix` moves this change's two spec
+  files from `excused` to `accountable`; `docs/tooling.md`'s per-suite figures move with the test
+  counts.
 - `docs/authoring.md:142` (the claim row of the vocabulary table), `docs/diagnostics.md:130` (the
   three new identifiers beside `port-claim-not-fixed`) and `docs/diagnostics.md:244` (the port row,
   which today states a rule the tree does not hold). `docs/plan.md:68,80` stay as written: `alloc`

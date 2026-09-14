@@ -20,6 +20,7 @@ let
     listToAttrs
     mapAttrs
     substring
+    tail
     ;
 
   pruned = entry: util.filterAttrs (_: v: !((isAttrs v && v == { }) || (isList v && v == [ ]))) entry;
@@ -640,43 +641,45 @@ rec {
     paths = {
       id = "entry-host-path-claimed-twice";
       row = diag.error;
-      what = name: "declare a configuration file at ${util.quote name}";
+      what = claim: "declare a configuration file at ${util.quote claim}";
       evidence = "a host path holds one file, so the entry applied last is the one whose rendering survives and the others are overwritten with nothing saying so";
       resolution =
         {
-          name,
+          claim,
           machine,
           reserved,
         }:
         if reserved then
-          "derive ${util.quote name} from the entry's own identity, which an implementation is handed as `instance` and `member`, or delete it from `reserves.paths` of machine ${util.quote machine} in the registry, which is where the machine states it holds the file"
+          "derive ${util.quote claim} from the entry's own identity, which an implementation is handed as `instance` and `member`, or delete it from `reserves.paths` of machine ${util.quote machine} in the registry, which is where the machine states it holds the file"
         else
-          "derive ${util.quote name} from the entry's own identity, which an implementation is handed as `instance` and `member`, or place the entries on different machines";
+          "derive ${util.quote claim} from the entry's own identity, which an implementation is handed as `instance` and `member`, or place the entries on different machines";
     };
     ports = {
       id = "entry-port-claimed-twice";
       row = diag.error;
-      what = name: "claim the port ${util.quote name}";
-      evidence = "one machine carries one listener per protocol and port, so every entry after the first cannot bind and the failure names neither declaration";
+      what =
+        claim:
+        "claim the port ${util.quote (toString claim.fixed)} on ${protoText claim} and ${addressText claim}";
+      evidence = "one machine carries one listener per protocol, port and address, and a claim stating no protocol or no address claims every one of them, so every entry after the first cannot bind and the failure names neither declaration";
       resolution =
         {
-          name,
+          claim,
           machine,
           reserved,
         }:
         if reserved then
-          "claim a `fixed` port other than ${util.quote name}, derived from the entry's own identity an implementation is handed as `instance` and `member`, or delete it from `reserves.ports` of machine ${util.quote machine} in the registry, which is where the machine states it listens there"
+          "claim a `fixed` port other than ${util.quote (toString claim.fixed)}, derived from the entry's own identity an implementation is handed as `instance` and `member`, state an `address` so it binds another address, or delete it from `reserves.ports` of machine ${util.quote machine} in the registry, which is where the machine states it listens there"
         else
-          "claim a `fixed` port other than ${util.quote name} in one of them, derived from the entry's own identity an implementation is handed as `instance` and `member`, or place the entries on different machines";
+          "claim a `fixed` port other than ${util.quote (toString claim.fixed)} in one of them, derived from the entry's own identity an implementation is handed as `instance` and `member`, state an `address` in each so the two bind different addresses, or place the entries on different machines";
     };
     directories = {
       id = "entry-unit-directory-shared";
       row = diag.warning;
-      what = name: "record the unit directory ${util.quote name}";
+      what = claim: "record the unit directory ${util.quote claim}";
       evidence = "the service manager deletes a runtime directory when its unit restarts, so two entries sharing one lose each other's files, and a shared state directory is a handoff only where both declarations intend one";
       resolution =
-        { name, ... }:
-        "derive ${util.quote name} from the entry's own identity, which an implementation is handed as `instance` and `member`, or leave it shared where both entries intend the handoff";
+        { claim, ... }:
+        "derive ${util.quote claim} from the entry's own identity, which an implementation is handed as `instance` and `member`, or leave it shared where both entries intend the handoff";
     };
   };
 
@@ -710,22 +713,33 @@ rec {
       ) (unit.extends or { })
     );
 
-  # A port claim compares the protocol beside the number, so a TCP listener and a
-  # UDP listener on one number are two claims. A machine's own reservation is read
-  # into the same resource, so one change types both halves. `count` is recorded
-  # and not expanded: one claim still states one number in this subset.
-  portResource =
-    proto: number: "${if isString proto then proto else "unstated"}/${builtins.toJSON number}";
+  # How a port claim reads in a row. A field the claim leaves unstated is every
+  # value of it, which is what the claim means and what the comparison made of
+  # it, so the row says so rather than naming an absence.
+  protoText =
+    claim:
+    if claim.proto == null then
+      "every protocol of the domain"
+    else
+      "protocol ${util.quote claim.proto}";
 
-  portsOf =
-    member:
-    util.mapAttrsToList (
-      name: fixed: portResource (member.declaration.claims.ports.${name}.proto or null) fixed
-    ) member.alloc.ports;
+  addressText =
+    claim:
+    if claim.address == null then
+      "every address of the machine"
+    else
+      "address ${util.quote claim.address}";
+
+  # A port claim compares as the record the reading normalised: the number, the
+  # protocol and the address, each already held to its domain, so the index
+  # compares no value the vocabulary refused and repairs none.
+  portsOf = member: attrValues member.declaration.claims.ports;
 
   # One entry's claims, flat, each naming the claimant. Deduplication is per
   # entry and happens here rather than after the collision test: two units of one
-  # entry recording one directory is one claim, the claimant being the entry.
+  # entry recording one directory is one claim, the claimant being the entry. A
+  # path and a directory are their own group, and a port claim is a record whose
+  # group is its number, the rest of it being compared inside the group.
   claimsOf =
     entry:
     if !(entry ? claims) then
@@ -733,32 +747,134 @@ rec {
     else
       concatMap (
         kind:
-        map (name: {
+        let
+          ports = kind == "ports";
+          claimed = entry.claims.${kind};
+        in
+        map (claim: {
           key = entry.name;
           inherit (entry.claims) machine;
-          inherit kind name;
-        }) (util.uniqueStrings entry.claims.${kind})
+          inherit kind claim;
+          group = if ports then toString claim.fixed else claim;
+        }) (if ports then util.distinct claimed else util.uniqueStrings claimed)
       ) (builtins.attrNames hostResources);
+
+  # Two claims of one machine and one number contend when their protocols
+  # overlap and their addresses do, an unstated field being every value of it.
+  overlap =
+    field: a: b:
+    a.${field} == null || b.${field} == null || a.${field} == b.${field};
+
+  contends = a: b: overlap "proto" a b && overlap "address" a b;
+
+  # What two overlapping claims contend over: the stated side of each field,
+  # since an unstated one is every value and so never the narrower.
+  contention = a: b: {
+    inherit (a) fixed;
+    proto = if a.proto == null then b.proto else a.proto;
+    address = if a.address == null then b.address else a.address;
+  };
+
+  # An address is non-empty wherever it is stated, so the empty half of this key
+  # is the absence and nothing else.
+  spelling = claim: "${toString claim.proto} ${toString claim.address}";
+
+  unorderedPairs =
+    xs:
+    if xs == [ ] then
+      [ ]
+    else
+      map (other: {
+        a = head xs;
+        b = other;
+      }) (tail xs)
+      ++ unorderedPairs (tail xs);
+
+  # One row for one collision, subjected to the first claimant in plan key
+  # order. A claim an entry makes twice is the entry's own, so the row is owed
+  # only where two claimants claim, and a claimant is a placed entry or the
+  # machine's own reservation.
+  collisionRow =
+    {
+      machine,
+      kind,
+      claim,
+      claimants,
+    }:
+    let
+      keys = util.sortStrings (util.uniqueStrings claimants);
+      resource = hostResources.${kind};
+    in
+    util.optional (builtins.length keys > 1) (
+      resource.row {
+        inherit (resource) id evidence;
+        subject = head keys;
+        message = "${util.quoteList keys} all ${resource.what claim} on machine ${util.quote machine}";
+        resolution = resource.resolution {
+          inherit claim machine;
+          reserved = elem "machine:${machine}" keys;
+        };
+      }
+    );
+
+  # One number's claims on one machine, compared inside the group: identical
+  # spellings are one bucket and one collision however many claimants they have,
+  # and two buckets whose spellings overlap are another, each row naming its own
+  # protocol and address. A healthy group holds one claim, so the pairwise step
+  # does no work.
+  portCollisions =
+    machine: claimants:
+    let
+      buckets = builtins.groupBy (c: spelling c.claim) claimants;
+      each = map (name: buckets.${name}) (builtins.attrNames buckets);
+      keysOf = bucket: map (c: c.key) bucket;
+      port =
+        claim: bucket:
+        collisionRow {
+          inherit machine claim;
+          kind = "ports";
+          claimants = bucket;
+        };
+    in
+    concatMap (bucket: port (head bucket).claim (keysOf bucket)) each
+    ++ concatMap (
+      pair:
+      let
+        a = (head pair.a).claim;
+        b = (head pair.b).claim;
+      in
+      if contends a b then port (contention a b) (keysOf pair.a ++ keysOf pair.b) else [ ]
+    ) (unorderedPairs each);
 
   # A machine's own claims: the host resources it states its image already holds.
   # The key is the machine record's, which is a plan key and no entry's, so the
-  # reservation enters the same ordering without a rule of its own.
+  # reservation enters the same ordering without a rule of its own. A reserved
+  # port is the claim record an entry's claim is, so one comparison reads both.
   reservedBy =
     machine: reserved:
     let
-      claim = kind: name: {
+      claimed = kind: claim: group: {
         key = "machine:${machine}";
-        inherit machine kind name;
+        inherit
+          machine
+          kind
+          claim
+          group
+          ;
       };
+      port =
+        p:
+        claimed "ports" {
+          fixed = p.number;
+          inherit (p) proto address;
+        } (toString p.number);
     in
-    map (port: claim "ports" (portResource port.proto port.number)) (attrValues reserved.ports)
-    ++ map (claim "paths") reserved.paths;
+    map port (attrValues reserved.ports) ++ map (path: claimed "paths" path path) reserved.paths;
 
   # A host resource two claimants of one machine both claim. The claims are one
   # flat list grouped twice, by machine and then by resource, so the check costs
   # the claims rather than their square, and one member placed on two machines
-  # claims under two machines rather than against itself. The row is one row for
-  # one collision, subjected to the first claimant in plan key order.
+  # claims under two machines rather than against itself.
   collisionRows =
     claims:
     concatLists (
@@ -768,22 +884,17 @@ rec {
           util.mapAttrsToList (
             _: claimants:
             let
-              keys = util.sortStrings (util.uniqueStrings (map (c: c.key) claimants));
-              resource = hostResources.${(head claimants).kind};
-              name = (head claimants).name;
+              claimed = head claimants;
             in
-            util.optional (builtins.length keys > 1) (
-              resource.row {
-                inherit (resource) id evidence;
-                subject = head keys;
-                message = "${util.quoteList keys} all ${resource.what name} on machine ${util.quote machine}";
-                resolution = resource.resolution {
-                  inherit name machine;
-                  reserved = elem "machine:${machine}" keys;
-                };
+            if claimed.kind == "ports" then
+              portCollisions machine claimants
+            else
+              collisionRow {
+                inherit machine;
+                inherit (claimed) kind claim;
+                claimants = map (c: c.key) claimants;
               }
-            )
-          ) (builtins.groupBy (c: "${c.kind} ${c.name}") onMachine)
+          ) (builtins.groupBy (c: "${c.kind} ${c.group}") onMachine)
         )
       ) (builtins.groupBy (c: c.machine) claims)
     );

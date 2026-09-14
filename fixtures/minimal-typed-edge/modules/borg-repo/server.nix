@@ -13,7 +13,6 @@
 
   claims.ports.ssh = {
     proto = "tcp";
-    count = 1;
     fixed = settings.port;
   };
 

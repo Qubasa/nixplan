@@ -114,8 +114,8 @@ let
 
   claimKeys = [
     "proto"
-    "count"
     "fixed"
+    "address"
   ];
 
   generatorKeys = [
@@ -388,42 +388,95 @@ rec {
         value = given.ports or { };
       };
       ports = portsRead.value;
-      claimReads = mapAttrs (
-        name: claim:
-        declaredRecord {
-          inherit subject module;
+
+      # The three fields are refused one at a time, because the failure
+      # directions differ: a number that is not a port leaves nothing to record
+      # and the claim is dropped, while a refused protocol or address leaves a
+      # number and is read as unstated, which compares against more rather than
+      # against nothing. A claim that is not a record at all is dropped by its
+      # own row rather than earning `port-claim-not-fixed` on top of it: a
+      # sentence about a mistake nobody made.
+      readPort =
+        name: value:
+        let
           where = "port claim ${util.quote name} of ${module}";
-          value = claim;
-        }
-      ) ports;
+          record = declaredRecord {
+            inherit
+              subject
+              module
+              where
+              value
+              ;
+          };
+          claim = record.value;
+          refuses = field: type: claim ? ${field} && type.verify claim.${field} != null;
+          numberRefused = refuses "fixed" atoms.port;
+          protoRefused = refuses "proto" atoms.protocol;
+          addressRefused = refuses "address" atoms.bindAddress;
+        in
+        {
+          claim =
+            if record.rows != [ ] || !(claim ? fixed) || numberRefused then
+              null
+            else
+              {
+                inherit (claim) fixed;
+                proto = if claim ? proto && !protoRefused then claim.proto else null;
+                address = if claim ? address && !addressRefused then claim.address else null;
+              };
+          rows =
+            if record.rows != [ ] then
+              record.rows
+            else
+              map (
+                key:
+                keyRow {
+                  inherit subject key where;
+                  allowed = claimKeys;
+                }
+              ) (util.extraKeys claimKeys claim)
+              ++ util.optional (!(claim ? fixed)) (
+                diag.error {
+                  inherit subject;
+                  id = "port-claim-not-fixed";
+                  message = "${where} declares no `fixed` port, and this subset allocates nothing";
+                  evidence = "the condition that introduces it: ${excluded.constructs.dynamicPort.trigger}";
+                  resolution = "write `claims.ports.${name}.fixed` in ${subject}, or land the change that carries the allocation table";
+                }
+              )
+              ++ util.optional numberRefused (
+                diag.error {
+                  inherit subject;
+                  id = "port-claim-not-a-port";
+                  message = "${where} declares `fixed` with a value that is not a port, and korora reports: ${toString (atoms.port.verify claim.fixed)}";
+                  evidence = "a port is an integer of ${toString atoms.portRange.first} to ${toString atoms.portRange.last}, and a number written as text is not read as the number it spells";
+                  resolution = "write an integer of ${toString atoms.portRange.first} to ${toString atoms.portRange.last} at `claims.ports.${name}.fixed` in ${subject}; the claim is recorded nowhere and nothing compares it";
+                }
+              )
+              ++ util.optional protoRefused (
+                diag.error {
+                  inherit subject;
+                  id = "port-claim-protocol-unknown";
+                  message = "${where} declares `proto` with a value the domain does not admit, and korora reports: ${toString (atoms.protocol.verify claim.proto)}";
+                  evidence = "the protocols are ${util.quoteList atoms.domains.protocol}, and a claim stating none claims its number on every one of them";
+                  resolution = "write one of ${util.quoteList atoms.domains.protocol} at `claims.ports.${name}.proto` in ${subject}, or omit the key; the number is recorded either way";
+                }
+              )
+              ++ util.optional addressRefused (
+                diag.error {
+                  inherit subject;
+                  id = "port-claim-address-malformed";
+                  message = "${where} declares `address` with a value that is not an address, and korora reports: ${toString (atoms.bindAddress.verify claim.address)}";
+                  evidence = "an address is a non-empty string of letters, digits and `:._%-`, and a wildcard has no spelling because the absence of the key is already every address of the machine";
+                  resolution = "write the one address the listener binds at `claims.ports.${name}.address` in ${subject}, or omit the key for every address of the machine; the number is recorded either way";
+                }
+              );
+        };
 
-      # A claim of the wrong kind claims no port and is dropped here rather than
-      # by the `fixed` filter below, which would leave it earning
-      # `port-claim-not-fixed`: a sentence about a mistake nobody made.
-      claimed = util.filterAttrs (name: _: claimReads.${name}.rows == [ ]) ports;
-
-      portRows =
-        name: claim:
-        map (
-          key:
-          keyRow {
-            inherit subject key;
-            where = "port claim ${util.quote name} of ${module}";
-            allowed = claimKeys;
-          }
-        ) (util.extraKeys claimKeys claim)
-        ++ util.optional (!(claim ? fixed)) (
-          diag.error {
-            inherit subject;
-            id = "port-claim-not-fixed";
-            message = "port claim ${util.quote name} of ${module} declares no `fixed` port, and this subset allocates nothing";
-            evidence = "the condition that introduces it: ${excluded.constructs.dynamicPort.trigger}";
-            resolution = "write `claims.ports.${name}.fixed` in ${subject}, or land the change that carries the allocation table";
-          }
-        );
+      claimReads = mapAttrs readPort ports;
     in
     {
-      ports = util.filterAttrs (_: claim: claim ? fixed) claimed;
+      ports = util.filterAttrs (_: claim: claim != null) (mapAttrs (_: p: p.claim) claimReads);
       rows =
         read.rows
         ++ portsRead.rows
@@ -435,8 +488,7 @@ rec {
             allowed = [ "ports" ];
           }
         ) (util.extraKeys [ "ports" ] given)
-        ++ util.concatMapAttrsToList (name: _: claimReads.${name}.rows) ports
-        ++ util.concatMapAttrsToList portRows claimed;
+        ++ util.concatMapAttrsToList (_: p: p.rows) claimReads;
     };
 
   readVars =

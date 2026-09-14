@@ -2930,6 +2930,18 @@ in
             number = "22";
           };
         };
+        outOfRange = planned {
+          ports.sshd = {
+            proto = "tcp";
+            number = 70000;
+          };
+        };
+        address = planned {
+          ports.sshd = {
+            number = 22;
+            address = "0.0.0.0";
+          };
+        };
         unnumbered = planned { ports.sshd.proto = "tcp"; };
       };
     in
@@ -2956,10 +2968,16 @@ in
             "the reserved port `sshd` of machine `one` is declared as a value of type int, and the reading needs a record"
           ];
           number = [
-            "the reserved port `sshd` of machine `one` declares `number` as `22`, and the reading needs a number"
+            "the reserved port `sshd` of machine `one` declares `number` as `22`, and the reading needs a port"
+          ];
+          outOfRange = [
+            "the reserved port `sshd` of machine `one` declares `number` as a value of type int, and the reading needs a port"
+          ];
+          address = [
+            "the reserved port `sshd` of machine `one` declares `address` as `0.0.0.0`, and the reading needs a bind address"
           ];
           unnumbered = [
-            "the reserved port `sshd` of machine `one` declares no `number`, and the reading needs a number there"
+            "the reserved port `sshd` of machine `one` declares no `number`, and the reading needs a port there"
           ];
         };
         subjects = {

@@ -25,7 +25,6 @@ in
   # and the planner allocates none.
   claims.ports.postgres = {
     proto = "tcp";
-    count = 1;
     fixed = settings.port;
   };
 

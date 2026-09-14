@@ -37,6 +37,7 @@ let
   resolve = import ./resolve.nix {
     inherit
       util
+      atoms
       diag
       interface
       module

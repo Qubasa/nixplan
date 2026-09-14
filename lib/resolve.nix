@@ -6,6 +6,7 @@
 # fleet instead of square in it.
 {
   util,
+  atoms,
   diag,
   interface,
   module,
@@ -84,6 +85,18 @@ let
     number = {
       what = "a number";
       is = builtins.isInt;
+    };
+    port = {
+      what = "a port";
+      is = v: atoms.port.verify v == null;
+    };
+    protocol = {
+      what = "a protocol";
+      is = v: atoms.protocol.verify v == null;
+    };
+    bindAddress = {
+      what = "a bind address";
+      is = v: atoms.bindAddress.verify v == null;
     };
     flag = {
       what = "a boolean";
@@ -340,14 +353,21 @@ in
                 inherit where;
                 record = record.value;
                 field = "proto";
-                shape = shapes.name;
+                shape = shapes.protocol;
+                fallback = null;
+              };
+              address = read {
+                inherit where;
+                record = record.value;
+                field = "address";
+                shape = shapes.bindAddress;
                 fallback = null;
               };
               number = read {
                 inherit where;
                 record = record.value;
                 field = "number";
-                shape = shapes.number;
+                shape = shapes.port;
                 fallback = null;
                 required = true;
               };
@@ -355,9 +375,10 @@ in
             {
               value = {
                 proto = proto.value;
+                address = address.value;
                 number = number.value;
               };
-              rows = if record.rows == [ ] then proto.rows ++ number.rows else record.rows;
+              rows = if record.rows == [ ] then proto.rows ++ address.rows ++ number.rows else record.rows;
             };
           readPorts = mapAttrs portOf ports.value;
         in

@@ -6,6 +6,7 @@ let
   inherit (builtins)
     elem
     isAttrs
+    isInt
     isString
     match
     ;
@@ -25,6 +26,30 @@ let
   consumerCardinalities = [
     "one"
     "many"
+  ];
+
+  # What a port claim may listen on. Two values rather than the four systemd
+  # carries: the other two need a kernel module and appear in no unit here, and
+  # widening the domain later is additive.
+  protocols = [
+    "tcp"
+    "udp"
+  ];
+
+  # The range a port is an integer of, read by the atom and by the row that
+  # reports a value outside it.
+  portRange = {
+    first = 1;
+    last = 65535;
+  };
+
+  # The wildcard is the absence of a claim's address and never a spelling of it.
+  # Two spellings of one reading is what let one number be claimed twice.
+  wildcardAddresses = [
+    "0.0.0.0"
+    "::"
+    "[::]"
+    "*"
   ];
 in
 korora
@@ -73,6 +98,26 @@ korora
   );
 
   domains.consumerCardinality = consumerCardinalities;
+
+  # A port as a deployment states it. Zero is refused with the rest of the range:
+  # asking the kernel to choose is the excluded allocation table under another
+  # spelling, and a number written as text is not the number it spells.
+  port = korora.typedef "port" (v: isInt v && v >= portRange.first && v <= portRange.last);
+
+  inherit portRange;
+
+  # The protocol a port claim listens on. A claim stating none is read as every
+  # protocol of the domain, which is the comparison that is safe by default.
+  protocol = korora.typedef "protocol" (v: isString v && elem v protocols);
+
+  domains.protocol = protocols;
+
+  # The single address a listener binds: a dotted quad, a v6 address with its
+  # zone, or a name, because which of them a machine answers on is the machine's
+  # answer. A wildcard spelling is refused, the absence saying it already.
+  bindAddress = korora.typedef "bindAddress" (
+    v: isString v && match "[0-9A-Za-z:._%-]+" v != null && !elem v wildcardAddresses
+  );
 
   # A delivered file's permission bits as a deployment states them: four octal
   # digits, the spelling `install -m` and `chmod` both take. A symbolic mode is

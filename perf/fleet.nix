@@ -87,7 +87,6 @@ let
 
       claims.ports.api = {
         proto = "tcp";
-        count = 1;
         fixed = settings.port;
       };
 

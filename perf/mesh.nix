@@ -99,7 +99,6 @@ let
 
       claims.ports.api = {
         proto = "tcp";
-        count = 1;
         fixed = 8443;
       };
 

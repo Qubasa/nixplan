@@ -83,10 +83,10 @@ The suites, and how many tests each holds:
 | Suite | Tests | Subject |
 | --- | --- | --- |
 | `interfaces` | 26 | interface identity by value, export atoms, the omission rule |
-| `composition` | 33 | roots, members, the settings namespace, defaults and fixed |
+| `composition` | 40 | roots, members, the settings namespace, defaults and fixed |
 | `resolution` | 62 | wiring, arity, secrecy, placement, keyset equality |
 | `diagnostics` | 58 | totality, ordering, severity, rendering, the scan that finds no raising call under `lib/` or in the reading beside it, the row table against `docs/diagnostics.md`, and every realiser refusal against the row producer above it |
-| `plan` | 54 | keys, planes, absences, dependencies, serialisation, the golden fixture |
+| `plan` | 61 | keys, planes, absences, dependencies, serialisation, the golden fixture |
 | `postgres` | 10 | one provider instance and two consumers, planned |
 | `exclusions` | 15 | one deployment per excluded construct, each refused, and the counts the fixture README records about its own folder |
 | `vars` | 34 | a generated value's cardinality, its delivery set, its entry and the program that produces it |
@@ -110,7 +110,7 @@ nix eval --json '.#debug.suites' \
 ```
 
 Nineteen suites, counted as the keys of `suites` in `tests/default.nix`, and
-543 tests, counted as the test attributes of the files under `tests/unit/`. Both
+557 tests, counted as the test attributes of the files under `tests/unit/`. Both
 numbers, and every figure in the table above, are compared against the tree by
 `coverage.testASuiteGainsATest`, so a suite that gains a test fails a check
 naming this document rather than leaving a stale number in it. That

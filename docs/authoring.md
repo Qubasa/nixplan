@@ -139,7 +139,7 @@ declares eight keys at most; anything else is a row.
 | Key | Shape |
 | --- | --- |
 | `platforms` | list of system strings |
-| `claims.ports.<name>` | `{ proto, count, fixed }` — `fixed` is required, the planner allocates nothing |
+| `claims.ports.<name>` | `{ proto, fixed, address }` — `fixed` is required and is an integer of 1 to 65535, the planner allocates nothing. `proto` is one of `tcp` / `udp`, and an unstated one claims the number on every protocol of the domain. `address` is the one address the listener binds, and an unstated one is every address of the machine, which is the only spelling of the wildcard |
 | `vars.<generator>` | `{ files.<file> = { secrecy }, per ? "placement", deploy ? true, reads ? [ ], program ? <store path> }` — below |
 | `uses.<slot>` | `{ interface, reach ? "one", reads ? <every export> }` |
 | `provides.<capability>` | `{ interface, consumers ? "many" }` |

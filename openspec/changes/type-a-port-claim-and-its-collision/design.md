@@ -161,6 +161,21 @@ good number, and dropping the claim there would remove it from the collision ind
 makes the library check less than it did. So the number is recorded and the refused field is read as
 unstated, which is the widest reading and the one that still reports a contention.
 
+### Merging with `reserve-what-a-machine-already-holds`
+
+That change lands on its own branch and this one does not contain it. It factors a shared
+`portResource proto number` out of `portsOf` in `lib/plan.nix` and adds a `reservedBy` claimant, so
+a machine's existing listener contends with a declared claim. This change deletes `portResource`:
+the string it built is the defect, and what `portsOf` returns here is the normalised record the
+reading produced.
+
+The merge is therefore not a textual one. A reservation has to become a claim record of the same
+shape - a number, a protocol and an address, each already held to its domain, with `null` for an
+unstated field - and enter the same `(machine, number)` group as a claimant that is the machine
+rather than an entry. Nothing else of the overlap step moves: a reservation stating no protocol
+contends with every protocol the way an unstated claim does, and a reservation naming an address
+contends only with the claims whose address overlaps it.
+
 ## Risks / Trade-offs
 
 - **A deployment that plans today stops planning.** → Only where a claim writes `count`, a number

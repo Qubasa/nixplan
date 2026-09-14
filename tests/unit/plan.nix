@@ -270,15 +270,31 @@ let
     };
   };
 
-  claimsPort = proto: fixed: _: {
+  # A claim in three parts, `null` standing for a field the module leaves
+  # unstated, which is what the index reads as every value of it.
+  claimsPort = proto: fixed: address: _: {
     claims.ports.listen = {
-      inherit proto fixed;
-      count = 1;
-    };
+      inherit fixed;
+    }
+    // (if proto == null then { } else { inherit proto; })
+    // (if address == null then { } else { inherit address; });
     impl = _: {
       units.only.command = "/bin/true";
     };
   };
+
+  claimsFromSetting =
+    { settings, ... }:
+    {
+      claims.ports.listen = {
+        proto = "tcp";
+        fixed = 5432;
+        address = settings.address;
+      };
+      impl = _: {
+        units.only.command = "/bin/true";
+      };
+    };
 
   reserving =
     machine: reserves:
@@ -945,7 +961,6 @@ in
                 module = _: {
                   claims.ports.ssh = {
                     proto = "tcp";
-                    count = 1;
                     fixed = 22;
                   };
                   provides.thing.interface = pub;
@@ -2212,20 +2227,21 @@ in
     };
 
   # The protocol is part of the claim, so the second deployment below claims one
-  # number twice and collides with nobody.
+  # number twice and collides with nobody. Both claims state an address, so the
+  # row names the one the contention is on.
   testTwoEntriesOnOneMachineClaimOnePort =
     let
       id = "entry-port-claimed-twice";
       shared = planOf {
         instances.svc = membersOn "one" {
-          first = claimsPort "tcp" 5432;
-          second = claimsPort "tcp" 5432;
+          first = claimsPort "tcp" 5432 "10.0.0.11";
+          second = claimsPort "tcp" 5432 "10.0.0.11";
         };
       };
       crossProtocol = planOf {
         instances.svc = membersOn "one" {
-          first = claimsPort "tcp" 5432;
-          second = claimsPort "udp" 5432;
+          first = claimsPort "tcp" 5432 "10.0.0.11";
+          second = claimsPort "udp" 5432 "10.0.0.11";
         };
       };
     in
@@ -2238,7 +2254,9 @@ in
           "`svc:first@one`"
           "`svc:second@one`"
           "`one`"
-          "`tcp/5432`"
+          "`5432`"
+          "protocol `tcp`"
+          "address `10.0.0.11`"
         ];
         acrossProtocols = rowIds crossProtocol;
         applicable = [
@@ -2251,6 +2269,8 @@ in
         severity = "error";
         subjects = [ "svc:first@one" ];
         names = [
+          true
+          true
           true
           true
           true
@@ -2358,9 +2378,9 @@ in
       id = "entry-port-claimed-twice";
       result = planOf {
         instances.svc = membersOn "one" {
-          alpha = claimsPort "tcp" 5432;
-          beta = claimsPort "tcp" 5432;
-          gamma = claimsPort "tcp" 5432;
+          alpha = claimsPort "tcp" 5432 "10.0.0.11";
+          beta = claimsPort "tcp" 5432 "10.0.0.11";
+          gamma = claimsPort "tcp" 5432 "10.0.0.11";
         };
       };
     in
@@ -2373,6 +2393,7 @@ in
           "`svc:alpha@one`"
           "`svc:beta@one`"
           "`svc:gamma@one`"
+          "address `10.0.0.11`"
         ];
       };
       expected = {
@@ -2380,6 +2401,7 @@ in
         count = 1;
         subjects = [ "svc:alpha@one" ];
         names = [
+          true
           true
           true
           true
@@ -2453,7 +2475,7 @@ in
           };
         };
         instances.svc = placedOn [ "one" ] (soleRoot {
-          module = claimsPort "tcp" 22;
+          module = claimsPort "tcp" 22 null;
         });
       };
     in
@@ -2466,11 +2488,11 @@ in
         names = map (needle: hasInfix needle (said messageById id result)) [
           "`machine:one`"
           "`svc:only@one`"
-          "`tcp/22`"
+          "the port `22` on protocol `tcp`"
           "machine `one`"
         ];
         resolutionNamesBothDeclarations = map (needle: hasInfix needle (said resolutionById id result)) [
-          "`fixed` port other than `tcp/22`"
+          "`fixed` port other than `22`"
           "`reserves.ports` of machine `one`"
         ];
         applicable = result.applicable;
@@ -2546,8 +2568,8 @@ in
           };
         };
         instances.svc = membersOn "one" {
-          alpha = claimsPort "tcp" 5432;
-          beta = claimsPort "tcp" 5432;
+          alpha = claimsPort "tcp" 5432 null;
+          beta = claimsPort "tcp" 5432 null;
         };
       };
     in
@@ -2585,7 +2607,7 @@ in
           paths = [ "/etc/ssh/sshd_config" ];
         };
         instances.svc = placedOn [ "one" ] (soleRoot {
-          module = claimsPort "tcp" 5432;
+          module = claimsPort "tcp" 5432 null;
         });
       };
     in
@@ -2614,7 +2636,7 @@ in
           paths = [ "/etc/x.conf" ];
         };
         instances.svc = membersOn "one" {
-          alpha = claimsPort "tcp" 5432;
+          alpha = claimsPort "tcp" 5432 null;
           beta = writesTo "/etc/x.conf";
         };
       };
@@ -2646,7 +2668,7 @@ in
           };
         };
         instances.svc = placedOn [ "one" ] (soleRoot {
-          module = claimsPort "tcp" 5432;
+          module = claimsPort "tcp" 5432 null;
         });
       };
     in
@@ -2658,6 +2680,243 @@ in
       expected = {
         rows = [ ];
         applicable = true;
+      };
+    };
+
+  testTheEntryRecordsTheNumberAlone =
+    let
+      result = planOf {
+        instances.svc = membersOn "one" {
+          only = claimsPort "tcp" 5432 "10.0.0.11";
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        alloc = result.plan."svc:only@one".alloc;
+      };
+      expected = {
+        rows = [ ];
+        alloc.ports.listen = 5432;
+      };
+    };
+
+  testAClaimThatStatesAnAddressKeysAsItDid =
+    let
+      keyOf =
+        address:
+        (planOf {
+          instances.svc = membersOn "one" {
+            only = claimsPort "tcp" 5432 address;
+          };
+        }).plan."svc:only@one".key;
+      unstated = planOf {
+        instances.svc = membersOn "one" {
+          only = claimsPort "tcp" 5432 null;
+        };
+      };
+      stated = planOf {
+        instances.svc = membersOn "one" {
+          only = claimsPort "tcp" 5432 "one.example";
+        };
+      };
+    in
+    {
+      expr = {
+        rows = [
+          (rowIds unstated)
+          (rowIds stated)
+        ];
+        keysAreOneKey = keyOf null == keyOf "one.example";
+      };
+      expected = {
+        rows = [
+          [ ]
+          [ ]
+        ];
+        keysAreOneKey = true;
+      };
+    };
+
+  # The address reaches the claim through the member's settings, and those are an
+  # input to the key already, so the entry re-keys and its sibling does not.
+  testAnAddressADeploymentMovesReKeysThroughSettings =
+    let
+      deployment =
+        address:
+        planOf {
+          instances.svc = {
+            module =
+              { service, ... }:
+              {
+                services.bound = service "bound" {
+                  module = claimsFromSetting;
+                  defaults.address = "10.0.0.11";
+                };
+                services.other = service "other" { module = writesTo "/etc/other.conf"; };
+              };
+            placement.every = {
+              bound.machines = [ "one" ];
+              other.machines = [ "one" ];
+            };
+            settings.bound.address = address;
+          };
+        };
+      before = deployment "10.0.0.11";
+      after = deployment "10.0.0.12";
+      keyOf = result: member: result.plan."svc:${member}@one".key;
+    in
+    {
+      expr = {
+        rows = [
+          (rowIds before)
+          (rowIds after)
+        ];
+        boundMoved = keyOf before "bound" != keyOf after "bound";
+        siblingStayed = keyOf before "other" == keyOf after "other";
+      };
+      expected = {
+        rows = [
+          [ ]
+          [ ]
+        ];
+        boundMoved = true;
+        siblingStayed = true;
+      };
+    };
+
+  testOneClaimStatesAProtocolAndTheOtherStatesNone =
+    let
+      id = "entry-port-claimed-twice";
+      result = planOf {
+        instances.svc = membersOn "one" {
+          first = claimsPort "tcp" 5432 null;
+          second = claimsPort null 5432 null;
+        };
+      };
+      twoProtocols = planOf {
+        instances.svc = membersOn "one" {
+          first = claimsPort "tcp" 5432 null;
+          second = claimsPort "udp" 5432 null;
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        count = countById id result;
+        severity = severityById id result;
+        namesTheNarrowerProtocol = hasInfix "protocol `tcp`" (said messageById id result);
+        twoProtocolsOfTheDomain = rowIds twoProtocols;
+        applicable = [
+          result.applicable
+          twoProtocols.applicable
+        ];
+      };
+      expected = {
+        rows = [ id ];
+        count = 1;
+        severity = "error";
+        namesTheNarrowerProtocol = true;
+        twoProtocolsOfTheDomain = [ ];
+        applicable = [
+          false
+          true
+        ];
+      };
+    };
+
+  testTwoClaimsOfOneNumberBindTwoAddresses =
+    let
+      result = planOf {
+        instances.svc = membersOn "one" {
+          first = claimsPort "tcp" 5432 "10.0.0.11";
+          second = claimsPort "tcp" 5432 "10.0.0.12";
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        applicable = result.applicable;
+        allocated = map (key: result.plan.${key}.alloc.ports.listen) [
+          "svc:first@one"
+          "svc:second@one"
+        ];
+      };
+      expected = {
+        rows = [ ];
+        applicable = true;
+        allocated = [
+          5432
+          5432
+        ];
+      };
+    };
+
+  testAWildcardClaimAndASpecificClaimOfOneNumber =
+    let
+      id = "entry-port-claimed-twice";
+      result = planOf {
+        instances.svc = membersOn "one" {
+          first = claimsPort "tcp" 5432 null;
+          second = claimsPort "tcp" 5432 "10.0.0.11";
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        count = countById id result;
+        subjects = subjectsById id result;
+        names = map (needle: hasInfix needle (said messageById id result)) [
+          "`svc:first@one`"
+          "`svc:second@one`"
+          "`5432`"
+          "address `10.0.0.11`"
+        ];
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ id ];
+        count = 1;
+        subjects = [ "svc:first@one" ];
+        names = [
+          true
+          true
+          true
+          true
+        ];
+        applicable = false;
+      };
+    };
+
+  # A refused protocol is read as unstated, which is the wider reading: the
+  # deployment carrying the refusal is not checked less than one carrying none.
+  testARefusedProtocolCollidesWithEveryProtocol =
+    let
+      id = "entry-port-claimed-twice";
+      result = planOf {
+        instances.svc = membersOn "one" {
+          first = claimsPort "TCP" 5432 null;
+          second = claimsPort "udp" 5432 null;
+        };
+      };
+    in
+    {
+      expr = {
+        rows = sortStrings (rowIds result);
+        count = countById id result;
+        namesTheStatedProtocol = hasInfix "protocol `udp`" (said messageById id result);
+      };
+      expected = {
+        rows = [
+          "entry-port-claimed-twice"
+          "port-claim-protocol-unknown"
+        ];
+        count = 1;
+        namesTheStatedProtocol = true;
       };
     };
 }
