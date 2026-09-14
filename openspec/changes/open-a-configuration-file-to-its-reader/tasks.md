@@ -354,8 +354,18 @@
 - [x] 8.2 Run `nix build .#checks.x86_64-linux.planner-perf` and verify the nine budgets hold:
   evaluation cost moves because every unit is read for six more fields and every configuration file
   for two, so record the measured cost per entry for sizes 64 and 256 and compare against the same
-  measurement of the base commit rather than against the recorded budget alone. See the figures
-  recorded below; the check's own verdict is in the report beside them.
+  measurement of the base commit rather than against the recorded budget alone. Measured with
+  `perf/measure.sh` against a read-only `git archive` of `b7dd7e1` unpacked in `/tmp`, fixture
+  fleet, repeats 2. Size 64 (193 entries): `nrThunks` 390.76 to 401.16 (+2.66%),
+  `gc.totalBytes` 21865.1 to 22186.4 (+1.47%), `values.number` 462.33 to 472.77 (+2.26%).
+  Size 256 (769 entries): `nrThunks` 369.97 to 380.07 (+2.73%), `gc.totalBytes` 20629.3 to
+  20993.7 (+1.77%), `values.number` 437.36 to 447.47 (+2.31%). The check itself exits 1 with
+  81 of 81 gated figures above budget, which is the state of this tree at `b7dd7e1` too: the
+  budgets are stale before this change and were not edited. Every growth ratio holds, all of
+  them below 1.0 against the 1.25 bound.
 - [x] 8.3 Run `nix run .#planner-e2e -- wired-pair portable-image` and verify neither folder
   regressed: `portable-image` is the one that asserts an installed configuration file on a machine,
-  and `wired-pair` is the one that declares none. See the report.
+  and `wired-pair` is the one that declares none. Run one folder per invocation, because the app
+  refuses a second name (`ERROR: file or directory not found: portable-image`). `wired-pair`:
+  37 passed in 52.68s. `portable-image`: 35 passed in 23.54s. Neither folder's artifact or image
+  digest moved: `watch:file@alpha` is still `65a5cd46d995f76f`.
