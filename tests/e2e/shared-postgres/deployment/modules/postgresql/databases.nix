@@ -21,8 +21,8 @@ in
 {
   platforms = [ "x86_64-linux" ];
 
-  # Fixed rather than a default, because the data source this module publishes is
-  # built from it.
+  # A default rather than fixed: two listeners on one machine need two numbers,
+  # and the planner allocates none.
   claims.ports.postgres = {
     proto = "tcp";
     count = 1;
@@ -55,12 +55,20 @@ in
 
   impl =
     {
+      instance,
+      member,
       target,
       alloc,
       vars,
       ...
     }:
     let
+      # The pair an entry's plan key is built from, minus the machine: the same
+      # member placed twice wants one path on each, and two entries of one
+      # machine differ in the pair.
+      name = "${instance}-${member}";
+      stateDir = "/var/lib/postgresql/${name}";
+      configPath = "/etc/${name}/postgresql.conf";
       port = toString alloc.ports.postgres;
       specOf = db: "${db}:${ownerOf db}:${vars.${generatorOf db}.password.path}";
     in
@@ -88,7 +96,7 @@ in
         remainAfterExit = true;
         user = "postgres";
         env = {
-          PGDATA = settings.dataDir;
+          PGDATA = stateDir;
           PGPORT = port;
           DATABASES = concatStringsSep " " (map specOf names);
         };
@@ -98,7 +106,7 @@ in
       # so the realiser assembles them at build time and the artifact carries the
       # file. The socket directory is the data directory because the compiled-in
       # default is `/run/postgresql`, which no plan creates and no machine has.
-      configData."/etc/postgresql/postgresql.conf" = {
+      configData.${configPath} = {
         mode = "0444";
         reload = [ "server" ];
         render = [
@@ -106,9 +114,10 @@ in
             text = concatStringsSep "\n" [
               "listen_addresses = '0.0.0.0'"
               "port = ${port}"
-              "unix_socket_directories = '${settings.dataDir}'"
+              "unix_socket_directories = '${stateDir}'"
               "password_encryption = scram-sha-256"
               "max_connections = 32"
+              "shared_buffers = '32MB'"
               "logging_collector = off"
               ""
             ];
@@ -122,9 +131,9 @@ in
         command = concatStringsSep " " [
           "${postgresql}/bin/postgres"
           "-D"
-          settings.dataDir
+          stateDir
           "-c"
-          "config_file=/etc/postgresql/postgresql.conf"
+          "config_file=${configPath}"
         ];
         user = "postgres";
         restart = "on-failure";

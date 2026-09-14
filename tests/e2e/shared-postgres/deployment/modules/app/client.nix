@@ -23,7 +23,17 @@
   };
 
   impl =
-    { results, ... }:
+    {
+      instance,
+      member,
+      results,
+      ...
+    }:
+    let
+      # The same pair the database member derives its own paths from, so two
+      # instances of this module on one machine share nothing.
+      name = "${instance}-${member}";
+    in
     {
       # Only the script: its own wrapper resolves psql, so naming the package
       # here would be a declared root the entry mentions nowhere.
@@ -39,7 +49,7 @@
           DB_PASSWORD_FILE = results.db.password.path;
           DB_VERSION = results.db.version;
           LABEL = settings.label;
-          RECORD_PATH = settings.recordPath;
+          RECORD_PATH = "/run/${name}/record";
         };
         # Oneshot and remaining after exit, so "the row went through" is a unit
         # state rather than a log line. The start timeout covers the retry the
@@ -62,7 +72,7 @@
               # on one machine own two directories: the service manager deletes a
               # runtime directory when its unit restarts, and a shared one would
               # take the other instance's record with it.
-              runtimeDirectory = baseNameOf (dirOf settings.recordPath);
+              runtimeDirectory = name;
             };
           }
         ];

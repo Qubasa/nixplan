@@ -15,9 +15,8 @@ let
   own = service "own" {
     module = import ../postgresql/databases.nix { inherit postgresql initScript postgresDatabase; };
 
-    defaults.dataDir = "/var/lib/postgresql/own";
     fixed.databases.private.owner = "app_private";
-    fixed.port = 5432;
+    defaults.port = 5432;
     fixed.version = version;
   };
 
@@ -25,7 +24,6 @@ let
     module = import ./client.nix { inherit consumeScript postgresDatabase grouped; };
 
     defaults.label = "unnamed";
-    defaults.recordPath = "/run/shared-postgres/client.json";
 
     wire.db = own.provides.private;
   };

@@ -184,6 +184,8 @@ let
     "report-a-secrets-refusal-as-a-row/specs/tooling/test-layers/spec.md"
     "run-a-shared-database-on-real-machines/specs/delivery/real-cluster/spec.md"
     "run-a-shared-database-on-real-machines/specs/tooling/test-layers/spec.md"
+    "give-every-instance-its-own-database/specs/delivery/real-cluster/spec.md"
+    "give-every-instance-its-own-database/specs/tooling/test-layers/spec.md"
     "hold-a-long-running-daemon/specs/planner/unit-vocabulary/spec.md"
     "hold-a-long-running-daemon/specs/realiser/portable-service-image/spec.md"
     "hold-a-long-running-daemon/specs/realiser/flakelet-artifact/spec.md"

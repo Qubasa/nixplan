@@ -760,14 +760,27 @@ silently unobserved.
   consumer runs as `nobody` declaring `supplementaryGroups = [ "postgres" ]` and writing its record
   under a `runtimeDirectory` the service manager creates for that account. The init script therefore
   drops privilege nowhere and calls no `runuser`: it already has the account it needs.
-- Its port is `fixed` rather than a default, because `lib/module.nix` allocates nothing and the data
-  source the module publishes is built from it.
+- Its port is a default rather than `fixed`, because `lib/module.nix` allocates nothing and two
+  listeners on one machine need two stated numbers: the leaf defaults to 5432 and `own-app` states
+  5433 for its own database member. An export built from a knob requires the knob be resolved,
+  which a default is, not that it be fixed.
+- Every host path of the folder is derived by a module from `${instance}-${member}`, the pair an
+  entry's plan key is built from minus the machine, and no declaration of the deployment states
+  one: the data and socket directory is `/var/lib/postgresql/<name>`, the configuration file
+  `/etc/<name>/postgresql.conf`, and a consumer's record `record` inside a runtime directory called
+  `<name>`. The separator is `-` because a key's own separators are refused in the names that enter
+  it. `test_shared_postgres.py` reads each of them off the plan, so a broken derivation is a red
+  test rather than a stale constant that still matches.
+- `alpha` runs four entries and `beta` one: the shared cluster, the consumer that shares its
+  machine, the private cluster and the application that owns it are all on `alpha`, placed there by
+  its `private` tag, and `beta` keeps the remote consumer so a working consumer outside one delivery
+  set is still there. `own-app:vars/password-private` is therefore delivered to `alpha` alone.
 - Its three app instances are three shapes of one module, which composes a consumer and a database
   of its own and binds the one to the other. `near-app` and `far-app` cut the database and wire the
   slot the binding left open; `own-app` keeps it and wires nothing. That rewrite moved no plan key
   and no entry record of the three that existed before it, which is the claim the corpus's
   instance-as-group sketch makes and the reason the folder is where it is proven.
-- Each app instance owns its own runtime directory, derived from its own `recordPath`. The service
+- Each app instance owns its own runtime directory, derived from its own identity. The service
   manager deletes a runtime directory when its unit restarts, so two instances sharing one name on
   a machine lose each other's records, which is how `own-app` first failed.
 - Its server declares `restart = "on-failure"` with a `restartSec`, so the folder asserts recovery
@@ -778,9 +791,15 @@ silently unobserved.
   part of every snapshot cut's key, so that one line made the next run of every folder cold;
   `rookery snapshot gc --all` is the reclaim. `tests/unit/layers.nix` crosses every account a
   folder's unit names against the image's own declaration and its assertion.
-- The disk that folder's data directory needs is its stage's, through `delivery.cluster_stage`'s
+- The disk that folder's data directories need is its stage's, through `delivery.cluster_stage`'s
   `disk_gib`, and never the shared image's `additionalSpace`: growing the image re-keys every other
-  folder's cut, and growing one stage re-keys only its own.
+  folder's cut, and growing one stage re-keys only its own. Two clusters on one machine is what
+  moved that figure last, and it moved this folder's cut and nobody else's.
+- `tests/unit/layers.nix` recognises a folder that writes state by a module of it naming a path
+  under a home the guest image declares for an account, because nothing in a plan creates an
+  account and no settings knob names a directory any more. A folder that writes state and is not
+  recognised makes the space check pass vacuously, which is what
+  `testAFolderWritingStateIsRecognisedByWhatItDeclares` is for.
 - `newcomer` proves the outward surface, not a deployment, and it proves it on a machine. The host
   computes one thing: the store path `nix flake metadata --json` resolves the checkout to. A
   `path:` reference copies the ignored trees beside it and a `git+file:` one pins `HEAD`, which
