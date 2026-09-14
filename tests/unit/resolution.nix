@@ -75,6 +75,41 @@ let
     };
   };
 
+  reserving =
+    reserves:
+    support.machines
+    // {
+      one = support.machines.one // {
+        inherit reserves;
+      };
+    };
+
+  # Two instances, so a malformed reservation on one machine is observably not
+  # the end of the registry or of the deployment.
+  twoMachines = machines: {
+    inherit machines;
+    instances = {
+      svc = {
+        module = soleRoot { module = ignorant; };
+        placement.every.only.machines = [ "one" ];
+      };
+      other = {
+        module = soleRoot { module = ignorant; };
+        placement.every.only.machines = [ "two" ];
+      };
+    };
+  };
+
+  declaredShapeRows =
+    result:
+    builtins.sort (a: b: a < b) (
+      map (r: r.message) (
+        builtins.filter (
+          r: r.id == "declaration-field-malformed" || r.id == "declaration-field-missing"
+        ) result.diagnostics
+      )
+    );
+
   # A leaf naming a host path after the pair its own entry key is built from,
   # which is the whole point of being handed the member it is.
   namesItsOwnPath = _: {
@@ -2567,6 +2602,175 @@ in
           "other:only@two" = "sha256-b5ae99c220af2984";
           "svc:only@one" = "sha256-ebcda56674bd296b";
         };
+      };
+    };
+
+  testAMachineReservesAPortAndAHostPath =
+    let
+      result = planOf {
+        machines = reserving {
+          ports.sshd = {
+            proto = "tcp";
+            number = 22;
+          };
+          paths = [ "/etc/ssh/sshd_config" ];
+        };
+        instances.svc = {
+          module = soleRoot { module = ignorant; };
+          placement.every.only.machines = [ "one" ];
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        planned = builtins.attrNames result.plan;
+        machineFields = builtins.attrNames result.plan."machine:one";
+        statedAnywhere = builtins.filter (needle: hasInfix needle (builtins.toJSON result.plan)) [
+          "reserves"
+          "sshd"
+          "/etc/ssh/sshd_config"
+        ];
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ ];
+        planned = [
+          "machine:one"
+          "svc:only@one"
+        ];
+        machineFields = [
+          "address"
+          "key"
+          "serviceManager"
+          "system"
+          "tags"
+        ];
+        statedAnywhere = [ ];
+        applicable = true;
+      };
+    };
+
+  # The keys on the right were recorded before the registry read a reservation,
+  # and a machine stating an empty one is the same registry again.
+  testAMachineStatesNoReservation =
+    let
+      stated = planOf (twoMachines (reserving { }));
+      unstated = planOf (twoMachines support.machines);
+    in
+    {
+      expr = {
+        rows = rowIds unstated ++ rowIds stated;
+        keys = builtins.mapAttrs (_: entry: entry.key) unstated.plan;
+        anEmptyStatementChangesNothing = [
+          (stated.plan == unstated.plan)
+          (stated.diagnostics == unstated.diagnostics)
+        ];
+      };
+      expected = {
+        rows = [ ];
+        keys = {
+          "machine:one" = "sha256-565f8656738015bf";
+          "machine:two" = "sha256-37a3730f286e1675";
+          "other:only@two" = "sha256-b5ae99c220af2984";
+          "svc:only@one" = "sha256-ebcda56674bd296b";
+        };
+        anEmptyStatementChangesNothing = [
+          true
+          true
+        ];
+      };
+    };
+
+  testAReservationOfTheWrongShape =
+    let
+      planned = reserves: planOf (twoMachines (reserving reserves));
+      cases = {
+        whole = planned "tcp/22";
+        ports = planned { ports = "22"; };
+        paths = planned { paths = "/etc/ssh"; };
+        port = planned { ports.sshd = 22; };
+        number = planned {
+          ports.sshd = {
+            proto = "tcp";
+            number = "22";
+          };
+        };
+        unnumbered = planned { ports.sshd.proto = "tcp"; };
+      };
+    in
+    {
+      expr = {
+        said = builtins.mapAttrs (_: declaredShapeRows) cases;
+        subjects = builtins.mapAttrs (_: result: subjectsById "declaration-field-malformed" result) {
+          inherit (cases) whole ports;
+        };
+        stillRead = builtins.attrNames cases.port.plan;
+      };
+      expected = {
+        said = {
+          whole = [
+            "machine `one` declares `reserves` as `tcp/22`, and the reading needs a record"
+          ];
+          ports = [
+            "the reservation of machine `one` declares `ports` as `22`, and the reading needs a record"
+          ];
+          paths = [
+            "the reservation of machine `one` declares `paths` as `/etc/ssh`, and the reading needs a list of names"
+          ];
+          port = [
+            "the reserved port `sshd` of machine `one` is declared as a value of type int, and the reading needs a record"
+          ];
+          number = [
+            "the reserved port `sshd` of machine `one` declares `number` as `22`, and the reading needs a number"
+          ];
+          unnumbered = [
+            "the reserved port `sshd` of machine `one` declares no `number`, and the reading needs a number there"
+          ];
+        };
+        subjects = {
+          whole = [ "deployment/machines.nix" ];
+          ports = [ "deployment/machines.nix" ];
+        };
+        stillRead = [
+          "machine:one"
+          "machine:two"
+          "other:only@two"
+          "svc:only@one"
+        ];
+      };
+    };
+
+  # Neither evaluation reads a path: what the two deployments differ in is text,
+  # and the plan is a function of the text alone.
+  testAReservationIsADeclarationAndNotAProbe =
+    let
+      reserved =
+        path:
+        planOf (
+          twoMachines (reserving {
+            paths = [ path ];
+          })
+        );
+      here = reserved "/etc";
+      nowhere = reserved "/etc/no-such-file-on-any-host";
+    in
+    {
+      expr = {
+        rows = [
+          (rowIds here)
+          (rowIds nowhere)
+        ];
+        samePlan = here.plan == nowhere.plan;
+        sameTable = here.diagnostics == nowhere.diagnostics;
+      };
+      expected = {
+        rows = [
+          [ ]
+          [ ]
+        ];
+        samePlan = true;
+        sameTable = true;
       };
     };
 }
