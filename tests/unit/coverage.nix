@@ -205,6 +205,7 @@ let
     "refuse-two-entries-claiming-one-host-resource/specs/planner/plan-artifact/spec.md"
     "state-no-host-path-in-a-deployment/specs/tooling/repository-shape/spec.md"
     "state-no-host-path-in-a-deployment/specs/tooling/test-layers/spec.md"
+    "hold-the-consumer-cardinality-a-provider-states/specs/planner/typed-edge/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -232,8 +233,6 @@ let
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "deliver-a-secret-without-exposing-it/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
-    "hold-the-consumer-cardinality-a-provider-states/specs/planner/typed-edge/spec.md" =
-      "an unimplemented change: no task of hold-the-consumer-cardinality-a-provider-states has been done, so nothing in this package claims to satisfy it yet";
     "keep-a-declaration-from-ending-an-evaluation/specs/planner/diagnostics/spec.md" =
       "an unimplemented change: no task of keep-a-declaration-from-ending-an-evaluation has been done, so nothing in this package claims to satisfy it yet";
     "keep-a-declaration-from-ending-an-evaluation/specs/planner/typed-edge/spec.md" =

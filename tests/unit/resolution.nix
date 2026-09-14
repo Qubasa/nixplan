@@ -280,8 +280,14 @@ let
 
   # The count is deployment-wide, so these run several instances of one consumer
   # module: what differs between two of them is the wire and never the slot.
-  taking =
-    caps: consumers:
+  # `exposure` maps an exposed name to the capability its member declared, since
+  # a root publishes its own vocabulary and a wire addresses that name.
+  takingAs =
+    {
+      caps,
+      consumers,
+      exposure ? builtins.mapAttrs (cap: _: cap) caps,
+    }:
     let
       consuming = builtins.mapAttrs (_: spec: {
         module = soleRoot { module = consumer { reads = [ "publicKey" ]; }; };
@@ -306,15 +312,20 @@ let
       interfaces = registry;
       instances = consuming // {
         provider = {
-          module = soleRoot {
-            module = offering caps;
-            provides = builtins.attrNames caps;
+          module = support.root {
+            members.only.module = offering caps;
+            provides = builtins.mapAttrs (_: cap: {
+              member = "only";
+              capability = cap;
+            }) exposure;
           };
           placement.every.only.machines = [ "one" ];
-          exposes = builtins.attrNames caps;
+          exposes = builtins.attrNames exposure;
         };
       };
     };
+
+  taking = caps: consumers: takingAs { inherit caps consumers; };
 
   worked = support.workedResult;
   client = worked.plan."nightly:client@alpha";
@@ -2452,6 +2463,180 @@ in
           true
           true
         ];
+        applicable = false;
+      };
+    };
+
+  testARootRenamingACapabilityTakenTwice =
+    let
+      result = takingAs {
+        caps.identity.consumers = "one";
+        exposure.endpoint = "identity";
+        consumers = {
+          authz.capability = "endpoint";
+          hosts.capability = "endpoint";
+        };
+      };
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        subjects = subjectsById "capability-consumers-exceeded" result;
+        severity = severityById "capability-consumers-exceeded" result;
+        namesTheDeclaredName = hasInfix "capability `identity` of `provider:only`" (
+          messageById "capability-consumers-exceeded" result
+        );
+        namesBothSlots = hasInfix "wired by `authz:only.far`, `hosts:only.far`" (
+          messageById "capability-consumers-exceeded" result
+        );
+        applicable = result.applicable;
+      };
+      expected = {
+        ids = [ "capability-consumers-exceeded" ];
+        subjects = [ "provider:only" ];
+        severity = "error";
+        namesTheDeclaredName = true;
+        namesBothSlots = true;
+        applicable = false;
+      };
+    };
+
+  testARootRenamingACapabilityTakenOnce =
+    let
+      result = takingAs {
+        caps.identity.consumers = "one";
+        exposure.endpoint = "identity";
+        consumers.authz.capability = "endpoint";
+      };
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        delivered = result.plan."authz:only@one".reads.far.delivered;
+        wired = result.plan."authz:only@one".reads.far.wire.provides;
+        read = result.plan."authz:only@one".reads.far.values.publicKey;
+        applicable = result.applicable;
+      };
+      expected = {
+        ids = [ ];
+        delivered = true;
+        wired = "endpoint";
+        read = "key-identity";
+        applicable = true;
+      };
+    };
+
+  testOneCapabilityExposedUnderTwoNames =
+    let
+      result = takingAs {
+        caps.identity.consumers = "one";
+        exposure = {
+          endpoint = "identity";
+          alias = "identity";
+        };
+        consumers = {
+          authz.capability = "endpoint";
+          hosts.capability = "alias";
+        };
+      };
+    in
+    {
+      expr = {
+        exceeded = countById "capability-consumers-exceeded" result;
+        subjects = subjectsById "capability-consumers-exceeded" result;
+        namesBothSlots = hasInfix "wired by `authz:only.far`, `hosts:only.far`" (
+          messageById "capability-consumers-exceeded" result
+        );
+        wired = [
+          result.plan."authz:only@one".reads.far.wire.provides
+          result.plan."hosts:only@one".reads.far.wire.provides
+        ];
+        applicable = result.applicable;
+      };
+      expected = {
+        exceeded = 1;
+        subjects = [ "provider:only" ];
+        namesBothSlots = true;
+        wired = [
+          "endpoint"
+          "alias"
+        ];
+        applicable = false;
+      };
+    };
+
+  testARootBindingAndAWireTakingOneCapability =
+    let
+      # A root that fills its own member's slot from a sibling's handle and
+      # publishes that same capability under another name.
+      bindingRoot =
+        { service, ... }:
+        let
+          only = service "only" { module = offering { identity.consumers = "one"; }; };
+        in
+        {
+          services = {
+            inherit only;
+            near = service "near" {
+              module = consumer { reads = [ "publicKey" ]; };
+              wire.far = only.provides.identity;
+            };
+          };
+          provides.endpoint = only.provides.identity;
+        };
+
+      result = planOf {
+        sources = {
+          deployment = "deployment/instances.nix";
+          machines = "deployment/machines.nix";
+          modules = {
+            authz = "modules/authz/default.nix";
+            provider = "modules/provider/default.nix";
+          };
+          leaves = {
+            authz.only = "modules/authz/leaf.nix";
+            provider.only = "modules/provider/leaf.nix";
+            provider.near = "modules/provider/near.nix";
+          };
+        };
+        interfaces = registry;
+        instances = {
+          authz = {
+            module = soleRoot { module = consumer { reads = [ "publicKey" ]; }; };
+            placement.every.only.machines = [ "one" ];
+            wire.far = {
+              instance = "provider";
+              provides = "endpoint";
+            };
+          };
+          provider = {
+            module = bindingRoot;
+            placement.every = {
+              only.machines = [ "one" ];
+              near.machines = [ "one" ];
+            };
+            exposes = [ "endpoint" ];
+          };
+        };
+      };
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        subjects = subjectsById "capability-consumers-exceeded" result;
+        namesBothSlots = hasInfix "wired by `authz:only.far`, `provider:near.far`" (
+          messageById "capability-consumers-exceeded" result
+        );
+        boundRead = result.plan."provider:near@one".reads.far.values.publicKey;
+        boundEntry = result.plan."provider:near@one".reads.far.entry;
+        applicable = result.applicable;
+      };
+      expected = {
+        ids = [ "capability-consumers-exceeded" ];
+        subjects = [ "provider:only" ];
+        namesBothSlots = true;
+        boundRead = "key-identity";
+        boundEntry = "provider:only@one";
         applicable = false;
       };
     };
