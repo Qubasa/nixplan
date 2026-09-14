@@ -199,6 +199,8 @@ let
     "take-effect-on-a-second-apply/specs/operator/machine-report/spec.md"
     "take-effect-on-a-second-apply/specs/realiser/flakelet-artifact/spec.md"
     "take-effect-on-a-second-apply/specs/realiser/portable-service-image/spec.md"
+    "state-no-host-path-in-a-deployment/specs/tooling/repository-shape/spec.md"
+    "state-no-host-path-in-a-deployment/specs/tooling/test-layers/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed

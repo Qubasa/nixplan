@@ -92,8 +92,6 @@ SERVER_UNIT = "site-server-serve.service"
 CLIENT_UNIT = "check-client-fetch.service"
 SWEEP_UNIT = "sweep-job-rotate.service"
 SWEEP_TIMER = "sweep-job-rotate.timer"
-SWEEP_MARKER = "/run/cluster-sweep.ran"
-RECORD_PATH = "/run/cluster-probe.body"
 STORE_PATH = re.compile(r"/nix/store/[0-9a-z]{32}-[^\s\"']+")
 MACHINES = (SERVER_MACHINE, CLIENT_MACHINE)
 
@@ -123,6 +121,28 @@ def _built(attribute: str) -> tuple[manifest.Deployment, tuple[str, ...]]:
 
 BUILT, BUILD_LOG = _built("planner-e2e-wired-pair")
 CHANGED, CHANGED_LOG = _built("planner-e2e-wired-pair-changed")
+
+
+def _output_of(key: str, unit: str) -> str:
+    """The path one unit of the built plan is told to write, read off the plan.
+
+    The module derives it from the identity of its own entry, so the path a
+    machine will look at is the plan's rather than a convention restated here.
+    """
+    command = str(BUILT.plan[key]["units"][unit]["command"])
+    found = re.search(r"--output (\S+)", command)
+    assert found is not None, command
+    return found.group(1)
+
+
+def _touched_by(key: str, unit: str) -> str:
+    """The path one unit of the built plan touches, which its command ends in."""
+    command = str(BUILT.plan[key]["units"][unit]["command"])
+    return command.split()[-1]
+
+
+RECORD_PATH = _output_of(CLIENT_KEY, "fetch")
+SWEEP_MARKER = _touched_by(SWEEP_KEY, "rotate")
 
 
 @dataclass

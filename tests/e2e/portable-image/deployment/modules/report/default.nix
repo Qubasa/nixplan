@@ -1,7 +1,6 @@
 {
   report,
   reportFile,
-  paths,
   grouped,
 }:
 
@@ -12,7 +11,6 @@ let
       inherit
         report
         reportFile
-        paths
         grouped
         ;
     };

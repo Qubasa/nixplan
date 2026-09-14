@@ -65,7 +65,6 @@ PROBE_MACHINE = "beta"
 IDLE_MACHINE = "gamma"
 ISSUER_UNIT = "issuer-api-serve.service"
 PROBE_UNIT = "probe-client-attest.service"
-RECORD_PATH = "/run/generated-secret-attest.json"
 MACHINES = (ISSUER_MACHINE, PROBE_MACHINE, IDLE_MACHINE)
 ATTRIBUTE = "planner-e2e-generated-secret"
 USER = "root"
@@ -122,6 +121,11 @@ AGE = _built(f"{FLAKE}#{ATTRIBUTE}-age")
 CONFIGURATION = GENERATION / "secrets.json"
 NAMES = GENERATION / "names.json"
 EXPRESSION = GENERATION / "plan.nix"
+
+# The path the probe's own unit writes, read off the plan the deployment build
+# produced rather than restated: the module derives it from the identity of its
+# entry. The second plan this folder evaluates is asserted to agree below.
+RECORD_PATH = str(DEPLOYMENT.plan[PROBE_KEY]["units"]["attest"]["env"]["RECORD_PATH"])
 
 
 def _files_in(root: Path) -> list[Path]:
@@ -471,6 +475,11 @@ def test_the_delivered_bytes_were_generated_not_written(delivered: Run) -> None:
     assert held[ISSUER_MACHINE] == held[PROBE_MACHINE]
     secret = held[ISSUER_MACHINE]
     assert HEX.match(secret), secret
+
+    # Two readings of one deployment, one against declared state and one against
+    # what the generator answered. A derived path is a function of the entry, so
+    # both readings carry it.
+    assert run.plan[PROBE_KEY]["units"]["attest"]["env"]["RECORD_PATH"] == RECORD_PATH
 
     # The public half the plan carries is the digest of exactly these bytes, which
     # is what makes them the pair the generator minted.

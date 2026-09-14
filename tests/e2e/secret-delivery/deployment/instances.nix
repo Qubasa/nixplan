@@ -15,7 +15,6 @@
 
     probe = {
       module = probe.services.default;
-      settings.client.recordPath = "/run/secret-delivery-probe.json";
       placement.every.client = {
         tags = [ "reads" ];
       };

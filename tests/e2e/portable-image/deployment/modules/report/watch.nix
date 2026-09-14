@@ -1,7 +1,6 @@
 {
   report,
   reportFile,
-  paths,
   grouped,
 }:
 
@@ -27,40 +26,52 @@ _: {
   };
 
   impl =
-    { vars, ... }:
+    {
+      instance,
+      member,
+      vars,
+      ...
+    }:
+    let
+      # All three derived from the entry's own identity: a second entry of this
+      # module on one machine is shown its own file and assembles its own two.
+      shown = "/var/lib/${instance}-${member}/upstream.txt";
+      assembled = "/etc/${instance}-${member}/report.conf";
+      quiet = "/etc/${instance}-${member}/quiet.conf";
+    in
     {
       # Only the script is a closure root. Everything it runs is a reference of it.
       closure = [ report ];
 
-      configData.${paths.assembled} = {
+      configData.${assembled} = {
         mode = "0444";
         reload = [ "report" ];
         render = [
           { text = "# assembled on the machine, from a file the image never carried\n"; }
-          { ref = paths.shown; }
+          { ref = shown; }
         ];
       };
 
       # The other half of the reload rule: one file names a unit and this one
       # names none, so an edit reaching both reloads exactly one.
-      configData.${paths.quiet} = {
+      configData.${quiet} = {
         mode = "0444";
         reload = [ ];
         render = [
           { text = "# named by no unit\n"; }
-          { ref = paths.shown; }
+          { ref = shown; }
         ];
       };
 
       provides.report.exports = {
-        path = paths.assembled;
+        path = assembled;
       };
 
       units.report = {
         command = report;
         env = {
-          ASSEMBLED = paths.assembled;
-          ORIGINAL = paths.shown;
+          ASSEMBLED = assembled;
+          ORIGINAL = shown;
           SECRET = vars.upstream.secret.path;
         };
         extends = [

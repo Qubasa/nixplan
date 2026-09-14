@@ -68,8 +68,6 @@ FOREIGN_KEY = "mirror:copy@elsewhere"
 SHOWN_TEXT = "upstream says so\n"
 EDITED_TEXT = "upstream changed its mind\n"
 AGAIN_TEXT = "upstream said it twice\n"
-WATCHED = "/etc/planner-portable/report.conf"
-QUIET = "/etc/planner-portable/quiet.conf"
 HOST_SYSTEM = "x86_64-linux"
 FOREIGN_SYSTEM = "aarch64-linux"
 
@@ -115,6 +113,23 @@ BUILT = _built(f"{FLAKE}#planner-e2e-portable-image")
 DEPLOYMENT = manifest.read(BUILT)
 CHANGED = _built(f"{FLAKE}#planner-e2e-portable-image-changed")
 CHANGED_BUILD = manifest.read(CHANGED)
+
+
+def _configured() -> tuple[str, str]:
+    """The two files the confined entry is shown, read off the plan's own keyset.
+
+    The module derives both paths from the identity of its entry, so they are
+    read here rather than restated. One of the two names the unit that reloads
+    for it and the other names none, which is what tells them apart.
+    """
+    records = DEPLOYMENT.plan[CONFINED_KEY]["configData"]
+    reloading = sorted(path for path, record in records.items() if record["reload"])
+    silent = sorted(path for path, record in records.items() if not record["reload"])
+    assert (len(reloading), len(silent)) == (1, 1), records
+    return str(reloading[0]), str(silent[0])
+
+
+WATCHED, QUIET = _configured()
 
 
 def _value_source(root: Path, deployment: manifest.Deployment, secret: str) -> Path:
