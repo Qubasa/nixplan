@@ -1326,7 +1326,7 @@ in
             ;
           varsEntries = mapAttrs (gen: _: varsEntryKeyOf gen) generators;
           units = mapAttrs (_: u: u.record) units;
-          configData = mapAttrs (_: f: f.record) configFiles;
+          configData = mapAttrs (_: f: f.record) (util.filterAttrs (_: f: f.kept) configFiles);
           closure = if closureIsList then util.uniqueStrings closureRaw.value else [ ];
           rows =
             implShape.rows
