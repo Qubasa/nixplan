@@ -628,6 +628,57 @@ in
       };
     };
 
+  # `provides` reaches a wire as the author's own record, so the far end is read
+  # for an interface before either comparison indexes it.
+  testAWireResolvesToACapabilityDeclaringNoInterface =
+    let
+      result = edge {
+        consumerModule = consumer { };
+        providerModule = _: {
+          provides.identity = { };
+          impl = _: {
+            units.only.command = "/bin/true";
+          };
+        };
+      };
+      entry = result.plan."consumer:only@one";
+      row = builtins.head (rowsById "wire-capability-untyped" result);
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        inherit (row) subject severity;
+        namesTheSlot = hasInfix "slot `far`" row.message;
+        namesTheCapability = hasInfix "`provider.identity`" row.message;
+        providerSubjects = subjectsById "capability-interface-missing" result;
+        delivered = entry.reads.far.delivered;
+        resolvedEntry = entry.reads.far ? entry;
+        receivedSlots = entry.units.only.env.SLOTS;
+        everyOtherEntry = builtins.attrNames result.plan;
+        applicable = result.applicable;
+      };
+      expected = {
+        ids = [
+          "capability-interface-missing"
+          "wire-capability-untyped"
+        ];
+        subject = "consumer:only";
+        severity = "error";
+        namesTheSlot = true;
+        namesTheCapability = true;
+        providerSubjects = [ "modules/provider/leaf.nix" ];
+        delivered = false;
+        resolvedEntry = false;
+        receivedSlots = "";
+        everyOtherEntry = [
+          "consumer:only@one"
+          "machine:one"
+          "provider:only@one"
+        ];
+        applicable = false;
+      };
+    };
+
   # Two instances wiring each other is not a cycle: a capability's exports are a
   # function of module and settings, never of a wire.
   testTwoInstancesWireEachOther = {

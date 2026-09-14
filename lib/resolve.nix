@@ -20,6 +20,7 @@ let
     elem
     filter
     head
+    isString
     length
     mapAttrs
     ;
@@ -84,8 +85,7 @@ let
     };
   };
 
-  shownValue =
-    v: if builtins.isString v then util.quote v else "a value of type ${builtins.typeOf v}";
+  inherit (util) shownValue;
 
   declaredField =
     {
@@ -998,15 +998,25 @@ in
           };
           declaredBindings = bindingRead.value;
 
+          # A binding is the capability value off a sibling's handle, and that
+          # value carries the member it came from, the capability it is and the
+          # interface it declares. A record short of any of the three is refused
+          # before the reading below indexes into it: each of the three is an
+          # attribute key or a comparison one stratum down.
           bindingOf =
             slotName:
             let
               given = declaredBindings.${slotName} or null;
+              shaped =
+                builtins.isAttrs given
+                && isString (given.member or null)
+                && isString (given.capability or null)
+                && given ? interface;
               key = inst.memberKeyOf.${given.member} or given.member;
             in
             if given == null then
               null
-            else if !(builtins.isAttrs given && given ? member && given ? capability) then
+            else if !shaped then
               { malformed = true; }
             else
               {
@@ -1089,6 +1099,7 @@ in
                 ];
               }
             ) member.unknownKeys
+            ++ member.declarationRows
             ++ compose.slotSetRows {
               subject = moduleSubject;
               name = mname;
@@ -1231,7 +1242,11 @@ in
             value = implValue.units or { };
           };
 
-          unitsGiven = util.filterAttrs (_: u: builtins.isAttrs u) unitsRaw.value;
+          # `units` and `configData` are indexed the way each entry inside them
+          # is, so the container is read for its kind first: a non-record reaches
+          # `util.filterAttrs` otherwise, and a type error is uncatchable.
+          unitsDeclared = if builtins.isAttrs unitsRaw.value then unitsRaw.value else { };
+          unitsGiven = util.filterAttrs (_: u: builtins.isAttrs u) unitsDeclared;
           unitNames = util.sortStrings (attrNames unitsGiven);
           unitSet = util.stringSet unitNames;
 
@@ -1250,7 +1265,13 @@ in
             }
           ) unitsGiven;
 
-          configGiven = util.filterAttrs (_: f: builtins.isAttrs f) (implValue.configData or { });
+          configDeclared =
+            let
+              given = implValue.configData or { };
+            in
+            if builtins.isAttrs given then given else { };
+
+          configGiven = util.filterAttrs (_: f: builtins.isAttrs f) configDeclared;
 
           configFiles = mapAttrs (
             path: file:
@@ -1276,11 +1297,13 @@ in
           closureIsList = builtins.isList closureRaw.value && all builtins.isString closureRaw.value;
 
           malformed =
-            map (name: "unit ${util.quote name}") (
-              attrNames (util.filterAttrs (_: u: !builtins.isAttrs u) unitsRaw.value)
+            util.optional (!builtins.isAttrs unitsRaw.value) "the unit set"
+            ++ util.optional (!builtins.isAttrs (implValue.configData or { })) "the configuration data"
+            ++ map (name: "unit ${util.quote name}") (
+              attrNames (util.filterAttrs (_: u: !builtins.isAttrs u) unitsDeclared)
             )
             ++ map (path: "configuration file ${util.quote path}") (
-              attrNames (util.filterAttrs (_: f: !builtins.isAttrs f) (implValue.configData or { }))
+              attrNames (util.filterAttrs (_: f: !builtins.isAttrs f) configDeclared)
             );
 
           # An extension for another service manager is refused here and still
@@ -1358,7 +1381,7 @@ in
                 subject = entryKey;
                 id = "implementation-malformed";
                 message = "${what} of ${member.moduleLabel} is not an attribute set";
-                evidence = "a unit is a record of the unit vocabulary and a configuration file is a record naming its bytes, so neither is a bare string";
+                evidence = "a unit is a record of the unit vocabulary, a configuration file is a record naming its bytes, and `units` and `configData` are records of those, so none of them is a bare string";
                 resolution = "write a record in ${member.moduleLabel}";
               }
             ) malformed
@@ -1574,20 +1597,32 @@ in
 
           providerMember =
             if capability == null then null else targetInstance.members.${capability.member} or null;
-          placements = if providerMember == null then [ ] else providerMember.placements;
+
+          # A far end the provider member does not declare is placed nowhere, so
+          # the reads below index no record of it: `provides` reaches a wire as the
+          # author's own record, and the capability named in it may be one that
+          # member never declared.
+          placements =
+            if providerMember == null || providerDeclared == null then [ ] else providerMember.placements;
 
           # The provider's own reading of the capability, which is where its
           # consumer cardinality is stated and checked.
           providerDeclared =
             if providerMember == null then null else providerMember.declaration.provides.${capName} or null;
 
+          # The far end is read for an interface before either comparison forces
+          # it. `provides` reaches a wire as the author's own record rather than as
+          # the validated reading, so the key the provider's own row already names
+          # may be absent here, and a missing attribute is uncatchable.
+          farTyped = capability != null && capability ? interface;
+
           slotClaim = if slot.interface == null then null else interface.identityOf slot.interface;
-          capabilityClaim = if capability == null then null else interface.identityOf capability.interface;
+          capabilityClaim = if farTyped then interface.identityOf capability.interface else null;
 
           # Both ends must claim, or taking one side's word would capture a far
           # end that never agreed to be captured. The value comparison is named
           # so it is made once and neither claim is forced where it succeeds.
-          sameValue = capability != null && slot.interface != null && slot.interface == capability.interface;
+          sameValue = farTyped && slot.interface != null && slot.interface == capability.interface;
 
           claimsMatch = slotClaim != null && slotClaim == capabilityClaim;
 
@@ -1747,7 +1782,16 @@ in
                 }
             )
             ++ util.optional claimsConflict (interface.conflictRow reg slot.interface capability.interface)
-            ++ util.optional (capability != null && slot.interface != null && !interfaceMatches) (
+            ++ util.optional (capability != null && !farTyped) (
+              diag.error {
+                inherit subject;
+                id = "wire-capability-untyped";
+                message = "slot ${util.quote slotName} of ${util.quote subject} is wired to ${util.quote far}, which declares no interface value, so the slot is delivered nothing";
+                evidence = "a wire resolves only to a far end whose interface can be compared with the slot's, and the module that declared the capability earns a row of its own for the same absence";
+                resolution = "pass the interface value into the module that declares ${util.quote far} and write it as `provides.${toString capName}.interface`, or wire ${util.quote slotName} to a capability that declares one in ${deploymentFile}";
+              }
+            )
+            ++ util.optional (farTyped && slot.interface != null && !interfaceMatches) (
               diag.error {
                 inherit subject;
                 id = "interface-mismatch";

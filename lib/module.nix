@@ -190,6 +190,36 @@ rec {
         resolution = "delete or correct ${util.quote key} in ${subject}${also}";
       };
 
+  # Every value below is read for its kind before the reading indexes into it. A
+  # guard is no substitute: the unknown-key scans call `removeAttrs` on the value
+  # itself and the walks call `mapAttrs`, and a type error is not something
+  # `builtins.tryEval` can catch.
+  declaredRecord =
+    {
+      subject,
+      module,
+      where,
+      value,
+    }:
+    if isAttrs value then
+      {
+        inherit value;
+        rows = [ ];
+      }
+    else
+      {
+        value = { };
+        rows = [
+          (diag.error {
+            inherit subject;
+            id = "declaration-malformed";
+            message = "${where} is declared as ${util.shownValue value}, and the reading needs a record";
+            evidence = "a value of the wrong kind contributes nothing to the plan and the rest of ${module} is still read, which is what keeps one malformed declaration from ending the evaluation";
+            resolution = "write a record for ${where}";
+          })
+        ];
+      };
+
   severityRow =
     { subject, where }:
     diag.warning {
@@ -210,13 +240,19 @@ rec {
     }:
     let
       where = "slot ${util.quote name} of ${module}";
-      reach = slot.reach or "one";
-      hasInterface = slot ? interface && isInterface slot.interface;
-      declared = if hasInterface then interface.exportNames slot.interface else [ ];
-      reads = if slot ? reads then slot.reads else declared;
-      unknownReads = if hasInterface then util.subtractList reads declared else [ ];
+      read = declaredRecord {
+        inherit subject module where;
+        value = slot;
+      };
+      declared = read.rows == [ ];
+      given = read.value;
+      reach = given.reach or "one";
+      hasInterface = given ? interface && isInterface given.interface;
+      exported = if hasInterface then interface.exportNames given.interface else [ ];
+      reads = if given ? reads then given.reads else exported;
+      unknownReads = if hasInterface then util.subtractList reads exported else [ ];
 
-      rows =
+      slotRows =
         map (
           key:
           keyRow {
@@ -224,8 +260,8 @@ rec {
             where = where;
             allowed = slotKeys;
           }
-        ) (util.extraKeys slotKeys slot)
-        ++ util.optional (slot ? severity) (severityRow {
+        ) (util.extraKeys slotKeys given)
+        ++ util.optional (given ? severity) (severityRow {
           inherit subject where;
         })
         ++ util.optional (!hasInterface) (
@@ -260,16 +296,17 @@ rec {
           diag.error {
             inherit subject;
             id = "slot-reads-unknown-export";
-            message = "${where} reads ${util.quote r}, which ${interface.label reg slot.interface} does not declare";
-            evidence = "the interface declares ${util.quoteList declared}";
+            message = "${where} reads ${util.quote r}, which ${interface.label reg given.interface} does not declare";
+            evidence = "the interface declares ${util.quoteList exported}";
             resolution = "read a declared export in ${subject}, or declare ${util.quote r} on the interface";
           }
         ) unknownReads;
     in
     {
-      inherit rows reach reads;
-      interface = if hasInterface then slot.interface else null;
-      resolvable = hasInterface && elem reach reaches && unknownReads == [ ];
+      inherit declared reach reads;
+      rows = read.rows ++ (if declared then slotRows else [ ]);
+      interface = if hasInterface then given.interface else null;
+      resolvable = declared && hasInterface && elem reach reaches && unknownReads == [ ];
     };
 
   readCapability =
@@ -281,17 +318,20 @@ rec {
     }:
     let
       where = "capability ${util.quote name} of ${module}";
-      hasInterface = capability ? interface && isInterface capability.interface;
+      read = declaredRecord {
+        inherit subject module where;
+        value = capability;
+      };
+      declared = read.rows == [ ];
+      given = read.value;
+      hasInterface = given ? interface && isInterface given.interface;
 
       # A capability declaring nothing admits any number of consumers, which is
       # what every capability written before this key meant.
-      stated = capability.consumers or null;
+      stated = given.consumers or null;
       known = stated == null || elem stated atoms.domains.consumerCardinality;
-    in
-    {
-      interface = if hasInterface then capability.interface else null;
-      consumers = if known && stated != null then stated else "many";
-      rows =
+
+      capabilityRows =
         map (
           key:
           keyRow {
@@ -299,8 +339,8 @@ rec {
             where = where;
             allowed = capabilityKeys;
           }
-        ) (util.extraKeys capabilityKeys capability)
-        ++ util.optional (capability ? severity) (severityRow {
+        ) (util.extraKeys capabilityKeys given)
+        ++ util.optional (given ? severity) (severityRow {
           inherit subject where;
         })
         ++ util.optional (!known) (
@@ -321,6 +361,12 @@ rec {
             resolution = "pass the interface value into ${subject} and write it as `provides.${name}.interface`";
           }
         );
+    in
+    {
+      inherit declared;
+      interface = if hasInterface then given.interface else null;
+      consumers = if known && stated != null then stated else "many";
+      rows = read.rows ++ (if declared then capabilityRows else [ ]);
     };
 
   readClaims =
@@ -330,7 +376,32 @@ rec {
       claims,
     }:
     let
-      ports = claims.ports or { };
+      read = declaredRecord {
+        inherit subject module;
+        where = "claims of ${module}";
+        value = claims;
+      };
+      given = read.value;
+      portsRead = declaredRecord {
+        inherit subject module;
+        where = "the port claims of ${module}";
+        value = given.ports or { };
+      };
+      ports = portsRead.value;
+      claimReads = mapAttrs (
+        name: claim:
+        declaredRecord {
+          inherit subject module;
+          where = "port claim ${util.quote name} of ${module}";
+          value = claim;
+        }
+      ) ports;
+
+      # A claim of the wrong kind claims no port and is dropped here rather than
+      # by the `fixed` filter below, which would leave it earning
+      # `port-claim-not-fixed`: a sentence about a mistake nobody made.
+      claimed = util.filterAttrs (name: _: claimReads.${name}.rows == [ ]) ports;
+
       portRows =
         name: claim:
         map (
@@ -352,17 +423,20 @@ rec {
         );
     in
     {
-      ports = util.filterAttrs (_: claim: claim ? fixed) ports;
+      ports = util.filterAttrs (_: claim: claim ? fixed) claimed;
       rows =
-        map (
+        read.rows
+        ++ portsRead.rows
+        ++ map (
           key:
           keyRow {
             inherit subject key;
             where = "claims of ${module}";
             allowed = [ "ports" ];
           }
-        ) (util.extraKeys [ "ports" ] claims)
-        ++ util.concatMapAttrsToList portRows ports;
+        ) (util.extraKeys [ "ports" ] given)
+        ++ util.concatMapAttrsToList (name: _: claimReads.${name}.rows) ports
+        ++ util.concatMapAttrsToList portRows claimed;
     };
 
   readVars =
@@ -443,7 +517,50 @@ rec {
           stated = util.sortStrings stated;
         };
 
-      declared = attrNames vars;
+      read = declaredRecord {
+        inherit subject module;
+        where = "the generators of ${module}";
+        value = vars;
+      };
+
+      genReads = mapAttrs (
+        gen: g:
+        declaredRecord {
+          inherit subject module;
+          where = "generator ${util.quote gen} of ${module}";
+          value = g;
+        }
+      ) read.value;
+
+      # A generator of the wrong kind declares no value: nothing builds a key from
+      # it, and a sibling naming it reads a generator this module does not declare.
+      given = util.filterAttrs (gen: _: genReads.${gen}.rows == [ ]) read.value;
+
+      filesRead = mapAttrs (
+        gen: g:
+        declaredRecord {
+          inherit subject module;
+          where = "the files of generator ${util.quote gen} of ${module}";
+          value = g.files or { };
+        }
+      ) given;
+
+      fileReads = mapAttrs (
+        gen: declaredFiles:
+        mapAttrs (
+          name: file:
+          declaredRecord {
+            inherit subject module;
+            where = "generated file ${util.quote "${gen}/${name}"} of ${module}";
+            value = file;
+          }
+        ) declaredFiles.value
+      ) filesRead;
+
+      filesOf =
+        gen: util.filterAttrs (name: _: fileReads.${gen}.${name}.rows == [ ]) filesRead.${gen}.value;
+
+      declared = attrNames given;
 
       perOf = g: if g ? per then toString g.per else "placement";
       deployOf = g: if g ? deploy then g.deploy else true;
@@ -451,7 +568,7 @@ rec {
 
       # A read resolves against the generators the reading kept, so a value whose
       # name the reading refused is read by nobody and no key is built from it.
-      declaredReadsOf = g: filter (name: vars ? ${name} && !(util.carriesKeySeparator name)) (readsOf g);
+      declaredReadsOf = g: filter (name: given ? ${name} && !(util.carriesKeySeparator name)) (readsOf g);
 
       # A program is recorded and never run, so the only thing checked is that it
       # is one store path and nothing else: that is what a consumer can hand to a
@@ -465,7 +582,7 @@ rec {
         gen:
         let
           step =
-            acc: util.uniqueStrings (acc ++ builtins.concatLists (map (n: declaredReadsOf vars.${n}) acc));
+            acc: util.uniqueStrings (acc ++ builtins.concatLists (map (n: declaredReadsOf given.${n}) acc));
           go =
             budget: acc:
             let
@@ -473,7 +590,7 @@ rec {
             in
             if budget == 0 || next == acc then acc else go (budget - 1) next;
         in
-        go (builtins.length declared) (declaredReadsOf vars.${gen});
+        go (builtins.length declared) (declaredReadsOf given.${gen});
 
       inCycle = gen: elem gen (reachableFrom gen);
 
@@ -482,9 +599,9 @@ rec {
         let
           where = "generator ${util.quote gen} of ${module}";
           per = perOf g;
-          unknownReads = filter (name: !(vars ? ${name})) (readsOf g);
+          unknownReads = filter (name: !(given ? ${name})) (readsOf g);
           coarser = coarserThan.${per} or cardinalities;
-          tooNarrow = filter (name: vars ? ${name} && !elem (perOf vars.${name}) coarser) (readsOf g);
+          tooNarrow = filter (name: given ? ${name} && !elem (perOf given.${name}) coarser) (readsOf g);
         in
         map (
           key:
@@ -546,7 +663,7 @@ rec {
             inherit subject;
             id = "vars-reads-arity";
             message = "${where} has per ${util.quote per} and reads ${util.quote name}, which has per ${
-              util.quote (perOf vars.${name})
+              util.quote (perOf given.${name})
             }";
             evidence = "the placements hold one value each and the reader is one value, so the read has no single answer";
             resolution = "reverse it: a per ${util.quote "placement"} generator reads the one per ${util.quote "instance"} value, which is the direction that works";
@@ -561,21 +678,25 @@ rec {
             resolution = "break the cycle in ${subject}; the reads of a generator in a cycle are dropped, so the plan records none of them";
           }
         )
-        ++ util.concatMapAttrsToList (fileRows gen) (g.files or { });
+        ++ filesRead.${gen}.rows
+        ++ util.concatMapAttrsToList (_: fileRead: fileRead.rows) fileReads.${gen}
+        ++ util.concatMapAttrsToList (fileRows gen) (filesOf gen);
     in
     {
       # A generator's name enters the key of its own value entry, so a name
       # carrying a key separator is refused here and the generator declares no
       # value: nothing downstream builds a key from it.
       generators = builtins.mapAttrs (gen: g: {
-        files = builtins.mapAttrs (_: fileRecord) (g.files or { });
+        files = builtins.mapAttrs (_: fileRecord) (filesOf gen);
         per = if elem (perOf g) cardinalities then perOf g else "placement";
         deploy = if builtins.isBool (deployOf g) then deployOf g else true;
         reads = if inCycle gen then [ ] else util.sortStrings (declaredReadsOf g);
         program = programOf g;
-      }) (util.filterAttrs (gen: _: !(util.carriesKeySeparator gen)) vars);
+      }) (util.filterAttrs (gen: _: !(util.carriesKeySeparator gen)) given);
       rows =
-        util.concatMapAttrsToList genRows vars
+        read.rows
+        ++ util.concatMapAttrsToList (gen: _: genReads.${gen}.rows) read.value
+        ++ util.concatMapAttrsToList genRows given
         ++ map (
           gen:
           diag.error {
@@ -585,7 +706,7 @@ rec {
             evidence = "a generated value's key is `<instance>:vars/<generator>@<machine>`, so a name carrying one of them produces a key that takes apart into parts nothing declared";
             resolution = "rename the generator in ${subject} to a name carrying none of ${util.quoteList util.keySeparators}";
           }
-        ) (filter util.carriesKeySeparator (attrNames vars));
+        ) (filter util.carriesKeySeparator (attrNames read.value));
     };
 
   # The planner records a pin and resolves nothing, so this guards hand-written
@@ -598,13 +719,23 @@ rec {
     }:
     let
       where = "the pin of ${module}";
-      locked = pin.locked or { };
-      hasLocked = isAttrs locked;
-      declared = if hasLocked then attrNames locked else [ ];
-      missing = if hasLocked then util.subtractList lockedRequired declared else lockedRequired;
+      read = declaredRecord {
+        inherit subject module where;
+        value = pin;
+      };
+      given = read.value;
+      lockedRead = declaredRecord {
+        inherit subject module;
+        where = "the locked record of ${module}";
+        value = given.locked or { };
+      };
+      locked = lockedRead.value;
+      hasLocked = lockedRead.rows == [ ];
+      declared = attrNames locked;
+      missing = util.subtractList lockedRequired declared;
       nonStrings = filter (n: locked ? ${n} && !isString locked.${n}) lockedKeys;
 
-      rows =
+      pinRows =
         map (
           key:
           keyRow {
@@ -612,7 +743,7 @@ rec {
             inherit where;
             allowed = pinKeys;
           }
-        ) (util.extraKeys pinKeys pin)
+        ) (util.extraKeys pinKeys given)
         ++ map (
           key:
           keyRow {
@@ -620,22 +751,13 @@ rec {
             where = "the locked record of ${module}";
             allowed = lockedKeys;
           }
-        ) (if hasLocked then util.extraKeys lockedKeys locked else [ ])
-        ++ util.optional (!(pin ? key) || !isString pin.key) (
+        ) (util.extraKeys lockedKeys locked)
+        ++ util.optional (!(given ? key) || !isString given.key) (
           diag.error {
             inherit subject;
             id = "pin-malformed";
             message = "${where} declares no lock key";
             evidence = "a pin is ${util.quote "{ key, locked }"}, where `key` is the string the resolver assigned and key equality is what says whether two entries share a dependency";
-            resolution = "let the resolver hand the module its pin through its lexical closure rather than writing one in ${subject}";
-          }
-        )
-        ++ util.optional (!hasLocked) (
-          diag.error {
-            inherit subject;
-            id = "pin-malformed";
-            message = "${where} declares no locked record";
-            evidence = "a locked record names a source, a revision and a content hash, all literal strings";
             resolution = "let the resolver hand the module its pin through its lexical closure rather than writing one in ${subject}";
           }
         )
@@ -659,12 +781,14 @@ rec {
             resolution = "record the string the resolver locked in ${subject}";
           }
         ) nonStrings;
+
+      rows = read.rows ++ lockedRead.rows ++ (if read.rows == [ ] then pinRows else [ ]);
     in
     {
       record =
         if rows == [ ] then
           {
-            inherit (pin) key;
+            inherit (given) key;
             locked = util.pickAttrs lockedKeys locked;
           }
         else
@@ -993,15 +1117,26 @@ rec {
       declaration,
     }:
     let
+      read = declaredRecord {
+        inherit subject module;
+        where = module;
+        value = declaration;
+      };
+      given = read.value;
       claims = readClaims {
         inherit subject module;
-        claims = declaration.claims or { };
+        claims = given.claims or { };
       };
       vars = readVars {
         inherit subject module storeDir;
-        vars = declaration.vars or { };
+        vars = given.vars or { };
       };
-      uses = builtins.mapAttrs (
+      usesRead = declaredRecord {
+        inherit subject module;
+        where = "the slots of ${module}";
+        value = given.uses or { };
+      };
+      slots = builtins.mapAttrs (
         name: slot:
         readSlot {
           inherit
@@ -1012,8 +1147,13 @@ rec {
             slot
             ;
         }
-      ) (declaration.uses or { });
-      provides = builtins.mapAttrs (
+      ) usesRead.value;
+      providesRead = declaredRecord {
+        inherit subject module;
+        where = "the capabilities of ${module}";
+        value = given.provides or { };
+      };
+      capabilities = builtins.mapAttrs (
         name: capability:
         readCapability {
           inherit
@@ -1023,19 +1163,67 @@ rec {
             capability
             ;
         }
-      ) (declaration.provides or { });
-      platforms = declaration.platforms or [ ];
+      ) providesRead.value;
+
+      # A slot or a capability of the wrong kind declares nothing: the member asks
+      # for no such slot, so no wire for it is resolved, and the capability is
+      # addressable by no wire.
+      uses = util.filterAttrs (_: slot: slot.declared) slots;
+      provides = util.filterAttrs (_: capability: capability.declared) capabilities;
+
+      stated = given.platforms or [ ];
+      platformsOk = isList stated && all isString stated;
+      platforms = if platformsOk then stated else [ ];
       pin =
-        if declaration ? pin then
+        if given ? pin then
           readPin {
             inherit subject module;
-            pin = declaration.pin;
+            pin = given.pin;
           }
         else
           {
             record = null;
             rows = [ ];
           };
+
+      declarationRows =
+        map (
+          key:
+          keyRow {
+            inherit subject key;
+            where = module;
+            allowed = moduleKeys;
+          }
+        ) (util.extraKeys moduleKeys given)
+        ++ util.optional (given ? severity) (severityRow {
+          inherit subject;
+          where = module;
+        })
+        ++ util.optional (!platformsOk) (
+          diag.error {
+            inherit subject;
+            id = "platforms-malformed";
+            message = "${module} declares `platforms` that is not a list of strings";
+            evidence = "a module states the platforms it runs on as a list of system strings, and the failing value is not recorded, so the module is read as running everywhere";
+            resolution = "write a list of system strings in ${subject}";
+          }
+        )
+        ++ util.optional (!(given ? impl) || !isFunction given.impl) (
+          diag.error {
+            inherit subject;
+            id = "impl-missing";
+            message = "${module} declares no `impl` function";
+            evidence = "`impl` is what produces units, configuration data and the exports of every capability the module provides";
+            resolution = "add `impl = { results, alloc, vars, settings, ... }: { ... };` to ${subject}";
+          }
+        )
+        ++ usesRead.rows
+        ++ providesRead.rows
+        ++ claims.rows
+        ++ vars.rows
+        ++ util.concatMapAttrsToList (_: s: s.rows) slots
+        ++ util.concatMapAttrsToList (_: c: c.rows) capabilities
+        ++ pin.rows;
     in
     {
       inherit
@@ -1046,42 +1234,7 @@ rec {
         vars
         ;
       pin = pin.record;
-      impl = declaration.impl or null;
-      rows =
-        map (
-          key:
-          keyRow {
-            inherit subject key;
-            where = module;
-            allowed = moduleKeys;
-          }
-        ) (util.extraKeys moduleKeys declaration)
-        ++ util.optional (declaration ? severity) (severityRow {
-          inherit subject;
-          where = module;
-        })
-        ++ util.optional (!(isList platforms && all isString platforms)) (
-          diag.error {
-            inherit subject;
-            id = "platforms-malformed";
-            message = "${module} declares `platforms` that is not a list of strings";
-            evidence = "a module states the platforms it runs on as a list of system strings";
-            resolution = "write a list of system strings in ${subject}";
-          }
-        )
-        ++ util.optional (!(declaration ? impl) || !isFunction declaration.impl) (
-          diag.error {
-            inherit subject;
-            id = "impl-missing";
-            message = "${module} declares no `impl` function";
-            evidence = "`impl` is what produces units, configuration data and the exports of every capability the module provides";
-            resolution = "add `impl = { results, alloc, vars, settings, ... }: { ... };` to ${subject}";
-          }
-        )
-        ++ claims.rows
-        ++ vars.rows
-        ++ util.concatMapAttrsToList (_: s: s.rows) uses
-        ++ util.concatMapAttrsToList (_: c: c.rows) provides
-        ++ pin.rows;
+      impl = given.impl or null;
+      rows = read.rows ++ declarationRows;
     };
 }
