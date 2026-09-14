@@ -1199,6 +1199,7 @@ in
           implArgs = {
             inherit machine vars;
             instance = iname;
+            member = mname;
             settings = member.settings.values;
             alloc = member.alloc;
             results = member.results;
