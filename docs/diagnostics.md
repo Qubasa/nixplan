@@ -135,7 +135,7 @@ discipline and deduplication applied).
 
 | id | Raised when |
 | --- | --- |
-| `machine-target-incomplete` | a machine declares no `system` or no `serviceManager`, so a placement on it has no derivable target |
+| `machine-target-incomplete` | a machine a placement selects declares no `address`, no `system` or no `serviceManager`, so a placement on it has no derivable target and is not planned |
 | `placement-platform-mismatch` | the machine's `system` is outside the module's `platforms` |
 
 ### Composition and placement
@@ -265,7 +265,6 @@ caller reads them in the same table as the planner's own.
 | `operator-entry-name-refused` | the endpoint of the stated realiser refuses the service name or a unit file name the entry derives |
 | `operator-entry-access-denied` | a unit needs an access the confinement profile the statement produced denies |
 | `operator-entry-name-collision` | two plan keys project onto one artifact name |
-| `operator-entry-machine-no-address` (warning) | the machine record of a placed entry declares no address; an address is read by the step that dials and by no step that builds |
 | `operator-plan-field-missing` | a plan record carries no field the reading of it indexes. The plan prunes a field whose value was empty, and this names the record and the field rather than ending the evaluation |
 
 ### Every row the secrets reading can produce
@@ -287,7 +286,7 @@ of them.
 | `secrets-file-name-reserved` | a generated file carries `.nixos-secrets-metadata`, the name the tool keeps for its own provenance record |
 | `secrets-name-collision` | two plan keys project onto one stored name, and one would overwrite the other's bytes |
 | `secrets-delivery-machine-unknown` | a value is delivered to a machine the plan carries no record for |
-| `secrets-delivery-machine-no-address` | a recipient machine's record declares no address; an error here, where a step is rendered, and a warning of a deployment build, where none is |
+| `secrets-delivery-machine-no-address` | a recipient machine's record declares no address; an error here, where a step is rendered, and no row of a deployment build, where none is |
 | `secrets-rendered-word-refused` | an address or a path the rendered deploy step cannot carry as one shell word |
 
 ## Refusals by subtraction

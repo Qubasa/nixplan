@@ -257,7 +257,6 @@ therefore reached only by a caller that never asked the reading:
 | `operator-entry-service-manager-mismatch` | the entry's machine runs another service manager | place it on a machine the realiser emits for |
 | `operator-entry-name-refused` | the stated realiser's endpoint refuses a name the entry derives | rename the instance or the service |
 | `operator-entry-access-denied` | a unit needs an access the stated profile denies | state a profile that allows it, or stop needing it |
-| `operator-entry-machine-no-address` (warning) | the entry's machine record declares no address | declare an `address` before applying that entry |
 
 A record carrying `delivery` is a generated value, one carrying `placement` is a service entry, and
 one carrying neither is a machine record. Nothing is classified by the text of a key: `machine` is a

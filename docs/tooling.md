@@ -85,17 +85,17 @@ The suites, and how many tests each holds:
 | `interfaces` | 26 | interface identity by value, export atoms, the omission rule |
 | `composition` | 32 | roots, members, the settings namespace, defaults and fixed |
 | `resolution` | 53 | wiring, arity, secrecy, placement, keyset equality |
-| `diagnostics` | 47 | totality, ordering, severity, rendering, the scan that finds no raising call under `lib/` or in the reading beside it, the row table against `docs/diagnostics.md`, and every realiser refusal against the row producer above it |
+| `diagnostics` | 51 | totality, ordering, severity, rendering, the scan that finds no raising call under `lib/` or in the reading beside it, the row table against `docs/diagnostics.md`, and every realiser refusal against the row producer above it |
 | `plan` | 47 | keys, planes, absences, dependencies, serialisation, the golden fixture |
 | `postgres` | 10 | one provider instance and two consumers, planned |
 | `exclusions` | 15 | one deployment per excluded construct, each refused, and the counts the fixture README records about its own folder |
 | `vars` | 34 | a generated value's cardinality, its delivery set, its entry and the program that produces it |
 | `units` | 38 | the portable unit vocabulary, per field |
-| `platform` | 19 | a machine's target, elaborated |
+| `platform` | 26 | a machine's target, elaborated |
 | `closure` | 25 | what a unit may name and what it must declare |
 | `image` | 37 | the portable-service-image realiser's reading of an entry |
 | `flakelet` | 21 | the flakelet realiser's reading: enablement, identity, the two name refusals, which host paths it carries |
-| `operator` | 35 | the deployment build's reading: the artifact name, `manifest.json`, the realiser statement, its refusals |
+| `operator` | 36 | the deployment build's reading: the artifact name, `manifest.json`, the realiser statement, its refusals |
 | `secrets` | 21 | the secrets realiser's reading: a plan as a generator configuration, the name projection, the rendered deploy step, and the rows it answers a refused plan with |
 | `consumer` | 2 | what this flake publishes: the recorded platform identity, and a plan keyed by a caller's own nixpkgs |
 | `perf` | 6 | the synthetic fleet is deterministic and realises nothing |
@@ -110,7 +110,7 @@ nix eval --json '.#debug.suites' \
 ```
 
 Nineteen suites, counted as the keys of `suites` in `tests/default.nix`, and
-507 tests, counted as the test attributes of the files under `tests/unit/`. Both
+519 tests, counted as the test attributes of the files under `tests/unit/`. Both
 numbers, and every figure in the table above, are compared against the tree by
 `coverage.testASuiteGainsATest`, so a suite that gains a test fails a check
 naming this document rather than leaving a stale number in it. That

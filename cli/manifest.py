@@ -230,9 +230,10 @@ def read(root: Path) -> Deployment:
 def address_of(entry: Entry) -> str:
     """Return the address to dial for one placed entry.
 
-    A machine that declares no address is a warning of the planner rather than
-    a refusal, so the record carries the absence and the refusal is made here,
-    where the machine would be reached.
+    No plan the planner emits carries a placed entry whose machine declares no
+    address, and a record is an interface a caller may write by hand, so the
+    reading carries the absence and the refusal is made here, where the machine
+    would be reached.
 
     Args:
         entry: The placed entry.
