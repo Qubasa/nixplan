@@ -24,7 +24,6 @@ caller who states one keeps it.
 
 from __future__ import annotations
 
-import base64
 import contextlib
 import shlex
 import subprocess
@@ -55,16 +54,24 @@ CONFIGURATION = "config"
 class Runner(Protocol):
     """The half of a command channel every remote step uses.
 
-    ``run`` is the shape rookery's ``Cluster.run`` already has, so the machine
-    layer hands its own namespace in unchanged, and ``output`` is for the steps
-    whose evidence is what the machine said.
+    ``run`` is the shape rookery's ``Cluster.run`` has for a step that sends no
+    payload, so the machine layer hands its own namespace in unchanged, and
+    ``output`` is for the steps whose evidence is what the machine said.
+
+    A step that carries bytes carries them as ``stdin``: the argv of every step
+    is a function of the plan, so an observer of the channel - a process table,
+    a recorder - is handed the path and never the value.
     """
 
-    def run(self, cmd: list[str], *, env: dict[str, str] | None = None) -> object:
+    def run(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> object:
         """Run ``cmd`` where the deployment's addresses resolve."""
         ...
 
-    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
+    def output(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> str:
         """Run ``cmd`` and return its standard output."""
         ...
 
@@ -73,19 +80,25 @@ class Runner(Protocol):
 class Subprocess:
     """The runner an operator gets: the local process table."""
 
-    def run(self, cmd: list[str], *, env: dict[str, str] | None = None) -> object:
+    def run(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> object:
         """Run ``cmd`` and report a non-zero exit as the machine's refusal."""
-        return self._completed(cmd, env)
+        return self._completed(cmd, env, stdin)
 
-    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
+    def output(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> str:
         """Run ``cmd``, report a non-zero exit and return its standard output."""
-        return self._completed(cmd, env).stdout
+        return decoded(self._completed(cmd, env, stdin).stdout)
 
+    # Bytes in and text out: a payload is a secret's own bytes, which no encoding
+    # of text can carry, and what a machine printed is decoded at one place.
     def _completed(
-        self, cmd: list[str], env: dict[str, str] | None
-    ) -> subprocess.CompletedProcess[str]:
+        self, cmd: list[str], env: dict[str, str] | None, stdin: bytes | None
+    ) -> subprocess.CompletedProcess[bytes]:
         try:
-            return subprocess.run(cmd, env=env, check=True, capture_output=True, text=True)
+            return subprocess.run(cmd, env=env, input=stdin, check=True, capture_output=True)
         except subprocess.CalledProcessError as refused:
             raise Refused(destination(cmd), refused.returncode, printed(refused)) from refused
 
@@ -183,9 +196,24 @@ def taking(step: str, address: str, record: Callable[[str], None]) -> Iterator[N
         raise
 
 
+def decoded(said: object) -> str:
+    """Return what a machine printed as text, whatever bytes it printed.
+
+    A step runs in binary mode because a payload is arbitrary bytes, so a
+    machine's answer is decoded here and nowhere else. A byte the locale cannot
+    decode is replaced rather than raised on: what a refusal is for is naming
+    the step and the machine, and a decoder that raised would report neither.
+    """
+    if isinstance(said, bytes):
+        return said.decode(errors="replace")
+    return said if isinstance(said, str) else ""
+
+
 def printed(refused: subprocess.CalledProcessError) -> str:
     """Return what a machine said when it refused a step."""
-    return "\n".join(part.strip() for part in (refused.stderr, refused.stdout) if part)
+    return "\n".join(
+        said.strip() for said in (decoded(refused.stderr), decoded(refused.stdout)) if said
+    )
 
 
 def destination(cmd: Sequence[str]) -> str:
@@ -264,13 +292,14 @@ def ssh_argv(address: str, script: str, *, opts: str, user: str = "root") -> lis
     return ["ssh", *shlex.split(opts), f"{user}@{address}", script]
 
 
-def write_script(file: ValueFile, content: bytes) -> str:
+def write_script(file: ValueFile) -> str:
     """Return the script that writes one generated file on a machine.
 
     Not `nix copy`: a store object is readable by every process on the machine,
     and the whole point of a generated secret is that its bytes are not in the
-    store. The bytes travel base64-encoded because a runner runs an argv rather
-    than a shell.
+    store. The bytes arrive on the step's own input, so this script is a
+    function of the record alone: the argv it goes out in carries the path, the
+    mode and the ownership, and nothing read out of a value source.
 
     The temporary is created `0600 root` before its first byte, so the bytes are
     never at the login's umask; ownership is set next and the recorded mode last,
@@ -297,13 +326,11 @@ def write_script(file: ValueFile, content: bytes) -> str:
 
     Args:
         file: The value file record the plan carries.
-        content: The bytes to write.
 
     Returns:
         The shell script, which writes nothing readable by anyone the record
         does not admit.
     """
-    encoded = base64.b64encode(content).decode()
     path = shlex.quote(file.path)
     owned = shlex.quote(f"{file.owner}:{file.group}")
     mode = shlex.quote(file.mode)
@@ -319,7 +346,7 @@ def write_script(file: ValueFile, content: bytes) -> str:
         f"(umask 066; mkdir -p {parent}); chmod 0711 {parent}; "
         f"tmp={path}.planner; trap 'rm -f \"$tmp\"' EXIT; "
         f'install -m 0600 /dev/null "$tmp"; '
-        f'printf %s {shlex.quote(encoded)} | base64 -d > "$tmp"; '
+        f'cat > "$tmp"; '
         f'chown {owned} "$tmp" 2>/dev/null || {{ echo {missing} >&2; exit 1; }}; '
         f'chmod {mode} "$tmp"; '
         f'if cmp -s "$tmp" {path}; then moved=unchanged; rm -f "$tmp"; '

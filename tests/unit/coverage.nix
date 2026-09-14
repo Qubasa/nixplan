@@ -224,6 +224,8 @@ let
     "open-a-configuration-file-to-its-reader/specs/realiser/portable-service-image/spec.md"
     "refuse-a-value-a-unit-file-cannot-carry/specs/planner/diagnostics/spec.md"
     "refuse-a-value-a-unit-file-cannot-carry/specs/realiser/portable-service-image/spec.md"
+    "keep-a-secret-out-of-a-process-table/specs/operator/apply-command/spec.md"
+    "keep-a-secret-out-of-a-process-table/specs/realiser/secrets-configuration/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -251,10 +253,6 @@ let
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "deliver-a-secret-without-exposing-it/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
-    "keep-a-secret-out-of-a-process-table/specs/operator/apply-command/spec.md" =
-      "an unimplemented change: no task of keep-a-secret-out-of-a-process-table has been done, so nothing in this package claims to satisfy it yet";
-    "keep-a-secret-out-of-a-process-table/specs/realiser/secrets-configuration/spec.md" =
-      "an unimplemented change: no task of keep-a-secret-out-of-a-process-table has been done, so nothing in this package claims to satisfy it yet";
   };
 
   isSpecFile = path: match ".*/spec\\.md" path != null;

@@ -141,11 +141,13 @@ machine of the delivery set - already prove the write still works over the new c
   is already appended (`cli/remote.py:39-48`), and a caller's options are the caller's: the command
   appends rather than decides (`cli/remote.py:17-22`). Not guarded against, and named here so the
   next reader does not have to rediscover it.
-- **The rendered step's reused temporary.** → If some store backend's `get` refuses to write to a
-  path that already exists, truncation is not enough and the step needs an `rm -f` before each
-  fetch. Open question, to be answered against the pinned tool and against
-  `tests/e2e/generated-secret/deployment/backend.py` while implementing; both spellings satisfy the
-  requirement, and the scenario that runs the step is what decides it.
+- **The rendered step's reused temporary.** → Answered while implementing: truncation is enough.
+  `tests/e2e/generated-secret/deployment/backend.py:106-119` fetches with
+  `age --decrypt --identity … --output <out>`, and `age` overwrites an output path that already
+  exists, measured directly against a file created by `: >`. The step therefore spells the
+  truncation `: > "$tmp"` and needs no `rm -f` before each fetch, and `nix run .#planner-e2e
+  generated-secret` runs the real tool through that path. A backend whose `get` refused an existing
+  path would want the `rm -f` spelling instead; both satisfy the requirement.
 - **Cost.** → None that is measured. Nothing under `lib/` changes, so no plan field, no golden and
   no counter moves; `nix build .#checks.x86_64-linux.planner-perf` is not part of this change's
   verification and the reason is recorded in the task list rather than left to a reader.

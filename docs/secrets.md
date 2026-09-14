@@ -120,8 +120,17 @@ machine.
 The script carries no bytes. `deliver` fetches each file from the store backend's own `get` program
 at run time, into a temporary file, and pipes it over `ssh` into a file the record decides:
 `install -m 0600` before the first byte, then the recorded owner, group and mode, then the move into
-place, so no window exists in which the bytes sit wider than the deployment stated. The value's
+place, so the bytes are never on the machine wider than the deployment stated. The value's
 directories are `0711`, traversable so that a file opened to an account is reachable by it.
+
+That temporary is the plaintext of one file on the host running the step, and the step removes it.
+One of them exists for the whole run rather than one per delivery, `mktemp` creates it `0600`,
+each fetch truncates it, and a `trap` installed before the first fetch removes it on a normal exit,
+on the exit `set -eu` makes of a refused send, and on an interrupt. A removal written after the send
+is not the fix: that is the one path `set -eu` never reaches, and a machine that refused is the
+reason an operator reruns the step. Only a signal no process can trap gets past it, and what
+survives that is one file rather than one per delivery.
+
 `$PLANNER_SECRETS_SSH_OPTS` reaches `ssh` unquoted, and the word splitting is the point: the
 contract says a deploy step takes whatever else it needs from the environment, and reaching a guest
 whose host key nobody has accepted yet is exactly that.

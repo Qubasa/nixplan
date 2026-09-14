@@ -15,7 +15,9 @@ nothing here states what a real one prints, so no verdict the command reads out
 of it is measured against an invention.
 """
 
+import base64
 import grp
+import hashlib
 import json
 import os
 import pwd
@@ -68,6 +70,10 @@ def _delivered(
 TOKEN = {"token": _delivered("/run/vars/issuer/session/token", "secret")}
 PROGRAM = "/nix/store/3k9m2x7vqz1n5bpr4jlfg8ys6cwh0d2a-mint-token.drv"
 
+# What a run delivers when the assertion is about what carried it. Bytes rather
+# than a string, because a generated secret is bytes.
+SECRET = b"s3cret-payload"
+
 PLAN = {
     "machine:alpha": {"address": "10.0.0.10", "tags": ["cluster"]},
     "machine:beta": {"address": "10.0.0.11", "tags": ["cluster"]},
@@ -88,16 +94,26 @@ PLAN = {
 
 
 class Recorder:
-    """A runner that records the argv it was handed instead of running it."""
+    """A runner that records the argv it was handed instead of running it.
+
+    The payload of a step is dropped rather than recorded. A harness that kept
+    the bytes of a value would be a second copy of the leak the argv no longer
+    carries, and the assertion that no recorded argv holds them would then be
+    made beside a recording of them.
+    """
 
     def __init__(self) -> None:
         self.commands: list[list[str]] = []
 
-    def run(self, cmd: list[str], *, env: dict[str, str] | None = None) -> object:
+    def run(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> object:
         self.commands.append(cmd)
         return env
 
-    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
+    def output(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> str:
         self.commands.append(cmd)
         return ""
 
@@ -193,6 +209,30 @@ def _source(root: Path, files: dict[str, str]) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
     return root
+
+
+def _bytes_source(root: Path, files: dict[str, bytes]) -> Path:
+    """Write a value source holding bytes, keyed by `<entry-key>/<file>`.
+
+    A generated secret is arbitrary bytes, so the payload of an assertion about
+    what a step carries is written as bytes rather than as text.
+    """
+    root.mkdir(parents=True, exist_ok=True)
+    for relative, content in files.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    return root
+
+
+def _delivering(root: Path) -> manifest.Deployment:
+    """One entry on alpha, which the session value's one file is delivered to."""
+    return _built(
+        root,
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+        values={SESSION_VALUE: {"delivery": ["alpha"], "files": TOKEN}},
+    )
 
 
 def _activated(log: tuple[str, ...]) -> list[str]:
@@ -505,9 +545,11 @@ class Reporting(Recorder):
     and an activation reports the steps the artifact's own script took.
     """
 
-    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
+    def output(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> str:
         self.commands.append(cmd)
-        if "base64 -d" in cmd[-1]:
+        if 'cat > "$tmp"' in cmd[-1]:
             return "unchanged"
         if "try-restart" in cmd[-1]:
             return ""
@@ -525,8 +567,10 @@ def _reading() -> dict[str, Any]:
 class Rotating(Reporting):
     """A recorder whose machines say every value write moved the bytes."""
 
-    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
-        answered = super().output(cmd, env=env)
+    def output(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> str:
+        answered = super().output(cmd, env=env, stdin=stdin)
         return "changed" if answered == "unchanged" else answered
 
 
@@ -607,6 +651,95 @@ def test_a_run_is_asked_what_it_would_do(tmp_path: Path) -> None:
         "  started site-server-serve.service",
         "  started site-server-serve.service",
     ]
+
+
+def test_a_dry_run_hands_no_payload_to_the_channel_it_substitutes(tmp_path: Path) -> None:
+    """A dry run of a delivered value dials nothing and prints the real run's lines.
+
+    The bytes are read out of the source and handed to a channel that takes no
+    step with them, which is what keeps the two runs comparable line for line:
+    a payload is a parameter of a step, not a decision the walk takes.
+    """
+    deployment = _delivering(tmp_path / "built")
+    source = _bytes_source(tmp_path / "values", {f"{SESSION_VALUE}/token": SECRET})
+
+    asked = Reporting()
+    would = apply.apply(deployment, asked, source=source, dry_run=True, base_env={})
+
+    assert asked.commands == []
+
+    taken = Reporting()
+    did = apply.apply(deployment, taken, source=source, base_env={})
+
+    assert [line for line in did if not line.startswith("  ")] == list(would)
+    assert [line for line in would if line.startswith("value ")] == [
+        f"value {SESSION_VALUE} token -> root@10.0.0.10:{TOKEN['token']['path']} (root:root 0400)"
+    ]
+
+
+def _leaks(content: bytes) -> dict[str, bytes]:
+    """Return the encodings of ``content`` no argument vector may carry."""
+    return {
+        "the bytes": content,
+        "base64": base64.b64encode(content),
+        "base32": base64.b32encode(content),
+        "hex": content.hex().encode(),
+        "a digest": hashlib.sha256(content).hexdigest().encode(),
+        "a digest in base64": base64.b64encode(hashlib.sha256(content).digest()),
+    }
+
+
+def test_a_process_table_observed_during_a_value_write(tmp_path: Path) -> None:
+    """What a process table shows of a step is the argv, and no argv holds a value.
+
+    The argv is read off the channel rather than sampled out of `/proc`: a write
+    lasts a millisecond, and a sampler that passed by missing the window would be
+    worse than no test. It is one vector on both hosts, the machine's own command
+    line being the element that carries the script.
+    """
+    deployment = _delivering(tmp_path / "built")
+    source = _bytes_source(tmp_path / "values", {f"{SESSION_VALUE}/token": SECRET})
+    recorder = Reporting()
+
+    apply.apply(deployment, recorder, source=source, base_env={})
+
+    written = [cmd for cmd in recorder.commands if 'cat > "$tmp"' in cmd[-1]]
+    assert len(written) == 1
+    assert written[0][-1] == remote.write_script(
+        ValueFile(
+            name="token",
+            path=TOKEN["token"]["path"],
+            secrecy="secret",
+            owner="root",
+            group="root",
+            mode="0400",
+        )
+    )
+    for cmd in recorder.commands:
+        for word in cmd:
+            spoken = word.encode(errors="surrogateescape")
+            for what, needle in _leaks(SECRET).items():
+                assert needle not in spoken, f"{what} of the value is in {word}"
+
+
+def test_two_values_of_one_length_run_one_argument_vector(tmp_path: Path) -> None:
+    """Two payloads of one length are one argv and one log, which is the property.
+
+    Stronger than the absence of a known needle: the vector is a function of the
+    plan, so two deliveries of different bytes to one path are indistinguishable
+    from anything the channel was handed.
+    """
+    deployment = _delivering(tmp_path / "built")
+    runs = []
+    for name, content in (("one", b"\x00\x01payload-one"), ("two", b"payload-two\xff\xfe")):
+        source = _bytes_source(tmp_path / name, {f"{SESSION_VALUE}/token": content})
+        recorder = Reporting()
+        log = apply.apply(deployment, recorder, source=source, base_env={})
+        runs.append((recorder.commands, [line for line in log if not line.startswith("  ")]))
+
+    assert runs[0][0] == runs[1][0]
+    assert runs[0][1] == runs[1][1]
+    assert any('cat > "$tmp"' in cmd[-1] for cmd in runs[0][0])
 
 
 def test_a_dry_run_of_a_deployment_the_planner_refuses(tmp_path: Path) -> None:
@@ -1521,13 +1654,17 @@ class Failing(Recorder):
         super().__init__()
         self.at = at
 
-    def run(self, cmd: list[str], *, env: dict[str, str] | None = None) -> object:
+    def run(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> object:
         self._refuse(cmd)
-        return super().run(cmd, env=env)
+        return super().run(cmd, env=env, stdin=stdin)
 
-    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
+    def output(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> str:
         self._refuse(cmd)
-        return super().output(cmd, env=env)
+        return super().output(cmd, env=env, stdin=stdin)
 
     def _refuse(self, cmd: list[str]) -> None:
         if self.at in " ".join(cmd):
@@ -1661,8 +1798,10 @@ class Answering(Recorder):
         self.asked = asked
         self.said = said
 
-    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
-        answered = super().output(cmd, env=env)
+    def output(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> str:
+        answered = super().output(cmd, env=env, stdin=stdin)
         return self.said if self.asked in " ".join(cmd) else answered
 
 
@@ -1826,8 +1965,10 @@ class Silent(Recorder):
         self.status = status
         self.said = said
 
-    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
-        answered = super().output(cmd, env=env)
+    def output(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> str:
+        answered = super().output(cmd, env=env, stdin=stdin)
         if self.at in " ".join(cmd):
             raise subprocess.CalledProcessError(self.status, cmd, output="", stderr=self.said)
         return answered
@@ -1988,8 +2129,10 @@ class Fleet(Recorder):
         super().__init__()
         self.said = said
 
-    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
-        answered = super().output(cmd, env=env)
+    def output(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> str:
+        answered = super().output(cmd, env=env, stdin=stdin)
         for address, said in self.said.items():
             if address in " ".join(cmd):
                 return said
@@ -2111,13 +2254,13 @@ def test_a_build_of_a_deployment_carrying_an_error_prints_the_table_and_refuses(
     assert TABLE in capsys.readouterr().out
 
 
-def _written(script: str, *, umask: int) -> int:
-    """Run one write script under a stated umask and return its exit status."""
+def _written(script: str, *, umask: int, content: bytes = b"s3cret") -> int:
+    """Run one write script under a stated umask, with its bytes on its own input."""
     return subprocess.run(
         ["bash", "-c", f"umask {umask:04o}; {script}"],
+        input=content,
         check=False,
         capture_output=True,
-        text=True,
     ).returncode
 
 
@@ -2143,7 +2286,7 @@ def test_a_mode_widened_on_the_machine(tmp_path: Path) -> None:
             group=group,
             mode="0640",
         )
-        script = remote.write_script(file, b"s3cret")
+        script = remote.write_script(file)
         assert _written(script, umask=umask) == 0
         assert stat.S_IMODE(path.stat().st_mode) == 0o640
         path.chmod(0o666)
@@ -2167,10 +2310,10 @@ def test_an_interrupted_write(tmp_path: Path) -> None:
         group=group,
         mode="0400",
     )
-    assert _written(remote.write_script(file, b"first"), umask=0o077) == 0
-    interrupted = remote.write_script(file, b"second").replace("mv -f", "false; mv -f", 1)
+    assert _written(remote.write_script(file), umask=0o077, content=b"first") == 0
+    interrupted = remote.write_script(file).replace("mv -f", "false; mv -f", 1)
 
-    assert _written(interrupted, umask=0o077) != 0
+    assert _written(interrupted, umask=0o077, content=b"second") != 0
 
     assert path.read_bytes() == b"first"
     assert sorted(p.name for p in tmp_path.iterdir()) == ["token"]
@@ -2188,7 +2331,8 @@ def test_an_account_the_machine_does_not_have(tmp_path: Path) -> None:
         mode="0400",
     )
     ran = subprocess.run(
-        ["bash", "-c", remote.write_script(file, b"s3cret")],
+        ["bash", "-c", remote.write_script(file)],
+        input="s3cret",
         check=False,
         capture_output=True,
         text=True,
@@ -2198,6 +2342,91 @@ def test_an_account_the_machine_does_not_have(tmp_path: Path) -> None:
     assert "no account nosuchaccount:nosuchaccount" in ran.stderr
     assert str(path) in ran.stderr
     assert list(tmp_path.iterdir()) == []
+
+
+def _file_record(path: Path, *, owner: str, group: str, mode: str = "0400") -> ValueFile:
+    """One value file record naming ``path``."""
+    return ValueFile(
+        name="token", path=str(path), secrecy="secret", owner=owner, group=group, mode=mode
+    )
+
+
+def test_a_value_write_carries_its_bytes_on_the_steps_input_stream(tmp_path: Path) -> None:
+    """The file holds the bytes handed over, and the step still answers one word.
+
+    The payload is not valid text, which is the case a channel encoding what it
+    is given corrupts silently. The observation is the file rather than a
+    recording of it: what records a step is handed the argv and never the bytes.
+    """
+    owner, group = _own_account()
+    path = tmp_path / "token"
+    step = ["bash", "-c", remote.write_script(_file_record(path, owner=owner, group=group))]
+    payload = b"\x00\xfe not utf-8 \xff\x80"
+    channel = remote.Subprocess()
+
+    answered = channel.output(step, stdin=payload)
+
+    assert path.read_bytes() == payload
+    assert answered.split() == ["changed"]
+    assert channel.output(step, stdin=payload).split() == ["unchanged"]
+
+    # A machine's own answer is decoded where it is read, so a byte the locale
+    # cannot decode is reported rather than raised on inside the decoder.
+    with pytest.raises(remote.Refused) as refused:
+        channel.output(["bash", "-c", "printf 'refused \\377\\n' >&2; exit 7"], stdin=payload)
+
+    assert refused.value.status == 7
+    assert "refused" in refused.value.said
+    assert "\ufffd" in refused.value.said
+
+
+def test_a_write_that_fails_after_its_bytes_have_arrived(tmp_path: Path) -> None:
+    """A write refused at the ownership leaves the file that was there and nothing else.
+
+    The run reports the value, the file, the machine and what the machine said,
+    and takes no step after it: the recovery is a second apply.
+    """
+    owner, group = _own_account()
+    path = tmp_path / "token"
+    held = _file_record(path, owner=owner, group=group)
+    assert _written(remote.write_script(held), umask=0o077, content=b"first") == 0
+    refused = _file_record(path, owner="nosuchaccount", group="nosuchaccount")
+
+    assert _written(remote.write_script(refused), umask=0o077, content=SECRET) != 0
+
+    assert path.read_bytes() == b"first"
+    assert sorted(entry.name for entry in tmp_path.iterdir()) == ["token"]
+
+    deployment = _delivering(tmp_path / "built")
+    source = _bytes_source(tmp_path / "values", {f"{SESSION_VALUE}/token": SECRET})
+    failing = Failing('cat > "$tmp"')
+    printed: list[str] = []
+    with pytest.raises(errors.ApplyError) as reported:
+        apply.apply(deployment, failing, source=source, base_env={}, log=printed.append)
+
+    message = str(reported.value)
+    for named in (SESSION_VALUE, "token", "10.0.0.10", TOKEN["token"]["path"], REFUSED):
+        assert named in message
+    assert failing.commands == []
+    assert printed[-1].startswith("failed ")
+
+
+def test_a_repeated_write_finishes_what_a_failed_one_did_not(tmp_path: Path) -> None:
+    """The apply after a write that stopped part way writes the file and says so."""
+    owner, group = _own_account()
+    path = tmp_path / "token"
+    file = _file_record(path, owner=owner, group=group, mode="0640")
+    script = remote.write_script(file)
+    assert _written(script, umask=0o077, content=b"first") == 0
+    assert _written(script.replace("mv -f", "false; mv -f", 1), umask=0o077, content=SECRET) != 0
+
+    answered = remote.Subprocess().output(["bash", "-c", script], stdin=SECRET)
+
+    assert answered.split() == ["changed"]
+    assert path.read_bytes() == SECRET
+    assert stat.S_IMODE(path.stat().st_mode) == 0o640
+    assert (path.owner(), path.group()) == (owner, group)
+    assert sorted(entry.name for entry in tmp_path.iterdir()) == ["token"]
 
 
 TOKEN_PATH = "/run/vars/issuer/session/token"
@@ -2215,8 +2444,10 @@ class Holding(Recorder):
         super().__init__()
         self.held = held
 
-    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
-        answered = super().output(cmd, env=env)
+    def output(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> str:
+        answered = super().output(cmd, env=env, stdin=stdin)
         asked = cmd[-1]
         if "present" not in asked:
             return answered

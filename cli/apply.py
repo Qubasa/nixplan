@@ -252,13 +252,21 @@ class Nobody:
     walk over a channel that takes no step and answers nothing. The steps it prints
     are therefore the steps a real run prints, and what is missing from its output
     is what a machine would have said.
+
+    The walk is the walk either way, so a value write hands this channel the
+    bytes it would have sent and this channel sends nothing: the payload is a
+    parameter of a step and never a decision the walk takes.
     """
 
-    def run(self, cmd: list[str], *, env: dict[str, str] | None = None) -> object:
+    def run(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> object:
         """Take no step."""
         return None
 
-    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
+    def output(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> str:
         """Answer nothing, which is what a machine that was not asked said."""
         return ""
 
@@ -344,11 +352,12 @@ def apply(
             answered = channel.output(
                 remote.ssh_argv(
                     write.address,
-                    remote.write_script(write.file, write.content),
+                    remote.write_script(write.file),
                     opts=opts,
                     user=user,
                 ),
                 env=env,
+                stdin=write.content,
             )
         for line in answered.splitlines():
             record(f"  {line}")

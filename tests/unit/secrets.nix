@@ -516,6 +516,41 @@ in
       };
     };
 
+  # A pure evaluation cannot run a shell, so this is a reading of the rendered
+  # text. What the step does when it runs is asserted in tests/e2e/generated-secret.
+  testTheRenderedStepRemovesThePlaintextItFetched =
+    let
+      script = renderOf worked.plan;
+      numbered = lines script;
+      indexed = builtins.genList (i: {
+        inherit i;
+        line = builtins.elemAt numbered i;
+      }) (builtins.length numbered);
+      firstAt =
+        needle:
+        let
+          hits = filter (entry: hasInfix needle entry.line) indexed;
+        in
+        if hits == [ ] then null else (head hits).i;
+      countOf = needle: builtins.length (filter (line: hasInfix needle line) numbered);
+    in
+    {
+      expr = {
+        trap = filter (line: hasInfix "trap " line) numbered;
+        temporaries = countOf "mktemp";
+        # The fetch writes plaintext, so a trap installed after it covers a file
+        # that already exists.
+        theTrapIsBeforeTheFirstFetch = firstAt "trap " < firstAt "\"$get\"";
+        eachFetchTruncatesTheOneTemporary = countOf ": > \"$tmp\"" == 1;
+      };
+      expected = {
+        trap = [ "trap 'rm -f \"$tmp\"' EXIT INT TERM HUP" ];
+        temporaries = 1;
+        theTrapIsBeforeTheFirstFetch = true;
+        eachFetchTruncatesTheOneTemporary = true;
+      };
+    };
+
   testADeliveryTargetWithNoAddressIsRefused =
     let
       addressless = worked.plan // {

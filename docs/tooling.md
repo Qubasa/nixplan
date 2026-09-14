@@ -96,7 +96,7 @@ The suites, and how many tests each holds:
 | `image` | 53 | the portable-service-image realiser's reading of an entry |
 | `flakelet` | 27 | the flakelet realiser's reading: enablement, identity, the two name refusals, and which host paths it carries, by when their bytes exist and by the record they state |
 | `operator` | 39 | the deployment build's reading: the artifact name, `manifest.json`, the realiser statement, its refusals |
-| `secrets` | 21 | the secrets realiser's reading: a plan as a generator configuration, the name projection, the rendered deploy step, and the rows it answers a refused plan with |
+| `secrets` | 22 | the secrets realiser's reading: a plan as a generator configuration, the name projection, the rendered deploy step, and the rows it answers a refused plan with |
 | `consumer` | 2 | what this flake publishes: the recorded platform identity, and a plan keyed by a caller's own nixpkgs |
 | `perf` | 6 | the synthetic fleet is deterministic and realises nothing |
 | `layers` | 29 | the shape of the test tree itself, the root document and the one shell |
@@ -110,7 +110,7 @@ nix eval --json '.#debug.suites' \
 ```
 
 Nineteen suites, counted as the keys of `suites` in `tests/default.nix`, and
-609 tests, counted as the test attributes of the files under `tests/unit/`. Both
+610 tests, counted as the test attributes of the files under `tests/unit/`. Both
 numbers, and every figure in the table above, are compared against the tree by
 `coverage.testASuiteGainsATest`, so a suite that gains a test fails a check
 naming this document rather than leaving a stale number in it. That
@@ -137,13 +137,13 @@ See [cluster.md](cluster.md) for the host it needs, the six folders, what a run
 observes and how to drive `pytest` by hand against the working tree.
 
 The pure half of that layer needs no machine and is a check like any other:
-`nix build .#checks.x86_64-linux.planner-delivery -L`, 84 tests over
+`nix build .#checks.x86_64-linux.planner-delivery -L`, 90 tests over
 `tests/e2e/test_harness.py`. Most of them are the command's rather than the
 harness's now - the order `apply` walks, the refusals it makes before it dials -
 because the harness hands the command a recorder in place of a process table and
 reads the argv it produced. The check exports `PYTHONPATH` naming `cli/`, since
 that is where those modules live. `nix develop` carries the same `pytest`, so
-`PYTHONPATH=cli pytest -q tests/e2e/test_harness.py` runs the same 84 against
+`PYTHONPATH=cli pytest -q tests/e2e/test_harness.py` runs the same 90 against
 the working tree. Nothing here answers for `portablectl`: every claim about what
 a real one prints, and every verdict read out of it, is a test of
 `tests/e2e/portable-image/`.
