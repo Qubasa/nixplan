@@ -40,11 +40,19 @@ DEFAULT_STORE = "/nix/store"
 
 @dataclass(frozen=True)
 class ValueFile:
-    """One file a generated value declares."""
+    """One file a generated value declares, and what it is delivered as.
+
+    `owner`, `group` and `mode` are the plan's, never this command's: the
+    deployment's statement and the bytes on every machine cannot disagree if
+    only one of them decides.
+    """
 
     name: str
     path: str
     secrecy: str
+    owner: str
+    group: str
+    mode: str
 
 
 @dataclass(frozen=True)
@@ -410,6 +418,9 @@ def _file(key: str, name: str, file: Any) -> ValueFile:
         name=name,
         path=_text(record, "path", of=f"{key}/{name}"),
         secrecy=_text(record, "secrecy", of=f"{key}/{name}"),
+        owner=_text(record, "owner", of=f"{key}/{name}"),
+        group=_text(record, "group", of=f"{key}/{name}"),
+        mode=_text(record, "mode", of=f"{key}/{name}"),
     )
 
 

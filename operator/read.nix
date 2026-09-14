@@ -36,6 +36,7 @@ let
     quote
     quoteList
     sortStrings
+    subtractList
     uniqueStrings
     ;
 
@@ -191,6 +192,29 @@ let
             inherit entry;
             profile = confinement;
           };
+
+      # The directive table is the stated realiser's own, asked of it rather than
+      # restated here, so a directive added to a builder is a field this row
+      # stops naming with no edit in this file.
+      directives =
+        if realiser == "image" then
+          imageReader.systemdDirectives
+        else
+          flakeletReader.reader.systemdDirectives;
+      unrendered =
+        if !known then
+          [ ]
+        else
+          concatLists (
+            map (
+              unit:
+              map (field: { inherit unit field; }) (
+                subtractList (attrNames ((entry.units.${unit}.extends or { }).${emits} or { })) (
+                  attrNames directives
+                )
+              )
+            ) (attrNames (entry.units or { }))
+          );
     in
     {
       inherit
@@ -273,11 +297,21 @@ let
               planner.error {
                 id = "operator-entry-path-not-assembled";
                 subject = key;
-                message = "entry ${quote key} is stated to be realised by ${quote realiser} and is shown the host path ${quote p.path} as a ${p.kind} assembled from ${quote p.from}, and ${flakeletReader.pathRule}";
+                message = "entry ${quote key} is stated to be realised by ${quote realiser} and is shown the host path ${quote p.path}, whose recipe reads ${quote (p.needs or p.from)}, and ${flakeletReader.pathRule}";
                 evidence = "a realisation statement decides which realiser meets the entry, and this one runs no step on the machine";
                 resolution = "state ${quote "image"} for ${quote key}, or stop declaring the ${p.kind} the path is assembled from";
               }
             ) unassemblable
+            ++ map (
+              f:
+              planner.error {
+                id = "operator-entry-extension-field-unrendered";
+                subject = key;
+                message = "entry ${quote key} unit ${quote f.unit} records the ${quote emits} extension field ${quote f.field}, and the stated realiser ${quote realiser} renders no directive for it";
+                evidence = "an extension declares the fields it accepts and the library accepts them, and which of them reach a unit file is the realiser's own directive table, asked of it rather than restated here";
+                resolution = "drop ${quote f.field} from the extension the unit applies in the module, or state a realiser whose table carries it";
+              }
+            ) unrendered
             ++ optional (known && runs != null && runs != emits) (
               planner.error {
                 id = "operator-entry-service-manager-mismatch";
@@ -302,7 +336,12 @@ let
               planner.error {
                 id = "operator-entry-access-denied";
                 subject = key;
-                message = "entry ${quote key} unit ${quote denial.unit} needs ${denial.access}, and the confinement profile ${quote confinement} the statement produced denies it";
+                message = "entry ${quote key} unit ${quote denial.unit} needs ${denial.access}${
+                  if denial ? path then
+                    " at ${quote denial.path}, recorded ${quote denial.record} and read by ${quote denial.account},"
+                  else
+                    ","
+                } and the confinement profile ${quote confinement} the statement produced denies it";
                 evidence = "a profile is stated and the accesses a unit needs are recorded in the plan, and the profile is not widened on the entry's behalf";
                 resolution = "state a profile that allows ${denial.access} for ${quote key}, or stop needing it in unit ${quote denial.unit}";
               }
@@ -347,13 +386,19 @@ let
       at = " on file ${quote name}";
       path = planned key at file "path" "";
       secrecy = planned key at file "secrecy" "";
+      owner = planned key at file "owner" "";
+      group = planned key at file "group" "";
+      mode = planned key at file "mode" "";
     in
     {
       value = {
         path = path.value;
         secrecy = secrecy.value;
+        owner = owner.value;
+        group = group.value;
+        mode = mode.value;
       };
-      rows = path.rows ++ secrecy.rows;
+      rows = path.rows ++ secrecy.rows ++ owner.rows ++ group.rows ++ mode.rows;
     };
 
   # `program` is recorded only where the plan records one, so the manifest of a

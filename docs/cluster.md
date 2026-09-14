@@ -10,7 +10,8 @@ None of it is a `check`. A build sandbox has no `/dev/kvm`, no `/dev/net/tun` an
 layer is one app:
 
 ```bash
-nix run .#planner-e2e                  # five folders, twelve machines
+nix run .#planner-e2e                  # six folders, fourteen machines
+nix run .#planner-e2e shared-postgres  # two machines, one cluster, two databases
 nix run .#planner-e2e wired-pair       # two machines
 nix run .#planner-e2e portable-image   # one machine booted, two images built
 nix run .#planner-e2e secret-delivery  # three machines
@@ -36,6 +37,7 @@ anyway.
     newcomer
     portable-image
     secret-delivery
+    shared-postgres
     wired-pair
 ===========================================
 ```
@@ -77,7 +79,7 @@ Neither side names a version: `../pytest-env.nix` takes this nixpkgs' default `p
 rookery takes its own. The one dev shell that carries that environment lives in
 `../devshells.nix`.
 
-## The five folders
+## The six folders
 
 Each directory under `../tests/e2e/` is one end-to-end test and its own fixture: exactly one
 `test_*.py` and a `deployment/` of `default.nix`, `machines.nix`, `instances.nix`, `interfaces/` and
@@ -100,7 +102,7 @@ realising and the collecting are the repository's and arrive as `operator`, docu
 
 Both discoveries happen by looking. The runner finds a folder's tests as `test_*.py` under each
 directory, and `../flake-module.nix` finds a folder's deployment at
-`tests/e2e/<folder>/deployment/default.nix`, so a fifth folder needs no registration anywhere and
+`tests/e2e/<folder>/deployment/default.nix`, so a sixth folder needs no registration anywhere and
 the flake names no folder. `../tests/unit/layers.nix` holds both halves: no file of a folder names
 `mkPlan`, a link farm or either realiser's builder, and every folder carrying a deployment is
 reachable as a package.
@@ -253,6 +255,36 @@ nixpkgs *source* is already in the image, since a NixOS system pins its own flak
 and nix never downloads a locked input whose hash is already valid in the store. Without egress
 the folder skips itself and says so: a green run there would be a lie. The image carries
 `nix-command`, `flakes` and 6 GiB of spare filesystem for the same machine.
+
+### `shared-postgres` - two machines, one cluster, two databases
+
+One instance publishes one capability per configured database, and two other instances each wire
+one of them. `pg:cluster` on `alpha` runs two units - a root one-shot that initialises the data
+directory, writes the authentication file and applies each role's delivered password, and a
+long-running server as the machine's `postgres` account, ordered after it. `near-app:client` shares
+that machine and reads the `eu` database; `far-app:client` is on `beta` and reads `us` over the
+address and port the plan recorded.
+
+What only this folder can show is the negative half of a delivery set. Each database's password is
+its own generated value, and the machine that is left out of one set is a working consumer of the
+same provider rather than a machine running nothing: `beta` holds `password-us` and no file of
+`password-eu` exists on it. Beside that, one cluster identifier answers both databases, a
+credential of one is refused by the other with the server's own message, and restarting the server
+leaves the data written before it readable and the one-shot's start timestamp where it was.
+
+Two accommodations the vocabulary forces are visible in the folder's own text. The server's knobs
+are command-line flags rather than a configuration file, because the flakelet realiser runs no step
+on the machine that could assemble one; and the one-shot is the only reader of a delivered
+password, because a delivered value lands at `0400 root` and the account the server runs as cannot
+open one. The account itself is declared in `../tests/e2e/guest.nix`: nothing in a plan creates one.
+
+The data directory is state, so this folder's stage declares its own disk through
+`delivery.cluster_stage`'s `disk_gib` rather than growing the shared image, which is part of every
+other folder's cut key.
+
+One test per scenario of
+[`delivery/real-cluster/spec.md`](../openspec/changes/run-a-shared-database-on-real-machines/specs/delivery/real-cluster/spec.md),
+named after it.
 
 ## Where the machines come from
 

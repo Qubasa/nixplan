@@ -119,12 +119,14 @@ discipline and deduplication applied).
 | `slot-reach-local` | `reach = "local"`, which derives from a locality this subset does not declare |
 | `slot-reads-unknown-export` | a `reads` entry the interface does not declare; the evidence lists what it does |
 | `vars-file-secrecy-domain` | a generated file's `secrecy` is outside the two values |
+| `vars-file-ownership-malformed` | a generated file's `owner`, `group` or `mode` fails its type; the failing value is not recorded and the default is delivered |
 | `vars-per-domain` | a generator's `per` is neither `instance` nor `placement` |
 | `vars-deploy-malformed` | `deploy` is not a boolean |
 | `vars-reads-malformed` | `reads` is not a list of strings |
 | `vars-reads-unknown-generator` | `reads` names a generator the module does not declare; the evidence lists what it does |
 | `vars-reads-arity` | a `per = "instance"` generator reads a `per = "placement"` sibling, so the read has no single answer |
 | `vars-reads-cycle` | a generator transitively reads itself; the recorded reads of every generator in the cycle are dropped |
+| `capability-consumers-malformed` | a capability's `consumers` is neither `one` nor `many`; the value is not recorded and the capability is taken by any number of slots |
 | `port-claim-not-fixed` | a port claim with no `fixed`; this subset allocates nothing |
 | `vars-program-malformed` | a generator's `program` is not exactly one store path. Omitting the key is no row at all: a program is recorded as a literal string, neither run nor read here |
 | `name-carries-key-separator` | a machine, an instance, a member or a generator is named with `/`, `@` or `:`. A plan key is `<instance>:<member>@<machine>` and a generated value's is `<instance>:vars/<generator>@<machine>`, so such a name produces a key that takes apart into parts nothing declared. The named thing is left out of every key the plan builds |
@@ -147,7 +149,12 @@ discipline and deduplication applied).
 | `placement-unknown-machine` | a placement names a machine the registry does not hold |
 | `member-not-placed` | a member matched no machine and no tag, so nothing it declares runs anywhere |
 | `exposes-unknown-capability` | `exposes` names a capability the root does not provide |
-| `slot-set-settings-derived` (warning) | the set of slots a member asks for differs between its resolved settings and its own values, so the module is publishing a cut; the evidence is the condition that would make member cuts a construct of their own |
+| `slot-set-settings-derived` (warning) | the set of slots a member asks for differs between its resolved settings and its own values, so the module is publishing a cut; the evidence names the deployment's own cut, `members.<name>.enable = false`, which removes the whole member |
+| `members-unknown-member` | `members.<name>` names a member the instance's root does not own; the evidence lists the ones it does |
+| `member-and-slot-name-collide` | a root owns a member and a slot of the same name, so one `wire.<name>` key would address a member's own slots and a slot of every member at once |
+| `cut-member-named` | the deployment places, configures or wires a member the same deployment cuts with `members.<name>.enable = false`; a cut member takes no placement, needs no settings and fills no slot |
+| `binding-malformed` | a root binds a member's slot to something other than a capability off a sibling's handle, which carries the member it came from |
+| `binding-unknown-slot` | a root binds a slot the member does not declare; the evidence lists the ones it does |
 | `member-name-disagrees` | a root declares a member under one attribute key and the member names itself another. The key is the identity, since placement, the settings namespace and every plan key are read from it, and the second spelling is a member nothing else can address |
 
 ### Units, extensions and configuration files
@@ -167,6 +174,9 @@ discipline and deduplication applied).
 | `unit-extension-type-mismatch` | an assigned value fails its field's type |
 | `unit-extension-backend-mismatch` | the extension's `backend` is not the target machine's `serviceManager`; the fields are still recorded under that backend |
 | `unit-env-value-newline` | a unit's environment value carries a line break, which a unit file has no line to put |
+| `unit-restart-delay-without-policy` | a unit declares `restartSec` and no `restart`, so the delay changes nothing; the delay is not recorded |
+| `unit-restart-contradicts-one-shot` | a `oneShot` unit declares `restart = "always"`, which restarts it for as long as it keeps succeeding; the policy is not recorded |
+| `unit-restart-on-scheduled` | a unit declares a `schedule` and a restart policy other than `no`, which is a second schedule nobody declared; the policy is not recorded |
 | `config-file-mode-missing` | a configuration file declares no `mode` |
 | `config-file-reload-malformed` | `reload` is not a list of this module's unit names |
 | `config-file-render-item` | a `render` item is neither one public literal nor one reference |
@@ -189,6 +199,8 @@ discipline and deduplication applied).
 | id | Raised when |
 | --- | --- |
 | `slot-unwired` | no deployment wires the slot; it resolves to no value at all |
+| `wire-names-bound-slot` | the deployment wires a slot the instance's own root binds to a member it keeps, so the two statements disagree about what the composition is; the binding resolves the slot |
+| `capability-consumers-exceeded` | a capability declaring `consumers = "one"` is wired by more than one slot; the count is over wires, so one consumer placed on twelve machines is one consumer |
 | `wire-unknown-instance` | the wire names an instance the deployment does not declare |
 | `wire-unknown-capability` | the instance exposes no such capability |
 | `wire-capability-not-exposed` | the root provides it and the instance does not expose it; the row lists what is exposed |
@@ -199,6 +211,7 @@ discipline and deduplication applied).
 | `export-type-mismatch` | a published value fails its atom's type |
 | `export-secret-not-a-reference` | an export declared `secret` publishes something other than a generated file, so its bytes would be in the plan rather than its path |
 | `slot-reads-undeployed-value` | a `reads` entry names a secret export backed by a `deploy = false` generator, so the path it names resolves to nothing at run time |
+| `slot-reads-value-unreadable-by-user` | a unit runs as an account the recorded ownership and mode of a file backing one of the entry's reads do not admit, so the unit starts and fails with `EACCES` |
 | `interface-fold-raised` | the interface's `fold` raised while combining the set the slot collected; the slot is then absent from `results`, and the row renders only where no implementation forces that slot |
 | `interface-fold-refused` | the interface's `fold` returned `{ refused = "<why>"; }`; the fold states the message and the planner states the identifier, the consuming entry as subject and the severity. The slot is absent from `results`, so a consumer reading it under `results ? <slot>` renders the row and one reading it unconditionally ends the evaluation of the whole table with a missing attribute |
 | `module-raised` | a module's own code raised a catchable error; its value is recorded as not computed and the rest of the plan is still produced |
@@ -230,7 +243,8 @@ caller reads them in the same table as the planner's own.
 | `operator-statement-not-a-record` | a statement an entry is read by is a bare value rather than a record |
 | `operator-plan-record-unclassified` | a plan record is neither a generated value, a service entry nor a machine record |
 | `operator-entry-realises-nothing` | a statement names an entry that declares no unit, so there is nothing to realise |
-| `operator-entry-path-not-assembled` | the stated realiser runs no step that could assemble a host path the entry is shown |
+| `operator-entry-path-not-assembled` | the stated realiser runs no step that could assemble a host path the entry is shown, and the path's bytes do not exist before the entry is activated |
+| `operator-entry-extension-field-unrendered` | a unit records an extension field the stated realiser's own directive table has no rendering for |
 | `operator-entry-service-manager-mismatch` | the entry's machine runs one service manager and the stated realiser emits for another |
 | `operator-entry-name-refused` | the endpoint of the stated realiser refuses the service name or a unit file name the entry derives |
 | `operator-entry-access-denied` | a unit needs an access the confinement profile the statement produced denies |
@@ -272,7 +286,6 @@ locality        the first export whose value is a unix socket path or a loopback
 lifecycle       the first value that is not knowable at evaluation
 pick, strategy  the first service whose machine the operator lets the planner choose
 dynamicPort     a persisted allocation table, so a port chosen without a claim does not move
-enable, memberWire      a module publishing a composition whose cuts an operator wants
 externals       a non-fleet resource this deployment has to name
 collects, contributes, answers            clanServices/pki, and nothing smaller
 probes, register, frontier, orchestrator  not this change

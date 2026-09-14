@@ -655,6 +655,9 @@ in
         env.KEYFILE = "/run/vars/holder/hostKey/ssh_host_ed25519_key";
         varsRecord = {
           deploy = true;
+          group = "root";
+          mode = "0400";
+          owner = "root";
           inPlan = "reference";
           path = "/run/vars/holder/hostKey/ssh_host_ed25519_key";
           secrecy = "secret";
@@ -1643,6 +1646,436 @@ in
         ];
         closure = [ ];
         units = { };
+      };
+    };
+
+  # No field says when a file's bytes exist: the disposition and the presence of a
+  # `ref` already do, and these two tests are what a realiser reads to decide
+  # whether it can carry the path.
+  testAFileWhoseBytesExistAtBuildTime =
+    let
+      result = planOf {
+        instances.svc = placedWith [ "one" ] { } (soleRoot {
+          module = _: {
+            impl = _: {
+              closure = [ openssh ];
+              configData = {
+                "/etc/from-store.conf" = {
+                  source = "${openssh}/etc/ssh/ssh_config";
+                  mode = "0444";
+                  reload = [ "thing" ];
+                };
+                "/etc/from-literals.conf" = {
+                  render = [
+                    { text = "one\n"; }
+                    { text = "two\n"; }
+                  ];
+                  mode = "0444";
+                  reload = [ "thing" ];
+                };
+              };
+              units.thing.command = "${openssh}/bin/sshd";
+            };
+          };
+        });
+      };
+      files = result.plan."svc:only@one".configData;
+      fromStore = files."/etc/from-store.conf";
+      fromLiterals = files."/etc/from-literals.conf";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        storeKeys = attrNames fromStore;
+        literalKeys = attrNames fromLiterals;
+        source = fromStore.source;
+        # Every item is a literal, so the plan holds every byte it hashed.
+        literals = map (i: i.text) fromLiterals.render;
+        hashedContent = hasInfix "sha256-" fromLiterals.contentHash;
+      };
+      expected = {
+        rows = [ ];
+        storeKeys = [
+          "computed"
+          "mode"
+          "reload"
+          "source"
+        ];
+        literalKeys = [
+          "computed"
+          "contentHash"
+          "mode"
+          "reload"
+          "render"
+        ];
+        source = "${openssh}/etc/ssh/ssh_config";
+        literals = [
+          "one\n"
+          "two\n"
+        ];
+        hashedContent = true;
+      };
+    };
+
+  testAFileWhoseBytesExistOnlyOnTheMachine =
+    let
+      result = planOf {
+        instances.holder = {
+          module = soleRoot {
+            module = _: {
+              vars.hostKey.files."key".secrecy = "secret";
+              impl =
+                { vars, ... }:
+                {
+                  closure = [ openssh ];
+                  configData."/etc/agent.conf" = {
+                    mode = "0400";
+                    reload = [ "thing" ];
+                    render = [
+                      { text = "key_file = "; }
+                      { ref = vars.hostKey."key".path; }
+                    ];
+                  };
+                  units.thing.command = "${openssh}/bin/sshd";
+                };
+            };
+          };
+          placement.every.only.machines = [ "one" ];
+        };
+        varsState."holder:vars/hostKey@one"."key" = {
+          present = true;
+          content = "PRIVATE-KEY-BYTES";
+        };
+      };
+      file = result.plan."holder:only@one".configData."/etc/agent.conf";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        keys = attrNames file;
+        # The reference path is named, and nothing digests the assembled bytes.
+        references = map (i: i.ref or null) file.render;
+        hashedStructure = hasInfix "sha256-" file.structureHash;
+        hashedContent = file ? contentHash;
+      };
+      expected = {
+        rows = [ ];
+        keys = [
+          "computed"
+          "mode"
+          "reload"
+          "render"
+          "structureHash"
+        ];
+        references = [
+          null
+          "/run/vars/holder/hostKey/key"
+        ];
+        hashedStructure = true;
+        hashedContent = false;
+      };
+    };
+
+  # An entry key carries its own instance name, so the second instance of the
+  # scenario is a second deployment under the same name: two instances of one
+  # module cannot carry equal keys by construction.
+  testTheEntriesOfAKeptMemberAreUnchangedByACut =
+    let
+      pair =
+        { service, ... }:
+        {
+          services = {
+            keeper = service "keeper" { module = quiet; };
+            spare = service "spare" { module = quiet; };
+          };
+        };
+      whole = planOf {
+        instances.svc = {
+          module = pair;
+          placement.every = {
+            keeper.machines = [ "one" ];
+            spare.machines = [ "two" ];
+          };
+        };
+      };
+      cut = planOf {
+        instances.svc = {
+          module = pair;
+          members.spare.enable = false;
+          placement.every.keeper.machines = [ "one" ];
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds whole ++ rowIds cut;
+        keptKeyUnchanged = whole.plan."svc:keeper@one".key == cut.plan."svc:keeper@one".key;
+        keptEntryDifference =
+          differencesAt "svc:keeper@one" whole.plan."svc:keeper@one"
+            cut.plan."svc:keeper@one";
+        wholeKeys = attrNames whole.plan;
+        cutKeys = attrNames cut.plan;
+        namingTheCutMember = filter (key: hasInfix "spare" (toJSON cut.plan.${key})) (attrNames cut.plan);
+      };
+      expected = {
+        rows = [ ];
+        keptKeyUnchanged = true;
+        keptEntryDifference = [ ];
+        wholeKeys = [
+          "machine:one"
+          "machine:two"
+          "svc:keeper@one"
+          "svc:spare@two"
+        ];
+        cutKeys = [
+          "machine:one"
+          "svc:keeper@one"
+        ];
+        namingTheCutMember = [ ];
+      };
+    };
+
+  testACutMembersGeneratedValueIsNotRecorded =
+    let
+      pair =
+        { service, ... }:
+        {
+          services = {
+            keeper = service "keeper" { module = quiet; };
+            spare = service "spare" {
+              module = _: {
+                vars.token = {
+                  per = "instance";
+                  files."key".secrecy = "secret";
+                };
+                impl =
+                  { vars, ... }:
+                  {
+                    units.only = {
+                      command = "/bin/true";
+                      env.KEYFILE = vars.token."key".path;
+                    };
+                  };
+              };
+            };
+          };
+        };
+      # The same state either way, so the absence is the cut's and not a missing
+      # answer about whether the value exists.
+      state.varsState."svc:vars/token"."key".present = true;
+      whole = planOf (
+        {
+          instances.svc = {
+            module = pair;
+            placement.every = {
+              keeper.machines = [ "one" ];
+              spare.machines = [ "two" ];
+            };
+          };
+        }
+        // state
+      );
+      cut = planOf (
+        {
+          instances.svc = {
+            module = pair;
+            members.spare.enable = false;
+            placement.every.keeper.machines = [ "one" ];
+          };
+        }
+        // state
+      );
+    in
+    {
+      expr = {
+        rows = rowIds whole ++ rowIds cut;
+        keptRecordsTheValue = whole.plan ? "svc:vars/token";
+        cutRecordsTheValue = cut.plan ? "svc:vars/token";
+        cutKeys = attrNames cut.plan;
+        dependsOn = concatLists (planner.util.mapAttrsToList (_: entry: entry.dependsOn or [ ]) cut.plan);
+        namingTheGenerator = filter (key: hasInfix "vars/token" (toJSON cut.plan.${key})) (
+          attrNames cut.plan
+        );
+      };
+      expected = {
+        rows = [ ];
+        keptRecordsTheValue = true;
+        cutRecordsTheValue = false;
+        cutKeys = [
+          "machine:one"
+          "svc:keeper@one"
+        ];
+        dependsOn = [ "machine:one@${cut.plan."machine:one".key}" ];
+        namingTheGenerator = [ ];
+      };
+    };
+
+  # `keeper` is one module value shared by the two roots: the surviving member's
+  # declaration has to be identical, so the only difference is whether the root
+  # declares the second member at all.
+  testThePlanDoesNotSayWhatWasCut =
+    let
+      keeper = quiet;
+      pair =
+        { service, ... }:
+        {
+          services = {
+            keeper = service "keeper" { module = keeper; };
+            spare = service "spare" { module = quiet; };
+          };
+        };
+      solo =
+        { service, ... }:
+        {
+          services.keeper = service "keeper" { module = keeper; };
+        };
+      cut = planOf {
+        instances.svc = {
+          module = pair;
+          members.spare.enable = false;
+          placement.every.keeper.machines = [ "one" ];
+        };
+      };
+      never = planOf {
+        instances.svc = {
+          module = solo;
+          placement.every.keeper.machines = [ "one" ];
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds cut ++ rowIds never;
+        equal = cut.plan == never.plan;
+        difference = differencesAt "" cut.plan never.plan;
+      };
+      expected = {
+        rows = [ ];
+        equal = true;
+        difference = [ ];
+      };
+    };
+
+  # Both providers export the same value, so a field that moved moved because the
+  # read moved and not because the bytes did.
+  testAConsumerWhoseReadMovedToAWiredProvider =
+    let
+      provider = _: {
+        provides.api.interface = pub;
+        impl = _: {
+          provides.api.exports.publicKey = "ssh-ed25519 AAAA";
+          units.only.command = "/bin/true";
+        };
+      };
+      consumer = _: {
+        uses.api = {
+          interface = pub;
+          reach = "one";
+          reads = [ "publicKey" ];
+        };
+        impl =
+          { results, ... }:
+          {
+            units.only = {
+              command = "/bin/true";
+              env.AUTHORIZED = results.api.publicKey;
+            };
+          };
+      };
+      trio =
+        { service, ... }:
+        let
+          backend = service "backend" { module = provider; };
+        in
+        {
+          services = {
+            inherit backend;
+            sidecar = service "sidecar" { module = quiet; };
+            app = service "app" {
+              module = consumer;
+              wire.api = backend.provides.api;
+            };
+          };
+        };
+      far = {
+        module = soleRoot {
+          module = provider;
+          provides = [ "api" ];
+        };
+        placement.every.only.machines = [ "two" ];
+        exposes = [ "api" ];
+      };
+      whole = planOf {
+        instances = {
+          inherit far;
+          svc = {
+            module = trio;
+            placement.every = {
+              backend.machines = [ "two" ];
+              sidecar.machines = [ "one" ];
+              app.machines = [ "one" ];
+            };
+          };
+        };
+      };
+      cut = planOf {
+        instances = {
+          inherit far;
+          svc = {
+            module = trio;
+            members.backend.enable = false;
+            placement.every = {
+              sidecar.machines = [ "one" ];
+              app.machines = [ "one" ];
+            };
+            wire.app.api = {
+              instance = "far";
+              provides = "api";
+            };
+          };
+        };
+      };
+      bound = whole.plan."svc:app@one";
+      wired = cut.plan."svc:app@one";
+    in
+    {
+      expr = {
+        rows = rowIds whole ++ rowIds cut;
+        sameFields = attrNames bound == attrNames wired;
+        moved = filter (name: bound.${name} != wired.${name}) (attrNames bound);
+        readBound = bound.reads.api.entry;
+        readWired = wired.reads.api.entry;
+        siblingDifference =
+          differencesAt "svc:sidecar@one" whole.plan."svc:sidecar@one"
+            cut.plan."svc:sidecar@one";
+        wholeKeys = attrNames whole.plan;
+        cutKeys = attrNames cut.plan;
+      };
+      expected = {
+        rows = [ ];
+        sameFields = true;
+        moved = [
+          "key"
+          "reads"
+        ];
+        readBound = "svc:backend@two";
+        readWired = "far:only@two";
+        siblingDifference = [ ];
+        wholeKeys = [
+          "far:only@two"
+          "machine:one"
+          "machine:two"
+          "svc:app@one"
+          "svc:backend@two"
+          "svc:sidecar@one"
+        ];
+        cutKeys = [
+          "far:only@two"
+          "machine:one"
+          "machine:two"
+          "svc:app@one"
+          "svc:sidecar@one"
+        ];
       };
     };
 }

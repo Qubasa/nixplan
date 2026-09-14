@@ -115,15 +115,23 @@ derivation is instantiated either.
 | --- | --- |
 | a derived service name the endpoint would reject | `validate_name` (`manager.rs:1301-1312`): at most 128 characters, first an ASCII alphanumeric, then alphanumerics, `-` and `_`; no dots |
 | a unit file name outside the service's namespace | `validate_units` (`manager.rs:1314-1326`): the base is the service name or begins with `<name>-`, with at most one `@` |
-| an entry shown a host file it would have to assemble | this realiser runs no step on the machine, and a configuration file's bytes are assembled by the image realiser's attach script (`image/default.nix:101-133`); flakelet has no such step |
+| an entry shown a host file whose bytes exist on no machine yet | this realiser runs no step on the machine, so a recipe reading a delivered path has nothing to assemble it; the image realiser's attach script does (`image/default.nix:101-133`) |
 
 The name refusals are the endpoint's own rules, restated where the deployment can be told about
-them. The host-file refusal is this realiser's own limit, and it is narrower than a ban on host
-paths: a **delivered** generated file is its own source, so `from` equals `path` and the bytes are
-already at that path before the entry is activated. Only a path this realiser would have to
-create - a configuration file assembled from the plan - is refused. The worked deployment's four
-entries all render one, so they are built by the image realiser instead (design.md D7);
-`tests/e2e/secret-delivery/` is the case that is not, and it is a flakelet artifact.
+them. The host-file refusal is this realiser's own limit, and what it is applied to is **when a
+path's bytes exist** rather than what kind of file it is:
+
+| Shown path | Carried how |
+| --- | --- |
+| a delivered generated file | its own source, so `from` equals `path`; the bytes arrive by delivery before the entry is activated |
+| a configuration file recorded as a `source` store path | shown from that store path, which the artifact's closure reaches |
+| a configuration file whose `render` list holds `text` items only | assembled at build time, carried in the artifact beside `meta.json` and `units/`, and shown from that path |
+| a configuration file whose `render` list carries a `ref` | **refused**, naming the entry, the host path and the reference: those bytes exist on no machine until that path is written |
+
+The worked deployment's `vault-repo:server` renders a file of literals, so this realiser could
+carry it; the fixture still states an image for it, because that is where the reading of an image
+entry is exercised. `tests/e2e/shared-postgres/` is the folder that proves the carried file on a
+machine, and a recipe reading a delivered secret is the remaining refusal (design.md D7).
 
 A delivered value's bytes are also why the artifact holds none of them. `image/read.nix` refuses
 an environment value carrying a newline and quotes every other one, so what the unit records is a

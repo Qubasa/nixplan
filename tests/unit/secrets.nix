@@ -467,10 +467,10 @@ in
         # The shared value goes to both placements; each per-machine value goes
         # to its own machine and to no other.
         deliveries = [
-          "    deliver 'issuer:host:one' 'key' 'root@one.example:22' '/run/vars/issuer/host' '/run/vars/issuer/host/key'"
-          "    deliver 'issuer:host:two' 'key' 'root@two.example:22' '/run/vars/issuer/host' '/run/vars/issuer/host/key'"
-          "    deliver 'issuer:session' 'token' 'root@one.example:22' '/run/vars/issuer/session' '/run/vars/issuer/session/token'"
-          "    deliver 'issuer:session' 'token' 'root@two.example:22' '/run/vars/issuer/session' '/run/vars/issuer/session/token'"
+          "    deliver 'issuer:host:one' 'key' 'root@one.example:22' '/run/vars/issuer/host' '/run/vars/issuer/host/key' '0400' 'root:root'"
+          "    deliver 'issuer:host:two' 'key' 'root@two.example:22' '/run/vars/issuer/host' '/run/vars/issuer/host/key' '0400' 'root:root'"
+          "    deliver 'issuer:session' 'token' 'root@one.example:22' '/run/vars/issuer/session' '/run/vars/issuer/session/token' '0400' 'root:root'"
+          "    deliver 'issuer:session' 'token' 'root@two.example:22' '/run/vars/issuer/session' '/run/vars/issuer/session/token' '0400' 'root:root'"
         ];
         itReadsTheFileList = true;
         itRefusesAPairItDoesNotName = true;

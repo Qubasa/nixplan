@@ -16,8 +16,10 @@ let
     head
     isAttrs
     isList
+    isString
     listToAttrs
     mapAttrs
+    substring
     ;
 
   pruned = entry: util.filterAttrs (_: v: !((isAttrs v && v == { }) || (isList v && v == [ ]))) entry;
@@ -91,18 +93,38 @@ rec {
   # at a time, and whether bytes arrive at a path decides whether it may show that
   # path to a unit at all. An undeployed file still has a path, because a site that
   # opens it is a row this plan also reports.
+  #
+  # `owner`, `group` and `mode` are always recorded and enter the key only where
+  # the declaration stated them, which is the rule `program` already follows: a
+  # plan written before the fields existed keys as it did, and a deployment that
+  # states a mode delivers a different artifact and says so.
+  fileRecord =
+    file:
+    {
+      inherit (file)
+        path
+        secrecy
+        deploy
+        owner
+        group
+        mode
+        ;
+      inPlan = if file.secrecy == "secret" then "reference" else "value";
+    }
+    // (if file.present then { } else { bytes = "absent"; });
+
+  fileKeyInput = file: removeAttrs (fileRecord file) (util.subtractList ownershipKeys file.stated);
+
+  ownershipKeys = [
+    "owner"
+    "group"
+    "mode"
+  ];
+
   varsRecord =
-    placement:
-    mapAttrs (_: files: {
-      files = mapAttrs (
-        _: file:
-        {
-          inherit (file) path secrecy deploy;
-          inPlan = if file.secrecy == "secret" then "reference" else "value";
-        }
-        // (if file.present then { } else { bytes = "absent"; })
-      ) files;
-    }) placement.vars;
+    placement: mapAttrs (_: files: { files = mapAttrs (_: fileRecord) files; }) placement.vars;
+
+  varsKeyFiles = placement: mapAttrs (_: files: mapAttrs (_: fileKeyInput) files) placement.vars;
 
   referencePathsOf =
     { vars, configData }:
@@ -286,6 +308,85 @@ rec {
             resolution = "expect this entry to be re-keyed when another machine joins or leaves that set; what re-keys an entry and what restarts a process are decided separately";
           }
         )
+    ) member.edges;
+
+  # Whether an account may open a delivered file, from the plan alone: the file's
+  # recorded ownership and mode, and the unit's own account. A read bit is the
+  # octal digit carrying 4.
+  opens =
+    digit:
+    elem digit [
+      "4"
+      "5"
+      "6"
+      "7"
+    ];
+
+  # A unit's declared groups are whatever its extension applications record under
+  # `supplementaryGroups`, under any backend: this layer names no realiser, and
+  # the key is the one a realiser's directive table and this rule both read.
+  groupsOf =
+    unit:
+    concatLists (
+      util.mapAttrsToList (
+        _: fields:
+        let
+          declared = fields.supplementaryGroups or null;
+        in
+        if isList declared then
+          filter isString declared
+        else if isString declared then
+          [ declared ]
+        else
+          [ ]
+      ) (unit.extends or { })
+    );
+
+  admits =
+    unit: file:
+    let
+      account = unit.user or null;
+    in
+    account == null
+    || (account == file.owner && opens (substring 1 1 file.mode))
+    || (elem file.group (groupsOf unit) && opens (substring 2 1 file.mode))
+    || opens (substring 3 1 file.mode);
+
+  # A unit that cannot open a value its entry reads. Produced here rather than
+  # beside the wire, because the comparison needs the units and a unit set is a
+  # later stratum than the reads an entry's key is built from.
+  unreadableRows =
+    {
+      subject,
+      member,
+      units,
+    }:
+    util.concatMapAttrsToList (
+      slotName: edge:
+      if !edge.delivered then
+        [ ]
+      else
+        util.concatMapAttrsToList (
+          _providerKey: files:
+          util.concatMapAttrsToList (
+            readName: file:
+            if !file.deploy then
+              [ ]
+            else
+              util.concatMapAttrsToList (
+                unitName: unit:
+                util.optional (!(admits unit file)) (
+                  diag.error {
+                    inherit subject;
+                    id = "slot-reads-value-unreadable-by-user";
+                    message = "unit ${util.quote unitName} of ${util.quote subject} runs as ${util.quote unit.user} and reads ${util.quote readName} of slot ${util.quote slotName}, whose file is delivered as ${util.quote "${file.owner}:${file.group}"} at mode ${util.quote file.mode}";
+                    evidence = "the mode admits its owner, a member of its group where the unit declares that group, and nobody else, so the unit starts and fails with `EACCES` on ${util.quote file.path}";
+                    resolution = "declare `owner`, `group` or `mode` on that generated file so ${util.quote unit.user} may open it, or run the unit as ${util.quote file.owner}";
+                  }
+                )
+              ) units
+          ) files
+        ) edge.entryVarsFiles
     ) member.edges;
 
   # A configuration file names its bytes and never carries them. A digest covers
@@ -603,6 +704,9 @@ rec {
         }
         ++ entryRows {
           inherit subject member;
+        }
+        ++ unreadableRows {
+          inherit subject member units;
         };
       value =
         pruned {
@@ -723,7 +827,8 @@ rec {
             instance = iname;
             generator = gen;
             inherit (g) per deploy;
-            inherit files dependsOn;
+            files = (varsKeyFiles placement).${gen};
+            inherit dependsOn;
             machine = if g.per == "instance" then null else owner;
           }
           // (if g.program == null then { } else { inherit (g) program; });

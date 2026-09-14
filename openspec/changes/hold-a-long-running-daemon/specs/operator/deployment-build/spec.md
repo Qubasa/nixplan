@@ -18,9 +18,11 @@ applicable.
 
 The reading that turns a plan and a realisation statement into a deployment SHALL report, as an
 error row, every extension field an entry records that the realiser stated for it has no rendering
-for. The row SHALL name the entry, the unit, the extension, the field and the backend, and its
-resolution SHALL name both ways out: write a field the realiser renders, or state a realiser that
-renders this one.
+for. The row SHALL name the entry, the unit, the field and the backend, and its resolution SHALL
+name both ways out: write a field the realiser renders, or state a realiser that renders this one.
+The extension's own name SHALL NOT be required of the row: the plan folds an application's values
+into one attrset per backend and records no extension name, so naming it would need a plan field
+that moves every entry's key.
 
 No entry SHALL reach a realiser's own refusal for this condition without the row having been
 produced first. The rule the row is read against SHALL be the realiser's own table rather than a
@@ -33,8 +35,8 @@ its table and no artifact, the way every other error row of this reading behaves
 #### Scenario: A field no builder renders
 
 - **WHEN** an entry's unit records an extension field the realiser stated for it has no rendering for
-- **THEN** the reading SHALL produce an error row naming the entry, the unit, the extension, the
-  field and the backend
+- **THEN** the reading SHALL produce an error row naming the entry, the unit, the field and the
+  backend
 - **AND** the deployment SHALL be inapplicable
 - **AND** the build SHALL produce the plan and both halves of the table and no artifact
 

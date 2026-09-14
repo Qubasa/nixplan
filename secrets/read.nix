@@ -475,6 +475,9 @@ let
       files = mapAttrsToList (fname: file: {
         file = fileName value fname;
         path = requiredAt value.key " on file ${quote fname}" file "path";
+        owner = requiredAt value.key " on file ${quote fname}" file "owner";
+        group = requiredAt value.key " on file ${quote fname}" file "group";
+        mode = requiredAt value.key " on file ${quote fname}" file "mode";
       }) (required value.key value.entry "files");
       machines = map (machine: {
         inherit machine;

@@ -22,6 +22,15 @@
       files.token = {
         secrecy = "secret";
       };
+      # A second file of the same value, delivered to an account the image has
+      # rather than to root: the record is what the write reads, and `nobody`
+      # exists on every machine without the plan creating it.
+      files.owned = {
+        secrecy = "secret";
+        owner = "nobody";
+        group = "nogroup";
+        mode = "0440";
+      };
     };
 
     # One value, and no machine receives bytes. Its public half travels in the

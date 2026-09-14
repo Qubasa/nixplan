@@ -75,3 +75,21 @@ produced before the rule changed.
 - **WHEN** an entry records no configuration file
 - **THEN** the artifact SHALL hold exactly the metadata and the unit files
 - **AND** its content SHALL be identical to what this realiser produced before this change
+
+## MODIFIED Requirements
+
+### Requirement: A host path this realiser cannot carry is refused
+
+This realiser SHALL refuse an entry shown a host path whose bytes do not exist before the entry is
+activated, naming the entry, the path and what the path's recipe reads.
+
+This narrows `An entry shown a host file it would have to assemble`, which refused every
+configuration file whatever its disposition. What is refused is now decided by when the bytes
+exist rather than by the file's kind, so a `source` path and a literal recipe are accepted and a
+`ref`-bearing recipe is not.
+
+#### Scenario: An entry shown a configuration file
+
+- **WHEN** an entry is shown a configuration file whose `render` list carries a `ref`
+- **THEN** the build SHALL refuse naming the entry, the path and the reference
+- **AND** the planner SHALL have reported the same condition as a row

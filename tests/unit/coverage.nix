@@ -182,6 +182,23 @@ let
     "answer-whether-a-machine-is-current/specs/operator/machine-report/spec.md"
     "report-a-secrets-refusal-as-a-row/specs/realiser/secrets-configuration/spec.md"
     "report-a-secrets-refusal-as-a-row/specs/tooling/test-layers/spec.md"
+    "run-a-shared-database-on-real-machines/specs/delivery/real-cluster/spec.md"
+    "run-a-shared-database-on-real-machines/specs/tooling/test-layers/spec.md"
+    "hold-a-long-running-daemon/specs/planner/unit-vocabulary/spec.md"
+    "hold-a-long-running-daemon/specs/realiser/portable-service-image/spec.md"
+    "hold-a-long-running-daemon/specs/realiser/flakelet-artifact/spec.md"
+    "open-a-delivered-value-to-its-reader/specs/operator/apply-command/spec.md"
+    "open-a-delivered-value-to-its-reader/specs/planner/diagnostics/spec.md"
+    "open-a-delivered-value-to-its-reader/specs/planner/secret-delivery/spec.md"
+    "open-a-delivered-value-to-its-reader/specs/realiser/portable-service-image/spec.md"
+    "hold-a-long-running-daemon/specs/operator/deployment-build/spec.md"
+    "cut-a-member-and-wire-its-place/specs/planner/diagnostics/spec.md"
+    "cut-a-member-and-wire-its-place/specs/planner/plan-artifact/spec.md"
+    "cut-a-member-and-wire-its-place/specs/planner/typed-edge/spec.md"
+    "take-effect-on-a-second-apply/specs/operator/apply-command/spec.md"
+    "take-effect-on-a-second-apply/specs/operator/machine-report/spec.md"
+    "take-effect-on-a-second-apply/specs/realiser/flakelet-artifact/spec.md"
+    "take-effect-on-a-second-apply/specs/realiser/portable-service-image/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -373,6 +390,21 @@ let
     "An assertion holds for every input" = "testAGeneratorNamesItsProgram";
     "A claimed property needs another observation" = "testTwoAttributedInterfacesConflictWithNoWire";
     "A specification is both accounted for and excused" = "testEverySpecificationIsClassified";
+    "A file referencing a delivered path is still assembled on the machine" =
+      "testARenderRecipeIsAssembledOnTheHost";
+    "A field the directive table does not carry" = "testAFieldNoBuilderRenders";
+    "An image the machine already holds attached is not attached twice" =
+      "test_an_unchanged_deployment_applied_twice";
+    "A value whose bytes moved" = "test_a_value_whose_bytes_moved_is_written_and_reported_as_changed";
+    "A rotated secret restarts its reader" = "test_a_rotated_secret_restarts_the_entry_that_reads_it";
+    "A reader that is not running is not started" =
+      "test_a_reader_that_is_not_running_is_not_started_by_the_restart";
+    "A machine that lost its values" =
+      "test_a_machine_that_lost_its_values_is_reported_and_an_apply_restores_them";
+    "A machine holding every value" = "test_a_machine_holding_every_value_is_reported_without_a_line";
+    "A value delivered to one of two machines" =
+      "test_a_value_delivered_to_one_of_two_machines_is_named_where_it_is_missing";
+    "An artifact activated twice" = "test_an_unchanged_entry_is_a_no_op";
   };
 
   hasTest = title: existing ? ${snakeName title} || existing ? ${camelName title};

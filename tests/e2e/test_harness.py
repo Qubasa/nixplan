@@ -15,8 +15,12 @@ nothing here states what a real one prints, so no verdict the command reads out
 of it is measured against an invention.
 """
 
+import grp
 import json
 import os
+import pwd
+import shlex
+import stat
 import subprocess
 from pathlib import Path
 from typing import Any, NoReturn
@@ -33,6 +37,7 @@ import planner
 import remote
 import report
 import runner
+from manifest import ValueFile
 
 SERVER_ENTRY = "site:server"
 SERVER_KEY = "site:server@alpha"
@@ -41,7 +46,26 @@ CLIENT_KEY = "check:client@beta"
 SESSION_VALUE = "issuer:vars/session"
 CA_VALUE = "issuer:vars/ca"
 
-TOKEN = {"token": {"path": "/run/vars/issuer/session/token", "secrecy": "secret"}}
+
+def _delivered(
+    path: str,
+    secrecy: str,
+    *,
+    owner: str = "root",
+    group: str = "root",
+    mode: str = "0400",
+) -> dict[str, str]:
+    """One generated file record, at the ownership the planner defaults to."""
+    return {
+        "path": path,
+        "secrecy": secrecy,
+        "owner": owner,
+        "group": group,
+        "mode": mode,
+    }
+
+
+TOKEN = {"token": _delivered("/run/vars/issuer/session/token", "secret")}
 PROGRAM = "/nix/store/3k9m2x7vqz1n5bpr4jlfg8ys6cwh0d2a-mint-token.drv"
 
 PLAN = {
@@ -58,7 +82,7 @@ PLAN = {
         "per": "instance",
         "deploy": False,
         "delivery": [],
-        "files": {"ca.pub": {"path": "/run/vars/issuer/ca/ca.pub", "secrecy": "public"}},
+        "files": {"ca.pub": _delivered("/run/vars/issuer/ca/ca.pub", "public")},
     },
 }
 
@@ -474,11 +498,73 @@ def test_an_entry_named_on_the_command_line_is_not_in_the_plan(tmp_path: Path) -
 
 
 class Reporting(Recorder):
-    """A recorder that answers an activation the way the endpoint answers one."""
+    """A recorder that answers each question the way a machine answers it.
+
+    Three questions reach a machine through `output` and each has its own
+    answer: a value write says whether the bytes moved, a restart says nothing,
+    and an activation reports the steps the artifact's own script took.
+    """
 
     def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
         self.commands.append(cmd)
+        if "base64 -d" in cmd[-1]:
+            return "unchanged"
+        if "try-restart" in cmd[-1]:
+            return ""
         return "started site-server-serve.service"
+
+
+def _reading() -> dict[str, Any]:
+    """One resolved read of the secret export backed by the session value's file."""
+    return {
+        "entry": "issuer:api@alpha",
+        "values": {"token": {"path": TOKEN["token"]["path"], "secrecy": "secret"}},
+    }
+
+
+class Rotating(Reporting):
+    """A recorder whose machines say every value write moved the bytes."""
+
+    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
+        answered = super().output(cmd, env=env)
+        return "changed" if answered == "unchanged" else answered
+
+
+def test_a_value_read_by_two_entries_on_two_machines(tmp_path: Path) -> None:
+    """One value on two machines is two writes, and a move restarts both readers.
+
+    Each restart is its own step naming its own machine, because the readers are
+    two entries and the value is one: a run that folded them would leave one
+    machine's units holding the bytes the run replaced.
+    """
+    deployment = _built(
+        tmp_path / "built",
+        plan={
+            **PLAN,
+            SERVER_KEY: {"key": "sha256-1111111111111111", "reads": {"token": _reading()}},
+            CLIENT_KEY: {"key": "sha256-2222222222222222", "reads": {"token": _reading()}},
+        },
+        entries={
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+        },
+        values={SESSION_VALUE: {"delivery": ["alpha", "beta"], "files": TOKEN}},
+    )
+    source = _source(tmp_path / "values", {f"{SESSION_VALUE}/token": "s3cret"})
+
+    log = apply.apply(deployment, Rotating(), source=source, base_env={})
+
+    restarts = [line for line in log if line.startswith("restart ")]
+    # Sorted by value and then by entry key, so two machines are two lines in an
+    # order two runs of one deployment agree on.
+    assert restarts == [
+        f"restart {CLIENT_KEY} for {SESSION_VALUE} on beta at root@10.0.0.11",
+        f"restart {SERVER_KEY} for {SESSION_VALUE} on alpha at root@10.0.0.10",
+    ], log
+
+    # Every restart is after every activation: a unit started by an activation is
+    # already holding this run's bytes, and one that was running is not.
+    assert log.index(restarts[0]) > max(log.index(line) for line in log if "activate " in line)
 
 
 def test_a_run_is_asked_what_it_would_do(tmp_path: Path) -> None:
@@ -516,8 +602,11 @@ def test_a_run_is_asked_what_it_would_do(tmp_path: Path) -> None:
     assert taken.commands != []
     assert [line for line in did if not line.startswith("  ")] == list(would)
     assert [line for line in did if line.startswith("  ")] == [
-        "  started site-server-serve.service"
-    ] * 2
+        "  unchanged",
+        "  unchanged",
+        "  started site-server-serve.service",
+        "  started site-server-serve.service",
+    ]
 
 
 def test_a_dry_run_of_a_deployment_the_planner_refuses(tmp_path: Path) -> None:
@@ -756,7 +845,7 @@ GENERATED_PLAN = {
         "deploy": False,
         "delivery": [],
         "program": GENERATOR,
-        "files": {"key": {"path": "/run/vars/issuer/root/key", "secrecy": "secret"}},
+        "files": {"key": _delivered("/run/vars/issuer/root/key", "secret")},
     },
     TOKEN_VALUE: {
         "key": TOKEN_IDENTITY,
@@ -766,8 +855,8 @@ GENERATED_PLAN = {
         "reads": [ROOT_VALUE],
         "program": GENERATOR,
         "files": {
-            "secret": {"path": "/run/vars/issuer/token/secret", "secrecy": "secret"},
-            "fingerprint": {"path": "/run/vars/issuer/token/fingerprint", "secrecy": "public"},
+            "secret": _delivered("/run/vars/issuer/token/secret", "secret"),
+            "fingerprint": _delivered("/run/vars/issuer/token/fingerprint", "public"),
         },
     },
 }
@@ -1111,6 +1200,7 @@ def test_a_file_outside_every_values_own_directory_is_left_alone(tmp_path: Path)
 
     assert [line for line in log if line.startswith("value ")] == [
         f"value {SESSION_VALUE} token -> root@10.0.0.10:/run/vars/issuer/session/token"
+        f" (root:root 0400)"
     ]
     assert "README" not in " ".join(" ".join(command) for command in recorder.commands)
 
@@ -2019,3 +2109,150 @@ def test_a_build_of_a_deployment_carrying_an_error_prints_the_table_and_refuses(
     assert planner.main(["build", str(root)]) == 1
 
     assert TABLE in capsys.readouterr().out
+
+
+def _written(script: str, *, umask: int) -> int:
+    """Run one write script under a stated umask and return its exit status."""
+    return subprocess.run(
+        ["bash", "-c", f"umask {umask:04o}; {script}"],
+        check=False,
+        capture_output=True,
+        text=True,
+    ).returncode
+
+
+def _own_account() -> tuple[str, str]:
+    return pwd.getpwuid(os.getuid()).pw_name, grp.getgrgid(os.getgid()).gr_name
+
+
+def test_a_mode_widened_on_the_machine(tmp_path: Path) -> None:
+    """Ownership and mode are set on every apply, so a machine-side edit does not survive.
+
+    The mode is also read back under two umasks, because the record is the only
+    thing that decides it and a login's umask is not part of the deployment.
+    """
+    owner, group = _own_account()
+    modes = []
+    for umask in (0o077, 0o000):
+        path = tmp_path / f"u{umask:o}" / "token"
+        file = ValueFile(
+            name="token",
+            path=str(path),
+            secrecy="secret",
+            owner=owner,
+            group=group,
+            mode="0640",
+        )
+        script = remote.write_script(file, b"s3cret")
+        assert _written(script, umask=umask) == 0
+        assert stat.S_IMODE(path.stat().st_mode) == 0o640
+        path.chmod(0o666)
+
+        assert _written(script, umask=umask) == 0
+
+        modes.append(stat.S_IMODE(path.stat().st_mode))
+        assert path.read_bytes() == b"s3cret"
+    assert modes == [0o640, 0o640]
+
+
+def test_an_interrupted_write(tmp_path: Path) -> None:
+    """A write that stops part way is the old file or none, never a half of the new one."""
+    owner, group = _own_account()
+    path = tmp_path / "token"
+    file = ValueFile(
+        name="token",
+        path=str(path),
+        secrecy="secret",
+        owner=owner,
+        group=group,
+        mode="0400",
+    )
+    assert _written(remote.write_script(file, b"first"), umask=0o077) == 0
+    interrupted = remote.write_script(file, b"second").replace("mv -f", "false; mv -f", 1)
+
+    assert _written(interrupted, umask=0o077) != 0
+
+    assert path.read_bytes() == b"first"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["token"]
+
+
+def test_an_account_the_machine_does_not_have(tmp_path: Path) -> None:
+    """A recorded owner the machine lacks is that sentence, not `chown`'s wording."""
+    path = tmp_path / "token"
+    file = ValueFile(
+        name="token",
+        path=str(path),
+        secrecy="secret",
+        owner="nosuchaccount",
+        group="nosuchaccount",
+        mode="0400",
+    )
+    ran = subprocess.run(
+        ["bash", "-c", remote.write_script(file, b"s3cret")],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert ran.returncode != 0
+    assert "no account nosuchaccount:nosuchaccount" in ran.stderr
+    assert str(path) in ran.stderr
+    assert list(tmp_path.iterdir()) == []
+
+
+TOKEN_PATH = "/run/vars/issuer/session/token"
+OWNED_PATH = "/run/vars/issuer/session/owned"
+TWO_FILES = {
+    "token": _delivered(TOKEN_PATH, "secret"),
+    "owned": _delivered(OWNED_PATH, "secret", owner="nobody", group="nogroup", mode="0440"),
+}
+
+
+class Holding(Recorder):
+    """A machine that answers the values question for the paths it is asked about."""
+
+    def __init__(self, held: set[str]) -> None:
+        super().__init__()
+        self.held = held
+
+    def output(self, cmd: list[str], *, env: dict[str, str] | None = None) -> str:
+        answered = super().output(cmd, env=env)
+        asked = cmd[-1]
+        if "present" not in asked:
+            return answered
+        return "".join(
+            f"{path} {'present' if path in self.held else 'absent'}\n"
+            for path in (OWNED_PATH, TOKEN_PATH)
+            if shlex.quote(path) in asked
+        )
+
+
+def _holding(tmp_path: Path, held: set[str]) -> report.Report:
+    """Report on one machine delivered a value of two files, holding ``held`` of them."""
+    deployment = _built(
+        tmp_path,
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+        values={SESSION_VALUE: {"delivery": ["alpha"], "files": TWO_FILES}},
+    )
+    return report.status(deployment, Holding(held), base_env={})
+
+
+def test_a_machine_holding_every_file_of_a_value_is_reported_without_a_line(
+    tmp_path: Path,
+) -> None:
+    """A value of more than one file is one question and, when it is all there, no line."""
+    reported = _holding(tmp_path, {TOKEN_PATH, OWNED_PATH})
+
+    assert [line for line in reported.lines if line.startswith("value ")] == []
+    assert reported.unasked == ()
+
+
+def test_a_value_one_of_whose_files_is_gone_is_named_once(tmp_path: Path) -> None:
+    """The report is about the value and not about its files, so one line names it."""
+    reported = _holding(tmp_path, {OWNED_PATH})
+
+    assert [line for line in reported.lines if line.startswith("value ")] == [
+        f"value {SESSION_VALUE} missing on alpha"
+    ]
+    assert reported.unasked == ()

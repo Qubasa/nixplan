@@ -14,10 +14,10 @@ what was built.
 from __future__ import annotations
 
 import os
-import subprocess
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import order
 import remote
@@ -42,6 +42,7 @@ class Write:
 
     value: Value
     file: ValueFile
+    machine: str
     address: str
     content: bytes
 
@@ -124,8 +125,95 @@ def writes(
         content = values.bytes_of(source, value, file)
         for machine in reaching[value.key]:
             address = machine_address(deployment, machine, of=value.key)
-            planned.append(Write(value=value, file=file, address=address, content=content))
+            planned.append(
+                Write(
+                    value=value,
+                    file=file,
+                    machine=machine,
+                    address=address,
+                    content=content,
+                )
+            )
     return tuple(planned)
+
+
+def rotations(
+    deployment: Deployment, keys: Sequence[str], moved: Iterable[tuple[str, str]]
+) -> tuple[tuple[str, str], ...]:
+    """Return the entries to restart because a value they read moved.
+
+    The readers are derived from the reads the plan resolved, which is the same
+    source the activation order is derived from: a read that orders an apply is a
+    read that rotates a consumer. The whole entry is restarted rather than a named
+    unit, because the plan says which entry reads the value and not which of its
+    units opens the file - correct and coarse, never wrong.
+
+    An entry that declares no unit is not restarted: there is nothing on the
+    machine holding the bytes.
+
+    Args:
+        deployment: The deployment being applied.
+        keys: The placed entries this run activated.
+        moved: The value entry and machine of every write whose bytes changed.
+
+    Returns:
+        One pair per restart, the value first, sorted, for the entries placed on
+        the machine the value moved on.
+    """
+    index = {file.path: value.key for value in deployment.values.values() for file in value.files}
+    reading = {key: _reads(deployment.plan, key, index) for key in keys}
+    return tuple(
+        sorted(
+            (value, key)
+            for value, machine in set(moved)
+            for key in keys
+            if deployment.entries[key].machine == machine
+            and deployment.entries[key].units
+            and value in reading[key]
+        )
+    )
+
+
+def _reads(plan: Mapping[str, Any], key: str, index: Mapping[str, str]) -> frozenset[str]:
+    """Return the value entries one placed entry's resolved reads name.
+
+    A secret export resolves to the reference record of the generated file that
+    backs it, so the value a read names is the value the path it carries belongs
+    to. A public export carries bytes rather than a path, and those bytes are
+    part of the plan, so a move in them moves the artifact and is the
+    activation's business rather than this step's.
+
+    Args:
+        plan: The plan artifact, as read from its JSON.
+        key: The placed entry whose reads to read.
+        index: Every declared file path of the deployment, to its value entry.
+
+    Returns:
+        The value entry keys, empty for an entry reading no generated file.
+    """
+    entry = plan.get(key)
+    reads = entry.get("reads") if isinstance(entry, dict) else None
+    if not isinstance(reads, dict):
+        return frozenset()
+    return frozenset(
+        index[path]
+        for slot in reads.values()
+        if isinstance(slot, dict)
+        for path in _exported(slot)
+        if path in index
+    )
+
+
+def _exported(slot: Any) -> tuple[str, ...]:
+    """Return every path a resolved read's export values carry."""
+    exports = slot.get("values")
+    if not isinstance(exports, dict):
+        return ()
+    return tuple(
+        exported["path"]
+        for exported in exports.values()
+        if isinstance(exported, dict) and isinstance(exported.get("path"), str)
+    )
 
 
 def activation(entry: Entry) -> str:
@@ -149,45 +237,6 @@ def activation(entry: Entry) -> str:
         f"{entry.key} states realiser {entry.realiser}, and the command activates "
         f"flakelet and image"
     )
-
-
-def holds_attached(
-    runner: remote.Runner,
-    entry: Entry,
-    address: str,
-    *,
-    image: str,
-    opts: str,
-    user: str,
-    env: dict[str, str],
-) -> bool:
-    """Return whether the machine already holds one image entry attached.
-
-    The attach script runs under `set -eu` and `portablectl` refuses an image
-    it already holds, so a second run over an attached entry would fail on a
-    machine that is in the intended state.
-
-    Args:
-        runner: The channel every remote step goes through.
-        entry: The placed entry, realised as an image.
-        address: The machine's address.
-        image: The image the artifact carries, resolved before the first dial.
-        opts: The ssh options of this invocation.
-        user: The login user on the machine.
-        env: The environment a remote step runs under.
-
-    Returns:
-        Whether the machine answered with an attachment. A machine that could
-        not answer is one the attachment is attempted on: a question that
-        failed is no evidence that the image is there, and the artifact's own
-        script is what decides.
-    """
-    script = remote.image_status_script(artifact_of(entry) / image)
-    try:
-        answered = runner.output(remote.ssh_argv(address, script, opts=opts, user=user), env=env)
-    except (ApplyError, subprocess.CalledProcessError):
-        return False
-    return remote.attachment_of(answered).state not in ("", "detached")
 
 
 def _ignore(line: str) -> None:
@@ -261,11 +310,12 @@ def apply(
     taken = tuple(key for key in walked.order if deployment.entries[key].path is not None)
     scripts = {key: activation(deployment.entries[key]) for key in taken}
     addresses = {key: address_of(deployment.entries[key]) for key in taken}
-    images = {
-        key: image_file(deployment.entries[key])
-        for key in taken
-        if deployment.entries[key].realiser == "image"
-    }
+    # The record every image artifact carries is read here, where nothing has been
+    # dialled: an artifact the build wrote wrongly refuses the whole run rather
+    # than failing one machine half way through it.
+    for key in taken:
+        if deployment.entries[key].realiser == "image":
+            image_file(deployment.entries[key])
 
     opts = remote.ssh_opts(ssh_key, inherited=environment.get("NIX_SSHOPTS"))
     env = remote.copy_env(environment, opts)
@@ -284,20 +334,26 @@ def apply(
     for consumer, provider in withheld:
         record(f"not applying {provider}, which {consumer} reads")
 
+    moved: set[tuple[str, str]] = set()
     for write in planned:
         step = (
             f"value {write.value.key} {write.file.name} -> {user}@{write.address}:{write.file.path}"
+            f" ({write.file.owner}:{write.file.group} {write.file.mode})"
         )
         with remote.taking(step, write.address, record):
-            channel.run(
+            answered = channel.output(
                 remote.ssh_argv(
                     write.address,
-                    remote.write_script(write.file.path, write.content),
+                    remote.write_script(write.file, write.content),
                     opts=opts,
                     user=user,
                 ),
                 env=env,
             )
+        for line in answered.splitlines():
+            record(f"  {line}")
+        if "changed" in answered.split():
+            moved.add((write.value.key, write.machine))
 
     for key in taken:
         entry = deployment.entries[key]
@@ -305,15 +361,25 @@ def apply(
         artifact = artifact_of(entry)
         with remote.taking(f"copy {key} {artifact} -> {user}@{address}", address, record):
             channel.run(remote.copy_argv(artifact, address, user=user), env=env)
-        if entry.realiser == "image" and holds_attached(
-            channel, entry, address, image=images[key], opts=opts, user=user, env=env
-        ):
-            record(f"attached {key} already on {user}@{address}")
-            continue
         step = f"activate {key} ({entry.realiser}) on {user}@{address}"
         with remote.taking(step, address, record):
             reported = channel.output(
                 remote.ssh_argv(address, scripts[key], opts=opts, user=user), env=env
+            )
+        for line in reported.splitlines():
+            record(f"  {line}")
+
+    # Last, and after every activation: a unit the activation has just started is
+    # holding the bytes this run wrote, and a unit it did not start is one this
+    # step leaves stopped.
+    for value, key in rotations(deployment, taken, moved):
+        entry = deployment.entries[key]
+        address = addresses[key]
+        step = f"restart {key} for {value} on {entry.machine} at {user}@{address}"
+        with remote.taking(step, address, record):
+            reported = channel.output(
+                remote.ssh_argv(address, remote.restart_script(entry.units), opts=opts, user=user),
+                env=env,
             )
         for line in reported.splitlines():
             record(f"  {line}")

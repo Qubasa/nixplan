@@ -37,6 +37,7 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import shlex
 import subprocess
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -165,6 +166,8 @@ class Run:
     token: str
     source: Path
     steps: list[str] = field(default_factory=list)
+    rotation: list[str] = field(default_factory=list)
+    invocations: dict[str, str] = field(default_factory=dict)
 
     def vm(self, machine: str) -> Any:
         return self.cluster.vm(machine)
@@ -284,8 +287,8 @@ def test_a_secret_reaches_the_machines_the_plan_names(applied: Run) -> None:
         assert vm.ssh_succeed(f"stat -c %a {path}").strip() == "400"
         assert vm.ssh_succeed(f"stat -c %U {path}").strip() == USER
 
-    assert run.value_writes(SESSION_VALUE) == [
-        f"value {SESSION_VALUE} token -> {USER}@{run.address(machine)}:{path}"
+    assert [step for step in run.value_writes(SESSION_VALUE) if " token -> " in step] == [
+        f"value {SESSION_VALUE} token -> {USER}@{run.address(machine)}:{path} (root:root 0400)"
         for machine in (ISSUER_MACHINE, PROBE_MACHINE)
     ]
 
@@ -362,7 +365,10 @@ def test_a_secret_is_applied_from_the_operators_value_source(applied: Run) -> No
     run = applied
     held = run.source_file(SESSION_VALUE, "token")
     declared = run.value_file(SESSION_VALUE, "token")
-    assert run.source_holds() == [f"{SESSION_VALUE}/token"]
+    assert run.source_holds() == [
+        f"{SESSION_VALUE}/owned",
+        f"{SESSION_VALUE}/token",
+    ]
     assert held.read_text() == run.token
     assert held.stat().st_mode & 0o077 == 0
     assert declared.secrecy == "secret"
@@ -423,3 +429,279 @@ def test_a_public_generated_value_travels_in_the_plan(applied: Run) -> None:
     record = json.loads(run.vm(PROBE_MACHINE).ssh_succeed(f"cat {RECORD_PATH}"))
     assert record["caCertFirstLine"] == published["value"]
     assert record["caCertLength"] == len(published["value"])
+
+
+def test_a_value_delivered_with_the_defaults(applied: Run) -> None:
+    """A record that declares nothing is delivered as it was before it had the fields."""
+    run = applied
+    path = run.value_path(SESSION_VALUE, "token")
+    record = run.value_file(SESSION_VALUE, "token")
+    assert (record.owner, record.group, record.mode) == ("root", "root", "0400")
+
+    for machine in (ISSUER_MACHINE, PROBE_MACHINE):
+        answered = run.vm(machine).ssh_succeed(f"stat -c %U:%G:%a {path}").strip()
+        assert answered == "root:root:400", (machine, answered)
+
+
+def test_a_value_delivered_to_an_account(applied: Run) -> None:
+    """The owner, the group and the mode on the machine are the record's three fields."""
+    run = applied
+    path = run.value_path(SESSION_VALUE, "owned")
+    record = run.value_file(SESSION_VALUE, "owned")
+    assert (record.owner, record.group, record.mode) == ("nobody", "nogroup", "0440")
+
+    for machine in (ISSUER_MACHINE, PROBE_MACHINE):
+        vm = run.vm(machine)
+        answered = vm.ssh_succeed(f"stat -c %U:%G:%a {path}").strip()
+        assert answered == "nobody:nogroup:440", (machine, answered)
+        # The account the record names can read it, which is the point of stating one.
+        assert vm.ssh_succeed(f"runuser -u nobody -- cat {path}").strip() == run.token
+
+    assert [step for step in run.value_writes(SESSION_VALUE) if " owned -> " in step] == [
+        f"value {SESSION_VALUE} owned -> {USER}@{run.address(machine)}:{path} (nobody:nogroup 0440)"
+        for machine in (ISSUER_MACHINE, PROBE_MACHINE)
+    ]
+
+
+def test_an_owner_changed_on_the_machine(applied: Run) -> None:
+    """What a machine holds is the deployment's answer, not whatever last touched it."""
+    run = applied
+    path = run.value_path(SESSION_VALUE, "owned")
+    vm = run.vm(ISSUER_MACHINE)
+    vm.ssh_succeed(f"chown root:root {path} && chmod 0666 {path}")
+    assert vm.ssh_succeed(f"stat -c %U:%G:%a {path}").strip() == "root:root:666"
+
+    reapplied = run.cluster.run(
+        [str(CLI), "apply", str(run.deployment.root), "--values", str(run.source)],
+        env=delivery.command_env(dict(os.environ), run.key),
+    )
+
+    assert reapplied.returncode == 0, reapplied.stdout
+    assert vm.ssh_succeed(f"stat -c %U:%G:%a {path}").strip() == "nobody:nogroup:440"
+    assert f"value {SESSION_VALUE} owned -> " in reapplied.stdout
+
+
+def _apply(run: Run) -> Any:
+    """One ``planner apply --values`` of this run's deployment and source.
+
+    The cluster answers with its own completed process, which is what the
+    assertions read ``returncode`` and ``stdout`` off.
+    """
+    return run.cluster.run(
+        [str(CLI), "apply", str(run.deployment.root), "--values", str(run.source)],
+        env=delivery.command_env(dict(os.environ), run.key),
+    )
+
+
+def _status(run: Run) -> tuple[int, list[str]]:
+    """What ``planner status`` says about the whole deployment, and its exit status.
+
+    The command runs inside the cluster because a machine's address resolves only
+    in the cluster's own net namespace. A machine the report could not ask is
+    named on standard error, which is folded in so a failure says which one.
+    """
+    asked = run.cluster.run(
+        [str(CLI), "status", str(run.deployment.root)],
+        env=delivery.command_env(dict(os.environ), run.key),
+        check=False,
+    )
+    return asked.returncode, asked.stdout.splitlines() + asked.stderr.splitlines()
+
+
+def _invocation(run: Run, machine: str, unit: str) -> str:
+    """The identity the service manager gives one unit's current run.
+
+    A new identity is a new process for that unit, which is what a restart is,
+    and a unit that is not running has none at all.
+    """
+    shown = run.vm(machine).ssh_succeed(f"systemctl show -P InvocationID {unit}")
+    return str(shown.strip())
+
+
+def test_a_machine_holding_every_value_is_reported_without_a_line(applied: Run) -> None:
+    """A report of a machine holding every value it is delivered says nothing about them."""
+    status, reported = _status(applied)
+
+    assert status == 0, "\n".join(reported)
+    assert [line for line in reported if line.startswith("value ")] == [], reported
+
+
+def test_a_value_delivered_to_one_of_two_machines_is_named_where_it_is_missing(
+    applied: Run,
+) -> None:
+    """The machine that lost a file is named, and the one that still holds it is not."""
+    run = applied
+    path = run.value_path(SESSION_VALUE, "token")
+    probe = run.vm(PROBE_MACHINE)
+    probe.ssh_succeed(f"rm {path}")
+
+    status, reported = _status(run)
+
+    assert status == 0, "\n".join(reported)
+    assert [line for line in reported if line.startswith("value ")] == [
+        f"value {SESSION_VALUE} missing on {PROBE_MACHINE}"
+    ], reported
+
+    assert _apply(run).returncode == 0
+    assert probe.ssh_succeed(f"cat {path}").strip() == run.token
+
+
+@pytest.fixture(scope="session")
+def rotated(applied: Run) -> Run:
+    """Phase 5: the same deployment applied again with different bytes in the source.
+
+    Nothing about the build moves, so every artifact on every machine is the one
+    already there and the only difference this apply can make is the one the
+    value carries.
+    """
+    run = applied
+    run.invocations = {
+        PROBE_UNIT: _invocation(run, PROBE_MACHINE, PROBE_UNIT),
+        ISSUER_UNIT: _invocation(run, ISSUER_MACHINE, ISSUER_UNIT),
+    }
+    run.token = secrets.token_hex(16)
+    _value_source(delivery.state_root(), run.deployment, run.token)
+
+    reported = _apply(run)
+    run.rotation = reported.stdout.splitlines()
+    run.vm(PROBE_MACHINE).wait_for_unit(PROBE_UNIT, timeout=120)
+    return run
+
+
+def test_a_value_whose_bytes_moved_is_written_and_reported_as_changed(rotated: Run) -> None:
+    """The write step says the file moved, and both machines of the set hold the new bytes."""
+    run = rotated
+    path = run.value_path(SESSION_VALUE, "token")
+
+    writes = [
+        index
+        for index, line in enumerate(run.rotation)
+        if line.startswith(f"value {SESSION_VALUE} token -> ")
+    ]
+    assert len(writes) == 2, run.rotation
+    assert [run.rotation[index + 1].strip() for index in writes] == ["changed", "changed"]
+
+    for machine in (ISSUER_MACHINE, PROBE_MACHINE):
+        assert run.vm(machine).ssh_succeed(f"cat {path}").strip() == run.token
+
+
+def test_a_rotated_secret_restarts_the_entry_that_reads_it(rotated: Run) -> None:
+    """The reader is a new process and the owner is not, and the step names the machine.
+
+    The consumer declares a read of the export the value backs, so it is restarted;
+    the issuer owns the generator and reads the path at request time, so nothing
+    this run wrote is stale in it and it is left running.
+    """
+    run = rotated
+    restarts = [line for line in run.rotation if line.startswith("restart ")]
+
+    assert restarts == [
+        f"restart {PROBE_KEY} for {SESSION_VALUE} on {PROBE_MACHINE} "
+        f"at {USER}@{run.address(PROBE_MACHINE)}"
+    ], run.rotation
+
+    assert _invocation(run, PROBE_MACHINE, PROBE_UNIT) != run.invocations[PROBE_UNIT]
+    assert _invocation(run, ISSUER_MACHINE, ISSUER_UNIT) == run.invocations[ISSUER_UNIT]
+
+
+def test_a_delivered_value_moves_under_an_unchanged_artifact(rotated: Run) -> None:
+    """The artifact is not a function of the bytes beside it, so activating it changed nothing.
+
+    The reader's process is replaced by the restart step and not by the
+    activation: the endpoint still holds generation 1, because a value's bytes
+    are not part of the entry whose identity a generation records.
+    """
+    run = rotated
+    service = delivery.service_name(manifest.artifact_of(run.deployment.entries[PROBE_KEY]))
+    registered = json.loads(
+        run.vm(PROBE_MACHINE).ssh_succeed(f"flakelet status --json {shlex.quote(service)}")
+    )
+
+    assert registered, service
+    assert registered[0]["generation"] == 1, registered
+
+    activated = [line for line in run.rotation if line.startswith(f"activate {PROBE_KEY} ")]
+    assert len(activated) == 1, run.rotation
+
+
+def test_a_restarted_reader_used_the_bytes_this_run_wrote(rotated: Run) -> None:
+    """The consumer's unit ran again against the rotated secret and was authorized."""
+    run = rotated
+    vm = run.vm(PROBE_MACHINE)
+    assert vm.ssh_succeed(f"systemctl is-active {PROBE_UNIT}").strip() == "active"
+
+    record = json.loads(vm.ssh_succeed(f"cat {RECORD_PATH}"))
+    assert record["authorizedStatus"] == 200, record
+    assert record["anonymousStatus"] == 401, record
+
+
+@pytest.fixture(scope="session")
+def halted(rotated: Run) -> Run:
+    """Phase 6: the reader stopped by hand, and the value rotated under it."""
+    run = rotated
+    run.vm(PROBE_MACHINE).ssh_succeed(f"systemctl stop {PROBE_UNIT}")
+    run.token = secrets.token_hex(16)
+    _value_source(delivery.state_root(), run.deployment, run.token)
+
+    run.rotation = _apply(run).stdout.splitlines()
+    return run
+
+
+def test_a_reader_that_is_not_running_is_not_started_by_the_restart(halted: Run) -> None:
+    """The restart step is taken for the entry and leaves a stopped unit stopped."""
+    run = halted
+    vm = run.vm(PROBE_MACHINE)
+
+    assert [line for line in run.rotation if line.startswith("restart ")] == [
+        f"restart {PROBE_KEY} for {SESSION_VALUE} on {PROBE_MACHINE} "
+        f"at {USER}@{run.address(PROBE_MACHINE)}"
+    ], run.rotation
+
+    # `systemctl is-active` exits 3 for a unit that is not running, so the
+    # answer is read rather than demanded.
+    assert vm.ssh(f"systemctl is-active {PROBE_UNIT}").stdout.strip() == "inactive"
+    assert vm.ssh_succeed(f"cat {run.value_path(SESSION_VALUE, 'token')}").strip() == run.token
+
+
+@pytest.fixture(scope="session")
+def rebooted(halted: Run) -> Run:
+    """Phase 7: the reader's machine rebooted, which is what empties ``/run``."""
+    run = halted
+    vm = run.vm(PROBE_MACHINE)
+    vm.ssh("systemctl reboot")
+    vm.wait_for_unit("multi-user.target", timeout=300)
+    return run
+
+
+def test_a_machine_that_lost_its_values_is_reported_and_an_apply_restores_them(
+    rebooted: Run,
+) -> None:
+    """A value lives under ``/run``, so a reboot loses it; the report names each one.
+
+    The entry itself is back - the endpoint brings its units up again - so the
+    report's value lines are the only thing that says the machine is not where the
+    deployment left it, and a second apply is what puts it back.
+    """
+    run = rebooted
+    vm = run.vm(PROBE_MACHINE)
+    path = run.value_path(SESSION_VALUE, "token")
+    assert vm.ssh(f"test -e {path}").returncode != 0
+
+    status, reported = _status(run)
+    assert status == 0, "\n".join(reported)
+    assert [line for line in reported if line.startswith("value ")] == [
+        f"value {SESSION_VALUE} missing on {PROBE_MACHINE}"
+    ], reported
+
+    reapplied = _apply(run)
+    assert reapplied.returncode == 0, reapplied.stdout
+    assert vm.ssh_succeed(f"cat {path}").strip() == run.token
+
+    # The restart step leaves a unit that is not running alone, which is the rule
+    # the phase above measures, so the unit is started here to read the bytes back.
+    vm.ssh_succeed(f"systemctl start {PROBE_UNIT}")
+    assert vm.ssh_succeed(f"systemctl is-active {PROBE_UNIT}").strip() == "active"
+
+    status, reported = _status(run)
+    assert status == 0, "\n".join(reported)
+    assert [line for line in reported if line.startswith("value ")] == [], reported

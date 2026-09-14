@@ -592,6 +592,125 @@ let
           ) advertisement
         )
       );
+
+  guestLines = lines (readFile (e2eRoot + "/guest.nix"));
+
+  nixFilesOf =
+    folder: filter (rel: match ".*\\.nix" rel != null) (filesUnder (e2eRoot + "/${folder}"));
+  testFilesOf =
+    folder: filter (rel: isTestFile (baseNameOf rel)) (filesUnder (e2eRoot + "/${folder}"));
+  textOf = folder: rel: readFile (e2eRoot + "/${folder}/${rel}");
+
+  # The account a folder's unit runs as. Nothing in a plan creates one, so each
+  # is a fact its folder needs from the shared guest image - except the two
+  # every Linux system already has, which no image declares and none may.
+  universalAccounts = [
+    "root"
+    "nobody"
+  ];
+
+  accountOf =
+    line:
+    let
+      m = match ".*user = \"([a-z_][0-9a-z_-]*)\";.*" line;
+    in
+    if m == null then null else head m;
+
+  folderAccounts = concatLists (
+    map (
+      folder:
+      concatLists (
+        map (
+          rel:
+          map (account: { inherit folder account; }) (
+            filter (a: a != null && !(elem a universalAccounts)) (map accountOf (lines (textOf folder rel)))
+          )
+        ) (nixFilesOf folder)
+      )
+    ) e2eNames
+  );
+
+  declaresAccount =
+    account: builtins.any (line: match " *users\\.users\\.${account} = .*" line != null) guestLines;
+
+  # What an account's assertion owes a reader: the folder that needs it, that no
+  # plan can supply it, and what adding it costs every other folder's next run.
+  accountedFor =
+    entry:
+    builtins.any (
+      line:
+      hasInfix entry.account line
+      && hasInfix "tests/e2e/${entry.folder}/" line
+      && hasInfix "no plan creates an account" line
+      && hasInfix "snapshot cut" line
+    ) guestLines;
+
+  unaccountedAccounts = sorted (
+    map (
+      entry:
+      "tests/e2e/${entry.folder} runs a unit as ${entry.account}, which the guest image ${
+        if declaresAccount entry.account then
+          "declares with no assertion naming the folder"
+        else
+          "does not declare"
+      }"
+    ) (filter (entry: !(declaresAccount entry.account) || !(accountedFor entry)) folderAccounts)
+  );
+
+  declaredAccountOf =
+    line:
+    let
+      m = match " *users\\.users\\.([a-z_][0-9a-z_-]*)[. ].*" line;
+    in
+    if m == null then null else head m;
+
+  uniqueNames =
+    names:
+    sorted (
+      attrNames (
+        listToAttrs (
+          map (name: {
+            inherit name;
+            value = null;
+          }) names
+        )
+      )
+    );
+
+  # The universal accounts belong to no folder: root is what rookery reaches
+  # every machine as, and nobody is what a unit needing no identity of its own
+  # runs as.
+  imageAccounts = filter (name: !(elem name universalAccounts)) (
+    uniqueNames (filter (name: name != null) (map declaredAccountOf guestLines))
+  );
+
+  neededAccounts = uniqueNames (map (entry: entry.account) folderAccounts);
+
+  spareAccounts = sorted (
+    map (account: "the guest image declares ${account}, which no folder's unit runs as") (
+      filter (account: !(elem account neededAccounts)) imageAccounts
+    )
+  );
+
+  # A module declaring a data directory is a service that writes state on the
+  # machine, and the space that needs is its own folder's stage's rather than
+  # the shared image's, which every other folder's cut is keyed on.
+  statefulFolders = sorted (
+    filter (
+      folder: builtins.any (rel: hasInfix "dataDir" (textOf folder rel)) (nixFilesOf folder)
+    ) e2eNames
+  );
+
+  declaresSpace =
+    folder: builtins.any (rel: hasInfix "disk_gib" (textOf folder rel)) (testFilesOf folder);
+
+  undeclaredSpace = sorted (
+    map (folder: "tests/e2e/${folder} writes state on the machine and its stage declares no space") (
+      filter (folder: !(declaresSpace folder)) statefulFolders
+    )
+  );
+
+  deliveryText = readFile (e2eRoot + "/delivery.py");
 in
 {
   testTheTestTreeIsRead = {
@@ -772,5 +891,42 @@ in
   testADocumentAdvertisesACommandItAlsoSaysFails = {
     expr = contradictions;
     expected = [ ];
+  };
+
+  testTheImageDeclaresTheAccountAFoldersServiceRunsAs = {
+    expr = {
+      unaccounted = unaccountedAccounts;
+      needed = neededAccounts;
+    };
+    expected = {
+      unaccounted = [ ];
+      needed = [ "postgres" ];
+    };
+  };
+
+  testAnImageFactNoFolderNeedsIsNotAdded = {
+    expr = {
+      spare = spareAccounts;
+      unknownFolders = dangling;
+    };
+    expected = {
+      spare = [ ];
+      unknownFolders = [ ];
+    };
+  };
+
+  testAStatefulFolderDeclaresItsOwnSpace = {
+    expr = {
+      undeclared = undeclaredSpace;
+      stateful = statefulFolders;
+      perFolder = hasInfix "disk_gib: int = 0" deliveryText;
+      forwarded = hasInfix "disk_size_gib=disk_gib" deliveryText;
+    };
+    expected = {
+      undeclared = [ ];
+      stateful = [ "shared-postgres" ];
+      perFolder = true;
+      forwarded = true;
+    };
   };
 }

@@ -2,6 +2,7 @@
   report,
   reportFile,
   paths,
+  grouped,
 }:
 
 { service, ... }:
@@ -12,6 +13,7 @@ let
         report
         reportFile
         paths
+        grouped
         ;
     };
   };

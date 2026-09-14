@@ -6,7 +6,6 @@
 {
   util,
   diag,
-  excluded,
 }:
 let
   inherit (builtins) attrNames;
@@ -15,6 +14,7 @@ let
     "module"
     "defaults"
     "fixed"
+    "wire"
   ];
 in
 rec {
@@ -58,6 +58,11 @@ rec {
         settings
         declaration
         ;
+      # What the root bound this member's slots to: the capability value off a
+      # sibling's handle, never a name. A mistyped attribute is a Nix error in
+      # the module's own file, and the record the resolver reads back carries the
+      # member it came from, so no root ever names an instance.
+      wire = args.wire or { };
       slotSet = if configured then observed.value else null;
       unknownKeys = util.extraKeys serviceKeys args;
       provides = builtins.mapAttrs (
@@ -185,7 +190,7 @@ rec {
         inherit subject;
         id = "slot-set-settings-derived";
         message = "member ${util.quote name} asks for ${util.quoteList moved} under one reading of its settings and not under the other, so the set of slots it declares is derived from what ${deploymentFile} wrote";
-        evidence = "the condition that introduces it: ${excluded.constructs.enable.trigger}";
+        evidence = "a member's slot set is the module's own statement, and a deployment that cuts a member writes `members.${name}.enable = false` where the whole member is the unit of the cut";
         resolution = "declare the slot unconditionally in ${subject} and branch on the setting inside `impl`, which leaves a wire the planner can refuse, or keep the cut and expect this row";
       }
     );

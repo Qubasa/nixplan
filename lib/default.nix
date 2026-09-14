@@ -33,7 +33,7 @@ let
       atoms
       ;
   };
-  compose = import ./compose.nix { inherit util diag excluded; };
+  compose = import ./compose.nix { inherit util diag; };
   resolve = import ./resolve.nix {
     inherit
       util
@@ -41,7 +41,6 @@ let
       interface
       module
       compose
-      excluded
       platform
       ;
   };

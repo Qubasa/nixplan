@@ -142,7 +142,7 @@ declares eight keys at most; anything else is a row.
 | `claims.ports.<name>` | `{ proto, count, fixed }` — `fixed` is required, the planner allocates nothing |
 | `vars.<generator>` | `{ files.<file> = { secrecy }, per ? "placement", deploy ? true, reads ? [ ], program ? <store path> }` — below |
 | `uses.<slot>` | `{ interface, reach ? "one", reads ? <every export> }` |
-| `provides.<capability>` | `{ interface }` |
+| `provides.<capability>` | `{ interface, consumers ? "many" }` |
 | `pin` | `{ key, locked }` — the lock entry of the sources this module's packages came from, below |
 | `impl` | a function, below |
 | `severity` | read and discarded, with a warning — a module does not decide the severity of a planner row |
@@ -254,6 +254,8 @@ machines receive them.
 | Key | Means |
 | --- | --- |
 | `files.<file>.secrecy` | `"secret"` — the plan carries the path — or `"public"`, where it may carry the bytes |
+| `files.<file>.owner`, `.group` | the account and group the file is delivered to, as names rather than identifiers, both defaulting to `root`. A value that is not a portable account name is `vars-file-ownership-malformed` and the default is delivered |
+| `files.<file>.mode` | the permission bits it is delivered at: four octal digits, defaulting to `"0400"`. `640`, `"0999"` and `"rw-r-----"` are `vars-file-ownership-malformed` |
 | `per` | `"placement"` (the default) is one value per machine the owner is placed on; `"instance"` is one value for the instance however many machines run it |
 | `deploy` | `false` means no machine receives the bytes. One value still exists, so a public file's value still travels in the plan, and anything that would open one of its files on a machine is refused |
 | `reads` | sibling generators of the same module. A `"placement"` generator may read an `"instance"` one; the reverse is `vars-reads-arity`, because the placements hold one value each and the reader is one value |
@@ -264,6 +266,14 @@ machine that receives it: one delivery of one value has one name. Two members of
 one instance declaring the same generator name is `vars-generator-claimed-twice`
 — a generator is addressed by instance and name, so the two declarations would
 be one address for two values.
+
+The ownership and mode are one value's, not one machine's: every machine in the
+delivery set holds the file the same way. A unit of an entry that reads such a
+file and runs as an account the record does not admit is
+`slot-reads-value-unreadable-by-user` — the planner compares the unit's `user`
+and the groups it declares against the record, so a service that cannot open its
+own credential is a row rather than an `EACCES` at start. A unit declaring no
+`user` is root and is admitted by every record.
 
 A deployment writes `<package>.drvPath` rather than an output path: the
 external generator this library reads a plan for wants a derivation, and a
@@ -385,6 +395,8 @@ empty".
 | `timeout` | `duration` | `30s`, `5min`, or a bare count of seconds |
 | `stopCommand` | string | what stops it |
 | `reloadCommand` | string | what reloads it |
+| `restart` | `restartPolicy` | what the service manager does when it stops: `no`, `on-failure`, `on-abnormal`, `always` |
+| `restartSec` | `duration` | how long to wait before restarting; recordable only beside a `restart` |
 | `extends` | list | typed extensions, below |
 
 **Each unit carries its own `env`.** Two units of one service needing different
@@ -399,6 +411,23 @@ recorded. A name in `after` or `requires` that this module did not declare is
 that declared the unit it names, so no module can order itself against a unit a
 stranger may rename. A key outside the vocabulary — a service manager's raw
 stanza, for instance — is `implementation-unknown-key`.
+
+**The restart domain is four values, not a service manager's seven.** The other
+three systemd carries are meaningless without a `Type=` or a `WatchdogSec=` this
+vocabulary does not carry, so a renderer maps these four to whatever its own
+manager calls the same thing. A value outside the four is
+`unit-field-type-mismatch`, and the row's evidence names the four.
+
+A restart policy is read against the shape the unit already declared, and a
+contradiction is a row rather than a value a renderer has to reconcile. A
+`oneShot` unit asking for `always` is `unit-restart-contradicts-one-shot`: a unit
+that applies and exits successfully would be restarted for as long as it keeps
+succeeding. `on-failure` on a `oneShot` unit is a legitimate shape and no row. A
+unit declaring a `schedule` and any policy but `no` is
+`unit-restart-on-scheduled`, because the timer already decides when it runs. A
+`restartSec` with no `restart` is `unit-restart-delay-without-policy`. In each
+case the field is not recorded, so no renderer is handed two statements about
+when the unit runs.
 
 ### Unit extensions
 
@@ -619,7 +648,7 @@ in
 }
 ```
 
-`service "<name>" { module, defaults ? { }, fixed ? { } }`:
+`service "<name>" { module, defaults ? { }, fixed ? { }, wire ? { } }`:
 
 - `defaults` a deployment may overwrite; `fixed` it may not
   (`settings-fixed-path` names both files).
@@ -637,6 +666,38 @@ in
   rather than naming a capability, because a name written in the root is a name
   chosen before the deployment has said anything. The knob the set comes from
   is an ordinary default or fixed value with no extra status.
+
+### Binding one member's slot to another's capability
+
+`wire.<slot>` on a member is the root filling that slot itself, with the
+capability **value** off a sibling's handle:
+
+```nix
+{ service, ... }:
+let
+  db = service "db" { module = postgres; };
+  app = service "app" {
+    module = api;
+    wire.database = db.provides.database;
+  };
+in
+{
+  services = { inherit db app; };
+  provides.database = db.provides.database;
+}
+```
+
+- The value is a capability, never a name: a mistyped attribute is a Nix error
+  in the module's own file, and a binding therefore carries no instance name —
+  a root that could name an instance would be a module naming a deployment.
+  A binding that is not one of the root's own capabilities is
+  `binding-malformed`, and one naming a slot the member does not declare is
+  `binding-unknown-slot`.
+- A bound slot needs no deployment statement and is subject to **every** check a
+  wire is: one interface, `reach` against the bound capability's placements, and
+  every declared read resolved against the bound provider's exports.
+- A member name and a slot name may not collide, because a deployment's `wire`
+  addresses both: `member-and-slot-name-collide`.
 
 ## 4. The deployment
 
@@ -709,7 +770,9 @@ a row rather than a raise.
 | `module` | the root function |
 | `settings.<member>.<knob>` | overrides a default the member declared |
 | `placement.every.<member>` | `{ machines ? [ ], tags ? [ ] }`, unioned; an unknown machine is a row, a member on no machine is a row |
+| `members.<member>.enable` | `false` cuts the member: it produces no entry at all |
 | `wire.<slot>` | `{ instance, provides }` — the far end, named once, by the deployment |
+| `wire.<member>.<slot>` | the same, for one member's own slot, which is how a slot a cut opened is filled |
 | `exposes` | which of the root's capabilities other instances may wire to |
 
 **Only what the instance exposes is addressable.** Wiring to a capability the
@@ -721,6 +784,46 @@ consuming module's `reach` decides it), and not the far end's machine list (the
 far instance's placement decides it). The two wires above point at each other
 and the graph is still acyclic, because a capability's exports are a function
 of module and settings and never of a `wire`.
+
+### Cutting a member
+
+An instance may state that a member of the module it names does not exist:
+
+```nix
+instances.eu = {
+  module = myGame.services.default;
+  members.db.enable = false;                                  # the cut
+  placement.every.server = { machines = [ "alpha" ]; };
+  wire.server.db = { instance = "pg-shared"; provides = "database"; };
+};
+```
+
+- A cut member takes no placement, needs no settings, owns no generated value,
+  contributes no closure and produces **no plan entry of any kind**. A member
+  the deployment does not mention is kept, so an instance writing no `members`
+  block keeps the whole composition.
+- `members.<name>` admits exactly one key, `enable`. A name the root does not
+  own is `members-unknown-member`.
+- Placing, configuring or wiring a member the same deployment cut is
+  `cut-member-named`, whose resolution names both ways out.
+- **A slot the module bound to a member the deployment cut becomes an ordinary
+  unfilled slot**, and `wire.<member>.<slot>` is how the deployment fills it.
+  No line of the module differs between the two cases: what decides whether a
+  reference is a binding or an address is whether its target is a kept member.
+  Left unwired it is the ordinary `slot-unwired` row, whose evidence names the
+  cut.
+- Wiring a slot the root binds to a member the instance **keeps** is
+  `wire-names-bound-slot`: the two statements disagree about what the
+  composition is, and the binding resolves the slot.
+
+### How many consumers a capability admits
+
+`provides.<capability>.consumers` is `"many"` (the default) or `"one"`. A
+capability declaring `"one"` that two slots wire is
+`capability-consumers-exceeded`, one row for the capability naming both slots.
+The count is over wires across the whole deployment, so a consumer placed on
+twelve machines is one consumer, and two capabilities of one instance taken by
+two consumers is no row.
 
 ## Generated files
 

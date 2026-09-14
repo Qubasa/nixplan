@@ -352,15 +352,30 @@ one the command invents.
 
 ```
 ordered against the read of <provider> by <consumer>
-value <value key> <file> -> <user>@<address>:<path>
+value <value key> <file> -> <user>@<address>:<path> (<owner>:<group> <mode>)
+  changed
 copy <plan key> <artifact store path> -> <user>@<address>
 activate <plan key> (<realiser>) on <user>@<address>
   <the endpoint's own report, one indented line each>
+restart <plan key> for <value key> on <machine> at <user>@<address>
 ```
 
 The first line appears only for an edge a cycle forced the walk to contradict. A flakelet entry is
 activated by the machine's own endpoint, `flakelet activate <name> <artifact>`; an image entry is
-attached by the script the artifact itself carries, `bin/attach`.
+attached by the script the artifact itself carries, `bin/attach`. No entry is skipped for being
+present: the machine's own script decides what to do, and the indented lines under an activation are
+that decision - `assembled <path>`, `replaced <image>`, `attached <image>`, `started <unit>`,
+`reloaded <unit>` or `nothing changed`.
+
+A value write says `changed` or `unchanged` under its own step, which is the machine comparing the
+bytes it holds against the ones being written. Neither the bytes nor a digest of them is printed:
+what is reported is that the file moved, never what it moved to.
+
+A `restart` step is the last thing a run does, and only for a value whose bytes moved. Its subject is
+the entry that *read* the value, which is where a stale process is: the units of that entry are
+restarted if they are running, and a unit an operator stopped stays stopped. The whole entry is
+restarted rather than a named unit, because the plan says which entry reads a value and not which of
+its units opens the file.
 
 **`apply --dry-run`** asks what a run would do. It makes every refusal a real run makes - the
 planner's own table, a restriction naming an entry the plan does not carry, a value source that is
@@ -414,9 +429,16 @@ other's word:
 | --- | --- |
 | `current` | the identity the machine names is the `key` the record published for that entry |
 | `holds <identity>, built <identity>` | it names another one: the machine is on an older build, and both are printed |
+| `holds this build's image, <path> <word>` | the image matches and a configuration file beside it does not |
 | `runs this build's units` | the endpoint names no identity, and the unit files it runs are the artifact's |
 | `runs units this build did not produce` | the same comparison, disagreeing |
 | `reports nothing to compare` | the endpoint named neither, so nothing was compared |
+
+An image's version digest excludes the bytes of a configuration file on purpose, so identity
+equality is evidence about the image and about nothing beside it. The artifact's own `bin/check`
+answers the other half - what the machine holds at each path the entry is shown, against what this
+build would assemble there - and the word it prints for a path that disagrees is what the line
+carries. A file whose bytes are on the machine is `current` and says nothing.
 
 An image names what it holds, because the image's file name carries the digest and
 `portablectl list` prints it. A flakelet endpoint stores that digest in the generation it keeps and
@@ -432,6 +454,20 @@ not be asked, and zero when every machine answered, whatever the answers were - 
 fleet that answered, and what to do about it is `apply`'s work. An apply that stopped half way is
 therefore readable: the entries the run reached say they run this build and the ones it did not
 reach say they do not.
+
+After the entry lines comes one line per value a machine is delivered and does not hold:
+
+```
+value issuer:vars/session missing on beta
+```
+
+Each machine is asked once, about every path delivered to it, and only whether each path is there.
+What a held file contains is never asked: reading a secret to report on it is not something this
+command does. A value of more than one file is one line however many of them are gone, because the
+subject is the value and not its files. Values live under `/run`, so a rebooted machine has lost
+every one of them, and this is how that is diagnosed: the entry is back - the endpoint brings its
+units up again - and the value lines are the only thing that says the machine is not where the
+deployment left it. A second `apply` writes them and restarts their readers.
 
 **`rollback`** takes exactly one `--only`, prints `rollback <key> on <user>@<address>` and then the
 endpoint's own report. An image entry carries no generation to return to, so rolling one back is
@@ -470,9 +506,25 @@ beside them, is a claim about no value and is measured by nothing. What the sour
 measured against the whole deployment even under `--only`, so a source that is right for a
 deployment stays right for a restricted run of it.
 
-Each file is written over ssh under `umask 077` and left at mode 0400, outside the store, at the
-path the value entry records. Not `nix copy`: a store object is readable by every process on the
-machine, which is the one property a generated secret cannot have.
+Each file is written outside the store, at the path the value entry records and at the ownership and
+mode that entry states. Not `nix copy`: a store object is readable by every process on the machine,
+which is the one property a generated secret cannot have.
+
+The write takes all three from the record and decides none of them. The temporary it goes through is
+created `0600 root` before its first byte, chowned, chmoded and only then moved into place, so the
+bytes are never at the writing login's umask and never readable by anyone the record does not admit;
+an interrupted run leaves the previous file or none. Ownership and mode are set again after the
+move, on every apply and not only where the bytes changed, so a mode widened on the machine or an
+owner changed there is returned to what the deployment states by the next apply. Where the recorded
+account does not exist on the machine the step fails naming it, and nothing is left owned by the
+login. The directories of a value are `0711`: traversable, so a file the record opens to an account
+is reachable by it, and listable by nobody.
+
+The temporary is compared against the file the machine already holds and moved only where they
+differ, and the step says `changed` or `unchanged`. The comparison is made on the machine, by the
+process that is about to write the bytes, and neither the bytes nor a digest of them is printed: what
+is reported is that the file moved, never what it moved to. That answer is what decides the restart
+steps at the end of the run.
 
 Nothing in this repository generates those bytes. The directory is where a generator hands them
 over, and `apply` cannot tell a minted secret from one an operator wrote by hand.

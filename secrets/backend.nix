@@ -58,6 +58,8 @@ let
             word "the address" target.machine "${user}@${target.address}"
           } ${word "the parent directory of the path" delivery.key (parentOf delivery.key file.path)} ${
             word "the path" delivery.key file.path
+          } ${word "the mode" delivery.key file.mode} ${
+            word "the ownership" delivery.key "${file.owner}:${file.group}"
           }"
     ) delivery.machines
     ++ [ "    ;;" ];
@@ -90,8 +92,7 @@ let
     "  tmp=$(mktemp)"
     "  out=\"$tmp\" \"$get\" \"$1\" \"$2\""
     "  # shellcheck disable=SC2086"
-    "  ssh $ssh_options -T \"$3\" \"set -eu; umask 077; mkdir -p '$4'; cat > '$5.new'; chmod 0400 '$5.new'; mv '$5.new' '$5'\" < \"$tmp\""
-    "  rm -f \"$tmp\""
+    "  ssh $ssh_options -T \"$3\" \"set -eu; umask 077; (umask 066; mkdir -p '$4'); chmod 0711 '$4'; install -m 0600 /dev/null '$5.new'; cat > '$5.new'; chown '$7' '$5.new'; chmod '$6' '$5.new'; mv '$5.new' '$5'; chmod '$6' '$5'; chown '$7' '$5'\" < \"$tmp\""
     "}"
     ""
     "# The tool writes the file list with `\"\\n\".join(...)`, so its last line carries"

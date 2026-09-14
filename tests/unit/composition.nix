@@ -17,6 +17,8 @@ let
 
   inherit (builtins)
     attrNames
+    attrValues
+    concatLists
     elem
     filter
     mapAttrs
@@ -249,6 +251,99 @@ let
       }
       // instances;
     };
+
+  slotConsumer = _: {
+    uses.far = {
+      interface = identity;
+      reads = [ "publicKey" ];
+    };
+    impl =
+      { results, ... }:
+      {
+        units.main = {
+          command = "/bin/app";
+          env.KEY = if results ? far then results.far.publicKey else "";
+        };
+      };
+  };
+
+  # A root filling one member's slot from inside the module: the capability value
+  # off the sibling's own handle, never a name.
+  boundPair =
+    capability:
+    { service, ... }:
+    let
+      backend = service "backend" { module = twoCapProvider; };
+      app = service "app" {
+        module = slotConsumer;
+        wire.far = backend.provides.${capability};
+      };
+    in
+    {
+      services = { inherit backend app; };
+    };
+
+  pairFiles = {
+    deployment = "deployment/instances.nix";
+    machines = "deployment/machines.nix";
+    modules.pair = "pair/default.nix";
+    leaves.pair.app = "pair/app.nix";
+    leaves.pair.backend = "pair/backend.nix";
+  };
+
+  interfaceFiles = {
+    "interfaces/identity.nix".identity = identity;
+    "interfaces/repository.nix".repository = repository;
+  };
+
+  farProvider = machine: {
+    module = soleRoot {
+      module = twoCapProvider;
+      provides = [ "identity" ];
+    };
+    exposes = [ "identity" ];
+    placement.every.only.machines = [ machine ];
+  };
+
+  keeperMember = _: {
+    impl = _: {
+      units.main.command = "/bin/keep";
+    };
+  };
+
+  extraRoot = "/nix/store/9qf2j5x3k8mz1cvb7ras4dpn6yhw0gl5-extra-member";
+
+  # The member a cut removes: a generator, a closure root and a unit of its own,
+  # so its absence is observable three ways rather than one.
+  extraMember = _: {
+    vars.evidence = {
+      per = "instance";
+      files.token.secrecy = "public";
+    };
+    impl = _: {
+      closure = [ extraRoot ];
+      units.main.command = "${extraRoot}/bin/extra";
+    };
+  };
+
+  cutProbe =
+    { service, ... }:
+    {
+      services = {
+        keeper = service "keeper" { module = keeperMember; };
+        extra = service "extra" { module = extraMember; };
+      };
+    };
+
+  cutProbeFiles = {
+    deployment = "deployment/instances.nix";
+    machines = "deployment/machines.nix";
+    modules.probe = "probe/default.nix";
+    leaves.probe.keeper = "probe/keeper.nix";
+    leaves.probe.extra = "probe/extra.nix";
+  };
+
+  closureRoots = result: concatLists (map (entry: entry.closure or [ ]) (attrValues result.plan));
 in
 {
   testADeploymentOverwritesADefault =
@@ -881,7 +976,7 @@ in
         subjects = subjectsById "slot-set-settings-derived" result;
         namesMember = hasInfix "`only`" (messageById "slot-set-settings-derived" result);
         namesSlot = hasInfix "`repo`" (messageById "slot-set-settings-derived" result);
-        statesTheTrigger = hasInfix "a module publishing a composition whose coherent cuts an operator wants" (
+        namesTheCut = hasInfix "`members.only.enable = false`" (
           evidenceById "slot-set-settings-derived" result
         );
         namesTheAlternative = hasInfix "branch on the setting inside `impl`" (
@@ -896,7 +991,7 @@ in
         subjects = [ "borg-push/leaf.nix" ];
         namesMember = true;
         namesSlot = true;
-        statesTheTrigger = true;
+        namesTheCut = true;
         namesTheAlternative = true;
         asksForNothing = false;
         applicable = true;
@@ -1050,6 +1145,527 @@ in
           "billing"
         ];
         theAddedOneIsNamable = "postgresql:///analytics";
+        applicable = true;
+      };
+    };
+
+  testARootBindingAConsumerToItsOwnProvider =
+    let
+      result = planOf {
+        sources = pairFiles;
+        instances.pair = {
+          module = boundPair "identity";
+          placement.every.backend.machines = [ "one" ];
+          placement.every.app.machines = [ "two" ];
+        };
+      };
+      entry = result.plan."pair:app@two";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        entryRead = entry.reads.far.entry;
+        delivered = entry.reads.far.delivered;
+        far = entry.reads.far.wire;
+        received = entry.units.main.env.KEY;
+        readBy = result.plan."pair:backend@one".provides.identity.exports.publicKey.readBy;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ ];
+        entryRead = "pair:backend@one";
+        delivered = true;
+        far = {
+          instance = "pair";
+          provides = "identity";
+        };
+        received = "ssh-ed25519 AAAA";
+        readBy = [ "pair:app@two" ];
+        applicable = true;
+      };
+    };
+
+  # The same mistake twice: once bound inside the root, once wired by the
+  # deployment. A binding is exempt from no check a wire is subject to.
+  testABindingWhoseInterfacesDoNotMatch =
+    let
+      bound = planOf {
+        sources = pairFiles;
+        interfaces = interfaceFiles;
+        instances.pair = {
+          module = boundPair "repo";
+          placement.every.backend.machines = [ "one" ];
+          placement.every.app.machines = [ "two" ];
+        };
+      };
+      wired = planOf {
+        sources = {
+          deployment = "deployment/instances.nix";
+          machines = "deployment/machines.nix";
+          modules.app = "pair/default.nix";
+          modules.store = "pair/default.nix";
+          leaves.app.only = "pair/app.nix";
+          leaves.store.only = "pair/backend.nix";
+        };
+        interfaces = interfaceFiles;
+        instances = {
+          store = {
+            module = soleRoot {
+              module = twoCapProvider;
+              provides = [ "repo" ];
+            };
+            exposes = [ "repo" ];
+            placement.every.only.machines = [ "one" ];
+          };
+          app = {
+            module = soleRoot { module = slotConsumer; };
+            wire.far = {
+              instance = "store";
+              provides = "repo";
+            };
+            placement.every.only.machines = [ "two" ];
+          };
+        };
+      };
+      names = result: {
+        slotFile = hasInfix "interfaces/identity.nix" (messageById "interface-mismatch" result);
+        capabilityFile = hasInfix "interfaces/repository.nix" (messageById "interface-mismatch" result);
+      };
+    in
+    {
+      expr = {
+        boundRows = rowIds bound;
+        wiredRows = rowIds wired;
+        boundNamesBothFiles = names bound;
+        wiredNamesBothFiles = names wired;
+        boundSubjects = subjectsById "interface-mismatch" bound;
+        wiredSubjects = subjectsById "interface-mismatch" wired;
+        boundDelivered = bound.plan."pair:app@two".reads.far.delivered;
+        applicable = {
+          bound = bound.applicable;
+          wired = wired.applicable;
+        };
+      };
+      expected = {
+        boundRows = [ "interface-mismatch" ];
+        wiredRows = [ "interface-mismatch" ];
+        boundNamesBothFiles = {
+          slotFile = true;
+          capabilityFile = true;
+        };
+        wiredNamesBothFiles = {
+          slotFile = true;
+          capabilityFile = true;
+        };
+        boundSubjects = [ "pair:app" ];
+        wiredSubjects = [ "app:only" ];
+        boundDelivered = false;
+        applicable = {
+          bound = false;
+          wired = false;
+        };
+      };
+    };
+
+  testABindingToACapabilityPlacedTwiceAgainstASingleValuedSlot =
+    let
+      result = planOf {
+        sources = pairFiles;
+        instances.pair = {
+          module = boundPair "identity";
+          placement.every.backend.machines = [
+            "one"
+            "two"
+          ];
+          placement.every.app.machines = [ "one" ];
+        };
+      };
+      entry = result.plan."pair:app@one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        subjects = subjectsById "reach-one-placement-count" result;
+        severity = severityById "reach-one-placement-count" result;
+        namesTheBoundCapability = hasInfix "`pair:backend.identity`" (
+          messageById "reach-one-placement-count" result
+        );
+        namesBothPlacements = hasInfix "`one`, `two`" (evidenceById "reach-one-placement-count" result);
+        delivered = entry.reads.far.delivered;
+        hasValues = entry.reads.far ? values;
+        received = entry.units.main.env.KEY;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ "reach-one-placement-count" ];
+        subjects = [ "pair:app" ];
+        severity = "error";
+        namesTheBoundCapability = true;
+        namesBothPlacements = true;
+        delivered = false;
+        hasValues = false;
+        received = "";
+        applicable = false;
+      };
+    };
+
+  # A member the deployment does not mention is kept, so the block is a cut and
+  # never a selection: writing every member out changes nothing.
+  testAnInstanceThatKeepsEveryMember =
+    let
+      deploy =
+        members:
+        planOf {
+          sources = pairFiles;
+          instances.pair = {
+            inherit members;
+            module = boundPair "identity";
+            placement.every.backend.machines = [ "one" ];
+            placement.every.app.machines = [ "two" ];
+          };
+        };
+      silent = deploy { };
+      stated = deploy {
+        backend.enable = true;
+        app.enable = true;
+      };
+    in
+    {
+      expr = {
+        silentRows = rowIds silent;
+        statedRows = rowIds stated;
+        keys = serviceKeys silent;
+        samePlan = silent.plan == stated.plan;
+        applicable = silent.applicable;
+      };
+      expected = {
+        silentRows = [ ];
+        statedRows = [ ];
+        keys = [
+          "pair:app@two"
+          "pair:backend@one"
+        ];
+        samePlan = true;
+        applicable = true;
+      };
+    };
+
+  testAMemberTheDeploymentCuts =
+    let
+      deploy =
+        extra:
+        planOf {
+          sources = cutProbeFiles;
+          instances.probe = {
+            module = cutProbe;
+            placement.every.keeper.machines = [ "one" ];
+          }
+          // extra;
+        };
+      whole = deploy {
+        placement.every.keeper.machines = [ "one" ];
+        placement.every.extra.machines = [ "one" ];
+      };
+      result = deploy { members.extra.enable = false; };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        keys = attrNames result.plan;
+        theWholeOneHasAllThree = {
+          entry = whole.plan ? "probe:extra@one";
+          value = whole.plan ? "probe:vars/evidence";
+          closure = elem extraRoot (closureRoots whole);
+        };
+        theCutOneHasNone = {
+          entry = result.plan ? "probe:extra@one";
+          value = result.plan ? "probe:vars/evidence";
+          closure = elem extraRoot (closureRoots result);
+        };
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ ];
+        keys = [
+          "machine:one"
+          "probe:keeper@one"
+        ];
+        theWholeOneHasAllThree = {
+          entry = true;
+          value = true;
+          closure = true;
+        };
+        theCutOneHasNone = {
+          entry = false;
+          value = false;
+          closure = false;
+        };
+        applicable = true;
+      };
+    };
+
+  testAPlacementForACutMember =
+    let
+      result = planOf {
+        sources = cutProbeFiles;
+        instances.probe = {
+          module = cutProbe;
+          members.extra.enable = false;
+          placement.every.keeper.machines = [ "one" ];
+          placement.every.extra.machines = [ "one" ];
+        };
+      };
+      row = builtins.head (rowsById "cut-member-named" result);
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        subject = row.subject;
+        severity = row.severity;
+        namesMember = hasInfix "places `extra`" row.message;
+        namesTheCut = hasInfix "`members.extra.enable = false`" row.evidence;
+        placed = result.plan ? "probe:extra@one";
+        unplaced = result.plan ? "probe:extra";
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ "cut-member-named" ];
+        subject = "probe:instance";
+        severity = "error";
+        namesMember = true;
+        namesTheCut = true;
+        placed = false;
+        unplaced = false;
+        applicable = false;
+      };
+    };
+
+  # A cut member is still a member, so its namespace is not an unkeyed knob: the
+  # cut is the one thing reported.
+  testSettingsForACutMember =
+    let
+      result = planOf {
+        sources = cutProbeFiles;
+        instances.probe = {
+          module = cutProbe;
+          members.extra.enable = false;
+          settings.extra.quota = 500;
+          placement.every.keeper.machines = [ "one" ];
+        };
+      };
+      row = builtins.head (rowsById "cut-member-named" result);
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        notMisreadAsAnUnkeyedKnob = countById "settings-not-member-keyed" result;
+        subject = row.subject;
+        severity = row.severity;
+        namesMember = hasInfix "writes settings for `extra`" row.message;
+        namesTheCut = hasInfix "`members.extra.enable = false`" row.evidence;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ "cut-member-named" ];
+        notMisreadAsAnUnkeyedKnob = 0;
+        subject = "probe:instance";
+        severity = "error";
+        namesMember = true;
+        namesTheCut = true;
+        applicable = false;
+      };
+    };
+
+  testAWireForASlotBoundToAKeptSibling =
+    let
+      result = planOf {
+        sources = pairFiles // {
+          modules.far = "far/default.nix";
+        };
+        instances = {
+          pair = {
+            module = boundPair "identity";
+            placement.every.backend.machines = [ "one" ];
+            placement.every.app.machines = [ "two" ];
+            wire.app.far = {
+              instance = "far";
+              provides = "identity";
+            };
+          };
+          far = farProvider "two";
+        };
+      };
+      row = builtins.head (rowsById "wire-names-bound-slot" result);
+      entry = result.plan."pair:app@two";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        subject = row.subject;
+        severity = row.severity;
+        namesSlot = hasInfix "slot `far`" row.message;
+        namesBoundMember = hasInfix "member `backend`" row.message;
+        namesDeploymentFile = hasInfix "deployment/instances.nix" row.message;
+        theBindingStillResolves = entry.reads.far.entry;
+        delivered = entry.reads.far.delivered;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ "wire-names-bound-slot" ];
+        subject = "pair:app";
+        severity = "error";
+        namesSlot = true;
+        namesBoundMember = true;
+        namesDeploymentFile = true;
+        theBindingStillResolves = "pair:backend@one";
+        delivered = true;
+        applicable = false;
+      };
+    };
+
+  testASlotOpenedByACutAndWired =
+    let
+      result = planOf {
+        sources = pairFiles // {
+          modules.far = "far/default.nix";
+        };
+        instances = {
+          pair = {
+            module = boundPair "identity";
+            members.backend.enable = false;
+            placement.every.app.machines = [ "one" ];
+            wire.app.far = {
+              instance = "far";
+              provides = "identity";
+            };
+          };
+          far = farProvider "two";
+        };
+      };
+      entry = result.plan."pair:app@one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        entryRead = entry.reads.far.entry;
+        wire = entry.reads.far.wire;
+        delivered = entry.reads.far.delivered;
+        received = entry.units.main.env.KEY;
+        theCutMemberIsGone = result.plan ? "pair:backend";
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ ];
+        entryRead = "far:only@two";
+        wire = {
+          instance = "far";
+          provides = "identity";
+        };
+        delivered = true;
+        received = "ssh-ed25519 AAAA";
+        theCutMemberIsGone = false;
+        applicable = true;
+      };
+    };
+
+  testASlotOpenedByACutAndLeftUnwired =
+    let
+      result = planOf {
+        sources = pairFiles;
+        instances.pair = {
+          module = boundPair "identity";
+          members.backend.enable = false;
+          placement.every.app.machines = [ "one" ];
+        };
+      };
+      row = builtins.head (rowsById "slot-unwired" result);
+      entry = result.plan."pair:app@one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        subject = row.subject;
+        severity = row.severity;
+        namesTheBoundMember = hasInfix "binds it to member `backend`" row.evidence;
+        namesTheCut = hasInfix "which deployment/instances.nix cuts" row.evidence;
+        namesTheMemberScopedForm = hasInfix "`wire.app.far = {" row.resolution;
+        namesKeepingTheMember = hasInfix "keep member `backend`" row.resolution;
+        delivered = entry.reads.far.delivered;
+        theImplementationSeesNoSlot = entry.units.main.env.KEY;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ "slot-unwired" ];
+        subject = "pair:app";
+        severity = "error";
+        namesTheBoundMember = true;
+        namesTheCut = true;
+        namesTheMemberScopedForm = true;
+        namesKeepingTheMember = true;
+        delivered = false;
+        theImplementationSeesNoSlot = "";
+        applicable = false;
+      };
+    };
+
+  # One module value, bound once in this `let` and named by both instances, so the
+  # two shapes are a difference the deployment made and not a second module.
+  testOneModuleTwoInstancesTwoShapes =
+    let
+      module = boundPair "identity";
+      result = planOf {
+        sources = {
+          deployment = "deployment/instances.nix";
+          machines = "deployment/machines.nix";
+          modules.whole = "pair/default.nix";
+          modules.reshaped = "pair/default.nix";
+          modules.far = "far/default.nix";
+        };
+        instances = {
+          whole = {
+            inherit module;
+            placement.every.backend.machines = [ "one" ];
+            placement.every.app.machines = [ "one" ];
+          };
+          reshaped = {
+            inherit module;
+            members.backend.enable = false;
+            placement.every.app.machines = [ "one" ];
+            wire.app.far = {
+              instance = "far";
+              provides = "identity";
+            };
+          };
+          far = farProvider "two";
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        keys = serviceKeys result;
+        theFirstReadsItsSibling = result.plan."whole:app@one".reads.far.entry;
+        theSecondReadsTheWiredProvider = result.plan."reshaped:app@one".reads.far.entry;
+        bothReceive = {
+          whole = result.plan."whole:app@one".units.main.env.KEY;
+          reshaped = result.plan."reshaped:app@one".units.main.env.KEY;
+        };
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ ];
+        keys = [
+          "far:only@two"
+          "reshaped:app@one"
+          "whole:app@one"
+          "whole:backend@one"
+        ];
+        theFirstReadsItsSibling = "whole:backend@one";
+        theSecondReadsTheWiredProvider = "far:only@two";
+        bothReceive = {
+          whole = "ssh-ed25519 AAAA";
+          reshaped = "ssh-ed25519 AAAA";
+        };
         applicable = true;
       };
     };

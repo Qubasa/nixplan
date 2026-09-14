@@ -232,6 +232,55 @@ let
       consumerModule = folds { inherit iface reach reads; };
     };
 
+  # What a capability says about how many slots may take it is a fact of the
+  # declaration, so each capability of a provider carries its own statement and
+  # publishes a value naming which one it is.
+  offering = caps: _: {
+    provides = builtins.mapAttrs (_: stated: { interface = identity; } // stated) caps;
+    impl = _: {
+      provides = builtins.mapAttrs (cap: _: { exports.publicKey = "key-${cap}"; }) caps;
+      units.only.command = "/bin/true";
+    };
+  };
+
+  # The count is deployment-wide, so these run several instances of one consumer
+  # module: what differs between two of them is the wire and never the slot.
+  taking =
+    caps: consumers:
+    let
+      consuming = builtins.mapAttrs (_: spec: {
+        module = soleRoot { module = consumer { reads = [ "publicKey" ]; }; };
+        placement.every.only.machines = spec.machines or [ "one" ];
+        wire.far = {
+          instance = "provider";
+          provides = spec.capability;
+        };
+      }) consumers;
+    in
+    planOf {
+      sources = sources // {
+        modules = sources.modules // {
+          authz = "modules/authz/default.nix";
+          hosts = "modules/hosts/default.nix";
+        };
+        leaves = sources.leaves // {
+          authz.only = "modules/authz/leaf.nix";
+          hosts.only = "modules/hosts/leaf.nix";
+        };
+      };
+      interfaces = registry;
+      instances = consuming // {
+        provider = {
+          module = soleRoot {
+            module = offering caps;
+            provides = builtins.attrNames caps;
+          };
+          placement.every.only.machines = [ "one" ];
+          exposes = builtins.attrNames caps;
+        };
+      };
+    };
+
   worked = support.workedResult;
   client = worked.plan."nightly:client@alpha";
   server = worked.plan."vault-repo:server@vault";
@@ -2176,6 +2225,199 @@ in
         claimedMismatches = 0;
         claimedDelivered = true;
         unclaimedMismatches = 1;
+      };
+    };
+
+  testTwoInstancesWiringOneSingleConsumerCapability =
+    let
+      result = taking { identity.consumers = "one"; } {
+        authz.capability = "identity";
+        hosts.capability = "identity";
+      };
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        subjects = subjectsById "capability-consumers-exceeded" result;
+        severity = severityById "capability-consumers-exceeded" result;
+        namesTheCapability = hasInfix "capability `identity` of `provider:only`" (
+          messageById "capability-consumers-exceeded" result
+        );
+        namesBothSlots = hasInfix "wired by `authz:only.far`, `hosts:only.far`" (
+          messageById "capability-consumers-exceeded" result
+        );
+        namesTheWidening = hasInfix "declare `consumers = \"many\"`" (
+          resolutionById "capability-consumers-exceeded" result
+        );
+        applicable = result.applicable;
+      };
+      expected = {
+        ids = [ "capability-consumers-exceeded" ];
+        subjects = [ "provider:only" ];
+        severity = "error";
+        namesTheCapability = true;
+        namesBothSlots = true;
+        namesTheWidening = true;
+        applicable = false;
+      };
+    };
+
+  testTwoConsumersTakingTwoCapabilitiesOfOneInstance =
+    let
+      result =
+        taking
+          {
+            alpha.consumers = "one";
+            beta.consumers = "one";
+          }
+          {
+            authz.capability = "alpha";
+            hosts.capability = "beta";
+          };
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        wired = [
+          result.plan."authz:only@one".reads.far.wire.provides
+          result.plan."hosts:only@one".reads.far.wire.provides
+        ];
+        read = [
+          result.plan."authz:only@one".reads.far.values.publicKey
+          result.plan."hosts:only@one".reads.far.values.publicKey
+        ];
+        applicable = result.applicable;
+      };
+      expected = {
+        ids = [ ];
+        wired = [
+          "alpha"
+          "beta"
+        ];
+        read = [
+          "key-alpha"
+          "key-beta"
+        ];
+        applicable = true;
+      };
+    };
+
+  testACapabilityDeclaringNothing =
+    let
+      result = taking { identity = { }; } {
+        authz.capability = "identity";
+        hosts.capability = "identity";
+      };
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        delivered = [
+          result.plan."authz:only@one".reads.far.delivered
+          result.plan."hosts:only@one".reads.far.delivered
+        ];
+        read = [
+          result.plan."authz:only@one".reads.far.values.publicKey
+          result.plan."hosts:only@one".reads.far.values.publicKey
+        ];
+        applicable = result.applicable;
+      };
+      expected = {
+        ids = [ ];
+        delivered = [
+          true
+          true
+        ];
+        read = [
+          "key-identity"
+          "key-identity"
+        ];
+        applicable = true;
+      };
+    };
+
+  testOneConsumerOfASingleConsumerCapabilityPlacedTwice =
+    let
+      result = taking { identity.consumers = "one"; } {
+        authz = {
+          capability = "identity";
+          machines = [
+            "one"
+            "two"
+          ];
+        };
+      };
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        exceeded = countById "capability-consumers-exceeded" result;
+        placements = builtins.attrNames result.plan;
+        delivered = [
+          result.plan."authz:only@one".reads.far.delivered
+          result.plan."authz:only@two".reads.far.delivered
+        ];
+        read = [
+          result.plan."authz:only@one".reads.far.values.publicKey
+          result.plan."authz:only@two".reads.far.values.publicKey
+        ];
+        applicable = result.applicable;
+      };
+      expected = {
+        ids = [ ];
+        exceeded = 0;
+        placements = [
+          "authz:only@one"
+          "authz:only@two"
+          "machine:one"
+          "machine:two"
+          "provider:only@one"
+        ];
+        delivered = [
+          true
+          true
+        ];
+        read = [
+          "key-identity"
+          "key-identity"
+        ];
+        applicable = true;
+      };
+    };
+
+  testACapabilityDeclaringAConsumerCountOutsideTheDomain =
+    let
+      result = taking { identity.consumers = "any"; } {
+        authz.capability = "identity";
+        hosts.capability = "identity";
+      };
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        subjects = subjectsById "capability-consumers-malformed" result;
+        severity = severityById "capability-consumers-malformed" result;
+        namesWritten = hasInfix "`any`" (messageById "capability-consumers-malformed" result);
+        namesTheDomain = hasInfix "`one`, `many`" (evidenceById "capability-consumers-malformed" result);
+        theCountIsNotApplied = countById "capability-consumers-exceeded" result;
+        delivered = [
+          result.plan."authz:only@one".reads.far.delivered
+          result.plan."hosts:only@one".reads.far.delivered
+        ];
+        applicable = result.applicable;
+      };
+      expected = {
+        ids = [ "capability-consumers-malformed" ];
+        subjects = [ "modules/provider/leaf.nix" ];
+        severity = "error";
+        namesWritten = true;
+        namesTheDomain = true;
+        theCountIsNotApplied = 0;
+        delivered = [
+          true
+          true
+        ];
+        applicable = false;
       };
     };
 }

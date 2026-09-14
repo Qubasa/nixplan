@@ -6,6 +6,8 @@
 let
   inherit (builtins)
     attrNames
+    elem
+    filter
     length
     tryEval
     ;
@@ -20,7 +22,13 @@ let
 
   inherit (support.worked) openssh borgbackup;
 
-  reader = import (imageSource + "/read.nix") { inherit planner; };
+  # This layer realises nothing, so a configuration file the realiser assembles at
+  # build time stands in as a store path keyed by its own bytes: two readings of
+  # one recipe answer one path, and an edited recipe answers another, which is what
+  # a real `writeText` does.
+  assemble = name: text: "/nix/store/${planner.util.shortHash text}-${name}";
+
+  reader = import (imageSource + "/read.nix") { inherit planner assemble; };
 
   laptopMachines = support.machines // {
     laptop = support.laptop;
@@ -70,6 +78,60 @@ let
   # it every refusal test passes without testing anything.
   raises = value: !(tryEval (builtins.deepSeq value value)).success;
 
+  # The denial reads the record rather than the secrecy, so a value the
+  # deployment opened to an account is not refused for having been generated.
+
+  shownTo =
+    {
+      profile,
+      fileArgs ? { },
+      unitArgs ? { },
+    }:
+    let
+      result = planOf {
+        instances.holder = {
+          module = soleRoot {
+            module = _: {
+              vars.hostKey.files."key" = {
+                secrecy = "secret";
+              }
+              // fileArgs;
+              impl =
+                { vars, ... }:
+                {
+                  closure = [ borgbackup ];
+                  units.only = {
+                    command = "${borgbackup}/bin/borg serve";
+                    env.KEYFILE = vars.hostKey."key".path;
+                  }
+                  // unitArgs;
+                };
+            };
+          };
+          placement.every.only.machines = [ "one" ];
+        };
+        varsState."holder:vars/hostKey@one"."key" = {
+          present = true;
+          content = "PRIVATE-KEY-BYTES";
+        };
+      };
+    in
+    reader.read {
+      plan = result.plan;
+      key = "holder:only@one";
+      inherit profile;
+    };
+
+  groupedUnit = planner.unitExtension {
+    backend = "systemd";
+    name = "systemd-service";
+    fields = {
+      supplementaryGroups = {
+        type = korora.listOf korora.string;
+      };
+    };
+  };
+
   simple = _: {
     closure = [ borgbackup ];
     units.only.command = "${borgbackup}/bin/borg serve";
@@ -84,18 +146,26 @@ let
             svc = {
               module = soleRoot {
                 module = _: {
-                  impl = _: {
-                    closure = [ borgbackup ];
-                    units.only = {
-                      command = "${borgbackup}/bin/borg serve";
-                      inherit timeout;
+                  vars.hostKey.files."key".secrecy = "secret";
+                  impl =
+                    { vars, ... }:
+                    {
+                      closure = [ borgbackup ];
+                      units.only = {
+                        command = "${borgbackup}/bin/borg serve";
+                        inherit timeout;
+                      };
+                      # A recipe naming a delivered path, so its bytes are
+                      # assembled on the machine and never enter the image.
+                      configData."/etc/thing.conf" = {
+                        mode = "0400";
+                        reload = [ "only" ];
+                        render = [
+                          { text = "value = ${text}\n"; }
+                          { ref = vars.hostKey."key".path; }
+                        ];
+                      };
                     };
-                    configData."/etc/thing.conf" = {
-                      mode = "0444";
-                      reload = [ "only" ];
-                      render = [ { text = "value = ${text}\n"; } ];
-                    };
-                  };
                 };
               };
               placement.every.only.machines = [ "one" ];
@@ -111,6 +181,10 @@ let
               };
               placement.every.only.machines = [ "two" ];
             };
+          };
+          varsState."svc:vars/hostKey@one"."key" = {
+            present = true;
+            content = "PRIVATE-KEY-BYTES";
           };
         };
       imageOf =
@@ -773,7 +847,7 @@ in
       expected = {
         unknownRaises = true;
         knownDoesNot = false;
-        directiveNames = 16;
+        directiveNames = 17;
       };
     };
 
@@ -958,7 +1032,7 @@ in
           "/run/vars/holder/hostKey/key"
         ];
         dispositions = [
-          "render"
+          "reference"
           "reference"
         ];
         boundInTheUnit = true;
@@ -1243,4 +1317,208 @@ in
     );
     expected = true;
   };
+
+  testAUnitThatIsRestartedOnFailure =
+    let
+      withPolicy = readOf { } (_: {
+        closure = [ borgbackup ];
+        units.only = {
+          command = "${borgbackup}/bin/borg serve";
+          restart = "on-failure";
+          restartSec = "5s";
+        };
+      });
+      text = reader.renderUnit withPolicy "only";
+    in
+    {
+      expr = {
+        policy = hasInfix "Restart=on-failure" text;
+        delay = hasInfix "RestartSec=5s" text;
+        digestMoved = withPolicy.version != (readOf { } simple).version;
+      };
+      expected = {
+        policy = true;
+        delay = true;
+        digestMoved = true;
+      };
+    };
+
+  testAUnitThatDeclaredNoPolicy =
+    let
+      text = reader.renderUnit (readOf { } simple) "only";
+    in
+    {
+      expr = {
+        policy = hasInfix "Restart=" text;
+        delay = hasInfix "RestartSec=" text;
+      };
+      expected = {
+        policy = false;
+        delay = false;
+      };
+    };
+
+  testAFileCopiedFromAStorePathIsNotStaged =
+    let
+      image = readOf { } (_: {
+        closure = [ borgbackup ];
+        units.only.command = "${borgbackup}/bin/borg serve";
+        configData."/etc/thing.conf" = {
+          mode = "0444";
+          reload = [ "only" ];
+          source = "${borgbackup}/share/thing.conf";
+        };
+      });
+      shown = builtins.head image.hostPaths;
+    in
+    {
+      expr = {
+        disposition = shown.disposition;
+        from = shown.from;
+        boundInTheUnit = hasInfix "BindReadOnlyPaths=${borgbackup}/share/thing.conf:/etc/thing.conf" (
+          reader.renderUnit image "only"
+        );
+        assembledOnTheMachine = filter (f: f.disposition == "reference") image.configFiles;
+        inTheClosure = elem borgbackup image.closure;
+      };
+      expected = {
+        disposition = "source";
+        from = "${borgbackup}/share/thing.conf";
+        boundInTheUnit = true;
+        assembledOnTheMachine = [ ];
+        inTheClosure = true;
+      };
+    };
+
+  testAFileAssembledFromLiteralsIsAssembledAtBuildTime =
+    let
+      literal = text: _: {
+        closure = [ borgbackup ];
+        units.only.command = "${borgbackup}/bin/borg serve";
+        configData."/etc/thing.conf" = {
+          mode = "0444";
+          reload = [ "only" ];
+          render = [ { text = "value = ${text}\n"; } ];
+        };
+      };
+      image = readOf { } (literal "before");
+      edited = readOf { } (literal "after");
+      shown = builtins.head image.hostPaths;
+    in
+    {
+      expr = {
+        disposition = shown.disposition;
+        fromTheStore = hasInfix "/nix/store/" shown.from;
+        boundInTheUnit = hasInfix "BindReadOnlyPaths=${shown.from}:/etc/thing.conf" (
+          reader.renderUnit image "only"
+        );
+        assembledOnTheMachine = filter (f: f.disposition == "reference") image.configFiles;
+        # The bytes are in the image now, so an edit of them is a new artifact.
+        editMovesTheDigest = image.version != edited.version;
+      };
+      expected = {
+        disposition = "literal";
+        fromTheStore = true;
+        boundInTheUnit = true;
+        assembledOnTheMachine = [ ];
+        editMovesTheDigest = true;
+      };
+    };
+
+  testAGroupReadableValueUnderAConfiningProfile = {
+    expr =
+      map
+        (
+          profile:
+          raises (shownTo {
+            inherit profile;
+            fileArgs = {
+              group = "readers";
+              mode = "0640";
+            };
+            # No `user`: a confining profile denies a static one, and the group is
+            # what admits the transient account the profile imposes.
+            unitArgs.extends = [
+              {
+                extension = groupedUnit;
+                values.supplementaryGroups = [ "readers" ];
+              }
+            ];
+          })
+        )
+        [
+          "default"
+          "nonetwork"
+          "strict"
+        ];
+    expected = [
+      false
+      false
+      false
+    ];
+  };
+
+  testARootOnlyValueUnderTheUnconfinedProfile = {
+    expr = raises (shownTo {
+      profile = "trusted";
+    });
+    expected = false;
+  };
+
+  testASecretIsNoLongerDeniedForBeingSecret =
+    let
+      # Two secret files under one profile, differing only in mode: the denial
+      # follows the record and the secrecy decides nothing.
+      open = shownTo {
+        profile = "default";
+        fileArgs.mode = "0444";
+      };
+      closed = shownTo {
+        profile = "default";
+        fileArgs.mode = "0400";
+      };
+    in
+    {
+      expr = [
+        (raises open)
+        (raises closed)
+      ];
+      expected = [
+        false
+        true
+      ];
+    };
+
+  testAUnitDeclaringASupplementaryGroup =
+    let
+      image = shownTo {
+        profile = "trusted";
+        unitArgs.extends = [
+          {
+            extension = groupedUnit;
+            values.supplementaryGroups = [ "readers" ];
+          }
+        ];
+      };
+      rendered = reader.renderUnit image "only";
+    in
+    {
+      expr = {
+        directive = hasInfix "SupplementaryGroups=readers" rendered;
+        inTheTable = reader.systemdDirectives.supplementaryGroups;
+      };
+      expected = {
+        directive = true;
+        inTheTable = "SupplementaryGroups";
+      };
+    };
+
+  testAUnitDeclaringNone =
+    let
+      rendered = reader.renderUnit (shownTo { profile = "trusted"; }) "only";
+    in
+    {
+      expr = hasInfix "SupplementaryGroups" rendered;
+      expected = false;
+    };
 }

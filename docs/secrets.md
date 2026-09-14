@@ -118,10 +118,16 @@ the plan gives no address for is refused while the script is rendered, naming th
 machine.
 
 The script carries no bytes. `deliver` fetches each file from the store backend's own `get` program
-at run time, into a temporary file, and pipes it over `ssh` into a file written under `umask 077`
-and moved into place. `$PLANNER_SECRETS_SSH_OPTS` reaches `ssh` unquoted, and the word splitting is
-the point: the contract says a deploy step takes whatever else it needs from the environment, and
-reaching a guest whose host key nobody has accepted yet is exactly that.
+at run time, into a temporary file, and pipes it over `ssh` into a file the record decides:
+`install -m 0600` before the first byte, then the recorded owner, group and mode, then the move into
+place, so no window exists in which the bytes sit wider than the deployment stated. The value's
+directories are `0711`, traversable so that a file opened to an account is reachable by it.
+`$PLANNER_SECRETS_SSH_OPTS` reaches `ssh` unquoted, and the word splitting is the point: the
+contract says a deploy step takes whatever else it needs from the environment, and reaching a guest
+whose host key nobody has accepted yet is exactly that.
+
+**The ownership stays this library's too.** The contract has no field for it, so the rendered step
+carries the record's three values as words of its own and the external side never learns them.
 
 **The path stays this library's.** The contract carries no path at all: a store entry's file record
 is one boolean, `deploy`, and `path` exists only as a NixOS option a backend sets, which a

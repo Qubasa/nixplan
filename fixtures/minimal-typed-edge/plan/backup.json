@@ -153,13 +153,19 @@
         "files": {
           "ssh_host_ed25519_key": {
             "deploy": true,
+            "group": "root",
             "inPlan": "reference",
+            "mode": "0400",
+            "owner": "root",
             "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key",
             "secrecy": "secret"
           },
           "ssh_host_ed25519_key.pub": {
             "deploy": true,
+            "group": "root",
             "inPlan": "value",
+            "mode": "0400",
+            "owner": "root",
             "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key.pub",
             "secrecy": "public"
           }
@@ -287,13 +293,19 @@
         "files": {
           "ssh_host_ed25519_key": {
             "deploy": true,
+            "group": "root",
             "inPlan": "reference",
+            "mode": "0400",
+            "owner": "root",
             "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key",
             "secrecy": "secret"
           },
           "ssh_host_ed25519_key.pub": {
             "deploy": true,
+            "group": "root",
             "inPlan": "value",
+            "mode": "0400",
+            "owner": "root",
             "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key.pub",
             "secrecy": "public"
           }
@@ -427,14 +439,20 @@
           "ssh_host_ed25519_key": {
             "bytes": "absent",
             "deploy": true,
+            "group": "root",
             "inPlan": "reference",
+            "mode": "0400",
+            "owner": "root",
             "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key",
             "secrecy": "secret"
           },
           "ssh_host_ed25519_key.pub": {
             "bytes": "absent",
             "deploy": true,
+            "group": "root",
             "inPlan": "value",
+            "mode": "0400",
+            "owner": "root",
             "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key.pub",
             "secrecy": "public"
           }
@@ -456,13 +474,19 @@
     "files": {
       "ssh_host_ed25519_key": {
         "deploy": true,
+        "group": "root",
         "inPlan": "reference",
+        "mode": "0400",
+        "owner": "root",
         "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key",
         "secrecy": "secret"
       },
       "ssh_host_ed25519_key.pub": {
         "deploy": true,
+        "group": "root",
         "inPlan": "value",
+        "mode": "0400",
+        "owner": "root",
         "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key.pub",
         "secrecy": "public"
       }
@@ -484,13 +508,19 @@
     "files": {
       "ssh_host_ed25519_key": {
         "deploy": true,
+        "group": "root",
         "inPlan": "reference",
+        "mode": "0400",
+        "owner": "root",
         "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key",
         "secrecy": "secret"
       },
       "ssh_host_ed25519_key.pub": {
         "deploy": true,
+        "group": "root",
         "inPlan": "value",
+        "mode": "0400",
+        "owner": "root",
         "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key.pub",
         "secrecy": "public"
       }
@@ -513,14 +543,20 @@
       "ssh_host_ed25519_key": {
         "bytes": "absent",
         "deploy": true,
+        "group": "root",
         "inPlan": "reference",
+        "mode": "0400",
+        "owner": "root",
         "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key",
         "secrecy": "secret"
       },
       "ssh_host_ed25519_key.pub": {
         "bytes": "absent",
         "deploy": true,
+        "group": "root",
         "inPlan": "value",
+        "mode": "0400",
+        "owner": "root",
         "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key.pub",
         "secrecy": "public"
       }

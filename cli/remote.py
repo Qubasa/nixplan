@@ -34,6 +34,7 @@ from pathlib import Path, PurePosixPath
 from typing import Protocol
 
 from errors import ApplyError
+from manifest import ValueFile
 
 BOUNDS = (
     "-o",
@@ -48,6 +49,7 @@ BOUNDS = (
 UNREACHABLE = 255
 MISSING = (126, 127)
 LISTING = "images"
+CONFIGURATION = "config"
 
 
 class Runner(Protocol):
@@ -262,26 +264,107 @@ def ssh_argv(address: str, script: str, *, opts: str, user: str = "root") -> lis
     return ["ssh", *shlex.split(opts), f"{user}@{address}", script]
 
 
-def write_script(path: str, content: bytes) -> str:
+def write_script(file: ValueFile, content: bytes) -> str:
     """Return the script that writes one generated file on a machine.
 
     Not `nix copy`: a store object is readable by every process on the machine,
     and the whole point of a generated secret is that its bytes are not in the
     store. The bytes travel base64-encoded because a runner runs an argv rather
-    than a shell, and land at mode 0400 under a directory this script creates.
+    than a shell.
+
+    The temporary is created `0600 root` before its first byte, so the bytes are
+    never at the login's umask; ownership is set next and the recorded mode last,
+    so the file is at no instant readable by anyone the record does not admit.
+    The mode cannot be applied first: a record without an owner write bit would
+    then refuse the write it was created for.
+
+    The write goes to a temporary beside the destination and is moved into place
+    under a trap, so an interrupted run leaves the previous file or none, and
+    never a fragment and never a stray temporary.
+
+    The temporary is compared against the file the machine already holds and
+    moved only where they differ, and the script says `changed` or `unchanged`.
+    The comparison is made where both halves already exist, by the process that
+    is about to write the bytes, and neither the bytes nor a digest of them is
+    printed: what is reported is that the file moved, never what it moved to.
+
+    Ownership and mode are set again after the move, on every apply rather than
+    only where the bytes moved, so a mode widened on the machine is restored by
+    the next one.
+
+    An account the machine does not have is named as such rather than left to
+    `chown`'s own wording, and nothing is written under it.
 
     Args:
-        path: The absolute path the value entry records for the file.
+        file: The value file record the plan carries.
         content: The bytes to write.
 
     Returns:
-        The shell script, which writes nothing readable by anyone else.
+        The shell script, which writes nothing readable by anyone the record
+        does not admit.
     """
     encoded = base64.b64encode(content).decode()
+    path = shlex.quote(file.path)
+    owned = shlex.quote(f"{file.owner}:{file.group}")
+    mode = shlex.quote(file.mode)
+    missing = shlex.quote(f"this machine has no account {file.owner}:{file.group} for {file.path}")
+    parent = shlex.quote(str(PurePosixPath(file.path).parent))
     return (
-        f"set -eu; umask 077; mkdir -p {shlex.quote(str(PurePosixPath(path).parent))}; "
-        f"printf %s {shlex.quote(encoded)} | base64 -d > {shlex.quote(path)}; "
-        f"chmod 0400 {shlex.quote(path)}"
+        f"set -eu; umask 077; "
+        # A file the record opens to an account is unreachable behind a directory
+        # only root may traverse, so every directory of the chain is `0711`:
+        # traversable by any, listable by none, and each file's own mode still
+        # decides its bytes. `umask 066` is what `mkdir -p` gives the ancestors
+        # it creates; the leaf is set again so an older apply's `0700` is fixed.
+        f"(umask 066; mkdir -p {parent}); chmod 0711 {parent}; "
+        f"tmp={path}.planner; trap 'rm -f \"$tmp\"' EXIT; "
+        f'install -m 0600 /dev/null "$tmp"; '
+        f'printf %s {shlex.quote(encoded)} | base64 -d > "$tmp"; '
+        f'chown {owned} "$tmp" 2>/dev/null || {{ echo {missing} >&2; exit 1; }}; '
+        f'chmod {mode} "$tmp"; '
+        f'if cmp -s "$tmp" {path}; then moved=unchanged; rm -f "$tmp"; '
+        f'else mv -f "$tmp" {path}; moved=changed; fi; trap - EXIT; '
+        f"chmod {mode} {path}; chown {owned} {path}; "
+        f'printf "%s\\n" "$moved"'
+    )
+
+
+def restart_script(units: Sequence[str]) -> str:
+    """Return the restart of one entry's units, for units that are running.
+
+    `try-restart` is what replaces a process holding bytes that are no longer
+    current without starting one an operator stopped: whether a unit runs at all
+    is the activation's answer and never this step's.
+
+    Args:
+        units: The unit file names of the entry.
+
+    Returns:
+        The shell script the machine runs, empty of any value's bytes.
+    """
+    return f"systemctl try-restart {' '.join(shlex.quote(unit) for unit in units)} 2>&1"
+
+
+def values_script(paths: Sequence[str]) -> str:
+    """Return the question of which delivered paths one machine holds.
+
+    One question per machine rather than per file, because a machine's sshd may
+    be socket activated and a burst of short logins is answered by the socket's
+    own trigger limit. Nothing about the bytes of a file that is there is asked:
+    a held value's contents are a secret, and reading one to report on it is not
+    something this command does.
+
+    Args:
+        paths: The declared paths of the values delivered to that machine.
+
+    Returns:
+        The shell script, which prints `<path> present` or `<path> absent`.
+    """
+    return "; ".join(
+        f"if [ -e {shlex.quote(path)} ]; "
+        f'then printf "%s present\\n" {shlex.quote(path)}; '
+        f'else printf "%s absent\\n" {shlex.quote(path)}; fi'
+        for path in paths
     )
 
 
@@ -321,29 +404,41 @@ def flakelet_status_script(name: str) -> str:
     return f"flakelet status --json {shlex.quote(name)}"
 
 
-def image_status_script(image: Path) -> str:
+def image_status_script(image: Path, check: Path) -> str:
     """Return what the machine's own tool says about one image and what it holds.
 
-    Two facts, one question: the state of the image the caller names, and the
-    images the machine holds, whose names carry the identity of the build each
-    came from. A machine that was never given this image answers nothing about
-    it, which is why that half may fail and the exit status is the listing's:
-    a machine carrying no tool exits `MISSING` and a machine whose service
-    manager answers nothing exits non-zero, and both are answers about the
-    machine rather than about the entry.
+    Three facts, one question: the state of the image the caller names, the
+    bytes the machine holds at each path the entry is shown a configuration file
+    at, and the images the machine holds, whose names carry the identity of the
+    build each came from. A machine that was never given this image answers
+    nothing about it, which is why that half may fail and the exit status is the
+    listing's: a machine carrying no tool exits `MISSING` and a machine whose
+    service manager answers nothing exits non-zero, and both are answers about
+    the machine rather than about the entry.
+
+    The bytes are answered by the artifact's own check script, so the recipe a
+    report compares against is the recipe an attach writes. It may be absent on
+    a machine that was never given the artifact, which is the same fact as the
+    image being absent and is not a second refusal.
+
+    Args:
+        image: The image file inside the copied artifact.
+        check: The artifact's own staleness check.
     """
     return (
         f"portablectl is-attached {shlex.quote(str(image))} || true; "
+        f"{shlex.quote(str(check))} 2> /dev/null || true; "
         f"printf '%s\\n' {LISTING}; portablectl list --no-legend"
     )
 
 
 @dataclass(frozen=True)
 class Attachment:
-    """What a machine answered about one image, and the images it listed."""
+    """What a machine answered about one image, its files and the images it listed."""
 
     state: str
     listed: tuple[tuple[str, str], ...]
+    configuration: tuple[tuple[str, str], ...]
 
 
 def attachment_of(reported: str) -> Attachment:
@@ -354,7 +449,8 @@ def attachment_of(reported: str) -> Attachment:
 
     Returns:
         The word the tool printed for the image it was asked about, empty
-        where it printed none, and each listed image with the state the
+        where it printed none, each configuration path with the word the
+        artifact's check gave it, and each listed image with the state the
         listing gives it. A row the listing writes differently from the tool
         this was written against is dropped rather than guessed at, so an
         answer this cannot read carries no image and the caller reports what
@@ -362,13 +458,23 @@ def attachment_of(reported: str) -> Attachment:
     """
     lines = reported.splitlines()
     mark = lines.index(LISTING) if LISTING in lines else len(lines)
-    said = [line for line in lines[:mark] if line.strip()]
+    head = [line for line in lines[:mark] if line.strip()]
+    files = tuple(
+        (columns[1], columns[2])
+        for columns in (line.split() for line in head)
+        if len(columns) == 3 and columns[0] == CONFIGURATION
+    )
+    said = [line for line in head if not line.startswith(f"{CONFIGURATION} ")]
     rows = tuple(
         (columns[0], columns[-1])
         for columns in (line.split() for line in lines[mark + 1 :])
         if len(columns) > 1
     )
-    return Attachment(state=said[0].strip() if said else "", listed=rows)
+    return Attachment(
+        state=said[0].strip() if said else "",
+        listed=rows,
+        configuration=files,
+    )
 
 
 def rollback_script(name: str) -> str:

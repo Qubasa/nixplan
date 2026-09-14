@@ -891,7 +891,7 @@ in
       result = placed [ "one" ] (_: {
         units.web = {
           command = "/bin/web";
-          restartSec = 5;
+          restartLimit = 5;
         };
         units.db = {
           command = "/bin/db";
@@ -1158,6 +1158,182 @@ in
       expected = {
         rows = [ "config-file-disposition" ];
         namesNeither = true;
+      };
+    };
+
+  testAUnitThatIsRestartedWhenItFails =
+    let
+      result = placed [ "one" ] (_: {
+        units.web = {
+          command = "/bin/web";
+          restart = "on-failure";
+          restartSec = "5s";
+        };
+        units.db.command = "/bin/db";
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        web = entry.units.web;
+        db = entry.units.db;
+      };
+      expected = {
+        rows = [ ];
+        web = {
+          command = "/bin/web";
+          restart = "on-failure";
+          restartSec = "5s";
+        };
+        db.command = "/bin/db";
+      };
+    };
+
+  testARestartPolicyOutsideItsDomain =
+    let
+      result = placed [ "one" ] (_: {
+        units.web = {
+          command = "/bin/web";
+          restart = "sometimes";
+        };
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        namesTheDomain = hasInfix "`on-abnormal`" (evidenceById "unit-field-type-mismatch" result);
+        namesTheField = hasInfix "`restart`" (messageById "unit-field-type-mismatch" result);
+        recorded = entry.units.web;
+      };
+      expected = {
+        rows = [ "unit-field-type-mismatch" ];
+        namesTheDomain = true;
+        namesTheField = true;
+        recorded.command = "/bin/web";
+      };
+    };
+
+  testARestartDelayWithNoPolicy =
+    let
+      result = placed [ "one" ] (_: {
+        units.web = {
+          command = "/bin/web";
+          restartSec = "5s";
+        };
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        namesTheUnit = hasInfix "unit `web`" (messageById "unit-restart-delay-without-policy" result);
+        recorded = entry.units.web;
+      };
+      expected = {
+        rows = [ "unit-restart-delay-without-policy" ];
+        namesTheUnit = true;
+        recorded.command = "/bin/web";
+      };
+    };
+
+  # The key is a digest over the record, and the record carries neither field, so
+  # a unit that declared neither keys exactly as it did before the vocabulary
+  # carried them.
+  testAUnitThatDeclaresNoPolicyKeepsItsKey =
+    let
+      result = placed [ "one" ] (_: {
+        units.web.command = "/bin/web";
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        fields = attrNames entry.units.web;
+        keyMentionsEither = hasInfix "restart" (toJSON entry.units);
+      };
+      expected = {
+        rows = [ ];
+        fields = [ "command" ];
+        keyMentionsEither = false;
+      };
+    };
+
+  testAOneShotUnitAskingToBeRestartedAlways =
+    let
+      result = placed [ "one" ] (_: {
+        units.job = {
+          command = "/bin/job";
+          oneShot = true;
+          restart = "always";
+        };
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        namesTheUnit = hasInfix "unit `job`" (messageById "unit-restart-contradicts-one-shot" result);
+        fields = attrNames entry.units.job;
+      };
+      expected = {
+        rows = [ "unit-restart-contradicts-one-shot" ];
+        namesTheUnit = true;
+        fields = [
+          "command"
+          "oneShot"
+        ];
+      };
+    };
+
+  testAOneShotUnitRetriedOnFailure =
+    let
+      result = placed [ "one" ] (_: {
+        units.job = {
+          command = "/bin/job";
+          oneShot = true;
+          restart = "on-failure";
+        };
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        recorded = entry.units.job.restart;
+      };
+      expected = {
+        rows = [ ];
+        recorded = "on-failure";
+      };
+    };
+
+  testAScheduledUnitAskingForARestartPolicy =
+    let
+      result = placed [ "one" ] (_: {
+        units.nightly = {
+          command = "/bin/nightly";
+          schedule = "daily";
+          restart = "on-failure";
+        };
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        namesThePolicy = hasInfix "`on-failure`" (messageById "unit-restart-on-scheduled" result);
+        fields = attrNames entry.units.nightly;
+      };
+      expected = {
+        rows = [ "unit-restart-on-scheduled" ];
+        namesThePolicy = true;
+        fields = [
+          "command"
+          "schedule"
+        ];
       };
     };
 }

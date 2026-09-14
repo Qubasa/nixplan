@@ -10,7 +10,6 @@
   interface,
   module,
   compose,
-  excluded,
   platform,
 }:
 let
@@ -27,6 +26,7 @@ let
 
   instanceKeys = [
     "module"
+    "members"
     "settings"
     "placement"
     "wire"
@@ -77,6 +77,10 @@ let
     name = {
       what = "a name";
       is = builtins.isString;
+    };
+    flag = {
+      what = "a boolean";
+      is = builtins.isBool;
     };
   };
 
@@ -497,6 +501,7 @@ in
           declaredExposes = instanceField "exposes" shapes.names [ ] false;
           declaredWire = instanceField "wire" shapes.record { } false;
           declaredSettings = instanceField "settings" shapes.record { } false;
+          declaredMembersBlock = instanceField "members" shapes.record { } false;
           placed = placementOf.${iname};
 
           root = compose.mkRoot declaredRoot.value (
@@ -522,6 +527,111 @@ in
           badMemberNames = filter util.carriesKeySeparator (attrNames declaredMembers);
           members = util.filterAttrs (name: _: !(util.carriesKeySeparator name)) declaredMembers;
           memberNames = attrNames members;
+
+          # The cut is read before placement, settings, generators and wires, so
+          # "a cut member produces nothing" is one filter rather than a check at
+          # every later stage. A member the deployment does not mention is kept.
+          blockOf =
+            name:
+            declaredField {
+              subject = "${iname}:instance";
+              file = deploymentFile;
+              where = "`members.${name}` of instance ${util.quote iname}";
+              record = declaredMembersBlock.value;
+              field = name;
+              shape = shapes.record;
+              fallback = { };
+            };
+
+          memberBlocks = mapAttrs (name: _: blockOf name) declaredMembersBlock.value;
+
+          enableOf =
+            name:
+            declaredField {
+              subject = "${iname}:instance";
+              file = deploymentFile;
+              where = "`members.${name}` of instance ${util.quote iname}";
+              record = memberBlocks.${name}.value;
+              field = "enable";
+              shape = shapes.flag;
+              fallback = true;
+              required = true;
+            };
+
+          memberEnables = mapAttrs (name: _: enableOf name) declaredMembersBlock.value;
+
+          cutNames = filter (name: elem name memberNames && !memberEnables.${name}.value) (
+            attrNames declaredMembersBlock.value
+          );
+
+          keptNames = util.subtractList memberNames cutNames;
+          kept = util.filterAttrs (name: _: !(elem name cutNames)) members;
+
+          memberBlockRows =
+            declaredMembersBlock.rows
+            ++ util.concatMapAttrsToList (_: b: b.rows) memberBlocks
+            ++ util.concatMapAttrsToList (_: e: e.rows) memberEnables
+            ++ concatLists (
+              util.mapAttrsToList (
+                name: b:
+                map (
+                  key:
+                  module.keyRow {
+                    inherit subject key;
+                    where = "`members.${name}` of instance ${util.quote iname}";
+                    allowed = [ "enable" ];
+                  }
+                ) (util.extraKeys [ "enable" ] b.value)
+              ) memberBlocks
+            )
+            ++ map (
+              name:
+              diag.error {
+                inherit subject;
+                id = "members-unknown-member";
+                message = "${deploymentFile} states `members.${name}` in instance ${util.quote iname}, which its root does not own";
+                evidence = "the root in ${moduleFile} owns ${util.quoteList memberNames}";
+                resolution = "state one of ${util.quoteList memberNames} in ${deploymentFile}, or delete the block";
+              }
+            ) (util.subtractList (attrNames declaredMembersBlock.value) (memberNames ++ badMemberNames));
+
+          # One sentence for every way a deployment can go on naming a member it
+          # cut. The member is gone, so each of these addresses nothing.
+          cutRow =
+            {
+              what,
+              name,
+            }:
+            diag.error {
+              inherit subject;
+              id = "cut-member-named";
+              message = "${deploymentFile} ${what} of instance ${util.quote iname}, and the same deployment cuts that member";
+              evidence = "`members.${name}.enable = false` removes ${util.quote name} from instance ${util.quote iname}, so it takes no placement, needs no settings and fills no slot";
+              resolution = "delete the reference to ${util.quote name} in ${deploymentFile}, or keep the member by deleting `members.${name}.enable = false`";
+            };
+
+          cutReferenceRows =
+            map (
+              name:
+              cutRow {
+                inherit name;
+                what = "places ${util.quote name}";
+              }
+            ) (filter (name: elem name cutNames) (attrNames placed.every))
+            ++ map (
+              name:
+              cutRow {
+                inherit name;
+                what = "writes settings for ${util.quote name}";
+              }
+            ) (filter (name: elem name cutNames) (attrNames declaredSettings.value))
+            ++ map (
+              name:
+              cutRow {
+                inherit name;
+                what = "wires slots of ${util.quote name}";
+              }
+            ) (filter (name: elem name cutNames) (attrNames declaredWire.value));
 
           # A member's identity is the attribute key it is declared under, and
           # `service`'s name argument is row text. A capability records the name
@@ -589,7 +699,7 @@ in
             }
           ) (util.subtractList exposes (attrNames rootProvides));
 
-          resolvedMembers = mapAttrs (mname: member: mkMember iname idecl mname member) members;
+          resolvedMembers = mapAttrs (mname: member: mkMember iname idecl mname member) kept;
 
           generatorOwners = util.concatMapAttrsToList (
             mname: m: map (gen: { inherit gen mname; }) (attrNames m.declaration.vars.generators)
@@ -612,6 +722,25 @@ in
               resolution = "rename one of them in ${moduleFile}, or declare ${util.quote gen} in one member and let the other read it";
             }
           ) (util.sortStrings claimedTwice);
+
+          # A deployment's `wire` namespace addresses a member by name and a slot
+          # by name, so the two sets have to be disjoint or one key addresses two
+          # things. Read off the members' own declarations, which is the module's
+          # statement rather than the deployment's.
+          slotNames = util.uniqueStrings (
+            concatLists (util.mapAttrsToList (_: m: attrNames m.declaration.uses) resolvedMembers)
+          );
+
+          nameCollisionRows = map (
+            name:
+            diag.error {
+              inherit subject;
+              id = "member-and-slot-name-collide";
+              message = "the root of instance ${util.quote iname} owns a member named ${util.quote name} and a slot named ${util.quote name}";
+              evidence = "a deployment writes `wire.${name}` for both, so one key would address a member's own slots and a slot of every member at once";
+              resolution = "rename the member or the slot in ${moduleFile}";
+            }
+          ) (filter (name: elem name slotNames) memberNames);
 
           instanceRows =
             map (
@@ -642,6 +771,9 @@ in
             ++ placementRows
             ++ exposeRows
             ++ nameDisagreementRows
+            ++ memberBlockRows
+            ++ cutReferenceRows
+            ++ nameCollisionRows
             ++ collisionRows;
         in
         {
@@ -652,7 +784,10 @@ in
             rootProvides
             memberNames
             badMemberNames
+            keptNames
+            cutNames
             ;
+          memberKeyOf = keyOfDeclaredName;
           exposed = util.filterAttrs (n: _: elem n exposes) rootProvides;
           exposedNames = filter (n: rootProvides ? ${n}) exposes;
           wire = declaredWire.value;
@@ -807,21 +942,87 @@ in
             ports = mapAttrs (_: claim: claim.fixed) declaration.claims.ports;
           };
 
-          instanceWire = resolved.instances.${iname}.wire;
+          inst = resolved.instances.${iname};
+          instanceWire = inst.wire;
+
+          # `wire.<member>` addresses that member's own slots and every other key
+          # is a slot name reaching every member declaring it. Which of the two a
+          # key is depends on the member set alone, which is why the two
+          # namespaces are held disjoint one stratum up.
+          scopedRead = declaredField {
+            inherit subject;
+            file = deploymentFile;
+            where = "the wire of member ${util.quote mname} of instance ${util.quote iname}";
+            record = instanceWire;
+            field = mname;
+            shape = shapes.record;
+            fallback = { };
+          };
+          scoped = if instanceWire ? ${mname} then scopedRead.value else { };
+
+          addressed = slotName: scoped ? ${slotName};
+          reaches = slotName: instanceWire ? ${slotName} && !(elem slotName inst.memberNames);
 
           wireOf =
             slotName:
             declaredField {
               inherit subject;
               file = deploymentFile;
-              where = "the wire of instance ${util.quote iname}";
-              record = instanceWire;
+              where =
+                if addressed slotName then
+                  "the wire of member ${util.quote mname} of instance ${util.quote iname}"
+                else
+                  "the wire of instance ${util.quote iname}";
+              record = if addressed slotName then scoped else instanceWire;
               field = slotName;
               shape = shapes.record;
               fallback = null;
             };
 
           wires = mapAttrs (slotName: _: wireOf slotName) declaration.uses;
+
+          wireValue =
+            slotName: if addressed slotName || reaches slotName then wires.${slotName}.value else null;
+
+          # What the root bound this member's slots to. A binding naming a member
+          # the deployment kept resolves the slot; naming one it cut, the binding
+          # is discarded and the slot is the deployment's to fill.
+          bindingRead = declaredField {
+            inherit subject;
+            file = moduleLabel;
+            where = "the root of instance ${util.quote iname} binding member ${util.quote mname}";
+            record = member;
+            field = "wire";
+            shape = shapes.record;
+            fallback = { };
+          };
+          declaredBindings = bindingRead.value;
+
+          bindingOf =
+            slotName:
+            let
+              given = declaredBindings.${slotName} or null;
+              key = inst.memberKeyOf.${given.member} or given.member;
+            in
+            if given == null then
+              null
+            else if !(builtins.isAttrs given && given ? member && given ? capability) then
+              { malformed = true; }
+            else
+              {
+                malformed = false;
+                kept = elem key inst.keptNames;
+                member = key;
+                capability = given // {
+                  member = key;
+                };
+              };
+
+          bindings = mapAttrs (slotName: _: bindingOf slotName) declaration.uses;
+
+          bound =
+            slotName:
+            bindings.${slotName} != null && !bindings.${slotName}.malformed && bindings.${slotName}.kept;
 
           edges = mapAttrs (
             slotName: slot:
@@ -832,9 +1033,40 @@ in
                 slotName
                 slot
                 ;
-              wire = if instanceWire ? ${slotName} then wires.${slotName}.value else null;
+              binding = if bound slotName then bindings.${slotName}.capability else null;
+              wire = if bound slotName then null else wireValue slotName;
+              wireConflict = bound slotName && wireValue slotName != null;
+              boundMember = if bindings.${slotName} == null then null else bindings.${slotName}.member or null;
             }
           ) declaration.uses;
+
+          bindingRows =
+            map
+              (
+                slotName:
+                diag.error {
+                  inherit subject;
+                  id = "binding-malformed";
+                  message = "the root of instance ${util.quote iname} binds slot ${util.quote slotName} of member ${util.quote mname} to a value that is not a capability of one of its members";
+                  evidence = "a binding is the capability value off a sibling's handle, which carries the member it came from, so a name or a record of another shape resolves to nothing";
+                  resolution = "write `wire.${slotName} = <member>.provides.<capability>;` in ${moduleLabel}";
+                }
+              )
+              (
+                filter (slotName: bindings.${slotName} != null && bindings.${slotName}.malformed) (
+                  attrNames declaration.uses
+                )
+              )
+            ++ map (
+              slotName:
+              diag.error {
+                inherit subject;
+                id = "binding-unknown-slot";
+                message = "the root of instance ${util.quote iname} binds ${util.quote slotName} of member ${util.quote mname}, which declares no such slot";
+                evidence = "the member declares ${util.quoteList (attrNames declaration.uses)}";
+                resolution = "bind one of ${util.quoteList (attrNames declaration.uses)} in ${moduleFileOf iname}, or delete the binding";
+              }
+            ) (util.subtractList (attrNames declaredBindings) (attrNames declaration.uses));
 
           results = mapAttrs (_: edge: edge.implValue) (util.filterAttrs (_: edge: edge.delivered) edges);
 
@@ -853,6 +1085,7 @@ in
                   "module"
                   "defaults"
                   "fixed"
+                  "wire"
                 ];
               }
             ) member.unknownKeys
@@ -865,6 +1098,9 @@ in
             ++ settings.rows
             ++ declaration.rows
             ++ placementRows
+            ++ scopedRead.rows
+            ++ bindingRead.rows
+            ++ bindingRows
             ++ util.concatMapAttrsToList (_: w: w.rows) wires
             ++ util.concatMapAttrsToList (_: edge: edge.rows) edges;
         in
@@ -937,7 +1173,7 @@ in
               let
                 fileState = state.${fname} or { };
                 present = fileState.present or false;
-                secrecy = interface.secrecyOf fdecl;
+                inherit (fdecl) secrecy;
               in
               {
                 __varsFile = true;
@@ -946,6 +1182,12 @@ in
                 file = fname;
                 entry = valueKey;
                 inherit (g) deploy;
+                inherit (fdecl)
+                  owner
+                  group
+                  mode
+                  stated
+                  ;
                 path = "/run/vars/${iname}/${gen}/${fname}";
                 content = if present && secrecy != "secret" then fileState.content or null else null;
               }
@@ -1199,6 +1441,10 @@ in
                       file
                       entry
                       deploy
+                      owner
+                      group
+                      mode
+                      path
                       ;
                   }
                 else
@@ -1272,6 +1518,9 @@ in
           slotName,
           slot,
           wire,
+          binding ? null,
+          wireConflict ? false,
+          boundMember ? null,
         }:
         let
           subject = "${iname}:${mname}";
@@ -1279,14 +1528,10 @@ in
           ifaceLabel =
             if slot.interface == null then "the slot's interface" else interface.label reg slot.interface;
 
-          isMemberCut =
-            wire != null
-            && !(wire ? instance)
-            && builtins.any (v: builtins.isAttrs v && v ? instance) (builtins.attrValues wire);
+          isBound = binding != null;
 
           # A wire's own two fields are names the reading turns into attribute
-          # keys, so each is read with its shape before it is one. A member cut
-          # carries neither, and is a row of its own.
+          # keys, so each is read with its shape before it is one.
           wireField =
             field:
             declaredField {
@@ -1297,13 +1542,16 @@ in
               inherit field;
               shape = shapes.name;
               fallback = null;
-              required = wire != null && !isMemberCut;
+              required = wire != null;
             };
 
           wireTarget = wireField "instance";
           wireCapability = wireField "provides";
-          target = wireTarget.value;
-          capName = wireCapability.value;
+
+          # A binding names a member of this instance and never a deployment, so
+          # its far end is this instance and the capability is the value itself.
+          target = if isBound then iname else wireTarget.value;
+          capName = if isBound then binding.capability else wireCapability.value;
 
           # Membership is asked of the set the reading built, never of the
           # deployment's own: a name the reading refused is absent from one and
@@ -1311,14 +1559,26 @@ in
           targetInstance =
             if target != null && resolved.instances ? ${target} then resolved.instances.${target} else null;
           capability =
-            if targetInstance == null || capName == null then
+            if isBound then
+              binding
+            else if targetInstance == null || capName == null then
               null
             else
               targetInstance.exposed.${capName} or null;
 
+          # How a row names the far end: an exposed capability of an instance, or
+          # a member's own capability where the module bound one.
+          far =
+            if isBound then "${iname}:${capability.member}.${capName}" else "${target}.${toString capName}";
+
           providerMember =
             if capability == null then null else targetInstance.members.${capability.member} or null;
           placements = if providerMember == null then [ ] else providerMember.placements;
+
+          # The provider's own reading of the capability, which is where its
+          # consumer cardinality is stated and checked.
+          providerDeclared =
+            if providerMember == null then null else providerMember.declaration.provides.${capName} or null;
 
           slotClaim = if slot.interface == null then null else interface.identityOf slot.interface;
           capabilityClaim = if capability == null then null else interface.identityOf capability.interface;
@@ -1380,7 +1640,7 @@ in
           arityOk =
             interfaceMatches && (if slot.reach == "all" then placements != [ ] else length placements == 1);
 
-          deliverable = slot.resolvable && wire != null && !isMemberCut && capability != null && arityOk;
+          deliverable = slot.resolvable && (wire != null || isBound) && capability != null && arityOk;
 
           entryKeyed = builtins.listToAttrs (
             map (c: {
@@ -1424,22 +1684,30 @@ in
           implValue = if foldApplies then folded.value else value;
 
           rows =
-            util.optional (wire == null) (
+            util.optional (wire == null && !isBound) (
               diag.error {
                 inherit subject;
                 id = "slot-unwired";
                 message = "slot ${util.quote slotName} of ${util.quote subject} is wired by no deployment, so it resolves to no value at all";
-                evidence = "${consumerFile} declares the slot against ${ifaceLabel}, and ${deploymentFile} writes no `wire.${slotName}` for instance ${util.quote iname}";
-                resolution = "write `wire.${slotName} = { instance = <instance>; provides = <capability>; };` in ${deploymentFile}";
+                evidence =
+                  if boundMember == null then
+                    "${consumerFile} declares the slot against ${ifaceLabel}, and ${deploymentFile} writes no `wire.${slotName}` for instance ${util.quote iname}"
+                  else
+                    "${consumerFile} declares the slot against ${ifaceLabel} and its root binds it to member ${util.quote boundMember}, which ${deploymentFile} cuts, so the binding is the deployment's to replace";
+                resolution =
+                  if boundMember == null then
+                    "write `wire.${slotName} = { instance = <instance>; provides = <capability>; };` in ${deploymentFile}"
+                  else
+                    "write `wire.${mname}.${slotName} = { instance = <instance>; provides = <capability>; };` in ${deploymentFile}, or keep member ${util.quote boundMember}";
               }
             )
-            ++ util.optional isMemberCut (
+            ++ util.optional wireConflict (
               diag.error {
                 inherit subject;
-                id = "declaration-excluded-key";
-                message = "${deploymentFile} wires ${util.quote slotName} of instance ${util.quote iname} per member, which this subset does not carry";
-                evidence = "the condition that introduces it: ${excluded.constructs.memberWire.trigger}";
-                resolution = "write one `wire.${slotName}` naming an instance and a capability in ${deploymentFile}";
+                id = "wire-names-bound-slot";
+                message = "${deploymentFile} wires slot ${util.quote slotName} of ${util.quote subject}, which its own root binds to member ${util.quote (toString boundMember)}";
+                evidence = "a reference to a member the instance keeps is a binding the module made, so the two statements disagree about what the composition is and the binding resolves the slot";
+                resolution = "cut member ${util.quote (toString boundMember)} with `members.${toString boundMember}.enable = false` in ${deploymentFile}, or delete the wire";
               }
             )
             ++ wireTarget.rows
@@ -1449,13 +1717,7 @@ in
             # second row stating the deployment does not declare it.
             ++
               util.optional
-                (
-                  wire != null
-                  && !isMemberCut
-                  && target != null
-                  && !(util.carriesKeySeparator target)
-                  && targetInstance == null
-                )
+                (wire != null && target != null && !(util.carriesKeySeparator target) && targetInstance == null)
                 (
                   diag.error {
                     inherit subject;
@@ -1470,7 +1732,7 @@ in
                 diag.error {
                   inherit subject;
                   id = "wire-capability-not-exposed";
-                  message = "${deploymentFile} wires ${util.quote slotName} to ${util.quote "${target}.${capName}"}, which instance ${util.quote target} provides and does not expose";
+                  message = "${deploymentFile} wires ${util.quote slotName} to ${util.quote far}, which instance ${util.quote target} provides and does not expose";
                   evidence = "instance ${util.quote target} exposes ${util.quoteList targetInstance.exposedNames}";
                   resolution = "add ${util.quote capName} to the `exposes` list of instance ${util.quote target} in ${deploymentFile}";
                 }
@@ -1478,7 +1740,7 @@ in
                 diag.error {
                   inherit subject;
                   id = "wire-unknown-capability";
-                  message = "${deploymentFile} wires ${util.quote slotName} to ${util.quote "${target}.${toString capName}"}, which instance ${util.quote target} does not expose";
+                  message = "${deploymentFile} wires ${util.quote slotName} to ${util.quote far}, which instance ${util.quote target} does not expose";
                   evidence = "instance ${util.quote target} exposes ${util.quoteList targetInstance.exposedNames} and its root provides ${util.quoteList (attrNames targetInstance.rootProvides)}";
                   resolution = "wire one of ${util.quoteList targetInstance.exposedNames} in ${deploymentFile}";
                 }
@@ -1488,7 +1750,7 @@ in
               diag.error {
                 inherit subject;
                 id = "interface-mismatch";
-                message = "slot ${util.quote slotName} of ${util.quote subject} declares ${ifaceLabel} and ${util.quote "${target}.${capName}"} declares ${interface.label reg capability.interface}";
+                message = "slot ${util.quote slotName} of ${util.quote subject} declares ${ifaceLabel} and ${util.quote far} declares ${interface.label reg capability.interface}";
                 evidence =
                   if slotClaim != null && capabilityClaim != null then
                     "both ends claim an identity and the two claims differ, so the values were never compared"
@@ -1507,7 +1769,7 @@ in
               diag.error {
                 inherit subject;
                 id = "reach-one-placement-count";
-                message = "slot ${util.quote slotName} of ${util.quote subject} declares reach ${util.quote "one"} and ${util.quote "${target}.${capName}"} has ${
+                message = "slot ${util.quote slotName} of ${util.quote subject} declares reach ${util.quote "one"} and ${util.quote far} has ${
                   util.countNoun (length placements) "placement" "placements"
                 }";
                 evidence = "the wired capability is placed on ${util.quoteList placements}, and the count is checked after placement is decided rather than believed from the deployment";
@@ -1518,7 +1780,7 @@ in
               diag.error {
                 inherit subject;
                 id = "reach-all-no-placement";
-                message = "slot ${util.quote slotName} of ${util.quote subject} declares reach ${util.quote "all"} and ${util.quote "${target}.${capName}"} is placed nowhere";
+                message = "slot ${util.quote slotName} of ${util.quote subject} declares reach ${util.quote "all"} and ${util.quote far} is placed nowhere";
                 evidence = "a set-valued read names its entries, and there are no placements to name";
                 resolution = "place the far end in ${deploymentFile}";
               }
@@ -1531,7 +1793,7 @@ in
                   diag.error {
                     inherit subject;
                     id = "slot-reads-undeployed-value";
-                    message = "slot ${util.quote slotName} of ${util.quote subject} reads ${util.quote r} of ${util.quote "${target}.${capName}"}, whose value no machine receives";
+                    message = "slot ${util.quote slotName} of ${util.quote subject} reads ${util.quote r} of ${util.quote far}, whose value no machine receives";
                     evidence = "${util.quote c.entryKey} publishes it from generator ${
                       util.quote c.varsFiles.${r}.generator
                     }, which declares `deploy = false`, so the path it names resolves to nothing at run time";
@@ -1573,7 +1835,7 @@ in
           reach = slot.reach;
           reads = slot.reads;
           wire =
-            if wire == null || isMemberCut then
+            if wire == null && !isBound then
               null
             else
               {
@@ -1583,6 +1845,12 @@ in
           capability = if capability == null then null else capability.capability;
           providerMember = if capability == null then null else capability.member;
           providerInstance = target;
+
+          # What the provider says about how many slots may take this capability,
+          # for the deployment-wide count. A capability declaring nothing is
+          # taken by any number.
+          consumers = if providerDeclared == null then "many" else providerDeclared.consumers;
+          bound = isBound;
           entryKeys = map (c: c.entryKey) collected;
           entryAbsences = builtins.listToAttrs (
             map (c: {
@@ -1669,6 +1937,49 @@ in
         }
       ) (filter (iface: !(appliedSomewhere iface)) foldDeclared);
 
+      # Which slot took which capability, across the whole deployment. Counted
+      # over wires rather than placements or reads: a consumer placed on twelve
+      # machines is one consumer, and a binding is a wire the module wrote.
+      takenCapabilities = concatLists (
+        util.mapAttrsToList (
+          iname: inst:
+          concatLists (
+            util.mapAttrsToList (
+              mname: member:
+              util.mapAttrsToList (slotName: edge: {
+                provider = "${edge.providerInstance}:${edge.providerMember}.${edge.capability}";
+                inherit (edge) consumers;
+                capability = edge.capability;
+                owner = "${edge.providerInstance}:${edge.providerMember}";
+                consumer = "${iname}:${mname}.${slotName}";
+              }) (util.filterAttrs (_: edge: edge.capability != null) member.edges)
+            ) inst.members
+          )
+        ) resolved.instances
+      );
+
+      consumerRows =
+        util.mapAttrsToList
+          (
+            _: taken:
+            let
+              first = head taken;
+              slots = util.sortStrings (util.uniqueStrings (map (t: t.consumer) taken));
+            in
+            diag.error {
+              subject = first.owner;
+              id = "capability-consumers-exceeded";
+              message = "capability ${util.quote first.capability} of ${util.quote first.owner} declares `consumers = \"one\"` and is wired by ${util.quoteList slots}";
+              evidence = "the count is over wires rather than placements, so one consumer placed on several machines is one consumer and two slots naming it are two";
+              resolution = "declare `consumers = \"many\"` on ${util.quote first.capability} if it can serve both, or wire one of ${util.quoteList slots} to another capability";
+            }
+          )
+          (
+            util.filterAttrs (
+              _: taken: util.uniqueStrings (map (t: t.consumer) taken) != [ (head taken).consumer ]
+            ) (builtins.groupBy (t: t.provider) (filter (t: t.consumers == "one") takenCapabilities))
+          );
+
       resolved = {
         instances = mapAttrs mkInstance (
           util.filterAttrs (name: _: !(util.carriesKeySeparator name)) instances
@@ -1681,6 +1992,7 @@ in
           machineRows
           ++ nameRows
           ++ foldRows
+          ++ consumerRows
           ++ util.concatMapAttrsToList (
             _: inst:
             inst.rows

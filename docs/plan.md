@@ -25,6 +25,15 @@ each need the other's units to know their own key.
 An empty attribute set or list is an absence rather than a fact, so it is not
 written. `nightly:client@alpha` has no `alloc` because it claims no ports.
 
+A member an instance cut with `members.<name>.enable = false` is an **absence of
+records** rather than a record marked absent: no placed entry, no unplaced entry,
+no generated value entry and no name in any other entry's `dependsOn`. No field
+says a composition was cut or which members an instance kept, so a reader cannot
+tell an operator's cut from a module that never published the member — which is
+what makes a cut an authoring decision rather than a plan field. Every entry that
+remains carries the key it carries when nothing is cut, unless the cut moved its
+own resolved reads.
+
 ## A service entry
 
 ```json
@@ -43,7 +52,7 @@ written. `nightly:client@alpha` has no `alloc` because it claims no ports.
   },
   "env": { "BORG_QUOTA_GIB": "500", "BORG_RSH": "…/bin/ssh -i /run/vars/nightly/hostKey/ssh_host_ed25519_key" },
   "settings": { "client": { "path": { "source": "deployment", "value": "/home" } } },
-  "vars": { "hostKey": { "files": { "ssh_host_ed25519_key": { "secrecy": "secret", "inPlan": "reference", "deploy": true } } } },
+  "vars": { "hostKey": { "files": { "ssh_host_ed25519_key": { "secrecy": "secret", "inPlan": "reference", "deploy": true, "owner": "root", "group": "root", "mode": "0400" } } } },
   "provides": { … },
   "reads": { … }
 }
@@ -67,7 +76,7 @@ field, and the table below says why.
 | `env` | the variables **every unit of the entry agrees on**, and nothing else. A unit's environment lives on the unit, so two units disagreeing about a variable is two records and no row |
 | `configData."<path>"` | `{ mode, reload, computed }` plus the file's identity, below |
 | `settings.<member>.<knob>` | `{ value, source }` where source is `defaults`, `deployment` or `fixed` — every resolved value records where it came from |
-| `vars.<gen>.files.<file>` | `{ path, secrecy, inPlan, deploy }`, plus `bytes: "absent"` when the generator has not run. The path is the same on every machine that receives the value, and `deploy` is what tells a realiser whether bytes arrive at it: a realiser shows a path to a unit only where they do |
+| `vars.<gen>.files.<file>` | `{ path, secrecy, inPlan, deploy, owner, group, mode }`, plus `bytes: "absent"` when the generator has not run. The path is the same on every machine that receives the value, and `deploy` is what tells a realiser whether bytes arrive at it: a realiser shows a path to a unit only where they do |
 | `alloc.ports.<claim>` | the fixed port |
 
 ## A machine entry
@@ -100,7 +109,11 @@ entry's `target.system`, once per placement rather than once per machine.
   "deliveryDerivedFrom": ["nightly:client@alpha owns it", "vault-repo:server@vault named publicKey in uses.clients.reads"],
   "dependsOn": ["machine:alpha@sha256-5840440439b3bbf1"],
   "files": {
-    "ssh_host_ed25519_key": { "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key", "secrecy": "secret", "inPlan": "reference", "deploy": true }
+    "ssh_host_ed25519_key": {
+      "path": "/run/vars/nightly/hostKey/ssh_host_ed25519_key",
+      "secrecy": "secret", "inPlan": "reference", "deploy": true,
+      "owner": "root", "group": "root", "mode": "0400"
+    }
   }
 }
 ```
@@ -119,7 +132,7 @@ that read it, and a `per = "instance"` value has no single placement to live in.
 | `reads` | the sibling values' entry keys, absent when it reads none |
 | `dependsOn` | the sibling entries it reads, plus its own machine entry when `per = "placement"` |
 | `files` | the file records, keyed by file name. Always present, empty or not, for the reason `delivery` is: a generator declaring no file records an empty set rather than no field |
-| `files.<file>` | `{ path, secrecy, inPlan, deploy }` plus `bytes: "absent"` when the generator has not run |
+| `files.<file>` | `{ path, secrecy, inPlan, deploy, owner, group, mode }` plus `bytes: "absent"` when the generator has not run. `owner`, `group` and `mode` are what the write sets on every machine of the delivery set: one value has one answer about who may read it. They default to `root`, `root` and `0400`, and take part in the entry's key only where the declaration stated them, so a plan written before the fields existed is keyed as it was |
 | `program` | the store path of the program that produces the files, as the generator declared it. **Absent** where none was declared, and it takes part in the entry's key only where one was, so a plan written before this field existed is keyed as it was. It is the one store path in a plan the closure scan does not hold against a declared closure: a generator runs where the plan is read, never on a machine receiving its output — see [secrets.md](secrets.md) |
 
 The set is derived from the owner's placements plus the machine of every entry
@@ -250,6 +263,13 @@ behavioural difference the worked example exists to demonstrate.
 A read that did not deliver records `delivered: false` and the row says why; the
 module's `results` does not contain the slot at all.
 
+A slot a root bound to one of its own members records the same fields, with the
+resolved far end in `wire`: the instance is that root's own instance and the
+capability is the member's. Nothing marks it as a binding rather than a wire,
+because nothing downstream may act on the difference — a deployment that cuts
+the bound member and wires the slot elsewhere changes the far end and nothing
+else about the entry.
+
 ## Planes
 
 Where a value arrived decides what changing it does. An export record's `plane`
@@ -266,6 +286,7 @@ own rather than a `plane` string.
 | the `closure` list | a store path root the implementation **declared** | moves the closure |
 | `pin` | the lock entry the roots were resolved from | moves every entry built from it |
 | `target.system` | the platform record the entry was planned for | re-keys every entry placed on that machine |
+| a generated file's declared `owner`, `group` or `mode` | the bytes a reader on the machine can open | re-keys that value; a record that declares none of the three keys as it did before the fields existed |
 
 A generated file records the same distinction from the other side, as
 `vars.<gen>.files.<file>.inPlan`: `"value"` for a public file, whose bytes an
@@ -278,13 +299,25 @@ statement of where to.
 
 A configuration file names its bytes and never carries them. Beside `mode` and
 the `reload` list the module wrote, a computed file carries exactly one
-identity:
+identity. The list is acted on: the image realiser's attach script reloads
+exactly the units a file it rewrote names, reloading where the unit declared a
+reload command and restarting where it did not, and never starting a unit that
+was not running:
 
 | The implementation declared | The entry records |
 | --- | --- |
 | `source` | the store path itself, and no digest — the bytes are already identified by it |
 | `render` of literals only | the recipe and `contentHash`, a digest over the concatenated fragments, because the plan holds every byte it hashes |
 | `render` carrying any `ref` | the recipe and `structureHash`, a digest over the fragments and the reference paths, and **no digest over the assembled bytes** |
+
+**The three rows say when the bytes exist, and no field is added to say it.** A
+`source` file's bytes are a store path and a literal `render` is bytes the plan
+itself holds, so both exist before a machine is dialled — which is why the second
+row can carry `contentHash` at all. A `render` carrying a `ref` names a path on a
+machine, so its bytes exist only once that path has been written, which is why
+the third row hashes the structure instead. A realiser that runs no step on a
+machine reads exactly this to decide what it can carry: the first two it shows
+from a store path, and the third it refuses.
 
 ```json
 "configData": {

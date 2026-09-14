@@ -24,7 +24,6 @@ let
     messageById
     planOf
     publicString
-    root
     rowIds
     severityById
     soleRoot
@@ -127,11 +126,6 @@ let
       subject = "modules/svc.nix";
     };
 
-  identity = planner.interface {
-    name = "identity";
-    exports.publicKey = publicString;
-  };
-
   exclusionHeader = "| Out | Why not now | Trigger to add it |";
 
   readmeLines = filter isString (split "\n" (builtins.readFile "${support.folder}/README.md"));
@@ -164,12 +158,10 @@ let
     "collects"
     "contributes"
     "dynamicPort"
-    "enable"
     "externals"
     "frontier"
     "lifecycle"
     "locality"
-    "memberWire"
     "orchestrator"
     "pick"
     "probes"
@@ -312,71 +304,6 @@ in
       };
     };
 
-  testEnableIsRefused =
-    let
-      result = oneInstance (
-        placedOn "one" (root {
-          members.only = {
-            module = quiet;
-            enable = true;
-          };
-        })
-      );
-    in
-    excludedKeyFacts {
-      inherit result;
-      key = "enable";
-      subject = "svc:only";
-      trigger = "a module publishing a composition whose coherent cuts an operator wants";
-      also.namesMember = hasInfix "member `only` of instance `svc`" (
-        messageById "declaration-excluded-key" result
-      );
-    };
-
-  testMemberWireIsRefused =
-    let
-      result = oneInstance {
-        module = soleRoot {
-          module = _: {
-            uses.far = {
-              interface = identity;
-              reads = [ "publicKey" ];
-            };
-            impl = unit;
-          };
-        };
-        placement.every.only.machines = [ "one" ];
-        wire.far.only = {
-          instance = "provider";
-          provides = "thing";
-        };
-      };
-    in
-    {
-      expr = {
-        rows = ids result;
-        severity = severityById "declaration-excluded-key" result;
-        subjects = subjectsById "declaration-excluded-key" result;
-        namesTheCut = hasInfix "wires `far` of instance `svc` per member" (
-          messageById "declaration-excluded-key" result
-        );
-        namesTrigger = hasInfix "a module publishing a composition whose coherent cuts an operator wants" (
-          evidenceById "declaration-excluded-key" result
-        );
-        delivered = result.plan."svc:only@one".reads.far.delivered;
-        applicable = result.applicable;
-      };
-      expected = {
-        rows = [ "declaration-excluded-key" ];
-        severity = "error";
-        subjects = [ "svc:only" ];
-        namesTheCut = true;
-        namesTrigger = true;
-        delivered = false;
-        applicable = false;
-      };
-    };
-
   testExternalsIsRefused = moduleKeyFacts "externals" "U3 and U4";
 
   testCollectsIsRefused = moduleKeyFacts "collects" "clanServices/pki";
@@ -407,14 +334,13 @@ in
     };
     expected = {
       headerFound = true;
-      readmeRowCount = 7;
-      coveredRowCount = 7;
+      readmeRowCount = 6;
+      coveredRowCount = 6;
       coveredRows = [
         "collect family"
         "externals"
         "lifecycle"
         "locality"
-        "member cuts"
         "placement.pick/strategy/allocation"
         "runtime plane"
       ];
@@ -423,7 +349,6 @@ in
         "externals"
         "lifecycle"
         "locality"
-        "member cuts"
         "placement.pick/strategy/allocation"
         "runtime plane"
       ];

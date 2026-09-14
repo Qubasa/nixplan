@@ -11,10 +11,25 @@
 {
   pkgs,
   planner,
-  reader ? import ./read.nix { inherit planner; },
+  # The shared reading, handed the same assembly the image builder hands it: a
+  # configuration file whose bytes the plan holds is written at build time and
+  # carried in this artifact, so the path the unit binds is a path the machine
+  # holds once the artifact's closure has been copied.
+  reader ? import ./read.nix {
+    inherit planner;
+    reader = import ../image/read.nix {
+      inherit planner;
+      assemble = name: text: "${pkgs.writeText name text}";
+    };
+  },
 }:
 let
-  inherit (builtins) attrNames concatLists listToAttrs;
+  inherit (builtins)
+    attrNames
+    concatLists
+    filter
+    listToAttrs
+    ;
 in
 {
   inherit reader;
@@ -53,6 +68,15 @@ in
         ) (attrNames image.units)
       );
 
+      # A configuration file the reading assembled at build time, carried beside
+      # the units so the artifact holds every byte its units bind. A `source`
+      # file is already someone else's store object and needs no copy; a `ref`
+      # recipe is refused by the reading above.
+      assembled = map (p: {
+        name = "files${p.path}";
+        path = p.from;
+      }) (filter (p: p.kind == "configuration-file" && p.disposition == "literal") image.hostPaths);
+
       meta = reader.meta image;
     in
     (pkgs.linkFarm "flakelet-${image.name}" (
@@ -66,6 +90,7 @@ in
         name = "units/${u.file}";
         path = pkgs.writeText u.file u.text;
       }) rendered
+      ++ assembled
     )).overrideAttrs
       (old: {
         passthru = (old.passthru or { }) // {

@@ -68,12 +68,17 @@ let
       deploy ? null,
       reads ? null,
       also ? { },
+      fileArgs ? { },
+      unitArgs ? { },
       openIt ? true,
     }:
     _: {
       vars = {
         app = {
-          files."key".secrecy = "secret";
+          files."key" = {
+            secrecy = "secret";
+          }
+          // fileArgs;
         }
         // (if per == null then { } else { inherit per; })
         // (if deploy == null then { } else { inherit deploy; })
@@ -88,13 +93,16 @@ let
           units.only = {
             command = "/bin/true";
           }
-          // (if openIt then { env.KEYFILE = vars.app."key".path; } else { });
+          // (if openIt then { env.KEYFILE = vars.app."key".path; } else { })
+          // unitArgs;
         };
     };
 
   reader =
     {
       reads ? [ "key" ],
+      unitArgs ? { },
+      extraUnits ? { },
     }:
     _: {
       uses.far = {
@@ -104,12 +112,29 @@ let
       impl =
         { results, ... }:
         {
-          units.only = {
-            command = "/bin/true";
-            env.SAW = builtins.concatStringsSep "," (attrNames (results.far or { }));
-          };
+          units = {
+            only = {
+              command = "/bin/true";
+              env.SAW = builtins.concatStringsSep "," (attrNames (results.far or { }));
+            }
+            // unitArgs;
+          }
+          // extraUnits;
         };
     };
+
+  # The one extension field the readability rule reads. A unit's declared groups
+  # are whatever an extension application records under this name, whichever
+  # backend declared it, so this layer names no realiser.
+  grouped = planner.unitExtension {
+    backend = "systemd";
+    name = "systemd-service";
+    fields = {
+      supplementaryGroups = {
+        type = planner.korora.listOf planner.korora.string;
+      };
+    };
+  };
 
   # A generator declared through `vars.<name>` directly, so a test can write two
   # of them in two members of one root.
@@ -841,6 +866,9 @@ in
         rows = [ ];
         oneRecordForTwoMachines."label" = {
           deploy = true;
+          group = "root";
+          mode = "0400";
+          owner = "root";
           inPlan = "value";
           path = "/run/vars/holder/app/label";
           secrecy = "public";
@@ -849,6 +877,9 @@ in
         underTheOtherKey."label" = {
           bytes = "absent";
           deploy = true;
+          group = "root";
+          mode = "0400";
+          owner = "root";
           inPlan = "value";
           path = "/run/vars/holder/app/label";
           secrecy = "public";
@@ -927,6 +958,339 @@ in
         recorded = false;
         applicable = false;
         aShortHashIsNotOne = [ "vars-program-malformed" ];
+      };
+    };
+
+  # The record a file carries about who may open it. Five scenarios, each varying
+  # one field of one declaration.
+
+  testAFileThatDeclaresNothing =
+    let
+      result = deployment { };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        recorded = result.plan."holder:vars/app@alpha".files."key";
+        # The key a record that declares nothing produces, recorded from the tree
+        # before the three fields existed: a change that folds a defaulted
+        # ownership into the key fails here rather than re-keying every value.
+        key = result.plan."holder:vars/app@alpha".key;
+      };
+      expected = {
+        rows = [ ];
+        recorded = {
+          deploy = true;
+          owner = "root";
+          group = "root";
+          mode = "0400";
+          inPlan = "reference";
+          path = "/run/vars/holder/app/key";
+          secrecy = "secret";
+        };
+        key = "sha256-2d73b17afc75cde1";
+      };
+    };
+
+  testAFileReadableByAnAccount =
+    let
+      result = deployment {
+        ownerArgs = {
+          fileArgs = {
+            owner = "app";
+            group = "app";
+            mode = "0640";
+          };
+          unitArgs.user = "app";
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        recorded = result.plan."holder:vars/app@alpha".files."key";
+        # The same value spelling the defaults out is another value, because a
+        # record the deployment stated is what the key is built from.
+        differsFromTheStatedDefaults =
+          result.plan."holder:vars/app@alpha".key != (deployment {
+            ownerArgs = {
+              fileArgs = {
+                owner = "root";
+                group = "root";
+                mode = "0400";
+              };
+            };
+          }).plan."holder:vars/app@alpha".key;
+      };
+      expected = {
+        rows = [ ];
+        recorded = {
+          deploy = true;
+          owner = "app";
+          group = "app";
+          mode = "0640";
+          inPlan = "reference";
+          path = "/run/vars/holder/app/key";
+          secrecy = "secret";
+        };
+        differsFromTheStatedDefaults = true;
+      };
+    };
+
+  testAModeThatIsNotAMode =
+    let
+      badMode = deployment { ownerArgs.fileArgs.mode = "0999"; };
+      symbolic = deployment { ownerArgs.fileArgs.mode = "rw-r-----"; };
+      badOwner = deployment { ownerArgs.fileArgs.owner = "Not An Account"; };
+    in
+    {
+      expr = {
+        rows = rowIds badMode;
+        subjects = subjectsById "vars-file-ownership-malformed" badMode;
+        namesTheField = hasInfix "mode" (messageById "vars-file-ownership-malformed" badMode);
+        # The failing value is not recorded, so the default is what travels.
+        delivered = badMode.plan."holder:vars/app@alpha".files."key".mode;
+        applicable = badMode.applicable;
+        symbolicRows = rowIds symbolic;
+        ownerRows = rowIds badOwner;
+        ownerDelivered = badOwner.plan."holder:vars/app@alpha".files."key".owner;
+      };
+      expected = {
+        rows = [ "vars-file-ownership-malformed" ];
+        subjects = [ "holder:only" ];
+        namesTheField = true;
+        delivered = "0400";
+        applicable = false;
+        symbolicRows = [ "vars-file-ownership-malformed" ];
+        ownerRows = [ "vars-file-ownership-malformed" ];
+        ownerDelivered = "root";
+      };
+    };
+
+  testTwoValuesDifferingOnlyInMode =
+    let
+      narrow = deployment { ownerArgs.fileArgs.mode = "0400"; };
+      wide = deployment { ownerArgs.fileArgs.mode = "0440"; };
+      entryOf = result: result.plan."holder:vars/app@alpha";
+    in
+    {
+      expr = {
+        # The bytes on a machine differ in a way a reader can observe, so the two
+        # are two values rather than one delivered twice.
+        keysDiffer = (entryOf narrow).key != (entryOf wide).key;
+        modes = [
+          (entryOf narrow).files."key".mode
+          (entryOf wide).files."key".mode
+        ];
+        rows = rowIds narrow ++ rowIds wide;
+      };
+      expected = {
+        keysDiffer = true;
+        modes = [
+          "0400"
+          "0440"
+        ];
+        rows = [ ];
+      };
+    };
+
+  testOneValueOnTwoMachines =
+    let
+      result = deployment {
+        ownerArgs = {
+          per = "instance";
+          fileArgs = {
+            owner = "app";
+            group = "app";
+            mode = "0640";
+          };
+          unitArgs.user = "app";
+        };
+        ownerMachines = [
+          "alpha"
+          "beta"
+        ];
+      };
+      recorded = result.plan."holder:vars/app".files."key";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        delivery = result.plan."holder:vars/app".delivery;
+        # One value, one answer about who may read it, however many machines it
+        # reaches: the record is the value's and not a machine's.
+        recorded = {
+          inherit (recorded) owner group mode;
+        };
+        entries = builtins.length (
+          builtins.filter (k: builtins.match "holder:vars/app.*" k != null) (attrNames result.plan)
+        );
+      };
+      expected = {
+        rows = [ ];
+        delivery = [
+          "alpha"
+          "beta"
+        ];
+        recorded = {
+          owner = "app";
+          group = "app";
+          mode = "0640";
+        };
+        entries = 1;
+      };
+    };
+
+  # The row a unit earns for reading a value its account cannot open. One
+  # scenario per direction of the comparison.
+
+  testAUnitRunningAsAnAccountReadsARootOnlyValue =
+    let
+      result = deployment {
+        consumer = reader { unitArgs.user = "app"; };
+      };
+      row = messageById "slot-reads-value-unreadable-by-user" result;
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        subjects = subjectsById "slot-reads-value-unreadable-by-user" result;
+        namesTheUnit = hasInfix "unit `only`" row;
+        namesTheAccount = hasInfix "`app`" row;
+        namesTheSlot = hasInfix "slot `far`" row;
+        namesTheExport = hasInfix "`key`" row;
+        namesTheRecord = hasInfix "`root:root` at mode `0400`" row;
+        applicable = result.applicable;
+        # The entry is still recorded: a row is not a refusal to plan.
+        theEntryIsPlanned = result.plan ? "client:only@beta";
+      };
+      expected = {
+        rows = [ "slot-reads-value-unreadable-by-user" ];
+        subjects = [ "client:only@beta" ];
+        namesTheUnit = true;
+        namesTheAccount = true;
+        namesTheSlot = true;
+        namesTheExport = true;
+        namesTheRecord = true;
+        applicable = false;
+        theEntryIsPlanned = true;
+      };
+    };
+
+  testAUnitRunningAsTheAccountTheFileNames =
+    let
+      result = deployment {
+        ownerArgs = {
+          fileArgs.owner = "app";
+          unitArgs.user = "app";
+        };
+        consumer = reader { unitArgs.user = "app"; };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        recorded = result.plan."holder:vars/app@alpha".files."key".owner;
+        theReadIsRecorded = result.plan."client:only@beta".reads.far ? entry;
+      };
+      expected = {
+        rows = [ ];
+        recorded = "app";
+        theReadIsRecorded = true;
+      };
+    };
+
+  testAUnitReadingAGroupReadableValue =
+    let
+      result = deployment {
+        ownerArgs = {
+          fileArgs = {
+            group = "readers";
+            mode = "0640";
+          };
+        };
+        consumer = reader {
+          unitArgs = {
+            user = "app";
+            extends = [
+              {
+                extension = grouped;
+                values.supplementaryGroups = [ "readers" ];
+              }
+            ];
+          };
+        };
+      };
+      # The same declaration without the group is the row, so the group is what
+      # the rule read rather than the mode alone.
+      without = deployment {
+        ownerArgs = {
+          fileArgs = {
+            group = "readers";
+            mode = "0640";
+          };
+        };
+        consumer = reader { unitArgs.user = "app"; };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        withoutTheGroup = rowIds without;
+      };
+      expected = {
+        rows = [ ];
+        withoutTheGroup = [ "slot-reads-value-unreadable-by-user" ];
+      };
+    };
+
+  testAPrivilegedUnitReadsARootOnlyValue =
+    let
+      result = deployment {
+        consumer = reader { };
+      };
+      worldReadable = deployment {
+        ownerArgs.fileArgs.mode = "0444";
+        consumer = reader { unitArgs.user = "app"; };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        # A mode with the world bit admits every account, so the declared user is
+        # not compared at all.
+        aWorldReadableValue = rowIds worldReadable;
+      };
+      expected = {
+        rows = [ ];
+        aWorldReadableValue = [ ];
+      };
+    };
+
+  testOneUnitOfTwoCannotOpenTheValue =
+    let
+      result = deployment {
+        consumer = reader {
+          unitArgs.user = "app";
+          extraUnits.privileged.command = "/bin/true";
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        count = countById "slot-reads-value-unreadable-by-user" result;
+        namesTheFirst = hasInfix "unit `only`" (messageById "slot-reads-value-unreadable-by-user" result);
+        bothUnitsRecorded = attrNames result.plan."client:only@beta".units;
+      };
+      expected = {
+        rows = [ "slot-reads-value-unreadable-by-user" ];
+        count = 1;
+        namesTheFirst = true;
+        bothUnitsRecorded = [
+          "only"
+          "privileged"
+        ];
       };
     };
 }

@@ -7,7 +7,6 @@
     "locality"
     "lifecycle"
     "placement.pick/strategy/allocation"
-    "member cuts"
     "externals"
     "collect family"
     "runtime plane"
@@ -33,14 +32,6 @@
     dynamicPort = {
       row = "placement.pick/strategy/allocation";
       trigger = "a persisted allocation table, so that a port chosen without a recorded claim does not move on the next evaluation and re-key the entry that claimed it";
-    };
-    enable = {
-      row = "member cuts";
-      trigger = "a module publishing a composition whose coherent cuts an operator wants";
-    };
-    memberWire = {
-      row = "member cuts";
-      trigger = "a module publishing a composition whose coherent cuts an operator wants";
     };
     externals = {
       row = "externals";

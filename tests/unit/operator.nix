@@ -75,6 +75,58 @@ let
       };
     };
 
+  # A configuration file whose recipe reads a delivered path: its bytes exist on
+  # no machine until that path is written, which is the one host path the default
+  # realiser still runs no step for.
+  refBearing = planOf {
+    instances.svc = {
+      module = soleRoot {
+        module = _: {
+          vars.hostKey.files."key".secrecy = "secret";
+          impl =
+            { vars, ... }:
+            {
+              closure = [ borgbackup ];
+              units.only.command = "${borgbackup}/bin/borg serve";
+              configData."/etc/agent.conf" = {
+                mode = "0400";
+                reload = [ "only" ];
+                render = [
+                  { text = "key_file = "; }
+                  { ref = vars.hostKey."key".path; }
+                ];
+              };
+            };
+        };
+      };
+      placement.every.only.machines = [ "one" ];
+    };
+    varsState."svc:vars/hostKey@one"."key" = {
+      present = true;
+      content = "PRIVATE-KEY-BYTES";
+    };
+  };
+
+  # An extension the library accepts and no realiser's directive table names.
+  unrenderedExtension = planner.unitExtension {
+    backend = "systemd";
+    name = "exotic";
+    fields.blockIODeviceWeight.type = support.korora.string;
+  };
+
+  extendedBeyondTheTable = _: {
+    closure = [ borgbackup ];
+    units.only = {
+      command = "${borgbackup}/bin/borg serve";
+      extends = [
+        {
+          extension = unrenderedExtension;
+          values.blockIODeviceWeight = "/dev/sda 500";
+        }
+      ];
+    };
+  };
+
   one = deployment simple;
   oneKey = "svc:only@one";
 
@@ -153,6 +205,9 @@ let
       files."ca.pub" = {
         path = "/run/vars/holder/app/ca.pub";
         secrecy = "public";
+        owner = "root";
+        group = "root";
+        mode = "0400";
       };
     };
   };
@@ -249,15 +304,25 @@ in
         recorded = reading.manifest.values.${key}.files.token;
       };
       expected = {
-        rows = [ "operator-plan-field-missing" ];
+        # One row per field the record owes the command: the secrecy and the
+        # three the write reads.
+        rows = [
+          "operator-plan-field-missing"
+          "operator-plan-field-missing"
+          "operator-plan-field-missing"
+          "operator-plan-field-missing"
+        ];
         namesTheEntry = key;
         namesTheField = true;
         namesWhere = true;
         severity = "error";
-        table = 1;
+        table = 4;
         recorded = {
           path = "/run/vars/issuer/session/token";
           secrecy = "";
+          owner = "";
+          group = "";
+          mode = "";
         };
       };
     };
@@ -640,10 +705,16 @@ in
             "ssh_host_ed25519_key" = {
               path = "/run/vars/nightly/hostKey/ssh_host_ed25519_key";
               secrecy = "secret";
+              owner = "root";
+              group = "root";
+              mode = "0400";
             };
             "ssh_host_ed25519_key.pub" = {
               path = "/run/vars/nightly/hostKey/ssh_host_ed25519_key.pub";
               secrecy = "public";
+              owner = "root";
+              group = "root";
+              mode = "0400";
             };
           };
         };
@@ -653,6 +724,9 @@ in
           files."ca.pub" = {
             path = "/run/vars/holder/app/ca.pub";
             secrecy = "public";
+            owner = "root";
+            group = "root";
+            mode = "0400";
           };
         };
         carriesNoBytes = {
@@ -673,6 +747,9 @@ in
           files."token" = {
             path = "/run/vars/holder/minted/token";
             secrecy = "secret";
+            owner = "root";
+            group = "root";
+            mode = "0400";
           };
         };
       };
@@ -690,6 +767,9 @@ in
           files."token" = {
             path = "/run/vars/holder/minted/token";
             secrecy = "secret";
+            owner = "root";
+            group = "root";
+            mode = "0400";
           };
         };
         unprogrammed = false;
@@ -997,25 +1077,112 @@ in
 
   testAConfigurationFileMeetsARealiserWithNoAssembleStep =
     let
-      reading = reader.read { inherit (worked) plan; };
+      reading = readOf { } refBearing;
       row = builtins.head (rowsById "operator-entry-path-not-assembled" reading);
     in
     {
       expr = {
         rows = idsOf reading;
         subject = row.subject;
-        namesThePath = hasInfix "`/srv/borg/.ssh/authorized_keys`" row.message;
+        namesThePath = hasInfix "`/etc/agent.conf`" row.message;
+        namesTheReference = hasInfix "`/run/vars/svc/hostKey/key`" row.message;
         namesTheRealiser = hasInfix "`flakelet`" row.message;
         statesTheRealisersOwnRule = hasInfix flakeletReader.pathRule row.message;
         refused = reading.refused;
       };
       expected = {
         rows = [ "operator-entry-path-not-assembled" ];
-        subject = "vault-repo:server@vault";
+        subject = "svc:only@one";
         namesThePath = true;
+        namesTheReference = true;
         namesTheRealiser = true;
         statesTheRealisersOwnRule = true;
         refused = true;
+      };
+    };
+
+  # Which fields reach a unit file is the realiser's own table, so a field the
+  # library accepted and no table names is a row before any build raises.
+  testAFieldNoBuilderRenders =
+    let
+      reading = readOf { } (deployment extendedBeyondTheTable);
+      row = builtins.head (rowsById "operator-entry-extension-field-unrendered" reading);
+    in
+    {
+      expr = {
+        rows = idsOf reading;
+        subject = row.subject;
+        namesTheUnit = hasInfix "unit `only`" row.message;
+        namesTheField = hasInfix "`blockIODeviceWeight`" row.message;
+        namesTheBackend = hasInfix "`systemd`" row.message;
+        refused = reading.refused;
+      };
+      expected = {
+        rows = [ "operator-entry-extension-field-unrendered" ];
+        subject = "svc:only@one";
+        namesTheUnit = true;
+        namesTheField = true;
+        namesTheBackend = true;
+        refused = true;
+      };
+    };
+
+  testTheSameFieldUnderARealiserThatRendersIt =
+    let
+      reading = readOf {
+        "svc:only" = {
+          realiser = "image";
+          profile = "trusted";
+        };
+      } (deployment extendedBeyondTheTable);
+    in
+    {
+      expr = {
+        rows = idsOf reading;
+        refused = reading.refused;
+      };
+      expected = {
+        rows = [ "operator-entry-extension-field-unrendered" ];
+        refused = true;
+      };
+    };
+
+  # The field is taken from the realiser's own table rather than a list restated
+  # here, so a table that gains a field is a field this row stops naming with no
+  # edit under `operator/`.
+  testAFieldAddedToARealisersTableStopsBeingReported =
+    let
+      rendered = builtins.head (sorted (attrNames imageReader.systemdDirectives));
+      inTheTable = planner.unitExtension {
+        backend = "systemd";
+        name = "rendered";
+        fields.${rendered}.type = support.korora.string;
+      };
+      reading = readOf { } (
+        deployment (_: {
+          closure = [ borgbackup ];
+          units.only = {
+            command = "${borgbackup}/bin/borg serve";
+            extends = [
+              {
+                extension = inTheTable;
+                values.${rendered} = "on";
+              }
+            ];
+          };
+        })
+      );
+    in
+    {
+      expr = {
+        rows = idsOf reading;
+        refused = reading.refused;
+        artifact = reading.entries."svc:only@one".artifact;
+      };
+      expected = {
+        rows = [ ];
+        refused = false;
+        artifact = "entries/svc-only-one";
       };
     };
 
@@ -1248,6 +1415,64 @@ in
         machineKeyMoves = true;
         publishedIdentityStays = true;
         artifactNameStays = true;
+      };
+    };
+
+  testARootOnlyValueUnderAConfiningProfile =
+    let
+      result = planOf {
+        instances.svc = {
+          module = soleRoot {
+            module = _: {
+              vars.hostKey.files."key".secrecy = "secret";
+              impl =
+                { vars, ... }:
+                {
+                  closure = [ borgbackup ];
+                  units.only = {
+                    command = "${borgbackup}/bin/borg serve";
+                    env.KEYFILE = vars.hostKey."key".path;
+                  };
+                };
+            };
+          };
+          placement.every.only.machines = [ "one" ];
+        };
+        varsState."svc:vars/hostKey@one"."key".present = true;
+      };
+      confined = readOf {
+        default = {
+          realiser = "image";
+          profile = "strict";
+        };
+      } result;
+      row = builtins.head (rowsById "operator-entry-access-denied" confined);
+    in
+    {
+      expr = {
+        rows = idsOf confined;
+        namesTheUnit = hasInfix "`only`" row.message;
+        namesTheFile = hasInfix "`/run/vars/svc/hostKey/key`" row.message;
+        namesTheRecord = hasInfix "`root:root at mode 0400`" row.message;
+        namesTheAccount = hasInfix "`a transient account`" row.message;
+        # The same condition ends the build: the row is above the raise, which is
+        # what `tests/unit/diagnostics.nix` crosses account against row for.
+        theRealiserRefuses =
+          !(builtins.tryEval (
+            builtins.deepSeq (imageReader.read {
+              plan = result.plan;
+              key = "svc:only@one";
+              profile = "strict";
+            }) null
+          )).success;
+      };
+      expected = {
+        rows = [ "operator-entry-access-denied" ];
+        namesTheUnit = true;
+        namesTheFile = true;
+        namesTheRecord = true;
+        namesTheAccount = true;
+        theRealiserRefuses = true;
       };
     };
 }

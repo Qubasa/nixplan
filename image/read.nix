@@ -10,11 +10,20 @@
 # field carries and this file is never handed whole. A raise here is therefore the
 # answer a caller reaching this file directly receives, and no path through the
 # deployment build reaches one without the row having been produced first.
-{ planner }:
+{
+  planner,
+  # How the caller turns bytes the plan already holds into a store object. This
+  # reading realises nothing, so a configuration file assembled from literals is
+  # written by whoever is building: the image puts it in its own closure and
+  # flakelet puts it beside `units/`. A reading handed none answers about the
+  # dispositions and renders nothing.
+  assemble ? null,
+}:
 let
   inherit (builtins)
     all
     attrNames
+    attrValues
     concatLists
     elem
     filter
@@ -26,6 +35,7 @@ let
     match
     replaceStrings
     sort
+    substring
     ;
   inherit (planner.util)
     mapAttrsToList
@@ -80,6 +90,29 @@ let
     memoryMax = "MemoryMax";
     tasksMax = "TasksMax";
     nice = "Nice";
+    supplementaryGroups = "SupplementaryGroups";
+  };
+
+  # How every unit field this realiser renders reaches a unit file. A field the
+  # plan can carry and this table does not name fails the build the way an
+  # unknown extension field does: a vocabulary that grew and a realiser that did
+  # not is the realiser's defect rather than the deployment's. `extends` is the
+  # extension namespace and reaches a unit file through the table above.
+  unitDirectives = {
+    command = "ExecStart";
+    stopCommand = "ExecStop";
+    reloadCommand = "ExecReload";
+    oneShot = "Type";
+    remainAfterExit = "RemainAfterExit";
+    timeout = "TimeoutStartSec";
+    restart = "Restart";
+    restartSec = "RestartSec";
+    user = "User";
+    env = "Environment";
+    after = "After";
+    requires = "Requires";
+    schedule = "OnCalendar";
+    extends = null;
   };
 
   backend = "systemd";
@@ -105,9 +138,10 @@ let
     profileUnknown.id = "operator-image-profile-unknown";
     closureRootUndeclared.id = "closure-path-undeclared";
     extensionForeignBackend.id = "unit-extension-backend-mismatch";
-    extensionFieldUnknown = {
+    extensionFieldUnknown.id = "operator-entry-extension-field-unrendered";
+    unitFieldUnrendered = {
       id = null;
-      because = "the field is one an extension declared and the library accepted, and this builder's own directive table is missing it, which is a defect of the builder rather than of the deployment";
+      because = "the field is one the unit vocabulary carries and this builder's own directive table is missing it, which is a defect of the builder rather than of the deployment";
     };
     extensionValueUnspellable = {
       id = null;
@@ -119,6 +153,10 @@ let
     closureRootIsReference.id = "closure-root-is-delivered";
     accessDenied.id = "operator-entry-access-denied";
     unitEnvNewline.id = "unit-env-value-newline";
+    hostPathUnassembled = {
+      id = null;
+      because = "a configuration file whose bytes the plan holds is written by whoever is building, and both builders hand this reading an assembly; a reading asked only about the plan answers about its dispositions and renders nothing";
+    };
   };
 
   fail = _account: message: throw "planner image: ${message}";
@@ -197,7 +235,14 @@ let
         gen: g:
         mapAttrsToList (fname: file: {
           inherit gen fname;
-          inherit (file) path secrecy deploy;
+          inherit (file)
+            path
+            secrecy
+            deploy
+            owner
+            group
+            mode
+            ;
           inPlan = file.inPlan;
           present = !(file ? bytes);
         }) g.files
@@ -212,17 +257,75 @@ let
       source = file.source or null;
       render = file.render or null;
       staged = stagedPath name path;
+      disposition = dispositionOf file;
     }) (entry.configData or { });
+
+  # A projected file record carries `render = null` where the plan recorded a
+  # source, so every reader of a recipe goes through this rather than `or [ ]`.
+  renderOf = file: if (file.render or null) == null then [ ] else file.render;
+
+  # When a configuration file's bytes exist. A source file is already a store
+  # object and a render of nothing but literals is bytes the plan itself holds,
+  # so both exist before a machine is dialled. A render carrying a reference
+  # names a path on a machine, so its bytes exist only once that path is written,
+  # and a file the planner recorded as not computed carries no recipe at all.
+  dispositionOf =
+    file:
+    if !(file.computed or false) then
+      reference
+    else if (file.source or null) != null then
+      "source"
+    else if all (i: i ? text) (renderOf file) then
+      "literal"
+    else
+      reference;
+
+  literalsOf = file: builtins.concatStringsSep "" (map (i: i.text) (renderOf file));
+
+  firstRefOf =
+    file:
+    let
+      refs = filter (i: i ? ref) (renderOf file);
+    in
+    if refs == [ ] then null else (builtins.head refs).ref;
+
+  assembledName =
+    name: path:
+    "${name}-config-${
+      replaceStrings [ "/" "." " " ] [ "-" "-" "-" ] (
+        builtins.substring 1 (builtins.stringLength path) path
+      )
+    }";
+
+  # Where the bytes the bind reads come from. A store path arrives with the
+  # entry's closure, a delivered file arrives at its own path, and only a recipe
+  # naming a reference is staged by a step on the machine.
+  fromOf =
+    name: f:
+    if f.disposition == "source" then
+      f.source
+    else if f.disposition == "literal" then
+      (if assemble == null then null else assemble (assembledName name f.path) (literalsOf f))
+    else
+      f.staged;
 
   hostPathsOf =
     { name, entry }:
-    map (f: {
-      path = f.path;
-      from = f.staged;
-      kind = "configuration-file";
-      inherit (f) mode;
-      disposition = if f.source != null then "source" else "render";
-    }) (configFilesOf name entry)
+    map (
+      f:
+      {
+        path = f.path;
+        from = fromOf name f;
+        kind = "configuration-file";
+        inherit (f) mode disposition;
+      }
+      // (
+        let
+          needs = firstRefOf f;
+        in
+        if needs == null then { } else { inherit needs; }
+      )
+    ) (configFilesOf name entry)
     ++ map (g: {
       path = g.path;
       from = g.path;
@@ -230,6 +333,44 @@ let
       inherit (g) secrecy;
       disposition = g.inPlan;
     }) (filter (g: g.deploy && g.inPlan == reference) (generatedOf entry));
+
+  # Whether a confined unit may open a delivered file, from the record alone. A
+  # read bit is the octal digit carrying 4, and a confined unit is never root, so
+  # a unit declaring no account is admitted by nothing but the world bit.
+  opens =
+    digit:
+    elem digit [
+      "4"
+      "5"
+      "6"
+      "7"
+    ];
+
+  groupsOf =
+    unit:
+    concatLists (
+      map (
+        fields:
+        let
+          declared = fields.supplementaryGroups or null;
+        in
+        if isList declared then
+          filter isString declared
+        else if isString declared then
+          [ declared ]
+        else
+          [ ]
+      ) (attrValues (unit.extends or { }))
+    );
+
+  admits =
+    unit: g:
+    let
+      account = unit.user or null;
+    in
+    (account != null && account == g.owner && opens (substring 1 1 g.mode))
+    || (elem g.group (groupsOf unit) && opens (substring 2 1 g.mode))
+    || opens (substring 3 1 g.mode);
 
   denialsOf =
     {
@@ -251,11 +392,15 @@ let
             unit = u;
             access = "a host file only root may read";
             inherit (g) path;
-          }) (attrNames units)
+            # The record and the account, so the row and the refusal name the
+            # facts a deployment can change rather than the file's secrecy.
+            record = "${g.owner}:${g.group} at mode ${g.mode}";
+            account = if units.${u} ? user then units.${u}.user else "a transient account";
+          }) (filter (u: !(admits units.${u} g)) (attrNames units))
         )
         (
           if elem "a host file only root may read" denies then
-            filter (g: g.deploy && g.secrecy == "secret" && g.inPlan == reference) generated
+            filter (g: g.deploy && g.inPlan == reference) generated
           else
             [ ]
         )
@@ -266,6 +411,9 @@ rec {
     profiles
     profileNames
     systemdDirectives
+    unitDirectives
+    dispositionOf
+    literalsOf
     backend
     nameOf
     unitFileName
@@ -299,12 +447,18 @@ rec {
   # The digest the endpoint stores for an artifact, over the artifact's own
   # content and never over the plan key: a fact that moves a key without moving a
   # byte leaves this where it was.
+  #
+  # A shown path enters the digest by what its bytes are rather than by where a
+  # builder put them: a file assembled from literals is described by the
+  # literals, so two readings of one entry - one handed an assembly and one not -
+  # answer the same digest, which is what lets `operator/read.nix` publish it.
   versionFor =
     { key, entry }:
     let
       parts = parseKey key;
       name = nameOf parts;
       target = entry.target or { };
+      byPath = path: builtins.head (filter (f: f.path == path) (configFilesOf name entry));
     in
     versionOf {
       inherit name;
@@ -312,7 +466,21 @@ rec {
       closure = entry.closure or [ ];
       storeDir = entry.storeDir or "";
       serviceManager = target.serviceManager or "";
-      hostPaths = hostPathsOf { inherit name entry; };
+      hostPaths =
+        map
+          (
+            p:
+            removeAttrs p [ "from" ]
+            // (
+              if p.kind == "configuration-file" && p.disposition == "literal" then
+                { bytes = literalsOf (byPath p.path); }
+              else
+                { inherit (p) from; }
+            )
+          )
+          (hostPathsOf {
+            inherit name entry;
+          });
       inherit (parts) instance service machine;
       platform = target.system or null;
     };
@@ -393,6 +561,8 @@ rec {
           unknownFields = subtractList (attrNames fields) (attrNames systemdDirectives);
           unspellable = filter (f: spell fields.${f} == null) (subtractList (attrNames fields) unknownFields);
 
+          unrenderable = subtractList (attrNames unit) (attrNames unitDirectives);
+
           references = filter (r: elem r (attrNames unit)) [
             "after"
             "requires"
@@ -404,6 +574,8 @@ rec {
           fail accounts.extensionForeignBackend "entry ${quote key} unit ${quote unitName} records extension fields for backend ${quote (builtins.head (sortStrings foreignBackends))}, and this builder renders ${quote backend}"
         else if unknownFields != [ ] then
           fail accounts.extensionFieldUnknown "entry ${quote key} unit ${quote unitName} records extension field ${quote (builtins.head (sortStrings unknownFields))}, which this builder has no rendering for"
+        else if unrenderable != [ ] then
+          fail accounts.unitFieldUnrendered "entry ${quote key} unit ${quote unitName} records ${quote (builtins.head (sortStrings unrenderable))}, which the unit vocabulary carries and this builder's directive table does not name"
         else if unspellable != [ ] then
           fail accounts.extensionValueUnspellable "entry ${quote key} unit ${quote unitName} records extension field ${quote (builtins.head (sortStrings unspellable))} with a value this builder cannot spell as a directive"
         else
@@ -453,7 +625,12 @@ rec {
       let
         first = builtins.head denied;
       in
-      fail accounts.accessDenied "entry ${quote key} unit ${quote first.unit} needs ${first.access}, and the stated confinement profile ${quote profile} denies it; the profile is not widened on the entry's behalf"
+      fail accounts.accessDenied "entry ${quote key} unit ${quote first.unit} needs ${first.access}${
+        if first ? path then
+          " at ${quote first.path}, recorded ${quote first.record} and read by ${quote first.account},"
+        else
+          ","
+      } and the stated confinement profile ${quote profile} denies it; the profile is not widened on the entry's behalf"
     else if unprintable != [ ] then
       let
         first = builtins.head unprintable;
@@ -496,6 +673,11 @@ rec {
         k: "Environment=\"${k}=${replaceStrings [ "\\" "\"" ] [ "\\\\" "\\\"" ] unit.env.${k}}\""
       ) (sortStrings (attrNames (unit.env or { })));
 
+      # Every shown path has to name bytes the machine holds. A literal recipe's
+      # bytes are the builder's to write, so a reading handed no assembly cannot
+      # render one at all.
+      unassembled = filter (p: p.from == null) image.hostPaths;
+
       binds = map (p: "BindReadOnlyPaths=${p.from}:${p.path}") (
         sort (a: b: a.path < b.path) image.hostPaths
       );
@@ -504,29 +686,36 @@ rec {
         sortStrings (attrNames u.directives)
       );
     in
-    builtins.concatStringsSep "\n" (
-      [
-        "[Unit]"
-        "Description=${image.instance}:${image.service} ${unitName}"
-      ]
-      ++ optional (unit ? after) (map (r: "After=${prefixed r}") unit.after)
-      ++ optional (unit ? requires) (map (r: "Requires=${prefixed r}") unit.requires)
-      ++ [
-        ""
-        "[Service]"
-        "ExecStart=${unit.command}"
-      ]
-      ++ optional (unit ? stopCommand) [ "ExecStop=${unit.stopCommand}" ]
-      ++ optional (unit ? reloadCommand) [ "ExecReload=${unit.reloadCommand}" ]
-      ++ optional (unit.oneShot or false) [ "Type=oneshot" ]
-      ++ optional (unit ? remainAfterExit) [ "RemainAfterExit=${spell unit.remainAfterExit}" ]
-      ++ optional (unit ? timeout) [ "TimeoutStartSec=${unit.timeout}" ]
-      ++ optional (unit ? user) [ "User=${unit.user}" ]
-      ++ environment
-      ++ binds
-      ++ extensionLines
-    )
-    + "\n";
+    if unassembled != [ ] then
+      fail accounts.hostPathUnassembled "entry ${quote image.key} is shown the host path ${quote (builtins.head unassembled).path} whose bytes this reading was handed no way to assemble"
+    else
+      builtins.concatStringsSep "\n" (
+        [
+          "[Unit]"
+          "Description=${image.instance}:${image.service} ${unitName}"
+        ]
+        ++ optional (unit ? after) (map (r: "${unitDirectives.after}=${prefixed r}") unit.after)
+        ++ optional (unit ? requires) (map (r: "${unitDirectives.requires}=${prefixed r}") unit.requires)
+        ++ [
+          ""
+          "[Service]"
+          "${unitDirectives.command}=${unit.command}"
+        ]
+        ++ optional (unit ? stopCommand) [ "${unitDirectives.stopCommand}=${unit.stopCommand}" ]
+        ++ optional (unit ? reloadCommand) [ "${unitDirectives.reloadCommand}=${unit.reloadCommand}" ]
+        ++ optional (unit.oneShot or false) [ "${unitDirectives.oneShot}=oneshot" ]
+        ++ optional (unit ? remainAfterExit) [
+          "${unitDirectives.remainAfterExit}=${spell unit.remainAfterExit}"
+        ]
+        ++ optional (unit ? timeout) [ "${unitDirectives.timeout}=${unit.timeout}" ]
+        ++ optional (unit ? restart) [ "${unitDirectives.restart}=${unit.restart}" ]
+        ++ optional (unit ? restartSec) [ "${unitDirectives.restartSec}=${unit.restartSec}" ]
+        ++ optional (unit ? user) [ "${unitDirectives.user}=${unit.user}" ]
+        ++ environment
+        ++ binds
+        ++ extensionLines
+      )
+      + "\n";
 
   # A scheduled unit becomes a timer beside the service, both carrying the image's
   # prefix, because a schedule is a trigger and not a property of the service.

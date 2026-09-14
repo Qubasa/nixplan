@@ -23,10 +23,13 @@ let
 
   inherit (support)
     countById
+    evidenceById
     hasInfix
     messageById
     planOf
     publicString
+    resolutionById
+    root
     rowIds
     severityById
     soleRoot
@@ -762,6 +765,98 @@ let
         });
       };
     };
+
+  consumerOfPub = reader {
+    interface = pub;
+    reads = [ "publicKey" ];
+  };
+
+  # A root that binds one member's slot to its sibling's capability. A deployment
+  # keeps the binding, cuts the member out from under it, or contradicts it.
+  boundPair =
+    { service, ... }:
+    let
+      backend = service "backend" { module = pubProvider; };
+      app = service "app" {
+        module = consumerOfPub;
+        wire.slot = backend.provides.thing;
+      };
+    in
+    {
+      services = {
+        inherit backend app;
+      };
+      provides.thing = backend.provides.thing;
+    };
+
+  twoQuiet = root {
+    members = {
+      keeper.module = quiet;
+      gone.module = quiet;
+    };
+  };
+
+  # The same capability as `pubProvider` publishes, declared for one slot.
+  soleUseProvider = _: {
+    provides.thing = {
+      interface = pub;
+      consumers = "one";
+    };
+    impl = _: {
+      provides.thing.exports.publicKey = "ssh-ed25519 AAAA";
+      units.only.command = "/bin/true";
+    };
+  };
+
+  takenTwice = planOf {
+    instances = {
+      vault = exposedOn [ "one" ] (soleRoot {
+        module = soleUseProvider;
+        provides = [ "thing" ];
+      });
+      first = wiredTo "one" "vault" (soleRoot {
+        module = consumerOfPub;
+      });
+      second = wiredTo "two" "vault" (soleRoot {
+        module = consumerOfPub;
+      });
+    };
+  };
+
+  exclusionHeader = "| Out | Why not now | Trigger to add it |";
+
+  fixtureReadme = builtins.readFile "${support.folder}/README.md";
+
+  exclusionTableRows =
+    (builtins.foldl'
+      (
+        st: line:
+        if st.closed then
+          st
+        else if !st.open then
+          st // { open = line == exclusionHeader; }
+        else if substring 0 1 line != "|" then
+          st // { closed = true; }
+        else if builtins.match "[|[:space:]-]+" line != null then
+          st
+        else
+          st // { rows = st.rows + 1; }
+      )
+      {
+        open = false;
+        closed = false;
+        rows = 0;
+      }
+      (support.lines fixtureReadme)
+    ).rows;
+
+  # The exclusion suite as data rather than as text: which constructs it refuses
+  # is what it states, and a row nobody refuses is what this crosses.
+  exclusionSuite = import (repoSource + "/tests/unit/exclusions.nix") { inherit planner support; };
+
+  exclusionCoverage = exclusionSuite.testEveryExclusionTableRowIsCovered;
+
+  constructRows = map (construct: construct.row) (builtins.attrValues planner.excluded.constructs);
 in
 {
   testAnInstanceNamesNoModule =
@@ -1727,7 +1822,7 @@ in
         unaccounted = [ ];
         namedByNoProducer = [ ];
         unexamined = [ ];
-        readSomeRefusals = 34;
+        readSomeRefusals = 36;
         readSomeProducers = true;
         theReadingProducesThem = [ ];
       };
@@ -1965,6 +2060,288 @@ in
     expected = {
       unproduced = [ ];
       constructs = treeConstructs;
+    };
+  };
+
+  testADeploymentCuttingAMemberEarnsNoExclusionRow =
+    let
+      result = planOf {
+        instances.svc = {
+          module = twoQuiet;
+          members.gone.enable = false;
+          placement.every.keeper.machines = [ "one" ];
+        };
+      };
+    in
+    {
+      expr = {
+        rows = ids result;
+        planned = filter (key: !hasInfix "machine:" key) (attrNames result.plan);
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ ];
+        planned = [ "svc:keeper@one" ];
+        applicable = true;
+      };
+    };
+
+  testAMemberScopedWireEarnsNoExclusionRow =
+    let
+      result = planOf {
+        instances = {
+          far = exposedOn [ "one" ] (soleRoot {
+            module = pubProvider;
+            provides = [ "thing" ];
+          });
+          svc = {
+            module = boundPair;
+            members.backend.enable = false;
+            placement.every.app.machines = [ "one" ];
+            wire.app.slot = {
+              instance = "far";
+              provides = "thing";
+            };
+          };
+        };
+      };
+      read = result.plan."svc:app@one".reads.slot;
+    in
+    {
+      expr = {
+        rows = ids result;
+        wire = read.wire;
+        entry = read.entry;
+        values = read.values;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ ];
+        wire = {
+          instance = "far";
+          provides = "thing";
+        };
+        entry = "far:only@one";
+        values.publicKey = "ssh-ed25519 AAAA";
+        applicable = true;
+      };
+    };
+
+  # The table, the suite that refuses one deployment per row, and the fixture
+  # README that publishes it: a row leaves all three or the three disagree here.
+  testTheTableTheSuiteAndTheFixturesReadmeAgree = {
+    expr = {
+      libraryRows = sortStrings (uniqueStrings planner.excluded.rows);
+      readmeRows = exclusionTableRows;
+      suiteRows = sortStrings exclusionCoverage.expr.coveredRows;
+      constructsWithoutARefusal = exclusionCoverage.expr.constructsWithoutATest;
+      refusalsAsserted = length (filter (name: hasInfix "IsRefused" name) (attrNames exclusionSuite));
+      theTableNamesMemberCuts = elem "member cuts" (planner.excluded.rows ++ constructRows);
+      theSuiteNamesMemberCuts = elem "member cuts" (
+        exclusionCoverage.expr.coveredRows ++ exclusionCoverage.expected.coveredRows
+      );
+      theReadmeNamesMemberCuts = hasInfix "member cuts" fixtureReadme;
+    };
+    expected = {
+      libraryRows = [
+        "collect family"
+        "externals"
+        "lifecycle"
+        "locality"
+        "placement.pick/strategy/allocation"
+        "runtime plane"
+      ];
+      readmeRows = 6;
+      suiteRows = [
+        "collect family"
+        "externals"
+        "lifecycle"
+        "locality"
+        "placement.pick/strategy/allocation"
+        "runtime plane"
+      ];
+      constructsWithoutARefusal = [ ];
+      refusalsAsserted = length (attrNames planner.excluded.constructs);
+      theTableNamesMemberCuts = false;
+      theSuiteNamesMemberCuts = false;
+      theReadmeNamesMemberCuts = false;
+    };
+  };
+
+  testTheSixRemainingRowsAreStillRefused = {
+    expr = {
+      rows = sortStrings (uniqueStrings planner.excluded.rows);
+      rowOfEveryConstruct = sortStrings (uniqueStrings constructRows);
+      constructsNamingNoRow = filter (
+        name: !elem planner.excluded.constructs.${name}.row planner.excluded.rows
+      ) (attrNames planner.excluded.constructs);
+      constructsNamingNoTrigger = filter (name: planner.excluded.constructs.${name}.trigger == "") (
+        attrNames planner.excluded.constructs
+      );
+    };
+    expected = {
+      rows = [
+        "collect family"
+        "externals"
+        "lifecycle"
+        "locality"
+        "placement.pick/strategy/allocation"
+        "runtime plane"
+      ];
+      rowOfEveryConstruct = [
+        "collect family"
+        "externals"
+        "lifecycle"
+        "locality"
+        "placement.pick/strategy/allocation"
+        "runtime plane"
+      ];
+      constructsNamingNoRow = [ ];
+      constructsNamingNoTrigger = [ ];
+    };
+  };
+
+  testEachNewRowNamesADeclarationToEdit =
+    let
+      contradicted = planOf {
+        instances = {
+          far = exposedOn [ "one" ] (soleRoot {
+            module = pubProvider;
+            provides = [ "thing" ];
+          });
+          svc = {
+            module = boundPair;
+            placement.every = {
+              backend.machines = [ "one" ];
+              app.machines = [ "one" ];
+            };
+            wire.app.slot = {
+              instance = "far";
+              provides = "thing";
+            };
+          };
+        };
+      };
+
+      cut = planOf {
+        instances.svc = {
+          module = twoQuiet;
+          members.gone.enable = false;
+          placement.every = {
+            keeper.machines = [ "one" ];
+            gone.machines = [ "one" ];
+          };
+        };
+      };
+    in
+    {
+      expr = {
+        boundSlotSubjects = subjectsById "wire-names-bound-slot" contradicted;
+        boundSlotNamesTheDeployment = hasInfix "deployment/instances.nix wires slot `slot` of `svc:app`" (
+          messageById "wire-names-bound-slot" contradicted
+        );
+        boundSlotNamesTheBinding = hasInfix "binds to member `backend`" (
+          messageById "wire-names-bound-slot" contradicted
+        );
+        boundSlotOffersTheCut = hasInfix "`members.backend.enable = false` in deployment/instances.nix" (
+          resolutionById "wire-names-bound-slot" contradicted
+        );
+        boundSlotOffersTheDeletion = hasInfix "or delete the wire" (
+          resolutionById "wire-names-bound-slot" contradicted
+        );
+
+        cutSubjects = subjectsById "cut-member-named" cut;
+        cutNamesTheDeployment = hasInfix "deployment/instances.nix places `gone` of instance `svc`" (
+          messageById "cut-member-named" cut
+        );
+        cutNamesTheCut = hasInfix "`members.gone.enable = false`" (evidenceById "cut-member-named" cut);
+        cutOffersTheDeletion = hasInfix "delete the reference to `gone` in deployment/instances.nix" (
+          resolutionById "cut-member-named" cut
+        );
+        cutOffersTheKeeping = hasInfix "keep the member by deleting `members.gone.enable = false`" (
+          resolutionById "cut-member-named" cut
+        );
+
+        exceededSubjects = subjectsById "capability-consumers-exceeded" takenTwice;
+        exceededNamesTheCapability = hasInfix "capability `thing` of `vault:only`" (
+          messageById "capability-consumers-exceeded" takenTwice
+        );
+        exceededOffersTheDeclaration = hasInfix "declare `consumers = \"many\"` on `thing`" (
+          resolutionById "capability-consumers-exceeded" takenTwice
+        );
+        exceededOffersTheOtherWire = hasInfix "to another capability" (
+          resolutionById "capability-consumers-exceeded" takenTwice
+        );
+      };
+      expected = {
+        boundSlotSubjects = [ "svc:app" ];
+        boundSlotNamesTheDeployment = true;
+        boundSlotNamesTheBinding = true;
+        boundSlotOffersTheCut = true;
+        boundSlotOffersTheDeletion = true;
+
+        cutSubjects = [ "svc:instance" ];
+        cutNamesTheDeployment = true;
+        cutNamesTheCut = true;
+        cutOffersTheDeletion = true;
+        cutOffersTheKeeping = true;
+
+        exceededSubjects = [ "vault:only" ];
+        exceededNamesTheCapability = true;
+        exceededOffersTheDeclaration = true;
+        exceededOffersTheOtherWire = true;
+      };
+    };
+
+  # The whole table, not the deduplicated identifiers: a second sentence about
+  # one absence is what a row of its own for a cut slot would be.
+  testACutWithAnUnwiredSlotReportsTheExistingRow =
+    let
+      result = planOf {
+        instances.svc = {
+          module = boundPair;
+          members.backend.enable = false;
+          placement.every.app.machines = [ "one" ];
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        subjects = subjectsById "slot-unwired" result;
+        namesTheCut = hasInfix "binds it to member `backend`, which deployment/instances.nix cuts" (
+          evidenceById "slot-unwired" result
+        );
+        namesTheScopedForm = hasInfix "write `wire.app.slot = " (resolutionById "slot-unwired" result);
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ "slot-unwired" ];
+        subjects = [ "svc:app" ];
+        namesTheCut = true;
+        namesTheScopedForm = true;
+        applicable = false;
+      };
+    };
+
+  testTwoConsumersReportOneRow = {
+    expr = {
+      rows = ids takenTwice;
+      count = countById "capability-consumers-exceeded" takenTwice;
+      namesTheFirstSlot = hasInfix "`first:only.slot`" (
+        messageById "capability-consumers-exceeded" takenTwice
+      );
+      namesTheSecondSlot = hasInfix "`second:only.slot`" (
+        messageById "capability-consumers-exceeded" takenTwice
+      );
+      applicable = takenTwice.applicable;
+    };
+    expected = {
+      rows = [ "capability-consumers-exceeded" ];
+      count = 1;
+      namesTheFirstSlot = true;
+      namesTheSecondSlot = true;
+      applicable = false;
     };
   };
 }

@@ -388,6 +388,7 @@ def cluster_stage(
     memory_mib: int = 2048,
     cpus: int = 2,
     offline: bool = True,
+    disk_gib: int = 0,
 ) -> Callable[[Preparation], Any]:
     """Return the decorator that declares a folder's machines as a snapshot stage.
 
@@ -420,6 +421,12 @@ def cluster_stage(
             which adds the ``pasta`` uplink and an upstream for the cluster's
             resolver. Every other folder leaves it on, and the wire it tests is
             then bounded by the machines themselves.
+        disk_gib: The size every machine's overlay is grown to, in GiB, for a
+            folder whose service holds state on disk. ``0`` keeps the image's
+            own size, which is what a folder delivering artifacts and nothing
+            else needs. It is part of the key, so the figure is declared beside
+            the folder that needs it rather than raised in the shared image,
+            where it would re-key every other folder's cut.
 
     Returns:
         The decorator to apply to the folder's preparation generator.
@@ -434,6 +441,7 @@ def cluster_stage(
         secure_boot=False,
         tpm=False,
         offline=offline,
+        disk_size_gib=disk_gib,
         scope="session",
     )
     return decorator

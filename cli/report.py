@@ -40,9 +40,11 @@ from errors import ApplyError
 from manifest import (
     Deployment,
     Entry,
+    ValueFile,
     address_of,
     artifact_of,
     image_file,
+    machine_address,
     service_name,
     unit_files,
 )
@@ -133,7 +135,86 @@ def status(
         log(line)
         if answer.status != UNREALISED and not _the_endpoint_answered(answer):
             unasked.add(entry.machine)
+    for machine, delivered in _values(deployment, only).items():
+        address = machine_address(deployment, machine, of=f"the values of {machine}")
+        answer = remote.asking(
+            runner,
+            remote.ssh_argv(
+                address,
+                remote.values_script([file.path for _, file in delivered]),
+                opts=opts,
+                user=user,
+            ),
+            env=env,
+        )
+        if answer.status != 0:
+            unasked.add(machine)
+            continue
+        for key in _absent(delivered, answer.said):
+            line = f"value {key} missing on {machine}"
+            lines.append(line)
+            log(line)
     return Report(lines=tuple(lines), unasked=tuple(sorted(unasked)))
+
+
+def _values(
+    deployment: Deployment, only: Sequence[str]
+) -> dict[str, tuple[tuple[str, ValueFile], ...]]:
+    """Return the values each machine of the selection is delivered, by machine.
+
+    A machine declaring no address is asked nothing: its entries' own lines
+    already say it was not dialled, and a value question would be a second copy
+    of that refusal.
+
+    Args:
+        deployment: The deployment to report on.
+        only: The entry keys the report was restricted to, empty for all.
+
+    Returns:
+        The value entry key and file of every declared file delivered to that
+        machine, sorted, for each machine with an address and a value.
+    """
+    machines = {entry.machine for entry in _selected(deployment, only) if entry.address is not None}
+    delivered: dict[str, tuple[tuple[str, ValueFile], ...]] = {}
+    for machine in sorted(machines):
+        held = tuple(
+            sorted(
+                (
+                    (value.key, file)
+                    for value in deployment.values.values()
+                    if machine in value.delivery
+                    for file in value.files
+                ),
+                # By the file's name and never by the record: two files of one
+                # value tie on the key, and a `ValueFile` is not ordered.
+                key=lambda held: (held[0], held[1].name),
+            )
+        )
+        if held:
+            delivered[machine] = held
+    return delivered
+
+
+def _absent(delivered: tuple[tuple[str, ValueFile], ...], reported: str) -> tuple[str, ...]:
+    """Return the value entries the machine answered were not all there.
+
+    Only the presence of each path is read. What a held file contains is never
+    asked: reading a secret to report on it is not something this command does.
+
+    Args:
+        delivered: The value entry key and file of each declared file.
+        reported: What the machine printed, one `<path> present|absent` a line.
+
+    Returns:
+        The value entry keys with at least one path the machine does not hold,
+        sorted, empty for a machine holding every one of them.
+    """
+    said = {
+        columns[0]: columns[1]
+        for columns in (line.split() for line in reported.splitlines())
+        if len(columns) == 2
+    }
+    return tuple(sorted({key for key, file in delivered if said.get(file.path) != "present"}))
 
 
 def _ask(
@@ -225,7 +306,8 @@ def _status_script(entry: Entry) -> str:
     if entry.realiser == "flakelet":
         return remote.flakelet_status_script(service_name(entry))
     if entry.realiser == "image":
-        return remote.image_status_script(artifact_of(entry) / image_file(entry))
+        artifact = artifact_of(entry)
+        return remote.image_status_script(artifact / image_file(entry), artifact / "bin" / "check")
     raise ApplyError(f"{entry.key} states realiser {entry.realiser}, which the command cannot ask")
 
 
@@ -278,6 +360,11 @@ def _read_attachment(entry: Entry, reported: str) -> str:
     machine holding an earlier build's image answers that one is attached and
     that it is not this one, and a listing this cannot read leaves the line the
     machine's own answer rather than a verdict over a guess.
+
+    An identity match is evidence about the image and about nothing beside it:
+    the version digest excludes a configuration file's bytes on purpose, so an
+    entry shown a file the machine no longer holds the current bytes of is
+    never `current`, and the line says which path disagrees.
     """
     answer = remote.attachment_of(reported)
     name = image_file(entry).removesuffix(".raw").rpartition("_")[0]
@@ -285,9 +372,17 @@ def _read_attachment(entry: Entry, reported: str) -> str:
     if held is None:
         return "absent" if answer.state in ("", "detached") else answer.state
     identity, attachment = held
-    if identity == entry.digest:
-        return f"{answer.state or attachment} current"
-    return f"{attachment} holds {identity}, built {entry.digest}"
+    beside = _beside(answer.configuration)
+    if identity != entry.digest:
+        return f"{attachment} holds {identity}, built {entry.digest}"
+    if beside:
+        return f"{answer.state or attachment} holds this build's image, {beside}"
+    return f"{answer.state or attachment} current"
+
+
+def _beside(configuration: tuple[tuple[str, str], ...]) -> str:
+    """Return what the machine holds beside the image that the build does not."""
+    return ", ".join(f"{path} {word}" for path, word in sorted(configuration) if word != "current")
 
 
 def _held(name: str, listed: tuple[tuple[str, str], ...]) -> tuple[str, str] | None:

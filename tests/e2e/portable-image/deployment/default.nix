@@ -13,6 +13,7 @@ let
   paths = {
     shown = "/var/lib/planner-portable/upstream.txt";
     assembled = "/etc/planner-portable/report.conf";
+    quiet = "/etc/planner-portable/quiet.conf";
   };
 
   reportOf =
@@ -28,6 +29,11 @@ let
       else
         printf 'original-read: %s\n' "$original"
       fi
+      if secret=$(${pkgs.coreutils}/bin/cat "$SECRET" 2>&1); then
+        printf 'secret-read: succeeded with %s\n' "$secret"
+      else
+        printf 'secret-read: %s\n' "$secret"
+      fi
       printf 'delivery: %s\n' ${delivery}
       exec ${pkgs.coreutils}/bin/sleep infinity
     '';
@@ -35,10 +41,22 @@ let
   interfaces = import ./interfaces/default.nix { korora = planner.korora; };
   inherit (interfaces) reportFile;
 
+  # The one extension field the confined unit needs: membership of the group the
+  # secret is delivered to, because the profile gives it no static account.
+  grouped = planner.unitExtension {
+    backend = "systemd";
+    name = "systemd-service";
+    fields = {
+      supplementaryGroups = {
+        type = planner.korora.listOf planner.korora.string;
+      };
+    };
+  };
+
   reportModuleOf = delivery: {
     services.default = import ./modules/report/default.nix {
       report = "${reportOf delivery}";
-      inherit reportFile paths;
+      inherit reportFile paths grouped;
     };
   };
 
@@ -79,6 +97,8 @@ let
         {
           inherit (deployment) instances;
           inherit (registry) machines;
+
+          varsState."watch:vars/upstream".secret.present = true;
 
           interfaces = {
             "interfaces/default.nix" = interfaces;

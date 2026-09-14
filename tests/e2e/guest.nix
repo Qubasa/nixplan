@@ -84,6 +84,13 @@ let
           ];
           message = "a machine of tests/e2e/newcomer/ locks a flake of its own, fetches its inputs and builds a deployment in its own store, and a stock nix.conf answers all three with a refusal about experimental features: the two flags every reader already has are part of this image";
         }
+        {
+          assertion =
+            config.users.users ? postgres
+            && config.users.users.postgres.group == "postgres"
+            && config.users.groups ? postgres;
+          message = "tests/e2e/shared-postgres/ runs its server as the `postgres` account, and no plan creates an account: a module's unit names a user and no realiser provisions one, so the account is the machine's and has to be declared here. Every property of this image is part of every snapshot cut's key, so adding it makes the next run of every folder cold; `rookery snapshot gc --all` reclaims the orphans";
+        }
       ];
 
       boot.kernelModules = [ "vmw_vsock_virtio_transport" ];
@@ -131,6 +138,18 @@ let
       };
 
       users.users.root.openssh.authorizedKeys.keys = [ sshKeys.snakeOilEd25519PublicKey ];
+
+      # tests/e2e/shared-postgres/'s server runs as this account and writes its
+      # cluster under /var/lib/postgresql. The assertion above says why a plan
+      # cannot state it.
+      users.groups.postgres = { };
+      users.users.postgres = {
+        isSystemUser = true;
+        group = "postgres";
+        home = "/var/lib/postgresql";
+        createHome = true;
+        homeMode = "700";
+      };
 
       services.flakelets.enable = true;
 

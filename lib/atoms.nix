@@ -3,7 +3,29 @@
 # korora's raising validator would end an evaluation this library keeps total.
 { korora }:
 let
-  inherit (builtins) isAttrs isString match;
+  inherit (builtins)
+    elem
+    isAttrs
+    isString
+    match
+    ;
+
+  # The domain of every atom that is an enumeration, so the row that reports a
+  # value outside one can name what it may take. Read by `lib/module.nix`.
+  restartPolicies = [
+    "no"
+    "on-failure"
+    "on-abnormal"
+    "always"
+  ];
+
+  # How many slots may be wired to one provided capability. `many` is what a
+  # capability declaring nothing means, so the domain carries it rather than
+  # leaving the default unnameable.
+  consumerCardinalities = [
+    "one"
+    "many"
+  ];
 in
 korora
 // {
@@ -34,6 +56,33 @@ korora
         match "([A-Z][a-z][a-z](,[A-Z][a-z][a-z])* )?([0-9*]+-[0-9*]+-[0-9*]+ )?[0-9*]{1,2}:[0-9*]{1,2}(:[0-9*]{1,2})?" v
         != null
     )
+  );
+
+  # What a service manager does when a unit stops. Four values rather than
+  # systemd's seven: the other three are meaningless without a `Type=` or a
+  # `WatchdogSec=` this vocabulary does not carry. The atom is the planner's own
+  # domain, so a realiser maps it to its manager's spelling.
+  restartPolicy = korora.typedef "restartPolicy" (v: isString v && elem v restartPolicies);
+
+  domains.restartPolicy = restartPolicies;
+
+  # Whether a provided capability may be taken by one slot or by any number. A
+  # provider states it; no deployment can widen it.
+  consumerCardinality = korora.typedef "consumerCardinality" (
+    v: isString v && elem v consumerCardinalities
+  );
+
+  domains.consumerCardinality = consumerCardinalities;
+
+  # A delivered file's permission bits as a deployment states them: four octal
+  # digits, the spelling `install -m` and `chmod` both take. A symbolic mode is
+  # refused because two writers render it and neither parses one.
+  fileMode = korora.typedef "fileMode" (v: isString v && match "[0-7][0-7][0-7][0-7]" v != null);
+
+  # An account name for an owner or a group, held to the same grammar a unit's
+  # `user` is: which identity it resolves to is the machine's answer.
+  groupName = korora.typedef "groupName" (
+    v: isString v && match "[a-z_][0-9a-z_-]{0,30}[$]?" v != null
   );
 
   # A portable account name rather than a uid: which identity a name resolves to is

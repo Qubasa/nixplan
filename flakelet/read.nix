@@ -116,13 +116,21 @@ let
   # again on its schedule, which is the mistake this rule prevents.
   installSection = target: "\n[Install]\nWantedBy=${target}\n";
 
-  # A configuration file's bytes come out of the store and land at a host path
-  # through an assemble step, and this realiser has none: the endpoint reads the
-  # directory, links and starts. A generated file is its own source and its bytes
-  # arrive by delivery before the entry is activated, so it is not this case.
-  pathRule = "a host path this realiser shows is a path bytes already arrive at, because it runs no step on the machine that could assemble one";
+  # A host path this realiser shows has to name bytes the machine already holds,
+  # because it runs no step there: the endpoint reads the directory, links and
+  # starts. A delivered generated file arrives at its own path before the entry is
+  # activated; a configuration file that is a store path, or one assembled from
+  # literals at build time, arrives with the artifact's closure. Only a recipe
+  # naming a reference is bytes that exist on no machine until that path is
+  # written, and that one is refused.
+  pathRule = "a host path this realiser shows is a path whose bytes exist before the entry is activated, because it runs no step on the machine that could assemble one";
 
-  acceptsHostPath = p: p.from == p.path;
+  acceptsHostPath =
+    p:
+    if p.kind == "configuration-file" then
+      p.disposition == "source" || p.disposition == "literal"
+    else
+      p.from == p.path;
 in
 {
   inherit
@@ -159,7 +167,9 @@ in
       let
         first = head shownPaths;
       in
-      fail accounts.pathNotAssembled "entry ${quote key} is shown the host path ${quote first.path} as a ${first.kind} assembled from ${quote first.from}: ${pathRule}"
+      fail accounts.pathNotAssembled "entry ${quote key} is shown the host path ${quote first.path}, whose recipe reads ${
+        quote (first.needs or first.from)
+      }: ${pathRule}"
     else
       image;
 

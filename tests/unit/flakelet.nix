@@ -16,7 +16,12 @@ let
   inherit (support) planOf soleRoot;
   inherit (support.worked) borgbackup;
 
-  imageReader = import (imageSource + "/read.nix") { inherit planner; };
+  # The reading is handed the same assembly the builder hands it, so a
+  # configuration file of nothing but literals is a store path here too. This
+  # layer realises nothing, so the stand-in is keyed by the bytes.
+  assemble = name: text: "/nix/store/${planner.util.shortHash text}-${name}";
+
+  imageReader = import (imageSource + "/read.nix") { inherit planner assemble; };
 
   reader = import (flakeletSource + "/read.nix") {
     inherit planner;
@@ -79,6 +84,14 @@ let
     units.web.command = "${borgbackup}/bin/borg serve";
   };
 
+  reloads = _: {
+    closure = [ borgbackup ];
+    units.web = {
+      command = "${borgbackup}/bin/borg serve";
+      reloadCommand = "${borgbackup}/bin/borg reload";
+    };
+  };
+
   withSchedule = _: {
     closure = [ borgbackup ];
     units = {
@@ -127,6 +140,48 @@ let
     varsState."svc:vars/hostKey@one"."key" = {
       present = true;
       content = "PRIVATE-KEY-BYTES";
+    };
+  };
+
+  # A recipe naming a delivered path: its bytes exist on no machine until that
+  # path is written, which is the one case this realiser still refuses.
+  shownARefBearingFile = planOf {
+    instances.svc = {
+      module = soleRoot {
+        module = _: {
+          vars.hostKey.files."key".secrecy = "secret";
+          impl =
+            { vars, ... }:
+            {
+              closure = [ borgbackup ];
+              units.web.command = "${borgbackup}/bin/borg serve";
+              configData."/etc/agent.conf" = {
+                mode = "0400";
+                reload = [ "web" ];
+                render = [
+                  { text = "key_file = "; }
+                  { ref = vars.hostKey."key".path; }
+                ];
+              };
+            };
+        };
+      };
+      placement.every.only.machines = [ "one" ];
+    };
+    varsState."svc:vars/hostKey@one"."key" = {
+      present = true;
+      content = "PRIVATE-KEY-BYTES";
+    };
+  };
+
+  # A configuration file that is someone else's store object already.
+  shownASourceFile = _: {
+    closure = [ borgbackup ];
+    units.web.command = "${borgbackup}/bin/borg serve";
+    configData."/etc/thing.conf" = {
+      mode = "0444";
+      reload = [ "web" ];
+      source = "${borgbackup}/share/thing.conf";
     };
   };
 
@@ -245,6 +300,57 @@ in
         ];
         timerWantedBy = true;
         timerNamesItsService = true;
+      };
+    };
+
+  # A reload is the caller's to issue, and it is only issuable where the unit
+  # file carries the directive: a unit that declared none is restarted instead,
+  # and neither needs the entry to be activated again.
+  testAUnitDeclaringAReloadCommand =
+    let
+      declaring = reader.renderUnit (readOf { } reloads) "web";
+      silent = reader.renderUnit (readOf { } simple) "web";
+    in
+    {
+      expr = {
+        rendered = support.hasInfix "\nExecReload=${borgbackup}/bin/borg reload\n" declaring;
+        absentWhereUndeclared = support.hasInfix "ExecReload" silent;
+        sameOtherwise = lastSection declaring == lastSection silent;
+      };
+      expected = {
+        rendered = true;
+        absentWhereUndeclared = false;
+        sameOtherwise = true;
+      };
+    };
+
+  # An artifact is unit files and a metadata document. What starts, reloads or
+  # restarts anything is the endpoint reading them, so nothing this realiser
+  # produces names a service manager verb.
+  testTheRealiserIssuesNothing =
+    let
+      image = readOf { } reloads;
+      texts = map (unitName: reader.renderUnit image unitName) (attrNames image.units);
+      names = [
+        "systemctl"
+        "try-restart"
+        "try-reload-or-restart"
+      ];
+    in
+    {
+      expr = {
+        issued = filter (verb: builtins.any (text: support.hasInfix verb text) texts) names;
+        metadataIssuesNothing = attrNames (reader.meta image);
+      };
+      expected = {
+        issued = [ ];
+        metadataIssuesNothing = [
+          "flake_rev"
+          "flake_url"
+          "name"
+          "settings_hash"
+          "version"
+        ];
       };
     };
 
@@ -413,26 +519,155 @@ in
       };
     };
 
-  testAnEntryShownAConfigurationFile = {
-    expr = {
-      refused = raises (readOf { } shownAConfigurationFile);
-      rowAbove = rowsAbove { } shownAConfigurationFile;
-      theRowNamesThePath = support.hasInfix "/etc/thing.conf" (messageAbove { } shownAConfigurationFile);
-      theImageRealiserShowsIt =
-        map (p: p.kind)
-          (reader.reader.read {
-            plan = (planned { } shownAConfigurationFile).plan;
+  # The base scenario, narrowed to the case that still holds: a recipe naming a
+  # delivered path is bytes that exist on no machine until that path is written,
+  # and this realiser runs no step there to write it.
+  testAnEntryShownAConfigurationFile =
+    let
+      key = "svc:only@one";
+      refusal = raises (
+        reader.read {
+          inherit key;
+          plan = shownARefBearingFile.plan;
+        }
+      );
+      rows = (build.read { plan = shownARefBearingFile.plan; }).rows;
+    in
+    {
+      expr = {
+        refused = refusal;
+        rowAbove = builtins.sort (a: b: a < b) (map (r: r.id) rows);
+        theRowNamesThePath = support.hasInfix "/etc/agent.conf" (builtins.head rows).message;
+        theRowNamesTheReference = support.hasInfix "/run/vars/svc/hostKey/key" (builtins.head rows).message;
+        theImageRealiserShowsIt =
+          map (p: p.kind)
+            (imageReader.read {
+              inherit key;
+              plan = shownARefBearingFile.plan;
+              profile = "trusted";
+            }).hostPaths;
+      };
+      expected = {
+        refused = true;
+        rowAbove = [ "operator-entry-path-not-assembled" ];
+        theRowNamesThePath = true;
+        theRowNamesTheReference = true;
+        theImageRealiserShowsIt = [
+          "configuration-file"
+          "generated-file"
+        ];
+      };
+    };
+
+  testAConfigurationFileReferencingADeliveredPath =
+    let
+      rows = (build.read { plan = shownARefBearingFile.plan; }).rows;
+    in
+    {
+      expr = {
+        refused = raises (
+          reader.read {
             key = "svc:only@one";
-            profile = "default";
-          }).hostPaths;
+            plan = shownARefBearingFile.plan;
+          }
+        );
+        statesWhenTheBytesExist = support.hasInfix "bytes exist before the entry is activated" (builtins.head rows)
+        .message;
+        rowIds = map (r: r.id) rows;
+      };
+      expected = {
+        refused = true;
+        statesWhenTheBytesExist = true;
+        rowIds = [ "operator-entry-path-not-assembled" ];
+      };
     };
-    expected = {
-      refused = true;
-      rowAbove = [ "operator-entry-path-not-assembled" ];
-      theRowNamesThePath = true;
-      theImageRealiserShowsIt = [ "configuration-file" ];
+
+  testAConfigurationFileAssembledFromLiterals =
+    let
+      image = readOf { } shownAConfigurationFile;
+      shown = builtins.head image.hostPaths;
+    in
+    {
+      expr = {
+        rowAbove = rowsAbove { } shownAConfigurationFile;
+        disposition = shown.disposition;
+        fromTheStore = support.hasInfix "/nix/store/" shown.from;
+        boundInTheUnit = support.hasInfix "BindReadOnlyPaths=${shown.from}:/etc/thing.conf" (
+          reader.renderUnit image "web"
+        );
+      };
+      expected = {
+        rowAbove = [ ];
+        disposition = "literal";
+        fromTheStore = true;
+        boundInTheUnit = true;
+      };
     };
-  };
+
+  testAConfigurationFileCopiedFromAStorePath =
+    let
+      image = readOf { } shownASourceFile;
+      shown = builtins.head image.hostPaths;
+    in
+    {
+      expr = {
+        rowAbove = rowsAbove { } shownASourceFile;
+        disposition = shown.disposition;
+        from = shown.from;
+        boundInTheUnit = support.hasInfix "BindReadOnlyPaths=${shown.from}:/etc/thing.conf" (
+          reader.renderUnit image "web"
+        );
+      };
+      expected = {
+        rowAbove = [ ];
+        disposition = "source";
+        from = "${borgbackup}/share/thing.conf";
+        boundInTheUnit = true;
+      };
+    };
+
+  # The acceptance rests on when the bytes arrive, not on the file's kind: the
+  # generated file is delivered before activation, so it is shown from its own path.
+  testADeliveredGeneratedFileIsStillAccepted =
+    let
+      image = reader.read {
+        key = "svc:only@one";
+        plan = shownAGeneratedFile.plan;
+      };
+    in
+    {
+      expr = {
+        accepted = !(raises image);
+        shown = map (p: {
+          inherit (p) kind;
+          isItsOwnSource = p.from == p.path;
+        }) image.hostPaths;
+      };
+      expected = {
+        accepted = true;
+        shown = [
+          {
+            kind = "generated-file";
+            isItsOwnSource = true;
+          }
+        ];
+      };
+    };
+
+  testAnEntryWithNoConfigurationFileIsUnchanged =
+    let
+      image = readOf { } simple;
+    in
+    {
+      expr = {
+        shown = image.hostPaths;
+        assembled = filter (p: p.kind == "configuration-file") image.hostPaths;
+      };
+      expected = {
+        shown = [ ];
+        assembled = [ ];
+      };
+    };
 
   # A generated file's host path is its own source rather than a staging
   # destination, and its bytes arrive by delivery before the entry is activated,

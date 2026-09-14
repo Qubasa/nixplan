@@ -67,6 +67,8 @@ let
     timeout = atoms.duration;
     stopCommand = atoms.string;
     reloadCommand = atoms.string;
+    restart = atoms.restartPolicy;
+    restartSec = atoms.duration;
   };
 
   unitKeys = attrNames unitVocabulary ++ [ "extends" ];
@@ -106,6 +108,7 @@ let
 
   capabilityKeys = [
     "interface"
+    "consumers"
     "severity"
   ];
 
@@ -279,9 +282,15 @@ rec {
     let
       where = "capability ${util.quote name} of ${module}";
       hasInterface = capability ? interface && isInterface capability.interface;
+
+      # A capability declaring nothing admits any number of consumers, which is
+      # what every capability written before this key meant.
+      stated = capability.consumers or null;
+      known = stated == null || elem stated atoms.domains.consumerCardinality;
     in
     {
       interface = if hasInterface then capability.interface else null;
+      consumers = if known && stated != null then stated else "many";
       rows =
         map (
           key:
@@ -294,6 +303,15 @@ rec {
         ++ util.optional (capability ? severity) (severityRow {
           inherit subject where;
         })
+        ++ util.optional (!known) (
+          diag.error {
+            inherit subject;
+            id = "capability-consumers-malformed";
+            message = "${where} declares `consumers` as ${util.quote (toString stated)}";
+            evidence = "the values are ${util.quoteList atoms.domains.consumerCardinality}, and a capability declaring nothing is taken by any number of slots";
+            resolution = "write one of ${util.quoteList atoms.domains.consumerCardinality} in ${subject}, or omit the key";
+          }
+        )
         ++ util.optional (!hasInterface) (
           diag.error {
             inherit subject;
@@ -355,25 +373,75 @@ rec {
       vars,
     }:
     let
+      # What a delivered file's record may say. `secrecy` is what the plan routes
+      # by; the other three are what the two writers set on the machine, and the
+      # defaults are what both wrote before the keys existed, so a record
+      # declaring none is the same delivered artifact it was.
+      fileKeys = [
+        "secrecy"
+        "owner"
+        "group"
+        "mode"
+      ];
+
+      fileTypes = {
+        owner = atoms.userName;
+        group = atoms.groupName;
+        mode = atoms.fileMode;
+      };
+
       fileRows =
         gen: name: file:
+        let
+          where = "generated file ${util.quote "${gen}/${name}"} of ${module}";
+          typed = filter (k: file ? ${k}) (attrNames fileTypes);
+        in
         map (
           key:
           keyRow {
-            inherit subject key;
-            where = "generated file ${util.quote "${gen}/${name}"} of ${module}";
-            allowed = [ "secrecy" ];
+            inherit subject key where;
+            allowed = fileKeys;
           }
-        ) (util.extraKeys [ "secrecy" ] file)
+        ) (util.extraKeys fileKeys file)
         ++ util.optional (!elem (interface.secrecyOf file) interface.secrecies) (
           diag.error {
             inherit subject;
             id = "vars-file-secrecy-domain";
-            message = "generated file ${util.quote "${gen}/${name}"} of ${module} declares secrecy ${util.quote (toString (interface.secrecyOf file))}";
+            message = "${where} declares secrecy ${util.quote (toString (interface.secrecyOf file))}";
             evidence = "secrecy on a generated file takes ${util.quoteList interface.secrecies}, the same two values it takes on an export";
             resolution = "write one of ${util.quoteList interface.secrecies} in ${subject}, or omit the key";
           }
-        );
+        )
+        ++ map (
+          key:
+          diag.error {
+            inherit subject;
+            id = "vars-file-ownership-malformed";
+            message = "${where} declares ${util.quote key} with a value that fails its field's type";
+            evidence = "the record declares ${key} as ${
+              util.quote fileTypes.${key}.name
+            }, and korora reports: ${toString (fileTypes.${key}.verify file.${key})}";
+            resolution = "write a value of that type in ${subject}; the failing value is not recorded and the default is delivered";
+          }
+        ) (filter (k: fileTypes.${k}.verify file.${k} != null) typed);
+
+      # The record every reader sees, so one function decides the defaults and
+      # nothing downstream writes `or "root"`. `stated` names the keys the
+      # declaration actually carried, which is what keeps a record declaring none
+      # of them out of the value's key.
+      fileRecord =
+        file:
+        let
+          stated = filter (k: file ? ${k} && fileTypes.${k}.verify file.${k} == null) (attrNames fileTypes);
+          valueOf = k: default: if elem k stated then file.${k} else default;
+        in
+        {
+          secrecy = interface.secrecyOf file;
+          owner = valueOf "owner" "root";
+          group = valueOf "group" "root";
+          mode = valueOf "mode" "0400";
+          stated = util.sortStrings stated;
+        };
 
       declared = attrNames vars;
 
@@ -500,7 +568,7 @@ rec {
       # carrying a key separator is refused here and the generator declares no
       # value: nothing downstream builds a key from it.
       generators = builtins.mapAttrs (gen: g: {
-        files = g.files or { };
+        files = builtins.mapAttrs (_: fileRecord) (g.files or { });
         per = if elem (perOf g) cardinalities then perOf g else "placement";
         deploy = if builtins.isBool (deployOf g) then deployOf g else true;
         reads = if inCycle gen then [ ] else util.sortStrings (declaredReadsOf g);
@@ -632,6 +700,23 @@ rec {
 
       references = filter (k: elem k typed) unitReferenceKeys;
 
+      # A restart policy read against the shape the unit already declared. A
+      # contradiction is a row and the field is not recorded, so no renderer is
+      # handed two statements about when the unit runs.
+      policy = if elem "restart" typed then unit.restart else null;
+      oneShot = elem "oneShot" typed && unit.oneShot == true;
+      scheduled = elem "schedule" typed;
+
+      contradictsOneShot = oneShot && policy == "always";
+      onScheduled = scheduled && policy != null && policy != "no";
+      delayWithoutPolicy = elem "restartSec" typed && policy == null;
+
+      withheld =
+        util.optional (contradictsOneShot || onScheduled) "restart"
+        ++ util.optional (contradictsOneShot || onScheduled || delayWithoutPolicy) "restartSec";
+
+      recorded = util.subtractList typed withheld;
+
       partitioned = listToAttrs (
         map (k: {
           name = k;
@@ -670,7 +755,7 @@ rec {
 
       record =
         util.filterAttrs (n: v: !(elem n unitReferenceKeys && v == [ ])) (
-          util.pickAttrs typed unit // ordering
+          util.pickAttrs recorded unit // ordering
         )
         // (
           if grouped == { } then
@@ -700,12 +785,18 @@ rec {
         ) (util.extraKeys unitKeys unit)
         ++ map (
           key:
+          let
+            typeName = unitVocabulary.${key}.name;
+          in
           diag.error {
             inherit subject;
             id = "unit-field-type-mismatch";
             message = "${where} declares ${util.quote key} with a value that fails its field's type";
-            evidence = "the vocabulary declares ${key} as ${
-              util.quote unitVocabulary.${key}.name
+            evidence = "the vocabulary declares ${key} as ${util.quote typeName}${
+              if atoms.domains ? ${typeName} then
+                ", whose values are ${util.quoteList atoms.domains.${typeName}}"
+              else
+                ""
             }, and korora reports: ${toString errors.${key}}";
             resolution = "write a value of that type in ${subject}; the failing value is not recorded";
           }
@@ -744,7 +835,34 @@ rec {
             evidence = "a unit file is line oriented, so an environment assignment has no second line to put the rest on";
             resolution = "write ${util.quote key} as one line in ${module}, or write the bytes to a file the unit reads";
           }
-        ) unprintable;
+        ) unprintable
+        ++ util.optional delayWithoutPolicy (
+          diag.error {
+            inherit subject;
+            id = "unit-restart-delay-without-policy";
+            message = "${where} declares `restartSec` and no `restart`";
+            evidence = "a delay says how long to wait before restarting, and a unit with no policy is never restarted, so the delay changes nothing";
+            resolution = "declare `restart` beside it in ${module}, or drop `restartSec`; the delay is not recorded";
+          }
+        )
+        ++ util.optional contradictsOneShot (
+          diag.error {
+            inherit subject;
+            id = "unit-restart-contradicts-one-shot";
+            message = "${where} declares `oneShot` and asks to be restarted always";
+            evidence = "a one-shot unit applies and exits, so restarting it whenever it exits restarts it for as long as it keeps succeeding; a job that failed and may be retried declares `on-failure` instead";
+            resolution = "drop `oneShot` in ${module} if the unit is long running, or write `restart = \"on-failure\"`; the policy is not recorded";
+          }
+        )
+        ++ util.optional onScheduled (
+          diag.error {
+            inherit subject;
+            id = "unit-restart-on-scheduled";
+            message = "${where} declares a `schedule` and a restart policy of ${util.quote (toString policy)}";
+            evidence = "the timer is what decides when a scheduled unit runs, so a restart policy beside it is a second schedule nobody declared";
+            resolution = "drop the policy in ${module}, or drop the schedule and let the unit run continuously; the policy is not recorded";
+          }
+        );
     in
     {
       inherit record rows;
