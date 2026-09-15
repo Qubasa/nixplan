@@ -5,6 +5,7 @@
 let
   inherit (builtins)
     elem
+    head
     isAttrs
     isInt
     isString
@@ -44,13 +45,21 @@ let
   };
 
   # The wildcard is the absence of a claim's address and never a spelling of it.
-  # Two spellings of one reading is what let one number be claimed twice.
-  wildcardAddresses = [
-    "0.0.0.0"
-    "::"
-    "[::]"
-    "*"
-  ];
+  # Two spellings of one reading is what let one number be claimed twice, so the
+  # shape is refused rather than a list of literals: an address drawn from `0`,
+  # `.` and `:` alone is all-zeros in both families, `::ffff:` in front of one is
+  # the same address v4-mapped, and `inet_aton` reads a bare hex zero as one too.
+  # A zone names an interface and narrows nothing about the address, so it is
+  # dropped before the comparison.
+  isWildcardAddress =
+    v:
+    let
+      zoned = match "([^%]*)%.*" v;
+      bare = if zoned == null then v else head zoned;
+    in
+    match "[0.:]+" bare != null
+    || match "::[fF][fF][fF][fF]:[0.:]+" bare != null
+    || match "0[xX]0+" bare != null;
 in
 korora
 // {
@@ -116,7 +125,7 @@ korora
   # zone, or a name, because which of them a machine answers on is the machine's
   # answer. A wildcard spelling is refused, the absence saying it already.
   bindAddress = korora.typedef "bindAddress" (
-    v: isString v && match "[0-9A-Za-z:._%-]+" v != null && !elem v wildcardAddresses
+    v: isString v && match "[0-9A-Za-z:._%-]+" v != null && !isWildcardAddress v
   );
 
   # A delivered file's permission bits as a deployment states them: four octal

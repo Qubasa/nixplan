@@ -1081,60 +1081,69 @@ in
       };
     };
 
+  # The wildcard has unboundedly many spellings, and a second admitted one is not a
+  # cosmetic miss: it reads as a narrow address, so two listeners on one machine and
+  # one number stop contending and `entry-port-claimed-twice` goes silent. Asserted
+  # over the spellings rather than over the literals a denylist once carried, which
+  # is what let `::0` and `0:0:0:0:0:0:0:0` through.
   testAnAddressSpelledAsTheWildcard =
     let
       id = "port-claim-address-malformed";
-      spellings =
-        map
-          (
-            address:
-            claimed {
-              proto = "tcp";
-              fixed = 5432;
-              inherit address;
-            }
-          )
-          [
-            "0.0.0.0"
-            "::"
-            "[::]"
-            "*"
-          ];
+      resultOf =
+        address:
+        claimed {
+          proto = "tcp";
+          fixed = 5432;
+          inherit address;
+        };
+      refuses = address: countById id (resultOf address) == 1;
+
+      wildcards = [
+        "0.0.0.0"
+        "::"
+        "[::]"
+        "*"
+        "0"
+        "0x0"
+        "00.00.00.00"
+        "::0"
+        "0:0:0:0:0:0:0:0"
+        "0000:0000:0000:0000:0000:0000:0000:0000"
+        "::ffff:0.0.0.0"
+        "::ffff:0:0"
+        "0.0.0.0%eth0"
+        "::%eth0"
+      ];
+
+      # A wildcard is refused by its shape, so the shape has to leave every address
+      # that names one interface alone.
+      narrow = [
+        "10.0.0.5"
+        "127.0.0.1"
+        "localhost"
+        "fe80::1"
+        "fe80::1%eth0"
+        "::1"
+        "0.0.0.1"
+        "1.0.0.0"
+      ];
     in
     {
       expr = {
-        rows = map (result: countById id result) spellings;
-        severity = map (result: severityById id result) spellings;
-        resolutionNamesOmittingTheField = map (
-          result: hasInfix "omit the key for every address of the machine" (resolutionById id result)
-        ) spellings;
-        numberRecorded = map (result: result.plan."i:only@one".alloc.ports.ssh) spellings;
+        spellingsNotRefused = filter (address: !(refuses address)) wildcards;
+        narrowAddressesRefused = filter refuses narrow;
+        severity = severityById id (resultOf "::0");
+        resolutionNamesOmittingTheField = hasInfix "omit the key for every address of the machine" (
+          resolutionById id (resultOf "::0")
+        );
+        numberRecorded = (resultOf "::0").plan."i:only@one".alloc.ports.ssh;
       };
       expected = {
-        rows = [
-          1
-          1
-          1
-          1
-        ];
-        severity = [
-          "error"
-          "error"
-          "error"
-          "error"
-        ];
-        resolutionNamesOmittingTheField = [
-          true
-          true
-          true
-          true
-        ];
-        numberRecorded = [
-          5432
-          5432
-          5432
-          5432
-        ];
+        spellingsNotRefused = [ ];
+        narrowAddressesRefused = [ ];
+        severity = "error";
+        resolutionNamesOmittingTheField = true;
+        numberRecorded = 5432;
       };
     };
 
