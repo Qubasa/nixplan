@@ -49,6 +49,13 @@ UNREACHABLE = 255
 MISSING = (126, 127)
 LISTING = "images"
 CONFIGURATION = "config"
+# The two shapes every remote step is addressed in, stated once: a builder
+# writes the destination into the position `destination` reads it back out of.
+COPY = ("nix", "copy")
+SSH = "ssh"
+TO = "--to"
+REMOTE = "ssh://"
+UNNAMED = "the machine"
 
 
 class Runner(Protocol):
@@ -217,13 +224,29 @@ def printed(refused: subprocess.CalledProcessError) -> str:
 
 
 def destination(cmd: Sequence[str]) -> str:
-    """Return the machine an argv addresses, which is all of it a refusal names."""
-    for word in cmd:
-        if word.startswith("ssh://"):
-            return word.removeprefix("ssh://")
-        if "@" in word:
-            return word
-    return "the machine"
+    """Return the machine an argv addresses, which is all of it a refusal names.
+
+    The destination is read off the position the command itself placed it in:
+    the word after `--to` for a copy, and the word before the script for an ssh
+    step. Never off a scan for a word that looks like one - the caller's own
+    connection options are in the same vector and an option's value may spell
+    anything, `-o Ciphers=aes256-gcm@openssh.com` being an ordinary one, so a
+    scan reports whichever word happens to look like a destination.
+
+    Args:
+        cmd: The argv one of this module's builders produced.
+
+    Returns:
+        The destination that builder addressed, and a name for the machine
+        where the vector is neither builder's.
+    """
+    words = list(cmd)
+    if tuple(words[: len(COPY)]) == COPY and TO in words:
+        at = words.index(TO) + 1
+        return words[at].removeprefix(REMOTE) if at < len(words) else UNNAMED
+    if words[:1] == [SSH] and len(words) >= 3:
+        return words[-2]
+    return UNNAMED
 
 
 def ssh_opts(ssh_key: Path | None, *, inherited: str | None = None) -> str:
@@ -264,14 +287,14 @@ def copy_argv(artifact: Path, address: str, *, user: str = "root") -> list[str]:
         user: The login user on the receiving machine.
 
     Returns:
-        The `nix copy` argv. `--no-check-sigs` is required because the artifact
-        was built locally and signed by nobody.
+        The `nix copy` argv, with the destination in the position a refusal
+        reads it back out of. `--no-check-sigs` is required because the
+        artifact was built locally and signed by nobody.
     """
     return [
-        "nix",
-        "copy",
-        "--to",
-        f"ssh://{user}@{address}",
+        *COPY,
+        TO,
+        f"{REMOTE}{user}@{address}",
         "--no-check-sigs",
         str(artifact),
     ]
@@ -287,9 +310,10 @@ def ssh_argv(address: str, script: str, *, opts: str, user: str = "root") -> lis
         user: The login user on the machine.
 
     Returns:
-        The `ssh` argv.
+        The `ssh` argv: the destination is the word before the script, which is
+        the position a refusal reads it back out of.
     """
-    return ["ssh", *shlex.split(opts), f"{user}@{address}", script]
+    return [SSH, *shlex.split(opts), f"{user}@{address}", script]
 
 
 def write_script(file: ValueFile) -> str:

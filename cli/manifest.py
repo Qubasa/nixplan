@@ -203,8 +203,9 @@ def read(root: Path) -> Deployment:
     Raises:
         ApplyError: If a file is absent or unreadable, if the record states a
             version this command does not implement or a store it does not run
-            against, or if the manifest states an entry without a field the
-            command needs, naming both.
+            against, if the manifest states an entry without a field the
+            command needs, naming both, or if it states an artifact path that
+            lands outside the build, naming the entry and the path.
     """
     interface = _load(root / MANIFEST)
     _shape(root / MANIFEST, interface)
@@ -390,7 +391,7 @@ def _entry(root: Path, key: str, record: Mapping[str, Any]) -> Entry:
         raise ApplyError(f"{key} records path as {stated!r}, which is not a path in the build")
     return Entry(
         key=key,
-        path=None if stated is None else (root / stated).resolve(),
+        path=None if stated is None else _artifact(root, key, stated),
         realiser=_text(record, "realiser", of=key),
         profile=profile,
         machine=_text(record, "machine", of=key),
@@ -398,6 +399,38 @@ def _entry(root: Path, key: str, record: Mapping[str, Any]) -> Entry:
         units=_texts(record, "units", of=key),
         digest=_text(record, "key", of=key),
     )
+
+
+def _artifact(root: Path, key: str, stated: str) -> Path:
+    """Return the store path one stated artifact path resolves to inside the build.
+
+    Containment is decided by where the path lands and not by what is there, so
+    it is settled on the joined path with its `..` components collapsed and
+    before any link is followed: the build is a farm of symlinks, and every one
+    of them points at a store path outside the build by design, so following
+    them first would answer that no artifact is inside the build at all.
+
+    Args:
+        root: The build the record was read from.
+        key: The entry the path was stated for, for the refusal.
+        stated: The path the record states.
+
+    Returns:
+        The store path the build's link for that entry resolves to, which is the
+        path the copy puts on the machine and the activation names there.
+
+    Raises:
+        ApplyError: If the path lands outside the build, whether it is stated
+            as an absolute location or climbs out of the build with `..`.
+    """
+    inside = Path(os.path.abspath(root))
+    landed = Path(os.path.abspath(inside / stated))
+    if not landed.is_relative_to(inside):
+        raise ApplyError(
+            f"{key} records path {stated!r}, which lands at {landed} and outside the build "
+            f"{inside}: a manifest addresses an artifact inside the build it was read from"
+        )
+    return (root / stated).resolve()
 
 
 def _value(key: str, record: Mapping[str, Any]) -> Value:

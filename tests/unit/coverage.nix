@@ -226,6 +226,20 @@ let
     "refuse-a-value-a-unit-file-cannot-carry/specs/realiser/portable-service-image/spec.md"
     "keep-a-secret-out-of-a-process-table/specs/operator/apply-command/spec.md"
     "keep-a-secret-out-of-a-process-table/specs/realiser/secrets-configuration/spec.md"
+    "hold-every-invariant-a-counterexample-breaks/specs/operator/apply-command/spec.md"
+    "hold-every-invariant-a-counterexample-breaks/specs/operator/deployment-build/spec.md"
+    "hold-every-invariant-a-counterexample-breaks/specs/operator/machine-report/spec.md"
+    "hold-every-invariant-a-counterexample-breaks/specs/planner/diagnostics/spec.md"
+    "hold-every-invariant-a-counterexample-breaks/specs/planner/interface-fold/spec.md"
+    "hold-every-invariant-a-counterexample-breaks/specs/planner/interface-identity/spec.md"
+    "hold-every-invariant-a-counterexample-breaks/specs/planner/plan-artifact/spec.md"
+    "hold-every-invariant-a-counterexample-breaks/specs/planner/secret-delivery/spec.md"
+    "hold-every-invariant-a-counterexample-breaks/specs/planner/typed-edge/spec.md"
+    "hold-every-invariant-a-counterexample-breaks/specs/planner/unit-vocabulary/spec.md"
+    "hold-every-invariant-a-counterexample-breaks/specs/realiser/flakelet-artifact/spec.md"
+    "hold-every-invariant-a-counterexample-breaks/specs/realiser/portable-service-image/spec.md"
+    "hold-every-invariant-a-counterexample-breaks/specs/realiser/secrets-configuration/spec.md"
+    "hold-every-invariant-a-counterexample-breaks/specs/tooling/test-layers/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -253,34 +267,6 @@ let
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "deliver-a-secret-without-exposing-it/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-invariant-a-counterexample-breaks/specs/operator/apply-command/spec.md" =
-      "an unimplemented change: no task of hold-every-invariant-a-counterexample-breaks has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-invariant-a-counterexample-breaks/specs/operator/deployment-build/spec.md" =
-      "an unimplemented change: no task of hold-every-invariant-a-counterexample-breaks has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-invariant-a-counterexample-breaks/specs/operator/machine-report/spec.md" =
-      "an unimplemented change: no task of hold-every-invariant-a-counterexample-breaks has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-invariant-a-counterexample-breaks/specs/planner/diagnostics/spec.md" =
-      "an unimplemented change: no task of hold-every-invariant-a-counterexample-breaks has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-invariant-a-counterexample-breaks/specs/planner/interface-fold/spec.md" =
-      "an unimplemented change: no task of hold-every-invariant-a-counterexample-breaks has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-invariant-a-counterexample-breaks/specs/planner/interface-identity/spec.md" =
-      "an unimplemented change: no task of hold-every-invariant-a-counterexample-breaks has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-invariant-a-counterexample-breaks/specs/planner/plan-artifact/spec.md" =
-      "an unimplemented change: no task of hold-every-invariant-a-counterexample-breaks has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-invariant-a-counterexample-breaks/specs/planner/secret-delivery/spec.md" =
-      "an unimplemented change: no task of hold-every-invariant-a-counterexample-breaks has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-invariant-a-counterexample-breaks/specs/planner/typed-edge/spec.md" =
-      "an unimplemented change: no task of hold-every-invariant-a-counterexample-breaks has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-invariant-a-counterexample-breaks/specs/planner/unit-vocabulary/spec.md" =
-      "an unimplemented change: no task of hold-every-invariant-a-counterexample-breaks has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-invariant-a-counterexample-breaks/specs/realiser/flakelet-artifact/spec.md" =
-      "an unimplemented change: no task of hold-every-invariant-a-counterexample-breaks has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-invariant-a-counterexample-breaks/specs/realiser/portable-service-image/spec.md" =
-      "an unimplemented change: no task of hold-every-invariant-a-counterexample-breaks has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-invariant-a-counterexample-breaks/specs/realiser/secrets-configuration/spec.md" =
-      "an unimplemented change: no task of hold-every-invariant-a-counterexample-breaks has been done, so nothing in this package claims to satisfy it yet";
-    "hold-every-invariant-a-counterexample-breaks/specs/tooling/test-layers/spec.md" =
-      "an unimplemented change: no task of hold-every-invariant-a-counterexample-breaks has been done, so nothing in this package claims to satisfy it yet";
   };
 
   isSpecFile = path: match ".*/spec\\.md" path != null;
@@ -361,16 +347,30 @@ let
     ) e2eTestFiles
   );
 
-  besideNamed =
-    map
-      (d: {
+  # A counted test file that is neither a suite nor a machine folder. The
+  # command's own counterexamples are here for the reason the perf check's tests
+  # are: a scenario is answered by the test that asserts it, whatever language
+  # the thing under test is run in.
+  besideFiles = [
+    {
+      rel = "perf/check_test.py";
+      file = perfSource + "/check_test.py";
+    }
+    {
+      rel = "cli/counterexample_test.py";
+      file = repoSource + "/cli/counterexample_test.py";
+    }
+  ];
+
+  besideNamed = concatLists (
+    map (
+      entry:
+      map (d: {
         inherit (d) name;
-        file = "perf/check_test.py";
-      })
-      (definedIn {
-        rel = "perf/check_test.py";
-        file = perfSource + "/check_test.py";
-      });
+        file = entry.rel;
+      }) (definedIn entry)
+    ) besideFiles
+  );
 
   filesByName =
     named:

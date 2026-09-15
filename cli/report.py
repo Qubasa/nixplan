@@ -10,17 +10,22 @@ is what tells the four apart, because an endpoint refuses a name it holds
 nothing under with a status of its own: only a shell that could not run the
 endpoint at all, and only ssh that reached nothing, are the other two. Printing
 absence for either of those would tell an operator the deployment was never
-applied when the truth is that nobody was asked. Each line is printed as it is
-known, because one machine's silence says nothing about another's answer.
+applied when the truth is that nobody was asked. An answer the command cannot
+read as the endpoint's own status is a fifth condition rather than a fifth
+spelling of absence: it is the command's own refusal naming the entry and what
+the machine said, because a machine whose answer cannot be read is a machine
+that was not asked. Each line is printed as it is known, because one machine's
+silence says nothing about another's answer.
 
 Each answered line then carries the verdict of comparing what the machine holds
 with what the build published. An image names the identity it holds in the name
 of the image the machine has attached, so that comparison is identity equality
-against the record's own field. A flakelet endpoint publishes no identity of the
-artifact it activated - it stores one and reports the unit files instead - so
-that comparison is the narrower one, and its words say so rather than borrowing
-the other's. Neither changes the exit status: a stale entry is an answer, and
-what to do about it is the applying command's work.
+against the record's own field, made against the entry's own image and never
+against whichever image the machine lists first. A flakelet endpoint publishes
+no identity of the artifact it activated - it stores one and reports the unit
+files instead - so that comparison is the narrower one, and its words say so
+rather than borrowing the other's. Neither changes the exit status: a stale
+entry is an answer, and what to do about it is the applying command's work.
 
 A rollback is the endpoint's own. An image entry has no generation to return to,
 so rolling one back is a refusal naming the entry and its realiser rather than a
@@ -34,6 +39,7 @@ import os
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import remote
 from errors import ApplyError
@@ -314,12 +320,7 @@ def _status_script(entry: Entry) -> str:
 def _read_status(entry: Entry, reported: str) -> str:
     if entry.realiser == "image":
         return _read_attachment(entry, reported)
-    try:
-        registered = json.loads(reported) if reported.strip() else []
-    except json.JSONDecodeError as malformed:
-        raise ApplyError(
-            f"{entry.key}: the endpoint said {reported.strip()!r}, which is not its JSON status"
-        ) from malformed
+    registered = _registered(entry, reported)
     if not registered:
         return "absent"
     first = registered[0]
@@ -331,6 +332,42 @@ def _read_status(entry: Entry, reported: str) -> str:
     )
     failed = first.get("last_error")
     return held if failed in (None, "") else f"{held}, last error {failed}"
+
+
+def _registered(entry: Entry, reported: str) -> list[Any]:
+    """Return the entries one endpoint registers, which is the only absence there is.
+
+    The endpoint prints the entries it holds under the name it was asked about,
+    so an empty registration is the one answer that says the deployment never
+    reached this machine. Every other answer is read as the condition it is: a
+    value of another kind, or one of a shape no entry can be read out of, is
+    the command's own refusal naming the entry and what the machine said, and
+    never a line saying the machine holds nothing.
+
+    Args:
+        entry: The entry the machine was asked about.
+        reported: What the machine printed.
+
+    Returns:
+        The registrations, empty for an endpoint that holds none.
+
+    Raises:
+        ApplyError: If the answer is not the endpoint's own status.
+    """
+    if not reported.strip():
+        return []
+    try:
+        answered = json.loads(reported)
+    except json.JSONDecodeError as malformed:
+        raise ApplyError(
+            f"{entry.key}: the endpoint said {reported.strip()!r}, which is not its JSON status"
+        ) from malformed
+    if not isinstance(answered, list):
+        raise ApplyError(
+            f"{entry.key}: the endpoint said {reported.strip()!r}, which is not the list of "
+            f"registered entries its status is"
+        )
+    return answered
 
 
 def _running(entry: Entry, reported: object) -> str:
@@ -361,14 +398,20 @@ def _read_attachment(entry: Entry, reported: str) -> str:
     that it is not this one, and a listing this cannot read leaves the line the
     machine's own answer rather than a verdict over a guess.
 
+    The identity compared is the entry's own: a machine may hold an earlier
+    build's image of the same entry beside this one, and whichever of them the
+    listing prints first decides nothing. This build's image is looked for by
+    name, and a listing holding only another build's is what names both
+    identities.
+
     An identity match is evidence about the image and about nothing beside it:
     the version digest excludes a configuration file's bytes on purpose, so an
     entry shown a file the machine no longer holds the current bytes of is
     never `current`, and the line says which path disagrees.
     """
     answer = remote.attachment_of(reported)
-    name = image_file(entry).removesuffix(".raw").rpartition("_")[0]
-    held = _held(name, answer.listed)
+    mine = image_file(entry).removesuffix(".raw")
+    held = _held(mine, mine.rpartition("_")[0], answer.listed)
     if held is None:
         return "absent" if answer.state in ("", "detached") else answer.state
     identity, attachment = held
@@ -385,13 +428,27 @@ def _beside(configuration: tuple[tuple[str, str], ...]) -> str:
     return ", ".join(f"{path} {word}" for path, word in sorted(configuration) if word != "current")
 
 
-def _held(name: str, listed: tuple[tuple[str, str], ...]) -> tuple[str, str] | None:
-    """Return the identity and state of the image a machine holds attached for one entry."""
+def _held(mine: str, name: str, listed: tuple[tuple[str, str], ...]) -> tuple[str, str] | None:
+    """Return the identity and state of the image a machine holds for one entry.
+
+    Args:
+        mine: The image file name this build published for the entry.
+        name: The entry's own image name, which every build of it shares.
+        listed: Each image the machine listed, with the state it gave it.
+
+    Returns:
+        This build's image where the machine holds it, another build's of the
+        same entry where it holds one of those instead, and nothing where it
+        holds neither. A detached image is one the machine does not hold.
+    """
     holds = [
         (image.removeprefix(f"{name}_"), state)
         for image, state in listed
         if name and image.startswith(f"{name}_") and state != "detached"
     ]
+    for held in holds:
+        if f"{name}_{held[0]}" == mine:
+            return held
     return holds[0] if holds else None
 
 

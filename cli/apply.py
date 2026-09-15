@@ -142,11 +142,12 @@ def rotations(
 ) -> tuple[tuple[str, str], ...]:
     """Return the entries to restart because a value they read moved.
 
-    The readers are derived from the reads the plan resolved, which is the same
-    source the activation order is derived from: a read that orders an apply is a
-    read that rotates a consumer. The whole entry is restarted rather than a named
-    unit, because the plan says which entry reads the value and not which of its
-    units opens the file - correct and coarse, never wrong.
+    The readers are derived from `order.reads`, which is the relation the
+    activation order is derived from: a read that orders an apply is a read that
+    rotates a consumer, whichever of the two shapes the plan recorded it in. The
+    whole entry is restarted rather than a named unit, because the plan says
+    which entry reads the value and not which of its units opens the file -
+    correct and coarse, never wrong.
 
     An entry that declares no unit is not restarted: there is nothing on the
     machine holding the bytes.
@@ -190,29 +191,13 @@ def _reads(plan: Mapping[str, Any], key: str, index: Mapping[str, str]) -> froze
 
     Returns:
         The value entry keys, empty for an entry reading no generated file.
+
+    Raises:
+        ApplyError: If a read is recorded in a shape the command does not
+            recognise, which the order refused before this step was reached.
     """
-    entry = plan.get(key)
-    reads = entry.get("reads") if isinstance(entry, dict) else None
-    if not isinstance(reads, dict):
-        return frozenset()
     return frozenset(
-        index[path]
-        for slot in reads.values()
-        if isinstance(slot, dict)
-        for path in _exported(slot)
-        if path in index
-    )
-
-
-def _exported(slot: Any) -> tuple[str, ...]:
-    """Return every path a resolved read's export values carry."""
-    exports = slot.get("values")
-    if not isinstance(exports, dict):
-        return ()
-    return tuple(
-        exported["path"]
-        for exported in exports.values()
-        if isinstance(exported, dict) and isinstance(exported.get("path"), str)
+        index[path] for read in order.reads(plan, key) for path in read.paths if path in index
     )
 
 

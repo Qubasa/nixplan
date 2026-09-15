@@ -4,10 +4,12 @@ anything is dialled.
 The layout is `<dir>/<entry-key>/<file>`, and an entry key carries a `/` of its
 own (`issuer:vars/session`), so `<dir>/issuer:vars/session/token` is a real
 nested path. A file claims to be a value's where it lies under that value's own
-directory, so the source is enumerated under the directory of every value entry
-the deployment delivers and a file under none of them is measured by nothing. A
-declared file is addressed by joining the key and the name rather than by
-splitting a relative path back into the two.
+directory, so the source is enumerated to the leaves of the directory of every
+value entry the deployment delivers and a file under none of them is measured
+by nothing. A file below a subdirectory of one is as much inside that value's
+directory as one lying beside the declared files, and it is named by its path
+below that directory. A declared file is addressed by joining the key and the
+name rather than by splitting a relative path back into the two.
 
 The required set is exactly the declared files of every value entry whose
 delivery set is non-empty and which records no `program`. Bytes are needed only
@@ -117,17 +119,44 @@ def held(root: Path, keys: Iterable[str]) -> tuple[str, ...]:
         keys: The value entries the deployment delivers.
 
     Returns:
-        Every file under one of those entries' own directories. A file under
-        none of them makes no claim about a value, so it is not measured.
+        Every file under one of those entries' own directories, at any depth. A
+        file under none of them makes no claim about a value, so it is not
+        measured.
     """
     return tuple(
-        sorted(
-            found.relative_to(root).as_posix()
-            for key in keys
-            for found in (root / key).rglob("*")
-            if found.is_file()
-        )
+        sorted({f"{key}/{below}" for key in keys for below in _leaves(root / key)}),
     )
+
+
+def _leaves(directory: Path) -> tuple[str, ...]:
+    """Return every file under one value's own directory, by its path below it.
+
+    A file is named by where it lies below the value's directory rather than by
+    where its bytes live, because what the operator is told is which file to
+    remove. A subdirectory is descended whatever it is, a link to a directory
+    elsewhere included, and a directory already walked is not walked again, so
+    a link back up the tree is a finite measurement rather than an endless one.
+
+    Args:
+        directory: The value entry's own directory in the source.
+
+    Returns:
+        The paths below ``directory``, empty where nothing is there.
+    """
+    found: list[str] = []
+    walked: set[Path] = set()
+    pending = [directory]
+    while pending:
+        here = pending.pop()
+        if not here.is_dir() or here.resolve() in walked:
+            continue
+        walked.add(here.resolve())
+        for entry in here.iterdir():
+            if entry.is_dir():
+                pending.append(entry)
+            elif entry.is_file():
+                found.append(entry.relative_to(directory).as_posix())
+    return tuple(found)
 
 
 def check(deployment: Deployment, root: Path | None, keys: Iterable[str]) -> None:

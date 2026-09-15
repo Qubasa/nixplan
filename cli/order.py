@@ -1,15 +1,22 @@
 """The order the command applies placed entries in.
 
 The edges are the reads the plan resolved. A read of one entry records the
-provider's own plan key at `plan.<consumer>.reads.<slot>.entry`; a read of every
-entry that provides the capability records them as `entries`, keyed by plan key.
-Both are the same relation and both are ordered against. `dependsOn` is not it:
-a consumer's `dependsOn` carries `machine:<name>@<hash>`, which is key
-provenance rather than order.
+provider's own plan key at `plan.<consumer>.reads.<slot>.entry` and its exports
+at `values`; a read of every entry that provides the capability records both as
+`entries`, keyed by plan key. Both are the same relation and both are ordered
+against. `dependsOn` is not it: a consumer's `dependsOn` carries
+`machine:<name>@<hash>`, which is key provenance rather than order.
 
-A delivered read recorded in neither shape is a refusal rather than zero edges:
-an unrecognised shape that contributed nothing silently is what let every
-set-valued read go unordered.
+`reads` is that relation and it is read once. The providers a consumer waits for
+and the paths a rotation matches a moved value against come out of one reading
+of one record, so a shape that orders a consumer is a shape that restarts it:
+reading the two questions out of two shapes is what left a set-valued reader
+ordered against a provider and never restarted when its bytes moved.
+
+A read recorded in neither shape is a refusal rather than zero edges, whatever
+kind of value it is: an unrecognised shape that contributed nothing silently is
+what let every set-valued read go unordered, and a bare provider key is as
+unreadable as a record whose fields the command does not know.
 
 The order is the strong components of that graph, walked in the dependency order
 between them. A component of one entry is an entry with an order; a component of
@@ -37,6 +44,20 @@ from errors import ApplyError
 
 
 @dataclass(frozen=True)
+class Read:
+    """One resolved read of one entry: who provides it, and what it points at.
+
+    ``providers`` is the plan key of every entry the read waits for, which is
+    what orders a run. ``paths`` is every host path the read's export values
+    carry, which is what a moved value is matched against. Both are read off
+    one record in one place, whichever shape it was recorded in.
+    """
+
+    providers: tuple[str, ...]
+    paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class WalkResult:
     """The order to apply in, the edges it contradicts, and where it broke."""
 
@@ -58,8 +79,8 @@ def walk(plan: Mapping[str, Any], keys: Iterable[str]) -> WalkResult:
         each cycle it was broken at.
 
     Raises:
-        ApplyError: If a delivered read is recorded in a shape this walk does
-            not recognise, or if the components cannot be ordered.
+        ApplyError: If a read is recorded in a shape this walk does not
+            recognise, or if the components cannot be ordered.
     """
     nodes = sorted(set(keys))
     forward: dict[str, list[str]] = {node: [] for node in nodes}
@@ -227,8 +248,8 @@ def edges(plan: Mapping[str, Any], keys: Iterable[str]) -> tuple[tuple[str, str]
         The edges, sorted by consumer then provider.
 
     Raises:
-        ApplyError: If a delivered read is recorded in a shape this walk does
-            not recognise, naming the consumer and the slot.
+        ApplyError: If a read is recorded in a shape this walk does not
+            recognise, naming the consumer and the slot.
     """
     placed = set(keys)
     found = {
@@ -255,8 +276,8 @@ def unsatisfied(
         deployment places and this run leaves out.
 
     Raises:
-        ApplyError: If a delivered read is recorded in a shape this walk does
-            not recognise, naming the consumer and the slot.
+        ApplyError: If a read is recorded in a shape this walk does not
+            recognise, naming the consumer and the slot.
     """
     applying = set(keys)
     withheld = set(placed) - applying
@@ -272,6 +293,32 @@ def unsatisfied(
     )
 
 
+def reads(plan: Mapping[str, Any], consumer: str) -> tuple[Read, ...]:
+    """Return every resolved read of one entry, in the shape the plan recorded it.
+
+    This is the relation: the order reads its providers and the rotation reads
+    its paths, so no question about a read is answered from one shape while
+    another is answered from a second.
+
+    Args:
+        plan: The plan artifact, as read from its JSON.
+        consumer: The entry whose reads to read.
+
+    Returns:
+        One `Read` per slot, in slot order, empty for an entry that reads
+        nothing.
+
+    Raises:
+        ApplyError: If a read is recorded in a shape this command does not
+            recognise, naming the consumer and the slot.
+    """
+    entry = plan.get(consumer)
+    recorded = entry.get("reads") if isinstance(entry, dict) else None
+    if not isinstance(recorded, dict):
+        return ()
+    return tuple(_read(recorded[name], consumer, name) for name in sorted(recorded))
+
+
 def _named(plan: Mapping[str, Any], consumer: str) -> tuple[str, ...]:
     """Return every provider key the resolved reads of ``consumer`` name.
 
@@ -283,20 +330,14 @@ def _named(plan: Mapping[str, Any], consumer: str) -> tuple[str, ...]:
         The provider keys, in slot order, empty for an entry that reads nothing.
 
     Raises:
-        ApplyError: If a delivered read is recorded in a shape this walk does
-            not recognise, naming the consumer and the slot.
+        ApplyError: If a read is recorded in a shape this walk does not
+            recognise, naming the consumer and the slot.
     """
-    entry = plan.get(consumer)
-    reads = entry.get("reads") if isinstance(entry, dict) else None
-    if not isinstance(reads, dict):
-        return ()
-    return tuple(
-        provider for name in sorted(reads) for provider in _providers(reads[name], consumer, name)
-    )
+    return tuple(provider for read in reads(plan, consumer) for provider in read.providers)
 
 
-def _providers(slot: Any, consumer: str, name: str) -> tuple[str, ...]:
-    """Return the plan keys one resolved read names as providers.
+def _read(slot: Any, consumer: str, name: str) -> Read:
+    """Return one resolved read, whichever of the two shapes recorded it.
 
     Args:
         slot: The read record, `plan.<consumer>.reads.<name>`.
@@ -304,23 +345,43 @@ def _providers(slot: Any, consumer: str, name: str) -> tuple[str, ...]:
         name: The slot's name, for the refusal.
 
     Returns:
-        The provider keys, empty for a read the planner did not deliver.
+        The read, carrying no provider and no path for one the planner did not
+        deliver.
 
     Raises:
-        ApplyError: If the read was delivered and records its providers in
-            neither shape the plan uses.
+        ApplyError: If the read is of another kind altogether, or is a record
+            that was delivered and names its providers in neither shape.
     """
-    if not isinstance(slot, dict):
-        return ()
-    one = slot.get("entry")
-    if isinstance(one, str):
-        return (one,)
-    every = slot.get("entries")
-    if isinstance(every, dict) and all(isinstance(key, str) for key in every):
-        return tuple(sorted(every))
-    if not slot.get("delivered"):
-        return ()
+    if isinstance(slot, dict):
+        one = slot.get("entry")
+        if isinstance(one, str):
+            return Read(providers=(one,), paths=_paths(slot.get("values")))
+        every = slot.get("entries")
+        if isinstance(every, dict) and all(isinstance(key, str) for key in every):
+            return Read(
+                providers=tuple(sorted(every)),
+                paths=tuple(path for exports in every.values() for path in _paths(exports)),
+            )
+        if not slot.get("delivered"):
+            return Read(providers=(), paths=())
     raise ApplyError(
-        f"{consumer} reads {name} as a resolved slot recorded in a shape the order "
-        "does not recognise: it names its providers by neither entry nor entries"
+        f"{consumer} reads {name} as a resolved slot recorded in a shape the command "
+        f"does not recognise: it names its providers by neither entry nor entries"
+    )
+
+
+def _paths(exports: Any) -> tuple[str, ...]:
+    """Return every path the export values of one provider carry.
+
+    A secret export resolves to the reference record of the generated file that
+    backs it, so a path is what names a value. A public export carries its bytes
+    instead, and an absent one carries a marker: neither is a path and neither
+    is read here.
+    """
+    if not isinstance(exports, dict):
+        return ()
+    return tuple(
+        exported["path"]
+        for exported in exports.values()
+        if isinstance(exported, dict) and isinstance(exported.get("path"), str)
     )
