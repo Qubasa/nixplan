@@ -20,7 +20,6 @@ let
     isString
     listToAttrs
     mapAttrs
-    substring
     tail
     ;
 
@@ -317,47 +316,11 @@ rec {
         )
     ) member.edges;
 
-  # Whether an account may open a delivered file, from the plan alone: the file's
-  # recorded ownership and mode, and the unit's own account. A read bit is the
-  # octal digit carrying 4.
-  opens =
-    digit:
-    elem digit [
-      "4"
-      "5"
-      "6"
-      "7"
-    ];
-
-  # A unit's declared groups are whatever its extension applications record under
-  # `supplementaryGroups`, under any backend: this layer names no realiser, and
-  # the key is the one a realiser's directive table and this rule both read.
-  groupsOf =
-    unit:
-    concatLists (
-      util.mapAttrsToList (
-        _: fields:
-        let
-          declared = fields.supplementaryGroups or null;
-        in
-        if isList declared then
-          filter isString declared
-        else if isString declared then
-          [ declared ]
-        else
-          [ ]
-      ) (unit.extends or { })
-    );
-
-  admits =
-    unit: file:
-    let
-      account = unit.user or null;
-    in
-    account == null
-    || (account == file.owner && opens (substring 1 1 file.mode))
-    || (elem file.group (groupsOf unit) && opens (substring 2 1 file.mode))
-    || opens (substring 3 1 file.mode);
+  # A unit the plan reads runs unconfined as the account it declares, and one
+  # declaring none is root, so both spellings of root open anything. The image
+  # reader asks the same rule with the other answer, because a confining profile
+  # imposes an account and never imposes root.
+  admits = util.admits { rootAdmitted = true; };
 
   # A unit that cannot open a value its entry reads. Produced here rather than
   # beside the wire, because the comparison needs the units and a unit set is a

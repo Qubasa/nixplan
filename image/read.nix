@@ -23,7 +23,6 @@ let
   inherit (builtins)
     all
     attrNames
-    attrValues
     concatLists
     elem
     filter
@@ -35,7 +34,6 @@ let
     match
     replaceStrings
     sort
-    substring
     ;
   inherit (planner.util)
     carriesLineBreak
@@ -435,43 +433,10 @@ let
       disposition = g.inPlan;
     }) (filter (g: g.deploy && g.inPlan == reference) (generatedOf entry));
 
-  # Whether a confined unit may open a delivered file, from the record alone. A
-  # read bit is the octal digit carrying 4, and a confined unit is never root, so
-  # a unit declaring no account is admitted by nothing but the world bit.
-  opens =
-    digit:
-    elem digit [
-      "4"
-      "5"
-      "6"
-      "7"
-    ];
-
-  groupsOf =
-    unit:
-    concatLists (
-      map (
-        fields:
-        let
-          declared = fields.supplementaryGroups or null;
-        in
-        if isList declared then
-          filter isString declared
-        else if isString declared then
-          [ declared ]
-        else
-          [ ]
-      ) (attrValues (unit.extends or { }))
-    );
-
-  admits =
-    unit: g:
-    let
-      account = unit.user or null;
-    in
-    (account != null && account == g.owner && opens (substring 1 1 g.mode))
-    || (elem g.group (groupsOf unit) && opens (substring 2 1 g.mode))
-    || opens (substring 3 1 g.mode);
+  # The same rule the planner asks, with the other answer to its one policy: a
+  # confining profile imposes the account and never imposes root, so a unit
+  # declaring none is admitted by nothing but the world bit.
+  admits = planner.util.admits { rootAdmitted = false; };
 
   # The files whose record a profile compares against the account it imposes: a
   # delivered generated file, and every configuration file the entry declares.

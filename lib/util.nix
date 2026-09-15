@@ -268,6 +268,59 @@ rec {
     else
       false;
 
+  # A read bit is the octal digit carrying 4.
+  opensDigit =
+    digit:
+    elem digit [
+      "4"
+      "5"
+      "6"
+      "7"
+    ];
+
+  # A unit's declared groups are whatever its extension applications record under
+  # `supplementaryGroups`, under any backend, so this names no realiser and the
+  # key is the one a realiser's directive table and this rule both read.
+  declaredGroups =
+    unit:
+    concatLists (
+      map (
+        fields:
+        let
+          declared = fields.supplementaryGroups or null;
+        in
+        if isList declared then
+          filter isString declared
+        else if isString declared then
+          [ declared ]
+        else
+          [ ]
+      ) (builtins.attrValues (unit.extends or { }))
+    );
+
+  # Whether a unit may open a file, from the file's recorded ownership and mode
+  # and the unit's own account. One rule, asked wherever those facts are held.
+  #
+  # `rootAdmitted` is the single thing its callers differ on, so it is an argument
+  # rather than a second copy of the comparison. The planner reads a unit running
+  # unconfined as the account it declares, and one declaring none is root, so both
+  # spellings of root open anything. A confining profile imposes the account and
+  # never imposes root, so there an undeclared account owns nothing.
+  #
+  # The group clause asks about the unit's declared groups and not about its
+  # account, so a unit naming a group and no account is admitted by that group
+  # under either answer.
+  admits =
+    { rootAdmitted }:
+    unit: file:
+    let
+      account = unit.user or null;
+    in
+    (rootAdmitted && (account == null || account == "root"))
+    || (account != null && account == file.owner && opensDigit (substring 1 1 file.mode))
+    || (elem file.group (declaredGroups unit) && opensDigit (substring 2 1 file.mode))
+    || opensDigit (substring 3 1 file.mode);
+
   isVarsFile = value: isAttrs value && (value.__varsFile or false);
 
   # A short content hash, truncated because people read plans. The context is
