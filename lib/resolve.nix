@@ -50,6 +50,17 @@ let
     "reserves"
   ];
 
+  reservationKeys = [
+    "ports"
+    "paths"
+  ];
+
+  reservedPortKeys = [
+    "proto"
+    "number"
+    "address"
+  ];
+
   machineTargetKeys = [
     "address"
     "system"
@@ -235,9 +246,17 @@ in
       # left incomplete is dropped from what is planned rather than reported and
       # then handed over. What a selector matched is kept beside it, because the
       # row and `member-not-placed` are about the declaration and not about what
-      # survived it.
-      missingTargetKeys =
-        machine: filter (k: machineFields.${machine}.${k}.value == null) machineTargetKeys;
+      # survived it. A key is stated only where what it states is usable: an
+      # empty string names no machine and no service manager, and a system the
+      # elaboration refused has no platform record for a target to carry.
+      statedTargetKey =
+        machine: key:
+        let
+          value = machineFields.${machine}.${key}.value;
+        in
+        value != null && value != "" && (key != "system" || platformOf machine != null);
+
+      missingTargetKeys = machine: filter (k: !(statedTargetKey machine k)) machineTargetKeys;
 
       placeable = machine: selectable machine && missingTargetKeys machine == [ ];
 
@@ -324,6 +343,19 @@ in
                 required
                 ;
             };
+          unknown =
+            {
+              where,
+              record,
+              allowed,
+            }:
+            map (
+              key:
+              module.keyRow {
+                subject = machinesFile;
+                inherit where key allowed;
+              }
+            ) (util.extraKeys allowed record);
           inside = "the reservation of machine ${util.quote name}";
           reserves = machineFieldOf name "reserves" shapes.record { };
           ports = read {
@@ -378,7 +410,18 @@ in
                 address = address.value;
                 number = number.value;
               };
-              rows = if record.rows == [ ] then proto.rows ++ address.rows ++ number.rows else record.rows;
+              rows =
+                if record.rows == [ ] then
+                  proto.rows
+                  ++ address.rows
+                  ++ number.rows
+                  ++ unknown {
+                    inherit where;
+                    record = record.value;
+                    allowed = reservedPortKeys;
+                  }
+                else
+                  record.rows;
             };
           readPorts = mapAttrs portOf ports.value;
         in
@@ -396,7 +439,15 @@ in
               ports = util.filterAttrs (_: port: port.number != null) (mapAttrs (_: port: port.value) readPorts);
               paths = paths.value;
             };
-            rows = ports.rows ++ paths.rows ++ concatLists (util.mapAttrsToList (_: port: port.rows) readPorts);
+            rows =
+              ports.rows
+              ++ paths.rows
+              ++ unknown {
+                where = inside;
+                record = reserves.value;
+                allowed = reservationKeys;
+              }
+              ++ concatLists (util.mapAttrsToList (_: port: port.rows) readPorts);
           };
 
       machineFields = mapAttrs (name: _: {
@@ -665,8 +716,32 @@ in
           moduleFile = moduleFileOf iname;
           declaredMembers = root.services or { };
           badMemberNames = filter util.carriesKeySeparator (attrNames declaredMembers);
-          members = util.filterAttrs (name: _: !(util.carriesKeySeparator name)) declaredMembers;
+
+          # A root may return anything under `services.<name>`, and the readings
+          # below index it. Dropped rather than reported and then handed over, for
+          # the reason an incomplete machine is: a record is what every later
+          # stratum reads a field of.
+          malformedMemberNames = filter (
+            name: !(util.carriesKeySeparator name) && !(builtins.isAttrs declaredMembers.${name})
+          ) (attrNames declaredMembers);
+
+          members = util.filterAttrs (
+            name: value: !(util.carriesKeySeparator name) && builtins.isAttrs value
+          ) declaredMembers;
           memberNames = attrNames members;
+
+          malformedMemberRows = map (
+            name:
+            diag.error {
+              inherit subject;
+              id = "declaration-malformed";
+              message = "the root in ${moduleFile} returns `services.${name}` as a value of type ${
+                builtins.typeOf declaredMembers.${name}
+              }, and the reading needs the record `service` returns";
+              evidence = "every later reading takes a field of that record, and a field of another kind is neither a catchable error nor a row, so the member is dropped and the rest of the instance is still read";
+              resolution = "return `service ${util.quote name} { module = …; }` for `services.${name}` in ${moduleFile}";
+            }
+          ) malformedMemberNames;
 
           # The cut is read before placement, settings, generators and wires, so
           # "a cut member produces nothing" is one filter rather than a check at
@@ -709,6 +784,7 @@ in
 
           memberBlockRows =
             declaredMembersBlock.rows
+            ++ malformedMemberRows
             ++ util.concatMapAttrsToList (_: b: b.rows) memberBlocks
             ++ util.concatMapAttrsToList (_: e: e.rows) memberEnables
             ++ concatLists (
@@ -724,16 +800,23 @@ in
                 ) (util.extraKeys [ "enable" ] b.value)
               ) memberBlocks
             )
-            ++ map (
-              name:
-              diag.error {
-                inherit subject;
-                id = "members-unknown-member";
-                message = "${deploymentFile} states `members.${name}` in instance ${util.quote iname}, which its root does not own";
-                evidence = "the root in ${moduleFile} owns ${util.quoteList memberNames}";
-                resolution = "state one of ${util.quoteList memberNames} in ${deploymentFile}, or delete the block";
-              }
-            ) (util.subtractList (attrNames declaredMembersBlock.value) (memberNames ++ badMemberNames));
+            ++
+              map
+                (
+                  name:
+                  diag.error {
+                    inherit subject;
+                    id = "members-unknown-member";
+                    message = "${deploymentFile} states `members.${name}` in instance ${util.quote iname}, which its root does not own";
+                    evidence = "the root in ${moduleFile} owns ${util.quoteList memberNames}";
+                    resolution = "state one of ${util.quoteList memberNames} in ${deploymentFile}, or delete the block";
+                  }
+                )
+                (
+                  util.subtractList (attrNames declaredMembersBlock.value) (
+                    memberNames ++ badMemberNames ++ malformedMemberNames
+                  )
+                );
 
           # One sentence for every way a deployment can go on naming a member it
           # cut. The member is gone, so each of these addresses nothing.

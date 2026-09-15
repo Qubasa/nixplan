@@ -339,6 +339,19 @@ let
     "interfaces/repository.nix".repository = repository;
   };
 
+  # A slot record the test writes, for the fields `slotConsumer` has no shape for.
+  slotLeaf = slot: _: {
+    uses.far = slot;
+    impl =
+      { results, ... }:
+      {
+        units.main = {
+          command = "/bin/app";
+          env.KEY = if results ? far then results.far.publicKey else "";
+        };
+      };
+  };
+
   farProvider = machine: {
     module = soleRoot {
       module = twoCapProvider;
@@ -1713,6 +1726,293 @@ in
         hasValues = false;
         received = "";
         applicable = false;
+      };
+    };
+
+  # `reads` is filtered as a list of export names, so a value of another kind is a
+  # row and the slot is left unresolvable: the reading asks its kind rather than
+  # indexing into it and recovering afterwards, which nothing can catch.
+  testASlotReadsSomethingOtherThanExportNames =
+    let
+      id = "declaration-malformed";
+      wired =
+        reads:
+        planOf {
+          sources = pairFiles;
+          interfaces = interfaceFiles;
+          instances.pair = {
+            module =
+              { service, ... }:
+              let
+                backend = service "backend" { module = twoCapProvider; };
+              in
+              {
+                services = {
+                  inherit backend;
+                  app = service "app" {
+                    module = slotLeaf {
+                      interface = identity;
+                      inherit reads;
+                    };
+                    wire.far = backend.provides.identity;
+                  };
+                };
+              };
+            placement.every.backend.machines = [ "one" ];
+            placement.every.app.machines = [ "two" ];
+          };
+        };
+      notAList = wired "publicKey";
+      holdingANonName = wired [ 5 ];
+      unknownName = wired [ "hostName" ];
+    in
+    {
+      expr = {
+        rows = map rowIds [
+          notAList
+          holdingANonName
+          unknownName
+        ];
+        severity = severityById id notAList;
+        subjects = subjectsById id notAList;
+        namesTheSlot = hasInfix "slot `far` of pair/app.nix declares `reads`" (messageById id notAList);
+        namesTheValue = map (result: hasInfix "as `publicKey`" (messageById id result)) [
+          notAList
+          holdingANonName
+        ];
+        namesTheElement = hasInfix "a list holding a value of type int" (messageById id holdingANonName);
+        received = map (result: result.plan."pair:app@two".units.main.env.KEY) [
+          notAList
+          holdingANonName
+          unknownName
+        ];
+        delivered = map (result: result.plan."pair:app@two".reads.far.delivered) [
+          notAList
+          holdingANonName
+          unknownName
+        ];
+        theProviderIsStillPlanned = map (result: attrNames result.plan) [
+          notAList
+          holdingANonName
+        ];
+      };
+      expected = {
+        rows = [
+          [ "declaration-malformed" ]
+          [ "declaration-malformed" ]
+          [ "slot-reads-unknown-export" ]
+        ];
+        severity = "error";
+        subjects = [ "pair/app.nix" ];
+        namesTheSlot = true;
+        namesTheValue = [
+          true
+          false
+        ];
+        namesTheElement = true;
+        received = [
+          ""
+          ""
+          ""
+        ];
+        delivered = [
+          false
+          false
+          false
+        ];
+        theProviderIsStillPlanned = [
+          [
+            "machine:one"
+            "machine:two"
+            "pair:app@two"
+            "pair:backend@one"
+          ]
+          [
+            "machine:one"
+            "machine:two"
+            "pair:app@two"
+            "pair:backend@one"
+          ]
+        ];
+      };
+    };
+
+  # The row fires because the value is outside the domain, so the value it names
+  # is one nobody vetted: a string is quoted and any other kind is named.
+  testASlotReachOutsideItsDomain =
+    let
+      id = "slot-reach-domain";
+      declaring =
+        reach:
+        planOf {
+          sources = bothFiles;
+          instances.i = {
+            module = soleRoot {
+              module = slotLeaf {
+                interface = identity;
+                reads = [ "publicKey" ];
+                inherit reach;
+              };
+            };
+            placement.every.only.machines = [ "one" ];
+          };
+        };
+      outsideTheDomain = declaring "every";
+      notAString = declaring { };
+    in
+    {
+      expr = {
+        rows = map rowIds [
+          outsideTheDomain
+          notAString
+        ];
+        severity = severityById id notAString;
+        subjects = subjectsById id notAString;
+        namesTheWrittenValue = hasInfix "declares reach `every`" (messageById id outsideTheDomain);
+        namesTheKind = hasInfix "declares reach a value of type set" (messageById id notAString);
+        namesTheDomain = map (result: hasInfix "`one`, `all`" (messageById id result)) [
+          outsideTheDomain
+          notAString
+        ];
+        theEntryIsStillPlanned = map (result: result.plan ? "i:only@one") [
+          outsideTheDomain
+          notAString
+        ];
+      };
+      expected = {
+        rows = [
+          [
+            "slot-reach-domain"
+            "slot-unwired"
+          ]
+          [
+            "slot-reach-domain"
+            "slot-unwired"
+          ]
+        ];
+        severity = "error";
+        subjects = [ "i:only" ];
+        namesTheWrittenValue = true;
+        namesTheKind = true;
+        namesTheDomain = [
+          true
+          true
+        ];
+        theEntryIsStillPlanned = [
+          true
+          true
+        ];
+      };
+    };
+
+  # A refused cardinality admits any number of slots, which is observable as the
+  # wire the capability still answers.
+  testACapabilityWhoseConsumersAreNotACardinality =
+    let
+      id = "capability-consumers-malformed";
+      result = planOf {
+        sources = {
+          deployment = "deployment/instances.nix";
+          machines = "deployment/machines.nix";
+          modules.app = "pair/default.nix";
+          modules.store = "pair/default.nix";
+          leaves.app.only = "pair/app.nix";
+          leaves.store.only = "pair/backend.nix";
+        };
+        interfaces = interfaceFiles;
+        instances = {
+          store = {
+            module = soleRoot {
+              module = _: {
+                provides.thing = {
+                  interface = identity;
+                  consumers = { };
+                };
+                impl = _: {
+                  provides.thing.exports.publicKey = "ssh-ed25519 AAAA";
+                  units.main.command = "/bin/true";
+                };
+              };
+              provides = [ "thing" ];
+            };
+            exposes = [ "thing" ];
+            placement.every.only.machines = [ "one" ];
+          };
+          app = {
+            module = soleRoot { module = slotConsumer; };
+            wire.far = {
+              instance = "store";
+              provides = "thing";
+            };
+            placement.every.only.machines = [ "two" ];
+          };
+        };
+      };
+      entry = result.plan."app:only@two";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        severity = severityById id result;
+        subjects = subjectsById id result;
+        namesTheKind = hasInfix "declares `consumers` as a value of type set" (messageById id result);
+        namesTheDomain = hasInfix "`one`, `many`" (evidenceById id result);
+        delivered = entry.reads.far.delivered;
+        received = entry.units.main.env.KEY;
+      };
+      expected = {
+        rows = [ "capability-consumers-malformed" ];
+        severity = "error";
+        subjects = [ "pair/backend.nix" ];
+        namesTheKind = true;
+        namesTheDomain = true;
+        delivered = true;
+        received = "ssh-ed25519 AAAA";
+      };
+    };
+
+  # `per` reaches a lookup and a comparison, so a value of the wrong kind is read
+  # for its kind before either and the value records the omitted cardinality.
+  testAGeneratorPerThatIsNotAString =
+    let
+      id = "vars-per-domain";
+      result = planOf {
+        sources = bothFiles;
+        instances.i = {
+          module = soleRoot {
+            module = _: {
+              vars.token = {
+                per = { };
+                files.secret.secrecy = "secret";
+              };
+              impl = _: {
+                units.main.command = "/bin/run";
+              };
+            };
+          };
+          placement.every.only.machines = [ "one" ];
+        };
+      };
+      value = result.plan."i:vars/token@one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        severity = severityById id result;
+        subjects = subjectsById id result;
+        namesTheKind = hasInfix "declares per a value of type set" (messageById id result);
+        namesTheDomain = hasInfix "`instance`, `placement`" (messageById id result);
+        recordedPer = value.per;
+        delivery = value.delivery;
+      };
+      expected = {
+        rows = [ "vars-per-domain" ];
+        severity = "error";
+        subjects = [ "i:only" ];
+        namesTheKind = true;
+        namesTheDomain = true;
+        recordedPer = "placement";
+        delivery = [ "one" ];
       };
     };
 

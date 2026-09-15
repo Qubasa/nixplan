@@ -277,8 +277,17 @@ rec {
       reach = given.reach or "one";
       hasInterface = given ? interface && isInterface given.interface;
       exported = if hasInterface then interface.exportNames given.interface else [ ];
-      reads = if given ? reads then given.reads else exported;
+      readsMalformed = given ? reads && !(isList given.reads && all isString given.reads);
+      reads = if given ? reads && !readsMalformed then given.reads else exported;
       unknownReads = if hasInterface then util.subtractList reads exported else [ ];
+
+      # A list is named by the element that is not an export name, the kind of the
+      # list itself not being the mistake there.
+      readsShown =
+        if isList given.reads then
+          "a list holding ${util.shownValue (builtins.head (filter (r: !isString r) given.reads))}"
+        else
+          util.shownValue given.reads;
 
       slotRows =
         map (
@@ -314,9 +323,18 @@ rec {
           diag.error {
             inherit subject;
             id = "slot-reach-domain";
-            message = "${where} declares reach ${util.quote (toString reach)}, and reach takes ${util.quoteList reaches}";
+            message = "${where} declares reach ${util.shownValue reach}, and reach takes ${util.quoteList reaches}";
             evidence = "an omitted reach means `one`";
             resolution = "write one of ${util.quoteList reaches} in ${subject}, or omit the key";
+          }
+        )
+        ++ util.optional readsMalformed (
+          diag.error {
+            inherit subject;
+            id = "declaration-malformed";
+            message = "${where} declares `reads` as ${readsShown}, and the reading needs a list of export names";
+            evidence = "a value of the wrong kind contributes nothing to the plan and the rest of ${module} is still read, which is what keeps one malformed declaration from ending the evaluation";
+            resolution = "write the export names ${where} reads as a list of strings in ${subject}, or omit the key";
           }
         )
         ++ map (
@@ -334,7 +352,8 @@ rec {
       inherit declared reach reads;
       rows = read.rows ++ (if declared then slotRows else [ ]);
       interface = if hasInterface then given.interface else null;
-      resolvable = declared && hasInterface && elem reach reaches && unknownReads == [ ];
+      resolvable =
+        declared && hasInterface && elem reach reaches && !readsMalformed && unknownReads == [ ];
     };
 
   readCapability =
@@ -375,7 +394,7 @@ rec {
           diag.error {
             inherit subject;
             id = "capability-consumers-malformed";
-            message = "${where} declares `consumers` as ${util.quote (toString stated)}";
+            message = "${where} declares `consumers` as ${util.shownValue stated}";
             evidence = "the values are ${util.quoteList atoms.domains.consumerCardinality}, and a capability declaring nothing is taken by any number of slots";
             resolution = "write one of ${util.quoteList atoms.domains.consumerCardinality} in ${subject}, or omit the key";
           }
@@ -642,7 +661,9 @@ rec {
 
       declared = attrNames given;
 
-      perOf = g: if g ? per then toString g.per else "placement";
+      # `per` reaches a lookup and a comparison and not only a sentence, so its kind
+      # is asked before either and a value of another kind means the omitted value.
+      perOf = g: if g ? per && isString g.per then g.per else "placement";
       deployOf = g: if g ? deploy then g.deploy else true;
       readsOf = g: if g ? reads && isList g.reads then filter isString g.reads else [ ];
 
@@ -679,6 +700,7 @@ rec {
         let
           where = "generator ${util.quote gen} of ${module}";
           per = perOf g;
+          statedPer = g.per or per;
           unknownReads = filter (name: !(given ? ${name})) (readsOf g);
           coarser = coarserThan.${per} or cardinalities;
           tooNarrow = filter (name: given ? ${name} && !elem (perOf given.${name}) coarser) (readsOf g);
@@ -691,11 +713,11 @@ rec {
             allowed = generatorKeys;
           }
         ) (util.extraKeys generatorKeys g)
-        ++ util.optional (!elem per cardinalities) (
+        ++ util.optional (!isString statedPer || !elem per cardinalities) (
           diag.error {
             inherit subject;
             id = "vars-per-domain";
-            message = "${where} declares per ${util.quote per}, and a cardinality takes ${util.quoteList cardinalities}";
+            message = "${where} declares per ${util.shownValue statedPer}, and a cardinality takes ${util.quoteList cardinalities}";
             evidence = "an omitted per means ${util.quote "placement"}: one value per machine the member is placed on, where ${util.quote "instance"} is one value for the instance";
             resolution = "write one of ${util.quoteList cardinalities} in ${subject}, or omit the key";
           }

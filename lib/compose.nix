@@ -8,7 +8,12 @@
   diag,
 }:
 let
-  inherit (builtins) attrNames isAttrs;
+  inherit (builtins)
+    attrNames
+    functionArgs
+    isAttrs
+    isFunction
+    ;
 
   # Composition indexes the value a module returned before the module reading
   # sees it, and `attrNames` on a value of another kind ends the evaluation. The
@@ -31,10 +36,48 @@ rec {
   service =
     settingsOf: name: args:
     let
-      module = args.module;
+      module = args.module or null;
       defaults = args.defaults or { };
       fixed = args.fixed or { };
       settings = settingsOf { inherit name defaults fixed; };
+
+      # Applying the module is the half no guard reaches: a value that is not a
+      # function, and a pattern requiring an argument the composer has none of,
+      # are neither a raise nor an assertion. Both are answered before the
+      # application, and the record they fall back to is the one a raise falls
+      # back to, so one family of rows covers every module that yields no
+      # declaration.
+      supplied = [ "settings" ];
+
+      # A formal mapped to false is one the pattern requires, and a module with
+      # an ellipsis or a default for it asks for nothing.
+      required = attrNames (util.filterAttrs (_: hasDefault: !hasDefault) (functionArgs module));
+
+      unsupplied = if isFunction module then util.subtractList required supplied else [ ];
+
+      applicable = isFunction module && unsupplied == [ ];
+
+      applied = values: if applicable then module { settings = values; } else { };
+
+      applicationRows =
+        util.optional (!isFunction module) (
+          diag.error {
+            subject = "member:${name}";
+            id = "module-raised";
+            message = "the declaration of member ${util.quote name} is ${util.shownValue module}, and the composer applies a module rather than reading it, so its value is recorded as not computed";
+            evidence = "a module is a function of ${util.quote "{ settings }"}, and applying a value of another kind is not an error `builtins.tryEval` recovers";
+            resolution = "write member ${util.quote name} as `{ settings }: { … }` and pass it as `module` in the root that composes it";
+          }
+        )
+        ++ util.optional (isFunction module && unsupplied != [ ]) (
+          diag.error {
+            subject = "member:${name}";
+            id = "module-raised";
+            message = "the declaration of member ${util.quote name} requires ${util.quoteList unsupplied}, which the composer does not supply, so its value is recorded as not computed";
+            evidence = "a module is applied to ${util.quote "{ settings }"} and nothing else, and a function called without an argument its pattern requires is not an error `builtins.tryEval` recovers";
+            resolution = "close over ${util.quoteList unsupplied} where member ${util.quote name} is defined, or give those formals defaults in its own file";
+          }
+        );
 
       # The module's own expression, forced under the recovery its implementation
       # already gets: a module that raises while computing its declaration is one
@@ -44,7 +87,7 @@ rec {
         subject = "member:${name}";
         what = "the declaration of member ${util.quote name}";
         fallback = { };
-        value = module { settings = settings.values; };
+        value = applied settings.values;
       };
       declaration = computed.value;
 
@@ -63,9 +106,7 @@ rec {
         fallback = null;
         value = {
           resolved = slotsOf declaration;
-          own = slotsOf (module {
-            settings = defaults // fixed;
-          });
+          own = slotsOf (applied (defaults // fixed));
         };
       };
     in
@@ -84,8 +125,8 @@ rec {
       # member it came from, so no root ever names an instance.
       wire = args.wire or { };
       slotSet = if configured then observed.value else null;
-      declarationRows = computed.rows;
-      unknownKeys = util.extraKeys serviceKeys args;
+      declarationRows = computed.rows ++ applicationRows;
+      unknownKeys = util.extraKeys serviceKeys (recordOf args);
       # A capability of the wrong kind stays a key the root can re-export, and
       # carries no interface: the module earns the reading's row and a wire to it
       # earns the untyped one, where indexing the value would end the evaluation.

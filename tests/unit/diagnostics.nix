@@ -34,6 +34,7 @@ let
     severityById
     soleRoot
     subjectsById
+    systemdService
     ;
 
   inherit (planner.util) sortStrings uniqueStrings;
@@ -1523,6 +1524,126 @@ in
         namesWhatWasForced = "the declaration of member `only` raised a catchable error, so its value is recorded as not computed";
         theRestIsPlanned = [ "only" ];
         applicable = false;
+      };
+    };
+
+  # The application of a module, which is the half no guard reaches: a value that
+  # is not a function, a pattern requiring an argument the composer has none of,
+  # and a service call naming no module. Each answers the row a raise answers
+  # with, beside the absence its empty fallback earns, and never a third
+  # identifier.
+  testAComposerCannotApplyAModule =
+    let
+      cases = {
+        notAFunction = badLeaf {
+          impl = _: {
+            units.main.command = "/bin/run";
+          };
+        };
+        wantsAnArgument = badLeaf (
+          { settings, pkgs }:
+          {
+            impl = _: {
+              units.main.command = "${pkgs.tool}/bin/run --port ${toString settings.port}";
+            };
+          }
+        );
+        noModule = planOf {
+          sources = leafSources;
+          instances = {
+            good = placedOn "one" (soleRoot {
+              module = quiet;
+            });
+            bad = placedOn "two" (
+              { service, ... }:
+              {
+                services.only = service "only" { };
+              }
+            );
+          };
+        };
+      };
+      read = result: {
+        rows = ids result;
+        subjects = {
+          raised = subjectsById "module-raised" result;
+          missing = subjectsById "impl-missing" result;
+        };
+        theRestIsPlanned = plannedWhole result;
+        applicable = result.applicable;
+      };
+      answered = {
+        rows = [
+          "impl-missing"
+          "module-raised"
+        ];
+        subjects = {
+          raised = [ "member:only" ];
+          missing = [ "modules/bad.nix" ];
+        };
+        theRestIsPlanned = [ "only" ];
+        applicable = false;
+      };
+    in
+    {
+      expr = builtins.mapAttrs (_: read) cases // {
+        namesTheArgument = hasInfix "pkgs" (messageById "module-raised" cases.wantsAnArgument);
+      };
+      expected = builtins.mapAttrs (_: _: answered) cases // {
+        namesTheArgument = true;
+      };
+    };
+
+  testAUnitExtendsWithAValueThatIsNotARecord =
+    let
+      extending = extends: {
+        impl = _: {
+          units.main = {
+            command = "/bin/run";
+            inherit extends;
+          };
+        };
+      };
+      cases = {
+        entry = badLeaf (_: extending [ 5 ]);
+        values = badLeaf (
+          _:
+          extending [
+            {
+              extension = systemdService;
+              values = 5;
+            }
+          ]
+        );
+      };
+      read = result: {
+        rows = ids result;
+        subjects = subjectsById "implementation-malformed" result;
+        unit = result.plan."bad:only@two".units.main;
+        theRestIsPlanned = plannedWhole result;
+        applicable = result.applicable;
+      };
+    in
+    {
+      expr = builtins.mapAttrs (_: read) cases;
+      expected = {
+        entry = {
+          rows = [ "implementation-malformed" ];
+          subjects = [ "bad:only@two" ];
+          unit.command = "/bin/run";
+          theRestIsPlanned = [ "only" ];
+          applicable = false;
+        };
+        values = {
+          rows = [ "implementation-malformed" ];
+          subjects = [ "bad:only@two" ];
+          unit = {
+            command = "/bin/run";
+            extends.systemd = { };
+          };
+          theRestIsPlanned = [ "only" ];
+          applicable = false;
+        };
       };
     };
 

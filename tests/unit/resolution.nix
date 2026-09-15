@@ -75,6 +75,29 @@ let
     };
   };
 
+  # Three registry keys declared and one of them unusable: an empty name, and a
+  # system string nixpkgs' elaboration refuses.
+  partlyTargeted =
+    bare:
+    support.machines
+    // {
+      bare = {
+        tags = [ "everywhere" ];
+        address = "bare.example:22";
+        system = "x86_64-linux";
+        serviceManager = "systemd";
+      }
+      // bare;
+    };
+
+  readsTheAddress = _: {
+    impl =
+      { target, ... }:
+      {
+        units.only.command = "/bin/serve ${target.address}";
+      };
+  };
+
   reserving =
     reserves:
     support.machines
@@ -952,6 +975,78 @@ in
         subjects = [ "deployment/machines.nix" ];
         namesTheMachine = true;
         severity = "error";
+      };
+    };
+
+  testAMachineDeclaresAnEmptyAddress =
+    let
+      result = planOf {
+        machines = partlyTargeted { address = ""; };
+        instances.svc = {
+          module = soleRoot { module = readsTheAddress; };
+          placement.every.only.machines = [
+            "one"
+            "bare"
+          ];
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        namesTheKey = hasInfix "`address`" (messageById "machine-target-incomplete" result);
+        subjects = subjectsById "machine-target-incomplete" result;
+        theEntryOnIt = result.plan ? "svc:only@bare";
+        theOtherEntryIsWhole = result.plan."svc:only@one".units.only.command;
+      };
+      expected = {
+        rows = [ "machine-target-incomplete" ];
+        namesTheKey = true;
+        subjects = [ "deployment/machines.nix" ];
+        theEntryOnIt = false;
+        theOtherEntryIsWhole = "/bin/serve one.example:22";
+      };
+    };
+
+  # The elaboration is nixpkgs' own and raises on a system string it cannot
+  # parse, so the machine declares three keys and still has no platform record.
+  # A placement onto it that was planned would hand `impl` no target at all,
+  # which is a missing argument no caller can catch, so asking for the table is
+  # the question this case answers.
+  testAMachineDeclaresASystemThatDoesNotElaborate =
+    let
+      result = planOf {
+        machines = partlyTargeted { system = "x86_64_linux"; };
+        instances.svc = {
+          module = soleRoot { module = readsTheAddress; };
+          placement.every.only.machines = [
+            "one"
+            "bare"
+          ];
+        };
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        namesTheMachine = hasInfix "`bare`" (messageById "machine-target-incomplete" result);
+        theElaborationIsNamed = hasInfix "`x86_64_linux`" (messageById "module-raised" result);
+        subjects = subjectsById "module-raised" result;
+        theEntryOnIt = result.plan ? "svc:only@bare";
+        theOtherEntryIsWhole = result.plan."svc:only@one".units.only.command;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [
+          "machine-target-incomplete"
+          "module-raised"
+        ];
+        namesTheMachine = true;
+        theElaborationIsNamed = true;
+        subjects = [ "deployment/machines.nix" ];
+        theEntryOnIt = false;
+        theOtherEntryIsWhole = "/bin/serve one.example:22";
+        applicable = false;
       };
     };
 
@@ -2984,6 +3079,58 @@ in
           whole = [ "deployment/machines.nix" ];
           ports = [ "deployment/machines.nix" ];
         };
+        stillRead = [
+          "machine:one"
+          "machine:two"
+          "other:only@two"
+          "svc:only@one"
+        ];
+      };
+    };
+
+  # A misspelled key reserves nothing, so the collision the reservation exists to
+  # report is silently not reported: the scan every other nested record gets is
+  # what makes the misspelling a row.
+  testAReservationMisspellsAKey =
+    let
+      planned = reserves: planOf (twoMachines (reserving reserves));
+      cases = {
+        ports = planned { port.sshd.number = 22; };
+        paths = planned { path = [ "/etc/ssh" ]; };
+        field = planned {
+          ports.sshd = {
+            protocol = "tcp";
+            number = 22;
+          };
+        };
+      };
+      said = result: map (r: r.message) (rowsById "declaration-unknown-key" result);
+    in
+    {
+      expr = {
+        rows = builtins.mapAttrs (_: rowIds) cases;
+        said = builtins.mapAttrs (_: said) cases;
+        subjects = subjectsById "declaration-unknown-key" cases.ports;
+        stillRead = builtins.attrNames cases.ports.plan;
+      };
+      expected = {
+        rows = {
+          ports = [ "declaration-unknown-key" ];
+          paths = [ "declaration-unknown-key" ];
+          field = [ "declaration-unknown-key" ];
+        };
+        said = {
+          ports = [
+            "the reservation of machine `one` declares `port`, and this subset reads `ports`, `paths`"
+          ];
+          paths = [
+            "the reservation of machine `one` declares `path`, and this subset reads `ports`, `paths`"
+          ];
+          field = [
+            "the reserved port `sshd` of machine `one` declares `protocol`, and this subset reads `proto`, `number`, `address`"
+          ];
+        };
+        subjects = [ "deployment/machines.nix" ];
         stillRead = [
           "machine:one"
           "machine:two"

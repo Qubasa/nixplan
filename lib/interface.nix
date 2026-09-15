@@ -441,9 +441,15 @@ rec {
       application,
     }:
     let
-      ext = application.extension or null;
+      # A unit's `extends` list is read for being a list one stratum up, and each
+      # item arrives here as the author wrote it. `removeAttrs` and `attrNames`
+      # over a value of another kind end the evaluation, so the entry and its
+      # values are read for their kind before either is indexed.
+      entry = if isAttrs application then application else { };
+      ext = entry.extension or null;
       known = isUnitExtension ext;
-      values = application.values or { };
+      declaredValues = entry.values or { };
+      values = if isAttrs declaredValues then declaredValues else { };
       extLabel = if known then "unit extension ${label reg ext}" else "the extension";
 
       fieldRows = util.concatMapAttrsToList (
@@ -481,11 +487,29 @@ rec {
             inherit subject;
             id = "implementation-unknown-key";
             message = "${where} declares ${util.quote key} on an `extends` entry, and an entry declares ${util.quoteList applicationKeys} and nothing else";
-            evidence = "declared keys are ${util.quoteList (attrNames application)}";
+            evidence = "declared keys are ${util.quoteList (attrNames entry)}";
             resolution = "delete ${util.quote key} from ${subject}";
           }
-        ) (util.extraKeys applicationKeys application)
-        ++ util.optional (!known) (
+        ) (util.extraKeys applicationKeys entry)
+        ++ util.optional (!isAttrs application) (
+          diag.error {
+            inherit subject;
+            id = "implementation-malformed";
+            message = "${where} declares an `extends` entry that is ${util.shownValue application}, and an entry is a record";
+            evidence = "an entry declares ${util.quoteList applicationKeys}, and the reading indexes it, so a value of another kind is a row and the rest of the unit is still read";
+            resolution = "write `extends = [ { extension = <the value>; values = { … }; } ]` in ${subject}";
+          }
+        )
+        ++ util.optional (isAttrs application && !isAttrs declaredValues) (
+          diag.error {
+            inherit subject;
+            id = "implementation-malformed";
+            message = "${where} assigns an `extends` entry ${util.quote "values"} of ${util.shownValue declaredValues}, and the values of an entry are a record";
+            evidence = "the values are a subset of the fields ${extLabel} declares, read by their names, so a value of another kind is a row and no field of the entry is applied";
+            resolution = "write `values = { <field> = <value>; … };` on that entry in ${subject}";
+          }
+        )
+        ++ util.optional (isAttrs application && !known) (
           diag.error {
             inherit subject;
             id = "unit-extension-missing";
