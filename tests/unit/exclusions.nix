@@ -77,16 +77,31 @@ let
       };
     };
 
+  # An interface's rows are reached from the module that imported it, so the atom
+  # is declared on a placed member and the attribution beside it decides only
+  # which file the row names.
   declaringAtom =
     key: value:
-    planOf {
-      instances = { };
-      interfaces."interfaces/default.nix".identity = planner.interface {
+    let
+      iface = planner.interface {
         name = "identity";
         exports.publicKey = publicString // {
           ${key} = value;
         };
       };
+    in
+    planOf {
+      instances.svc = placedOn "one" (soleRoot {
+        module = _: {
+          provides.identity.interface = iface;
+          impl = _: {
+            provides.identity.exports.publicKey = "ssh-ed25519 AAAA";
+            units.only.command = "/bin/true";
+          };
+        };
+        provides = [ "identity" ];
+      });
+      interfaces."interfaces/default.nix".identity = iface;
     };
 
   excludedKeyFacts =

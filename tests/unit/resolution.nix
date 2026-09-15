@@ -325,6 +325,75 @@ let
       consumerModule = folds { inherit iface reach reads; };
     };
 
+  # A record export, which is the one shape a claimed identity cannot compare:
+  # korora's `struct` names the record and never its members, so two member sets
+  # are one identity and the only structural check left is the one the consuming
+  # interface's own type makes over the value where it crosses the wire.
+  endpointOf =
+    portType: extra:
+    planner.interface {
+      name = "endpoint";
+      id = "example.com/endpoint";
+      exports = {
+        where.type = planner.korora.struct "endpoint" {
+          host = planner.korora.string;
+          port = portType;
+        };
+      }
+      // extra;
+    };
+
+  loosePort = planner.korora.union [
+    planner.korora.string
+    planner.korora.int
+  ];
+
+  # The publishing end accepts every member the tests below publish, so a refusal
+  # can only have come from the consuming end's own declaration.
+  looseEndpoint = endpointOf loosePort { };
+  strictEndpoint = endpointOf planner.korora.int { };
+
+  endpointRegistry = {
+    "interfaces/provider.nix".endpoint = looseEndpoint;
+    "interfaces/consumer.nix".endpoint = strictEndpoint;
+  };
+
+  publishing = where: _: {
+    provides.identity.interface = looseEndpoint;
+    impl =
+      { machine, ... }:
+      {
+        provides.identity.exports.where = where machine;
+        units.only.command = "/bin/true";
+      };
+  };
+
+  # The record the consumer received is recorded verbatim, so a value delivered
+  # unchanged and a slot left unfilled are both read off the entry.
+  receiving =
+    {
+      iface ? strictEndpoint,
+      reach ? null,
+    }:
+    _: {
+      uses.far = {
+        interface = iface;
+        reads = [ "where" ];
+      }
+      // (if reach == null then { } else { inherit reach; });
+      impl =
+        { results, ... }:
+        {
+          units.only = {
+            command = "/bin/true";
+            env = {
+              SLOTS = builtins.concatStringsSep "," (builtins.attrNames results);
+              WHERE = if results ? far then builtins.toJSON results.far else "<undelivered>";
+            };
+          };
+        };
+    };
+
   # What a capability says about how many slots may take it is a fact of the
   # declaration, so each capability of a provider carries its own statement and
   # publishes a value naming which one it is.
@@ -472,7 +541,7 @@ in
         consumerModule = consumer { };
         wire = null;
       };
-      env = result.plan."consumer:only@one".env;
+      entry = result.plan."consumer:only@one";
     in
     {
       expr = {
@@ -481,9 +550,14 @@ in
         severity = severityById "slot-unwired" result;
         namesSlot = hasInfix "`far`" (messageById "slot-unwired" result);
         namesDeclaringFile = hasInfix "interfaces/default.nix" (evidenceById "slot-unwired" result);
-        delivered = result.plan."consumer:only@one".reads.far.delivered;
-        receivedSlots = env.SLOTS;
-        mentionsSlot = hasInfix "far" env.SLOTS;
+        delivered = entry.reads.far.delivered;
+        # The implementation is not applied at all: a slot nobody wired is
+        # absent from `results`, and selecting an absent attribute is outside
+        # what the interpreter lets the planner catch, so the entry records
+        # nothing and the table below it is printable.
+        recordsAUnit = entry.units != { };
+        theTablePrints = planner.render result.diagnostics != "";
+        applicable = result.applicable;
       };
       expected = {
         ids = [ "slot-unwired" ];
@@ -492,8 +566,9 @@ in
         namesSlot = true;
         namesDeclaringFile = true;
         delivered = false;
-        receivedSlots = "";
-        mentionsSlot = false;
+        recordsAUnit = false;
+        theTablePrints = true;
+        applicable = false;
       };
     };
 
@@ -1396,12 +1471,63 @@ in
       };
     };
 
+  # The channel is the marker the planner hands the author, so the sentence is the
+  # row's whole message and the identifier and the severity are the planner's.
+  testAFoldRefusesTheSetItWasGiven =
+    let
+      why = "no provider of this set publishes a key the rotation policy accepts";
+      iface = folding (
+        set: planner.refuse "${why}: ${builtins.concatStringsSep ", " (builtins.attrNames set)}"
+      );
+      result = reading {
+        inherit iface;
+        providerMachines = [
+          "one"
+          "two"
+        ];
+      };
+      read = result.plan."consumer:only@one".reads.far;
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        subjects = subjectsById "interface-fold-refused" result;
+        message = messageById "interface-fold-refused" result;
+        severity = severityById "interface-fold-refused" result;
+        receivedSlots = result.plan."consumer:only@one".units.only.env.SLOTS;
+        rendered = result.plan."consumer:only@one".units.only.env.FAR;
+        readKeys = builtins.attrNames read;
+        untouchedEntries = map (key: result.plan.${key}.provides.identity.exports.publicKey.value) [
+          "provider:only@one"
+          "provider:only@two"
+        ];
+        applicable = result.applicable;
+      };
+      expected = {
+        ids = [ "interface-fold-refused" ];
+        subjects = [ "consumer:only" ];
+        message = "${why}: provider:only@one, provider:only@two";
+        severity = "error";
+        receivedSlots = "";
+        rendered = "";
+        readKeys = [
+          "delivered"
+          "reach"
+          "reads"
+          "wire"
+        ];
+        untouchedEntries = [
+          "ssh-ed25519 AAAA"
+          "ssh-ed25519 AAAA"
+        ];
+        applicable = false;
+      };
+    };
+
   testAGuardedConsumerStillReportsARefusedFold =
     let
       why = "no provider of this set publishes a rotatable key";
-      iface = folding (_: {
-        refused = why;
-      });
+      iface = folding (_: planner.refuse why);
       guarded = _: {
         uses.far = {
           interface = iface;
@@ -1939,9 +2065,28 @@ in
         providerModule = providerOf theirs;
         inherit interfaces;
       };
+      importer = iface: _: {
+        uses.far = {
+          interface = iface;
+          reads = [ ];
+        };
+        impl = _: { units.only.command = "/bin/true"; };
+      };
+      # The registry half of the same conflict: both interfaces are imported by a
+      # module, because a row about one is reached from there and never from the
+      # attribution, and neither slot is wired.
       attributed = planOf {
         inherit sources interfaces;
-        instances = { };
+        instances = {
+          first = {
+            module = soleRoot { module = importer mine; };
+            placement.every.only.machines = [ "one" ];
+          };
+          second = {
+            module = soleRoot { module = importer theirs; };
+            placement.every.only.machines = [ "two" ];
+          };
+        };
       };
     in
     {
@@ -2281,15 +2426,213 @@ in
         oneIdentity = planner.identityOf mine == planner.identityOf theirs;
         thePredicatesDisagree = strict.verify "k" != null && loose.verify "k" == null;
         ids = rowIds result;
+        subjects = subjectsById "slot-read-type-mismatch" result;
         delivered = result.plan."consumer:only@one".reads.far.delivered;
-        received = result.plan."consumer:only@one".reads.far.values.publicKey;
+        slotFilled = result.plan."consumer:only@one".reads.far ? values;
       };
       expected = {
         oneIdentity = true;
         thePredicatesDisagree = true;
+        ids = [ "slot-read-type-mismatch" ];
+        subjects = [ "consumer:only" ];
+        delivered = false;
+        slotFilled = false;
+      };
+    };
+
+  testAProviderPublishesARecordTheConsumingInterfaceRefuses =
+    let
+      published = {
+        host = "db.example";
+        port = "5432";
+      };
+      result = edge {
+        providerModule = publishing (_: published);
+        consumerModule = receiving { };
+        interfaces = endpointRegistry;
+      };
+      row = builtins.head (rowsById "slot-read-type-mismatch" result);
+      read = result.plan."consumer:only@one".reads.far;
+    in
+    {
+      expr = {
+        identitiesAgree = planner.identityOf looseEndpoint == planner.identityOf strictEndpoint;
+        thePublishingEndAccepts = looseEndpoint.exports.where.type.verify published == null;
+        ids = rowIds result;
+        inherit (row) subject severity;
+        namesTheSlotAndTheRead = hasInfix "slot `far` of `consumer:only` reads `where` of `provider:only@one`" row.message;
+        reportsTheConsumingType = hasInfix "korora reports: ${toString (strictEndpoint.exports.where.type.verify published)}" row.evidence;
+        receivedSlots = result.plan."consumer:only@one".units.only.env.SLOTS;
+        rendered = result.plan."consumer:only@one".units.only.env.WHERE;
+        slotFilled = read ? values;
+        theProviderIsStillPlanned = result.plan."provider:only@one".provides.identity.exports.where.value;
+        applicable = result.applicable;
+      };
+      expected = {
+        identitiesAgree = true;
+        thePublishingEndAccepts = true;
+        ids = [ "slot-read-type-mismatch" ];
+        subject = "consumer:only";
+        severity = "error";
+        namesTheSlotAndTheRead = true;
+        reportsTheConsumingType = true;
+        receivedSlots = "";
+        rendered = "<undelivered>";
+        slotFilled = false;
+        theProviderIsStillPlanned = published;
+        applicable = false;
+      };
+    };
+
+  # The accepting half, and the one that says the verification is asked even where
+  # the two ends matched by a claim: two member sets, one identity, and a value
+  # the consuming declaration accepts travels whole.
+  testAConsumingInterfaceAcceptsTheRecordItIsDelivered =
+    let
+      backed.key = support.secretFile;
+      holderEndpoint = endpointOf loosePort backed;
+      readerEndpoint = endpointOf planner.korora.string backed;
+      published = {
+        host = "db.example";
+        port = "5432";
+      };
+      holder = _: {
+        vars.app.files."key".secrecy = "secret";
+        provides.identity.interface = holderEndpoint;
+        impl =
+          { vars, ... }:
+          {
+            provides.identity.exports = {
+              where = published;
+              key = vars.app."key";
+            };
+            units.only.command = "/bin/true";
+          };
+      };
+      readerOf = iface: _: {
+        uses.far = {
+          interface = iface;
+          reads = [
+            "where"
+            "key"
+          ];
+        };
+        impl =
+          { results, ... }:
+          {
+            units.only = {
+              command = "/bin/true";
+              env = {
+                WHERE = builtins.toJSON results.far.where;
+                KEYFILE = results.far.key.path;
+              };
+            };
+          };
+      };
+      run =
+        iface:
+        edge {
+          providerModule = holder;
+          consumerModule = readerOf iface;
+          providerMachines = [ "two" ];
+          varsState."provider:vars/app@two"."key".present = true;
+          interfaces = {
+            "interfaces/provider.nix".endpoint = holderEndpoint;
+            "interfaces/consumer.nix".endpoint = readerEndpoint;
+          };
+        };
+      result = run readerEndpoint;
+      # The same deployment whose consumer imported the publishing end's own
+      # interface, so the pair matches by value and no record crosses two
+      # declarations: the value entry it records is what the verification may not
+      # move.
+      byValue = run holderEndpoint;
+      value = result.plan."provider:vars/app@two";
+    in
+    {
+      expr = {
+        identitiesAgree = planner.identityOf holderEndpoint == planner.identityOf readerEndpoint;
+        distinctValues = holderEndpoint != readerEndpoint;
+        ids = rowIds result;
+        received = result.plan."consumer:only@one".units.only.env.WHERE;
+        namedThePath = result.plan."consumer:only@one".units.only.env.KEYFILE == value.files."key".path;
+        delivery = value.delivery;
+        reasons = value.deliveryDerivedFrom;
+        theValueEntryIsUnmoved = value == byValue.plan."provider:vars/app@two";
+      };
+      expected = {
+        identitiesAgree = true;
+        distinctValues = true;
         ids = [ ];
-        delivered = true;
-        received = "k";
+        received = builtins.toJSON published;
+        namedThePath = true;
+        delivery = [
+          "one"
+          "two"
+        ];
+        reasons = [
+          "consumer:only@one named key in uses.far.reads"
+          "provider:only@two owns it"
+        ];
+        theValueEntryIsUnmoved = true;
+      };
+    };
+
+  testASetValuedReadVerifiesEachProviderAgainstTheConsumingInterface =
+    let
+      result = edge {
+        providerModule = publishing (machine: {
+          host = "db.example";
+          port = if machine == "one" then 5432 else "5433";
+        });
+        consumerModule = receiving { reach = "all"; };
+        providerMachines = [
+          "one"
+          "two"
+        ];
+        interfaces = endpointRegistry;
+      };
+      row = builtins.head (rowsById "slot-read-type-mismatch" result);
+      read = result.plan."consumer:only@one".reads.far;
+    in
+    {
+      expr = {
+        ids = rowIds result;
+        inherit (row) subject;
+        namesTheContributingProvider = hasInfix "slot `far` of `consumer:only` reads `where` of `provider:only@two`" row.message;
+        receivedSlots = result.plan."consumer:only@one".units.only.env.SLOTS;
+        rendered = result.plan."consumer:only@one".units.only.env.WHERE;
+        # Not the set the refused provider was dropped from: the slot is unfilled.
+        readKeys = builtins.attrNames read;
+        bothProvidersPlanned = map (key: result.plan.${key}.provides.identity.exports.where.value) [
+          "provider:only@one"
+          "provider:only@two"
+        ];
+        applicable = result.applicable;
+      };
+      expected = {
+        ids = [ "slot-read-type-mismatch" ];
+        subject = "consumer:only";
+        namesTheContributingProvider = true;
+        receivedSlots = "";
+        rendered = "<undelivered>";
+        readKeys = [
+          "delivered"
+          "reach"
+          "reads"
+          "wire"
+        ];
+        bothProvidersPlanned = [
+          {
+            host = "db.example";
+            port = 5432;
+          }
+          {
+            host = "db.example";
+            port = "5433";
+          }
+        ];
+        applicable = false;
       };
     };
 

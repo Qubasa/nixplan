@@ -611,9 +611,9 @@ rec {
         ) (filter (k: fileTypes.${k}.verify file.${k} != null) typed);
 
       # The record every reader sees, so one function decides the defaults and
-      # nothing downstream writes `or "root"`. `stated` names the keys the
-      # declaration actually carried, which is what keeps a record declaring none
-      # of them out of the value's key.
+      # nothing downstream writes `or "root"`. What enters the value's key is
+      # decided where the key is built, by comparing the value against the
+      # default it resolved to.
       fileRecord =
         file:
         let
@@ -625,7 +625,6 @@ rec {
           owner = valueOf "owner" "root";
           group = valueOf "group" "root";
           mode = valueOf "mode" "0400";
-          stated = util.sortStrings stated;
         };
 
       read = declaredRecord {
@@ -816,11 +815,11 @@ rec {
           diag.error {
             inherit subject;
             id = "name-carries-key-separator";
-            message = "generator ${util.quote gen} of ${module} is named with a character a plan key's structure uses, and a name a plan key is built from carries none of ${util.quoteList util.keySeparators}";
-            evidence = "a generated value's key is `<instance>:vars/<generator>@<machine>`, so a name carrying one of them produces a key that takes apart into parts nothing declared";
-            resolution = "rename the generator in ${subject} to a name carrying none of ${util.quoteList util.keySeparators}";
+            message = "generator ${util.quote gen} of ${module} is named outside the grammar a plan key can carry, which is ${util.nameAdmits}";
+            evidence = "a generated value's key is `<instance>:vars/<generator>@<machine>`, so a name carrying a separator produces a key that takes apart into parts nothing declared, and an empty or unprintable name produces one no reading of the plan can recover or render";
+            resolution = "rename the generator in ${subject} to ${util.nameAdmits}";
           }
-        ) (filter util.carriesKeySeparator (attrNames read.value));
+        ) (filter util.unkeyableName (attrNames read.value));
     };
 
   # The planner records a pin and resolves nothing, so this guards hand-written
@@ -953,6 +952,7 @@ rec {
         util.optional (contradictsOneShot || onScheduled) "restart"
         ++ util.optional (contradictsOneShot || onScheduled || delayWithoutPolicy) "restartSec"
         ++ withheldDirectories
+        ++ util.optional (refusedEnv != [ ] && envKept == { }) "env"
         ++ (if contradictedPaths == [ ] then [ ] else conditionPolarities);
 
       recorded = util.subtractList typed withheld;
@@ -1024,9 +1024,20 @@ rec {
         }) references
       );
 
+      # An environment name reaches the unit file as the left half of an
+      # assignment with no escape of its own, so a name outside the grammar a
+      # service manager carries for one is refused and neither the name nor its
+      # value is recorded. It earns no second row about a line break, one name
+      # being one row.
+      refusedEnv = if elem "env" typed then filter util.unassignable (attrNames unit.env) else [ ];
+
+      envKept = if elem "env" typed then removeAttrs unit.env refusedEnv else { };
+
+      env = if refusedEnv == [ ] || envKept == { } then { } else { env = envKept; };
+
       record =
         util.filterAttrs (n: v: !(elem n unitReferenceKeys && v == [ ])) (
-          util.pickAttrs recorded unit // ordering
+          util.pickAttrs recorded unit // ordering // env
         )
         // (
           if grouped == { } then
@@ -1037,11 +1048,20 @@ rec {
             }
         );
 
+      # The unit's own name is the outermost string the record is named by, and a
+      # renderer writes it into a file name and a unit reference with no escape
+      # of its own, so it is held to the rule every string inside the record is.
       unprintable =
-        if util.anyLineBreak record then
-          filter (found: util.carriesLineBreak found.value) (util.stringsDeep record)
-        else
-          [ ];
+        util.optional (util.carriesLineBreak name) {
+          path = "the unit's own name";
+          value = name;
+        }
+        ++ (
+          if util.anyLineBreak record then
+            filter (found: util.carriesLineBreak found.value) (util.stringsDeep record)
+          else
+            [ ]
+        );
 
       rows =
         map (
@@ -1105,6 +1125,16 @@ rec {
             resolution = "write ${util.quote found.path} as one line in ${module}, or write the bytes to a file the unit reads";
           }
         ) unprintable
+        ++ map (
+          bad:
+          diag.error {
+            inherit subject;
+            id = "unit-env-name-malformed";
+            message = "${where} declares the environment name ${util.shownValue bad}, and a service manager carries ${util.envNameAdmits}";
+            evidence = "an assignment is written `NAME=value` with no escape of its own, so a name outside that grammar is a directive the manager refuses in part and the unit starts without the variable; neither the name nor its value is recorded";
+            resolution = "rename it in ${module} to ${util.envNameAdmits}, or pass the value to the unit another way";
+          }
+        ) refusedEnv
         ++ util.optional delayWithoutPolicy (
           diag.error {
             inherit subject;
@@ -1178,6 +1208,7 @@ rec {
       unitSet,
       path,
       file,
+      storeDir,
     }:
     let
       where = "configuration file ${util.quote path} of ${module}";
@@ -1206,23 +1237,27 @@ rec {
           [ ];
       renderOk = renderIsList && malformedItems == [ ];
 
+      # `source` names bytes a realiser shows a unit, so it is read the way
+      # `program` is: one literal path inside the store, resolved by nobody and
+      # read by nobody here. A refused source leaves the file with no disposition
+      # at all, so no reader mistakes it for a file whose bytes exist.
+      sourceRefused = file ? source && !(util.inStore storeDir file.source);
+
       typedOwnership = filter (k: file ? ${k}) (attrNames configFileTypes);
 
       # The record every reader sees, so one function decides the defaults and
       # nothing downstream writes `or "root"`, the way `fileRecord` does for a
-      # generated value's file. `stated` names what enters the entry's key, and
-      # `mode` is always in it: a configuration file's mode is required, so a
-      # file stating no ownership keys exactly as it did.
+      # generated value's file.
       statedOwnership = filter (k: file ? ${k} && configFileTypes.${k}.verify file.${k} == null) (
         attrNames configFileTypes
       );
 
-      # The path is held to the grammar a rendered step can carry as one word,
-      # because three consumers read it and one renders it into a shell script.
-      # A refused path is left out of the record the way a name carrying a key
-      # separator is left out of every key it would have entered: a reader may
-      # be handed a plan whose table it never read.
-      refused = util.unrenderable path;
+      # The path is held to the grammar every renderer of it can carry: one word
+      # of a rendered shell step, and the value of a bind, which reads two more
+      # characters as its own. A refused path is left out of the record the way a
+      # name carrying a key separator is left out of every key it would have
+      # entered: a reader may be handed a plan whose table it never read.
+      refused = util.unbindable path;
 
       rows =
         map (
@@ -1237,9 +1272,18 @@ rec {
           diag.error {
             inherit subject;
             id = "config-file-path-refused";
-            message = "${where} is at a host path this plan cannot record: a rendered step carries a path as one shell word of ASCII letters, digits, ${util.wordAdmits} and nothing else";
-            evidence = "the path reaches a generated shell script of the realisation, where a word outside the grammar is a word that ends the one it was written into; the file is not recorded";
-            resolution = "write the file at a path of ASCII letters, digits, ${util.wordAdmits} in ${subject}";
+            message = "${where} is at a host path this plan cannot record: every renderer of a path carries it as one word of ASCII letters, digits, ${util.pathAdmits} and nothing else";
+            evidence = "the path reaches a generated shell script of the realisation, where a word outside the grammar ends the one it was written into, and the value of a bind directive, which reads the separator of one bind from the next and the introducer of a specifier as its own; the file is not recorded";
+            resolution = "write the file at a path of ASCII letters, digits, ${util.pathAdmits} in ${subject}";
+          }
+        )
+        ++ util.optional sourceRefused (
+          diag.error {
+            inherit subject;
+            id = "config-file-source-refused";
+            message = "${where} declares `source` as ${util.shownValue file.source}, and a source is one store path";
+            evidence = "the library records a literal store path and resolves nothing, the way it records a generator's `program`, so a value of another kind or a host path outside the store is bytes a realiser would show a unit under the name of this entry's own configuration";
+            resolution = "write the store path holding the rendered file for `source` in ${subject}, or write `render` instead";
           }
         )
         ++ util.optional (builtins.length given != 1) (
@@ -1315,17 +1359,16 @@ rec {
         mode = if file ? mode && isString file.mode then file.mode else null;
         owner = if elem "owner" statedOwnership then file.owner else "root";
         group = if elem "group" statedOwnership then file.group else "root";
-        stated = util.sortStrings ([ "mode" ] ++ statedOwnership);
         reload = util.sortStrings reloadSplit.right;
         disposition =
-          if builtins.length given != 1 then
+          if builtins.length given != 1 || sourceRefused then
             null
           else if builtins.head given == "render" && !renderOk then
             null
           else
             builtins.head given;
       }
-      // util.pickAttrs dispositions file;
+      // util.pickAttrs (if sourceRefused then [ "render" ] else dispositions) file;
     };
 
   read =
@@ -1454,7 +1497,9 @@ rec {
         vars
         ;
       pin = pin.record;
-      impl = given.impl or null;
+      # Recorded only where it is one, so the row above and the value the reading
+      # kept cannot disagree and nothing applies a declaration of another kind.
+      impl = if given ? impl && isFunction given.impl then given.impl else null;
       rows = read.rows ++ declarationRows;
     };
 }

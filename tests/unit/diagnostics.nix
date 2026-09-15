@@ -550,11 +550,14 @@ let
     )
   );
 
-  # The grammar of one word a rendered step can carry, as the literal a second
-  # statement of it would have to spell, and every file that could hold one:
-  # the library, the reading beside it, and the readings of the three realisers
-  # that render or refuse such a word.
-  wordGrammar = "[a-zA-Z0-9_./:@%+=,~-]";
+  # The two grammars a rendered step carries - one shell word, and a host path,
+  # which reaches a bind as well as a word - as the literals a second statement
+  # of either would have to spell. The library builds both out of one character
+  # list, so a file stating one at all is a second home for it.
+  wordGrammars = [
+    planner.util.wordRule
+    planner.util.pathRule
+  ];
 
   grammarSources =
     map (rel: {
@@ -582,7 +585,21 @@ let
 
   statingTheGrammar = sortStrings (
     map (source: source.label) (
-      filter (source: hasInfix wordGrammar (builtins.readFile source.file)) grammarSources
+      filter (
+        source:
+        let
+          text = builtins.readFile source.file;
+        in
+        builtins.any (grammar: hasInfix grammar text) wordGrammars
+      ) grammarSources
+    )
+  );
+
+  # Where the character list those grammars are built from lives, which is the
+  # one home the rule has.
+  statingTheCharacters = sortStrings (
+    map (source: source.label) (
+      filter (source: hasInfix "wordExtras" (builtins.readFile source.file)) grammarSources
     )
   );
 
@@ -628,9 +645,9 @@ let
   refusing = planner.interface {
     name = "pub";
     exports.publicKey = publicString;
-    fold = set: {
-      refused = "the set names ${toString (length (attrNames set))} provider and none of them is authoritative";
-    };
+    fold =
+      set:
+      planner.refuse "the set names ${toString (length (attrNames set))} provider and none of them is authoritative";
   };
 
   refusingProvider = _: {
@@ -924,7 +941,7 @@ let
     planner.interface {
       name = "pub";
       exports.publicKey = publicString;
-      fold = _: { refused = stated; };
+      fold = _: planner.refuse stated;
     };
 
   refusedWith =
@@ -2410,7 +2427,7 @@ in
         unaccounted = [ ];
         namedByNoProducer = [ ];
         unexamined = [ ];
-        readSomeRefusals = 39;
+        readSomeRefusals = 41;
         readSomeProducers = true;
         theReadingProducesThem = [ ];
       };
@@ -2632,6 +2649,13 @@ in
         "/etc/a\"b"
         "/etc/a$(b)"
       ];
+      # The two a bind reads as its own. A shell word carries both, so the path
+      # rule is the narrower of the two and the row is the one every path
+      # outside the grammar earns.
+      bound = [
+        "/etc/a:b"
+        "/etc/a%bc"
+      ];
       refusesPath =
         path:
         elem "config-file-path-refused" (
@@ -2656,12 +2680,17 @@ in
     {
       expr = {
         statedIn = statingTheGrammar;
+        charactersStatedIn = statingTheCharacters;
         theLibraryAnswers = map planner.util.unrenderable words;
         theDeliveryReadingAnswers = map secretsReader.unrenderable words;
         aConfigurationFilePathIsHeldToIt = map refusesPath words;
+        aWordCarriesTheBindCharacters = map planner.util.unrenderable bound;
+        aPathDoesNot = map planner.util.unbindable bound;
+        aConfigurationFilePathRefusesThem = map refusesPath bound;
       };
       expected = {
-        statedIn = [ "lib/util.nix" ];
+        statedIn = [ ];
+        charactersStatedIn = [ "lib/util.nix" ];
         theLibraryAnswers = [
           false
           true
@@ -2677,6 +2706,18 @@ in
         aConfigurationFilePathIsHeldToIt = [
           false
           true
+          true
+          true
+        ];
+        aWordCarriesTheBindCharacters = [
+          false
+          false
+        ];
+        aPathDoesNot = [
+          true
+          true
+        ];
+        aConfigurationFilePathRefusesThem = [
           true
           true
         ];
@@ -3142,6 +3183,504 @@ in
         forcingBothSucceeds = true;
         rendered = "/bin/serve one.example:22";
         theDroppedEntry = false;
+      };
+    };
+
+  # An `impl` that is not a function. The declaration records none, so the row is
+  # the one a member declaring no implementation already earns and the entry is
+  # the entry that member would have been planned into: nothing applied the value,
+  # which is why the result forces at all.
+  testAnImplementationThatIsNotAFunctionIsRecordedAsNone =
+    let
+      result = badLeaf (_: {
+        impl = {
+          units.main.command = "/bin/run";
+        };
+      });
+      declaringNone = badLeaf (_: { });
+      forced = builtins.tryEval (
+        builtins.deepSeq {
+          inherit (result) plan diagnostics;
+        } true
+      );
+    in
+    {
+      expr = {
+        rows = located result;
+        units = attrNames result.plan."bad:only@two".units;
+        readsAsNone = {
+          rows = result.diagnostics == declaringNone.diagnostics;
+          entry = result.plan."bad:only@two" == declaringNone.plan."bad:only@two";
+        };
+        theRestIsPlanned = plannedWhole result;
+        completed = forced.success && forced.value;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ "impl-missing :: modules/bad.nix" ];
+        units = [ ];
+        readsAsNone = {
+          rows = true;
+          entry = true;
+        };
+        theRestIsPlanned = [ "only" ];
+        completed = true;
+        applicable = false;
+      };
+    };
+
+  # An implementation that raises inside the recovery that caught it, read a
+  # second time by the provider's own exports. The row the recovery produced is
+  # in the table, the exports reading answers the absence rather than re-forcing
+  # the application, and the consumer's read is planned as the absence it is.
+  testAGuardedImplementationIsForcedOnce =
+    let
+      result = planOf {
+        sources.leaves = {
+          good.only = "modules/good.nix";
+          provider.only = "modules/provider.nix";
+          consumer.only = "modules/consumer.nix";
+        };
+        instances = {
+          good = placedOn "one" (soleRoot {
+            module = quiet;
+          });
+          provider = exposedOn [ "one" ] (soleRoot {
+            module = _: {
+              provides.thing.interface = pub;
+              impl = _: throw "the module author's own mistake";
+            };
+            provides = [ "thing" ];
+          });
+          consumer = wiredTo "two" "provider" (soleRoot {
+            module = consumerOfPub;
+          });
+        };
+      };
+      forced = builtins.tryEval (
+        builtins.deepSeq {
+          inherit (result) plan diagnostics;
+        } true
+      );
+    in
+    {
+      expr = {
+        rows = located result;
+        namesWhatWasForced = messageById "module-raised" result;
+        theProviderRecordsNothing = attrNames result.plan."provider:only@one".units;
+        theConsumerIsStillPlanned = attrNames result.plan."consumer:only@two".units;
+        theRestIsPlanned = plannedWhole result;
+        completed = forced.success && forced.value;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [
+          "module-raised :: provider:only@one"
+          "provider-export-missing :: provider:only@one"
+          "set-entry-absent :: consumer:only@two"
+        ];
+        namesWhatWasForced = "the implementation of provider:only@one raised a catchable error, so its value is recorded as not computed";
+        theProviderRecordsNothing = [ ];
+        theConsumerIsStillPlanned = [ "only" ];
+        theRestIsPlanned = [ "only" ];
+        completed = true;
+        applicable = false;
+      };
+    };
+
+  # A composing root whose member container is not a record. Every reading below
+  # it indexes that container, so it is read for its kind first: the row names
+  # the root's own file, the instance contributes no entry, and the other
+  # instance is planned.
+  testARootReturnsServicesOfAnotherKind =
+    let
+      result = planOf {
+        sources = {
+          modules.bad = "roots/bad.nix";
+          leaves.good.only = "modules/good.nix";
+        };
+        instances = {
+          good = placedOn "one" (soleRoot {
+            module = quiet;
+          });
+          bad = {
+            module = _: { services = "only"; };
+            placement.every.only.machines = [ "two" ];
+          };
+        };
+      };
+      forced = builtins.tryEval (
+        builtins.deepSeq {
+          inherit (result) plan diagnostics;
+        } true
+      );
+    in
+    {
+      expr = {
+        rows = located result;
+        namesTheRoot = messageById "declaration-field-malformed" result;
+        entries = attrNames result.plan;
+        theRestIsPlanned = plannedWhole result;
+        completed = forced.success && forced.value;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [
+          "declaration-field-malformed :: bad:instance"
+          "placement-unknown-member :: bad:instance"
+        ];
+        namesTheRoot = "the root in roots/bad.nix declares `services` as `only`, and the reading needs a record";
+        entries = [
+          "good:only@one"
+          "machine:one"
+        ];
+        theRestIsPlanned = [ "only" ];
+        completed = true;
+        applicable = false;
+      };
+    };
+
+  # A knob whose resolved value carries a function. It is serialised into the
+  # entry's key, so it is refused before the key is built: the row names the
+  # member and the knob, the entry records the knob nowhere, and the same
+  # deployment leaving the knob unstated records the default it resolves to.
+  testASettingsKnobHoldsAFunction =
+    let
+      knob =
+        written:
+        planOf {
+          sources = leafSources;
+          instances = {
+            good = placedOn "one" (soleRoot {
+              module = quiet;
+            });
+            bad = {
+              module = soleRoot {
+                module = _: {
+                  impl = _: {
+                    units.main.command = "/bin/run";
+                  };
+                };
+                defaults.format = null;
+              };
+              placement.every.only.machines = [ "two" ];
+              settings.only = written;
+            };
+          };
+        };
+      result = knob {
+        format = value: "${value}!";
+      };
+      unstated = knob { };
+      keysForce = builtins.tryEval (
+        builtins.deepSeq (map (key: result.plan.${key}.key or null) (attrNames result.plan)) true
+      );
+    in
+    {
+      expr = {
+        rows = located result;
+        namesTheKnob = messageById "settings-knob-unkeyable" result;
+        recorded = attrNames result.plan."bad:only@two".settings.only;
+        recordedWhereItIsUnstated = unstated.plan."bad:only@two".settings.only;
+        everyKeyForces = keysForce.success && keysForce.value;
+        theRestIsPlanned = plannedWhole result;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ "settings-knob-unkeyable :: bad:only" ];
+        namesTheKnob = "the knob `only.format` resolves to a value carrying a function, and a knob is serialised into the entry's key";
+        recorded = [ ];
+        recordedWhereItIsUnstated.format = {
+          source = "defaults";
+          value = null;
+        };
+        everyKeyForces = true;
+        theRestIsPlanned = [ "only" ];
+        applicable = false;
+      };
+    };
+
+  # Each argument the entry point is handed, one at a time, as a value of another
+  # kind. Every one is a row against the file the caller writes its deployment
+  # in, and the planner still answers with a plan and a table.
+  testThePlannerIsHandedAnArgumentOfAnotherKind =
+    let
+      cases = {
+        machines = planner.mkPlan {
+          machines = [ { name = "one"; } ];
+          instances = { };
+        };
+        instances = planOf {
+          instances = "deployment/instances.nix";
+        };
+        interfaces = planOf {
+          instances.app = placedOn "one" (soleRoot {
+            module = quiet;
+          });
+          interfaces = "interfaces/default.nix";
+        };
+        storeDir = planOf {
+          instances.app = placedOn "one" (soleRoot {
+            module = quiet;
+          });
+          storeDir = 42;
+        };
+        varsState = planOf {
+          instances.app = placedOn "one" (soleRoot {
+            module = quiet;
+          });
+          varsState = "deployment/state.json";
+        };
+      };
+      read = name: result: {
+        rows = located result;
+        namesTheArgument = hasInfix "`${name}`" (messageById "planner-argument-malformed" result);
+        answersATable = length result.diagnostics;
+        answersAPlan = builtins.isAttrs result.plan;
+        applicable = result.applicable;
+      };
+      answered = {
+        rows = [ "planner-argument-malformed :: deployment/instances.nix" ];
+        namesTheArgument = true;
+        answersATable = 1;
+        answersAPlan = true;
+        applicable = false;
+      };
+    in
+    {
+      expr = builtins.mapAttrs read cases // {
+        thePlacedInstanceSurvivesTheUnreadArgument = attrNames cases.storeDir.plan;
+      };
+      expected = builtins.mapAttrs (_: _: answered) cases // {
+        thePlacedInstanceSurvivesTheUnreadArgument = [
+          "app:only@one"
+          "machine:one"
+        ];
+      };
+    };
+
+  # The contract an implementation is held to: it accepts the arguments it does
+  # not name. A pattern naming none of them, one of them and every one of them
+  # plans the same entry and earns no row, so a field the argument record gains
+  # later leaves each of the three planning as it did.
+  testAnImplementationAcceptsTheArgumentsItDoesNotName =
+    let
+      variadic =
+        impl:
+        badLeaf (_: {
+          inherit impl;
+        });
+      cases = {
+        namesNone = variadic (
+          { ... }:
+          {
+            units.main.command = "/bin/run";
+          }
+        );
+        namesOne = variadic (
+          { ... }:
+          {
+            units.main.command = "/bin/run";
+          }
+        );
+        namesEvery = variadic (
+          {
+            ...
+          }:
+          {
+            units.main.command = "/bin/run";
+          }
+        );
+      };
+      read = result: {
+        rows = located result;
+        unit = result.plan."bad:only@two".units.main;
+        applicable = result.applicable;
+      };
+      answered = {
+        rows = [ ];
+        unit.command = "/bin/run";
+        applicable = true;
+      };
+    in
+    {
+      expr = builtins.mapAttrs (_: read) cases // {
+        onePlanForEveryPattern =
+          cases.namesNone.plan == cases.namesOne.plan && cases.namesOne.plan == cases.namesEvery.plan;
+      };
+      expected = builtins.mapAttrs (_: _: answered) cases // {
+        onePlanForEveryPattern = true;
+      };
+    };
+
+  # An argument pattern with no ellipsis. The planner cannot widen a signature it
+  # did not write and the interpreter lets it catch neither the refusal, so the
+  # condition is decided before the application: the row names the declaration
+  # and the edit that removes it, and the entry records nothing.
+  testAClosedSignatureIsNamedRatherThanContained =
+    let
+      result = badLeaf (_: {
+        impl =
+          { settings }:
+          {
+            units.main = {
+              command = "/bin/run";
+              env.KNOBS = builtins.toJSON settings;
+            };
+          };
+      });
+      row = builtins.head (filter (r: r.id == "implementation-formals-closed") result.diagnostics);
+    in
+    {
+      expr = {
+        rows = located result;
+        namesTheArgumentsItRefused = row.message;
+        namesTheEdit = row.resolution;
+        severity = row.severity;
+        theEntryRecordsNothing = {
+          units = attrNames result.plan."bad:only@two".units;
+          inherit (result.plan."bad:only@two") closure;
+        };
+        theRestIsPlanned = plannedWhole result;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ "implementation-formals-closed :: bad:only@two" ];
+        namesTheArgumentsItRefused = "the implementation of modules/bad.nix names its arguments closed, and the planner hands it `alloc`, `instance`, `machine`, `member`, `results`, `settings`, `target`, `vars`";
+        namesTheEdit = "write `...` in the argument pattern of `impl` in modules/bad.nix, which is the contract an implementation is held to";
+        severity = "error";
+        theEntryRecordsNothing = {
+          units = [ ];
+          closure = [ ];
+        };
+        theRestIsPlanned = [ "only" ];
+        applicable = false;
+      };
+    };
+
+  # Two entries holding a value the planner cannot make safe - a closed argument
+  # pattern and a slot nobody wired - beside one that is well formed. The table
+  # and the verdict are answered from the rows alone, each broken entry records
+  # nothing, and the entry that is well formed is still readable.
+  testATableIsPrintableWhereOnePlanRecordRaises =
+    let
+      result = planOf {
+        sources.leaves = {
+          good.only = "modules/good.nix";
+          shut.only = "modules/shut.nix";
+          open.only = "modules/open.nix";
+        };
+        instances = {
+          good = placedOn "one" (soleRoot {
+            module = quiet;
+          });
+          shut = placedOn "two" (soleRoot {
+            module = _: {
+              impl =
+                { }:
+                {
+                  units.main.command = "/bin/run";
+                };
+            };
+          });
+          open = placedOn "two" (soleRoot {
+            module = _: {
+              uses.peer = {
+                interface = pub;
+                reads = [ "publicKey" ];
+              };
+              impl =
+                { results, ... }:
+                {
+                  units.main.command = "/bin/echo ${results.peer.publicKey}";
+                };
+            };
+          });
+        };
+      };
+      answered = builtins.tryEval (builtins.deepSeq [ result.diagnostics result.applicable ] true);
+      rendered = planner.render result.diagnostics;
+    in
+    {
+      expr = {
+        rows = located result;
+        answeredWithoutThePlan = answered.success && answered.value;
+        oneBlockPerRow = length (renderedBlocks rendered) == length result.diagnostics;
+        rendersBothDeclarations = {
+          shut = hasInfix "modules/shut.nix" rendered;
+          open = hasInfix "`peer`" rendered;
+        };
+        eachBrokenEntryRecordsNothing = {
+          shut = attrNames result.plan."shut:only@two".units;
+          open = attrNames result.plan."open:only@two".units;
+        };
+        theOtherRecordIsReadable = result.plan."good:only@one".units.only.command;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [
+          "implementation-formals-closed :: shut:only@two"
+          "slot-unwired :: open:only"
+        ];
+        answeredWithoutThePlan = true;
+        oneBlockPerRow = true;
+        rendersBothDeclarations = {
+          shut = true;
+          open = true;
+        };
+        eachBrokenEntryRecordsNothing = {
+          shut = [ ];
+          open = [ ];
+        };
+        theOtherRecordIsReadable = "/bin/true";
+        applicable = false;
+      };
+    };
+
+  # A module reading a slot nobody wired. The slot's own row is one stratum above
+  # the application, so the implementation is not applied at all: the table
+  # carries the row about the slot, the verdict answers, and the entry is planned
+  # with the read recorded as undelivered and no unit.
+  testAnUnwiredSlotReadByItsOwnModuleLeavesATableToPrint =
+    let
+      result = badLeaf (_: {
+        uses.peer = {
+          interface = pub;
+          reads = [ "publicKey" ];
+        };
+        impl =
+          { results, ... }:
+          {
+            units.main.command = "/bin/echo ${results.peer.publicKey}";
+          };
+      });
+      answered = builtins.tryEval (builtins.deepSeq [ result.diagnostics result.applicable ] true);
+      rendered = planner.render result.diagnostics;
+    in
+    {
+      expr = {
+        rows = located result;
+        namesTheSlot = messageById "slot-unwired" result;
+        answeredWithoutThePlan = answered.success && answered.value;
+        rendersTheRow = length (renderedBlocks rendered);
+        theEntryRecordsNothing = attrNames result.plan."bad:only@two".units;
+        theReadIsRecordedAsUndelivered = result.plan."bad:only@two".reads.peer;
+        theRestIsPlanned = plannedWhole result;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ "slot-unwired :: bad:only" ];
+        namesTheSlot = "slot `peer` of `bad:only` is wired by no deployment, so it resolves to no value at all";
+        answeredWithoutThePlan = true;
+        rendersTheRow = 1;
+        theEntryRecordsNothing = [ ];
+        theReadIsRecordedAsUndelivered = {
+          delivered = false;
+          reach = "one";
+          reads = [ "publicKey" ];
+        };
+        theRestIsPlanned = [ "only" ];
+        applicable = false;
       };
     };
 }

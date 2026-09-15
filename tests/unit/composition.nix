@@ -1670,7 +1670,9 @@ in
         namesTheHandle = hasInfix "off a sibling's handle" row.evidence;
         theDeploymentsToFill = hasInfix "write `wire.far = { instance = <instance>;" unwired.resolution;
         delivered = entry.reads.far.delivered;
-        received = entry.units.main.env.KEY;
+        # A slot nobody wired leaves the implementation unapplied, so the entry
+        # is planned and records no unit at all.
+        recordsAUnit = entry.units != { };
         everyOtherEntry = attrNames result.plan;
         applicable = result.applicable;
       };
@@ -1685,7 +1687,7 @@ in
         namesTheHandle = true;
         theDeploymentsToFill = true;
         delivered = false;
-        received = "";
+        recordsAUnit = false;
         everyOtherEntry = [
           "machine:one"
           "machine:two"
@@ -2307,7 +2309,9 @@ in
         namesTheMemberScopedForm = hasInfix "`wire.app.far = {" row.resolution;
         namesKeepingTheMember = hasInfix "keep member `backend`" row.resolution;
         delivered = entry.reads.far.delivered;
-        theImplementationSeesNoSlot = entry.units.main.env.KEY;
+        # A slot nobody wired leaves the implementation unapplied, so the entry
+        # is planned and records no unit at all.
+        theImplementationIsNotApplied = entry.units == { };
         applicable = result.applicable;
       };
       expected = {
@@ -2319,7 +2323,7 @@ in
         namesTheMemberScopedForm = true;
         namesKeepingTheMember = true;
         delivered = false;
-        theImplementationSeesNoSlot = "";
+        theImplementationIsNotApplied = true;
         applicable = false;
       };
     };

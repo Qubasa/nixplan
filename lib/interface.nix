@@ -78,6 +78,19 @@ rec {
 
   foldApply = f: if isNamedFold f then f.apply else f;
 
+  # The one channel through which a module refuses another module's value, built
+  # the way a named fold is: a marker the planner hands the author rather than a
+  # word the fold's own result can be named with. A partitioning fold calls its
+  # own refused members `refused` and succeeds, so the marker sits outside the
+  # band a result occupies and no successfully computed value can imitate it.
+  refusalMarker = "__plannerFoldRefusal";
+
+  refuse = why: { ${refusalMarker} = { inherit why; }; };
+
+  isRefusal = v: isAttrs v && isAttrs (v.${refusalMarker} or null) && v.${refusalMarker} ? why;
+
+  refusalOf = v: v.${refusalMarker}.why;
+
   secrecyOf = atom: if isAttrs atom then atom.secrecy or "public" else "public";
 
   # The korora type an atom carries, or null where it carries none. Every reader
@@ -367,13 +380,13 @@ rec {
     };
 
   conflictRows =
-    reg:
+    reg: ifaces:
     let
       claimed = builtins.filter (c: c.claim != null) (
-        map (r: {
-          inherit (r) value;
-          claim = identityOf r.value;
-        }) (builtins.filter (r: isInterface r.value) reg)
+        map (iface: {
+          value = iface;
+          claim = identityOf iface;
+        }) ifaces
       );
       ids = util.uniqueStrings (map (c: c.claim.id) claimed);
       rowsFor =
@@ -391,32 +404,20 @@ rec {
   isInterface = v: isAttrs v && v ? name && v ? exports && isAttrs v.exports;
 
   # Attribution supplies the file a row names and decides nothing else, so the
-  # walk is every interface the deployment reaches together with every one the
-  # `interfaces` argument lists. An interface listed and never reached still
-  # earns its rows; an interface reached and never listed earns them too, with
-  # no file to name.
-  entriesFor =
-    reg: reached:
-    let
-      listed = builtins.filter (r: isInterface r.value) reg;
-      known = iface: builtins.any (r: r.value == iface) listed;
-    in
-    listed
-    ++ map (iface: {
-      file = null;
-      attr = iface.name;
-      value = iface;
-    }) (builtins.filter (iface: !(known iface)) (util.distinct reached));
-
+  # walk is the interfaces the modules imported and never the `interfaces`
+  # argument's own list. An interface nobody imported reaches no entry, no wire
+  # and no export, so a malformed one is neither checked nor reported: naming an
+  # interface registers nothing. One imported and never named earns every row a
+  # named one does, with no file to name.
   registryRows =
     reg: reached:
     let
-      walked = entriesFor reg reached;
+      walked = util.distinct (builtins.filter isInterface reached);
     in
     builtins.concatLists (
-      map (r: atomRows reg r.value ++ foldRows reg r.value ++ idRows reg r.value) walked
+      map (iface: atomRows reg iface ++ foldRows reg iface ++ idRows reg iface) walked
     )
-    ++ conflictRows walked;
+    ++ conflictRows reg walked;
 
   unitExtension =
     {

@@ -171,9 +171,14 @@ rec {
       undeclared = builtins.filter (k: !(fixed ? ${k}) && !(defaults ? ${k})) givenKeys;
       applied = removeAttrs given (writtenFixed ++ undeclared);
       values = defaults // applied // fixed;
+      # A resolved knob is serialised into the entry's key and recorded in the
+      # entry, so a value no key can be derived from is refused here and enters
+      # neither. A coercion at the key is caught by nothing, and the module still
+      # receives the value it was handed.
+      unkeyable = builtins.filter (k: util.carriesFunction values.${k}) (attrNames values);
     in
     {
-      inherit values;
+      inherit values unkeyable;
       sources = builtins.mapAttrs (
         k: _:
         if fixed ? ${k} then
@@ -184,7 +189,17 @@ rec {
           "defaults"
       ) values;
       rows =
-        util.optional malformed (
+        map (
+          k:
+          diag.error {
+            inherit subject;
+            id = "settings-knob-unkeyable";
+            message = "the knob ${util.quote "${name}.${k}"} resolves to a value carrying a function, and a knob is serialised into the entry's key";
+            evidence = "an entry's key is a digest over the facts that decide what the entry is, the resolved settings among them, and serialising a function is a coercion no recovery catches; the value is recorded in no entry and in no key";
+            resolution = "write a value that can be serialised for ${util.quote k}, in ${moduleFile} where it is declared or in ${deploymentFile} where it is set";
+          }
+        ) unkeyable
+        ++ util.optional malformed (
           diag.error {
             inherit subject;
             id = "declaration-field-malformed";

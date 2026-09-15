@@ -9,15 +9,18 @@
 let
   inherit (builtins)
     all
+    any
     attrValues
     concatLists
     concatMap
+    concatStringsSep
     elem
     filter
     head
     isAttrs
     isList
     isString
+    length
     listToAttrs
     mapAttrs
     tail
@@ -96,9 +99,9 @@ rec {
   # opens it is a row this plan also reports.
   #
   # `owner`, `group` and `mode` are always recorded and enter the key only where
-  # the declaration stated them, which is the rule `program` already follows: a
-  # plan written before the fields existed keys as it did, and a deployment that
-  # states a mode delivers a different artifact and says so.
+  # the value differs from the one the field resolves to unstated: a plan written
+  # before the fields existed keys as it did, stating a default states nothing,
+  # and a deployment that states a mode delivers a different artifact and says so.
   fileRecord =
     file:
     {
@@ -114,18 +117,26 @@ rec {
     }
     // (if file.present then { } else { bytes = "absent"; });
 
-  # The ownership keys a record states, and the projection that removes the ones
-  # a declaration did not state. One rule for the two file records this library
-  # carries: a plan written before a field existed keys as it did.
-  withoutUnstated = record: stated: removeAttrs record (util.subtractList ownershipKeys stated);
-
-  fileKeyInput = file: withoutUnstated (fileRecord file) file.stated;
-
+  # The ownership a record resolves to unstated, and the projection that removes
+  # every field sitting at it. One rule for the two file records this library
+  # carries; a configuration file's mode has no default, so it is always keyed.
   ownershipKeys = [
     "owner"
     "group"
     "mode"
   ];
+
+  ownershipDefaults = {
+    owner = "root";
+    group = "root";
+    mode = "0400";
+  };
+
+  withoutDefaults =
+    defaults: record:
+    removeAttrs record (filter (k: defaults ? ${k} && record.${k} == defaults.${k}) ownershipKeys);
+
+  fileKeyInput = file: withoutDefaults ownershipDefaults (fileRecord file);
 
   varsRecord =
     placement: mapAttrs (_: files: { files = mapAttrs (_: fileRecord) files; }) placement.vars;
@@ -389,9 +400,63 @@ rec {
         ) units
     ) configData;
 
+  # The third site the one readability predicate is asked at: a file of the
+  # entry's own generator that one of the entry's own units names. A unit that
+  # cannot open a file the plan told it to read starts under no realiser, so the
+  # row belongs to the layer holding the plan, and a confinement profile
+  # imposing an account stays a second condition about that imposed account.
+  ownValueUnreadableRows =
+    {
+      subject,
+      units,
+      placement,
+    }:
+    let
+      # One scan per unit rather than one per unit and file: the unit is read for
+      # the value paths it names and each of the entry's own files is a lookup.
+      namedBy = mapAttrs (_: unit: util.stringSet (util.varsPathsDeep unit)) units;
+    in
+    concatLists (
+      util.mapAttrsToList (
+        gen: files:
+        util.concatMapAttrsToList (
+          fname: file:
+          if !file.deploy then
+            [ ]
+          else
+            util.concatMapAttrsToList (
+              unitName: unit:
+              if !(util.inStringSet namedBy.${unitName} file.path) || admits unit file then
+                [ ]
+              else
+                [
+                  (diag.error {
+                    inherit subject;
+                    id = "entry-value-unreadable-by-user";
+                    message = "unit ${util.quote unitName} of ${util.quote subject} runs as ${util.quote unit.user} and names ${util.quote file.path}, the file ${util.quote "${gen}/${fname}"} of its own generator, delivered as ${util.quote "${file.owner}:${file.group}"} at mode ${util.quote file.mode}";
+                    evidence = "the mode admits its owner, a member of its group where the unit declares that group, and nobody else, so the unit starts and fails with `EACCES` on ${util.quote file.path}";
+                    resolution = "declare `owner`, `group` or `mode` on that generated file so ${util.quote unit.user} may open it, or run the unit as ${util.quote file.owner}";
+                  })
+                ]
+            ) units
+        ) files
+      ) placement.vars
+    );
+
   # A configuration file names its bytes and never carries them. A digest covers
   # only material the plan itself holds, and a file rendered over a set with an
   # absent entry is recorded as not computed rather than hashed over the rest.
+  #
+  # A fragment's own value is read for its kind here rather than in the reading
+  # of the declaration, because this is where it is coerced and because the
+  # reading runs before the reads a fragment may be built from are resolved.
+  malformedFragments =
+    file:
+    if file.disposition == "render" then
+      filter (item: !isString (item.text or item.ref)) file.render
+    else
+      [ ];
+
   fileIdentity =
     file:
     if file.disposition == "source" then
@@ -424,25 +489,35 @@ rec {
       guarded = diag.guard {
         inherit subject;
         what = "the configuration data of ${subject}";
-        fallback = { };
-        value = mapAttrs (
-          _: file:
+        fallback = {
+          record = { };
+          malformed = { };
+        };
+        value =
+          let
+            malformed = mapAttrs (_: malformedFragments) placement.configData;
+          in
           {
-            inherit (file)
-              mode
-              owner
-              group
-              reload
-              ;
-            computed = true;
-          }
-          // fileIdentity file
-        ) placement.configData;
+            inherit malformed;
+            record = mapAttrs (
+              path: file:
+              {
+                inherit (file)
+                  mode
+                  owner
+                  group
+                  reload
+                  ;
+                computed = true;
+              }
+              // (if malformed.${path} == [ ] then fileIdentity file else { })
+            ) placement.configData;
+          };
       };
 
       record =
         if complete then
-          guarded.value
+          guarded.value.record
         else
           mapAttrs (_: file: {
             inherit (file)
@@ -457,19 +532,39 @@ rec {
               inherit subject;
             };
           }) placement.configData;
+
+      fragmentRows = util.concatMapAttrsToList (
+        path: items:
+        util.optional (items != [ ]) (
+          diag.error {
+            inherit subject;
+            id = "config-file-render-item";
+            message = "configuration file ${util.quote path} of ${util.quote subject} declares a recipe with ${
+              util.countNoun (builtins.length items) "fragment" "fragments"
+            } whose value is not a string";
+            evidence = "a recipe's fragments are concatenated into the bytes, so a value of another kind is a coercion no recovery catches; the file's bytes are not recorded";
+            resolution = "write a string for every `text` and every `ref` of that recipe in the module that declares it";
+          }
+        )
+      ) guarded.value.malformed;
     in
     {
       inherit record;
-      rows = if complete then guarded.rows else [ ];
-      keyInput = mapAttrs (path: file: withoutUnstated file placement.configData.${path}.stated) record;
+      rows = if complete then guarded.rows ++ fragmentRows else [ ];
+      keyInput = mapAttrs (_: withoutDefaults (removeAttrs ownershipDefaults [ "mode" ])) record;
     };
+
+  # A knob the settings reading refused is in no record and in no key: its value
+  # cannot be serialised, and the module that was handed it is the only reader
+  # left.
+  keyableSettings = member: removeAttrs member.settings.values member.settings.unkeyable;
 
   settingsRecord =
     member:
     mapAttrs (k: v: {
       value = v;
       source = member.settings.sources.${k};
-    }) member.settings.values;
+    }) (keyableSettings member);
 
   # Every place an entry names a string, for the two checks that scan them: the
   # closure check, which scans all of them, and the undeployed-value check, which
@@ -524,50 +619,68 @@ rec {
       }) record.exports
     ) placement.capabilities;
 
-  # A `deploy = false` generator's file exists as a value and never as bytes on a
-  # machine, so a site that opens its path is a path that resolves to nothing at
-  # run time. The walk is the one the closure check already does.
-  undeployedRows =
+  # A path a machine does not hold. A value reaches a machine through the owner's
+  # placements and the declared reads and through nothing else, so a site of a
+  # placed entry that names the path of a value its machine does not receive
+  # names a path that resolves to nothing: what the machine reports when the unit
+  # fails to start names neither the value nor the declaration, which is the
+  # whole reason the row exists.
+  #
+  # A value no machine receives is the instance of this rule where the delivery
+  # set is empty, and keeps the identifier it had: there the resolution is to
+  # deploy the generator, and here it is to declare the read. The rule widens no
+  # delivery set - naming a path never puts a machine in one, or a routable
+  # secret would be bounded by nobody.
+  misdeliveredRows =
     {
       subject,
-      module,
-      placement,
+      machine,
+      values,
       sites,
     }:
     let
-      undeployed = concatLists (
-        util.mapAttrsToList (
-          gen: files:
-          util.mapAttrsToList (fname: file: {
-            inherit gen fname;
-            inherit (file) path;
-          }) (util.filterAttrs (_: file: !file.deploy) files)
-        ) placement.vars
-      );
-      paths = map (f: f.path) undeployed;
-      opened = concatLists (
+      # The scan reads the paths a site names and looks each up, so the cost is
+      # the entry's own strings rather than the entry against every value of the
+      # fleet. A per-placement value's path carries the instance and not the
+      # machine, so one path names one value per machine and the question a
+      # lookup answers is whether any value at that path reaches this one.
+      named = concatLists (
         map (
           site:
           map (path: {
             inherit path;
             inherit (site) where;
-          }) (util.mentionsDeep paths site.value)
+          }) (util.varsPathsDeep site.value)
         ) sites
       );
-      fileOf = path: head (filter (f: f.path == path) undeployed);
+
+      opened = filter (
+        m: values ? ${m.path} && !(any (v: elem machine v.delivery) values.${m.path})
+      ) named;
     in
     map (
       m:
       let
-        file = fileOf m.path;
+        group = values.${m.path};
+        value = head group;
+        delivered = util.sortStrings (util.uniqueStrings (concatMap (v: v.delivery) group));
       in
-      diag.error {
-        inherit subject;
-        id = "vars-not-deployed-opened";
-        message = "${subject} names ${util.quote m.path} in ${m.where}, and no machine receives that value";
-        evidence = "generator ${util.quote file.gen} of ${module} declares `deploy = false`, so one value exists and the path it is read at holds nothing";
-        resolution = "declare that generator deployed in ${module}, or stop naming ${util.quote "${file.gen}/${file.fname}"} in ${m.where}";
-      }
+      if delivered == [ ] then
+        diag.error {
+          inherit subject;
+          id = "vars-not-deployed-opened";
+          message = "${subject} names ${util.quote m.path} in ${m.where}, and no machine receives that value";
+          evidence = "generator ${util.quote value.gen} of ${value.module} declares `deploy = false`, so one value exists and the path it is read at holds nothing";
+          resolution = "declare that generator deployed in ${value.module}, or stop naming ${util.quote "${value.gen}/${value.fname}"} in ${m.where}";
+        }
+      else
+        diag.error {
+          inherit subject;
+          id = "vars-path-off-delivery-set";
+          message = "${subject} names ${util.quote m.path} in ${m.where}, and machine ${util.quote machine} does not receive ${util.quote value.valueKey}";
+          evidence = "that value is delivered to ${util.quoteList delivered}, and a delivery set is what the owner's placements and the declared reads make it, so a mention resolves to nothing rather than widening it";
+          resolution = "declare a read of the export backed by ${util.quote "${value.gen}/${value.fname}"} in this member, or stop naming that path in ${m.where}";
+        }
     ) opened;
 
   # An undeclared mention is an error, because the closure is the list a consumer
@@ -881,6 +994,59 @@ rec {
     in
     map port (attrValues reserved.ports) ++ map (path: claimed "paths" path path) reserved.paths;
 
+  # Every proper ancestor directory of a host path, so nesting is read by looking
+  # a path's own ancestors up in the set of claimed paths: that costs the claims
+  # and their depth rather than their square, which is the shape the rest of this
+  # index already has.
+  ancestorsOf =
+    path:
+    let
+      walked =
+        builtins.foldl'
+          (acc: seg: {
+            prefix = "${acc.prefix}/${seg}";
+            out = acc.out ++ [ "${acc.prefix}/${seg}" ];
+          })
+          {
+            prefix = "";
+            out = [ ];
+          }
+          (filter (s: isString s && s != "") (builtins.split "/" path));
+    in
+    filter (p: p != path) walked.out;
+
+  # Two shown paths of one machine where one is a parent directory of the other
+  # cannot both exist: one declaration asks for a file where the other asks for
+  # the directory holding it. Nesting is the contradiction equality is, observed
+  # one directory up, so it is refused beside it and here rather than in a
+  # builder, which meets it while creating a store object and can name a store
+  # path and no declaration.
+  nestingRows =
+    machine: onMachine:
+    let
+      paths = filter (c: c.kind == "paths") onMachine;
+      claimed = util.stringSet (map (c: c.claim) paths);
+      claimantsOf =
+        path: util.sortStrings (util.uniqueStrings (map (c: c.key) (filter (c: c.claim == path) paths)));
+    in
+    concatMap (
+      c:
+      map (
+        parent:
+        let
+          inner = claimantsOf c.claim;
+          outer = claimantsOf parent;
+        in
+        diag.error {
+          subject = head (util.sortStrings (util.uniqueStrings (inner ++ outer)));
+          id = "entry-host-path-nested";
+          message = "${util.quoteList inner} shows ${util.quote c.claim} on machine ${util.quote machine}, inside ${util.quote parent}, which ${util.quoteList outer} shows as a file";
+          evidence = "a realiser carries a file at every host path it is shown, so one of the two asks for a file where the other asks for the directory holding it, and the builder that meets it names a store path and no declaration";
+          resolution = "show one of the two at a path outside the other, or show the directory's own files instead of the directory";
+        }
+      ) (filter (p: util.inStringSet claimed p) (ancestorsOf c.claim))
+    ) paths;
+
   # A host resource two claimants of one machine both claim. The claims are one
   # flat list grouped twice, by machine and then by resource, so the check costs
   # the claims rather than their square, and one member placed on two machines
@@ -890,7 +1056,8 @@ rec {
     concatLists (
       util.mapAttrsToList (
         machine: onMachine:
-        concatLists (
+        nestingRows machine onMachine
+        ++ concatLists (
           util.mapAttrsToList (
             _: claimants:
             let
@@ -915,6 +1082,7 @@ rec {
   placedEntry =
     {
       readers,
+      values,
       resolved,
       machineKeys,
       iname,
@@ -951,12 +1119,14 @@ rec {
           ;
         storeDir = resolved.storeDir;
         configData = configData.keyInput;
-        settings = member.settings.values;
+        settings = keyableSettings member;
         alloc = member.alloc.ports;
       };
     in
     {
       name = subject;
+      family = "service";
+      claimant = "the entry of member ${util.quote mname} of instance ${util.quote iname} on machine ${util.quote machine}";
       # The records the entry claims on its machine, taken from the pre-pruned
       # values rather than from the plan, which drops an empty one.
       claims = {
@@ -982,9 +1152,8 @@ rec {
             configData = configData.record;
           };
         }
-        ++ undeployedRows {
-          inherit subject placement;
-          module = member.moduleLabel;
+        ++ misdeliveredRows {
+          inherit subject machine values;
           # The module's own vars and exports are declarations rather than sites
           # that open a path, so only the units and the files are scanned.
           sites = filter (site: site.kind != "declaration") sites;
@@ -994,6 +1163,9 @@ rec {
         }
         ++ unreadableRows {
           inherit subject member units;
+        }
+        ++ ownValueUnreadableRows {
+          inherit subject units placement;
         }
         ++ configUnreadableRows {
           inherit subject units;
@@ -1045,11 +1217,13 @@ rec {
         service = mname;
         machine = null;
         inherit reads;
-        settings = member.settings.values;
+        settings = keyableSettings member;
       };
     in
     {
       name = subject;
+      family = "service";
+      claimant = "the unplaced entry of member ${util.quote mname} of instance ${util.quote iname}";
       rows = entryRows {
         inherit subject member;
       };
@@ -1126,6 +1300,15 @@ rec {
         in
         {
           name = subject;
+          family = "value";
+          claimant = "the generated value of generator ${util.quote gen} of instance ${util.quote iname}";
+          # Who declared it, for the row a mention of its path off the delivery
+          # set earns: the plan record carries neither the generator's name nor
+          # the module that declared it.
+          owner = {
+            inherit gen;
+            module = member.moduleLabel;
+          };
           value =
             pruned (
               {
@@ -1193,6 +1376,23 @@ rec {
         ) resolved.instances
       );
 
+      # Every file of every value the plan carries, with the delivery set it was
+      # given: the one index the mention scan asks its machine question of.
+      values = builtins.groupBy (v: v.path) (
+        concatLists (
+          map (
+            e:
+            util.mapAttrsToList (fname: file: {
+              inherit fname;
+              inherit (file) path;
+              inherit (e.owner) gen module;
+              valueKey = e.name;
+              inherit (e.value) delivery;
+            }) e.value.files
+          ) varsEntries
+        )
+      );
+
       serviceEntries = concatLists (
         util.mapAttrsToList (
           iname: inst:
@@ -1216,6 +1416,7 @@ rec {
                   placedEntry {
                     inherit
                       readers
+                      values
                       resolved
                       machineKeys
                       iname
@@ -1229,30 +1430,70 @@ rec {
           )
         ) resolved.instances
       );
-
       usedMachines = resolved.usedMachines;
 
-      machineEntries = listToAttrs (
-        map (machine: {
-          name = "machine:${machine}";
-          value = pruned (
-            {
-              key = machineKeys.${machine};
-              inherit (resolved.machines.${machine}) address tags;
-            }
-            // util.pickAttrs [
-              "system"
-              "serviceManager"
-              "microarchitecture"
-            ] (util.filterAttrs (_: v: v != null) resolved.machines.${machine})
-          );
-        }) usedMachines
+      machineRecords = map (machine: {
+        name = "machine:${machine}";
+        family = "machine";
+        claimant = "the record of machine ${util.quote machine}";
+        value = pruned (
+          {
+            key = machineKeys.${machine};
+            inherit (resolved.machines.${machine}) address tags;
+          }
+          // util.pickAttrs [
+            "system"
+            "serviceManager"
+            "microarchitecture"
+          ] (util.filterAttrs (_: v: v != null) resolved.machines.${machine})
+        );
+      }) usedMachines;
+
+      # The three families live under one keyspace, and a key two of them claim
+      # is refused here rather than resolved by the merge that used to build the
+      # plan: `//` let the last family silently replace the first, which left a
+      # placed entry's provenance edge naming a key that was no longer a
+      # machine. The families are told apart by what a record holds and never by
+      # the text of a key, `machine` being a legal instance name and `vars/x` a
+      # legal member name, so the collision is refused where the keyspace is
+      # built.
+      #
+      # The order below is the precedence a collision is resolved with, and the
+      # first claimant keeps the key: a machine's record is what every placed
+      # entry's `dependsOn` already names.
+      claimants = machineRecords ++ varsEntries ++ serviceEntries;
+
+      byKey = builtins.groupBy (c: c.name) claimants;
+
+      # Two records of one family under one key are the fact a row of that
+      # family already reports - two members claiming one generator name, two
+      # members of one name - so the row owed here is the one nobody else can
+      # make: two families claiming one key.
+      keyCollisionRows = concatLists (
+        util.mapAttrsToList (
+          key: claiming:
+          if length (util.uniqueStrings (map (c: c.family) claiming)) < 2 then
+            [ ]
+          else
+            [
+              (diag.error {
+                subject = key;
+                id = "plan-key-claimed-twice";
+                message = "the plan key ${util.quote key} is claimed by ${
+                  concatStringsSep " and " (map (c: c.claimant) claiming)
+                }";
+                evidence = "a plan key names one record, and a reader takes a key apart to recover what an entry is: ${(head claiming).claimant} is the record the key names and every other claimant of it is in no plan";
+                resolution = "rename one of them so each names a key of its own";
+              })
+            ]
+        ) byKey
       );
     in
     {
-      plan = machineEntries // listToAttrs varsEntries // listToAttrs serviceEntries;
+      plan = listToAttrs (map (claiming: head claiming) (attrValues byKey));
       rows =
         concatLists (map (e: e.rows) serviceEntries)
+        ++ keyCollisionRows
         ++ collisionRows (
           concatMap claimsOf serviceEntries
           ++ concatMap (machine: reservedBy machine resolved.reservations.${machine}) usedMachines

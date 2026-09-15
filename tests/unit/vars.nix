@@ -1293,4 +1293,57 @@ in
         ];
       };
     };
+
+  # The negative half of the third readability site: the same record and the same
+  # account as the row above, with the group the record grants declared on the
+  # unit that names the file.
+  testAValueAUnitsDeclaredGroupAdmitsIsNoRow =
+    let
+      record = {
+        group = "readers";
+        mode = "0640";
+      };
+      result = deployment {
+        ownerArgs = {
+          fileArgs = record;
+          unitArgs = {
+            user = "app";
+            extends = [
+              {
+                extension = grouped;
+                values.supplementaryGroups = [ "readers" ];
+              }
+            ];
+          };
+        };
+      };
+      # The same declaration with the group withdrawn from the unit, so the group
+      # is what admitted the file rather than the mode alone.
+      without = deployment {
+        ownerArgs = {
+          fileArgs = record;
+          unitArgs.user = "app";
+        };
+      };
+      entry = result.plan."holder:only@alpha";
+      value = result.plan."holder:vars/app@alpha";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        withoutTheGroup = rowIds without;
+        units = attrNames entry.units;
+        namedThePath = entry.units.only.env.KEYFILE == value.files."key".path;
+        delivery = value.delivery;
+        reasons = value.deliveryDerivedFrom;
+      };
+      expected = {
+        rows = [ ];
+        withoutTheGroup = [ "entry-value-unreadable-by-user" ];
+        units = [ "only" ];
+        namedThePath = true;
+        delivery = [ "alpha" ];
+        reasons = [ "holder:only@alpha owns it" ];
+      };
+    };
 }

@@ -6,6 +6,7 @@ let
   inherit (builtins)
     any
     concatStringsSep
+    elem
     filter
     isString
     match
@@ -17,13 +18,18 @@ let
     "warning"
   ];
 
-  # A subject is a plan key, a path relative to the deployment root, or an issue
-  # identifier. An absolute path is refused, because a rendered table would then
-  # differ between two checkouts. The `/` a plan key may carry is the structural
-  # one of `<instance>:vars/<generator>`, which is why it is admitted only after
-  # the instance and never at the front.
-  isPlanKey =
-    s: match "[0-9A-Za-z_.-]+:[0-9A-Za-z_.-]+(/[0-9A-Za-z_.-]+)*(@[0-9A-Za-z_.-]+)?" s != null;
+  # A subject is a plan key the planner built, a path relative to the deployment
+  # root, or an issue identifier. An absolute path is refused, because a rendered
+  # table would then differ between two checkouts.
+  #
+  # A plan key is stated by its structure and not by the characters its names
+  # happen to carry: a name is held to `util.unkeyableName` and nothing else, so
+  # every key the planner builds from a name that rule admits is a subject. A
+  # component may be empty here, because a name the rule refused earns its own
+  # row and the key the planner built from it is still the subject that row
+  # names.
+  keyName = "[^@:/[:cntrl:]]*";
+  isPlanKey = s: match "${keyName}:(vars/)?${keyName}(@${keyName})?" s != null;
   isIssueId = s: match "universe-[0-9a-z]+" s != null;
   isPathSubject = s: match "[0-9A-Za-z_./-]+\\.nix" s != null && util.isRelativePath s;
 in
@@ -33,6 +39,9 @@ rec {
   isValidSubject = s: isString s && (isPlanKey s || isIssueId s || isPathSubject s);
 
   # Every field is required. A row with no resolution is a row nobody can act on.
+  # The subject goes through `oneLine` beside the three fields below it, so a
+  # rendered table has one line per field whatever a deployment interpolated into
+  # a name.
   row =
     {
       id,
@@ -42,11 +51,31 @@ rec {
       evidence,
       resolution,
     }:
+    if !(elem severity severities) then
+      severityRow { inherit id subject severity; }
+    else
+      {
+        inherit id severity;
+        subject = util.oneLine subject;
+        message = util.oneLine message;
+        evidence = util.oneLine evidence;
+        resolution = util.oneLine resolution;
+      };
+
+  # A severity outside the domain is reported where the row is built, so no
+  # reading has to infer it by comparing the value against the error spelling.
+  severityRow =
     {
-      inherit id subject severity;
-      message = util.oneLine message;
-      evidence = util.oneLine evidence;
-      resolution = util.oneLine resolution;
+      id,
+      subject,
+      severity,
+    }:
+    error {
+      inherit subject;
+      id = "diagnostic-severity-invalid";
+      message = "row ${util.quote id} was built with a severity of ${util.shownValue severity}, and a row carries one of ${util.quoteList severities}";
+      evidence = "the row it was built with is replaced by this one, so nothing in the table carries a severity no producer may state";
+      resolution = "build the row with `error` or `warning` where it is produced";
     };
 
   error = args: row (args // { severity = "error"; });
@@ -113,17 +142,23 @@ rec {
 
   # Ordered by identifier, then subject, then message, so two evaluations of one
   # input render the same bytes however the rows arose.
+  #
+  # Deduplication reads the rows as their producers built them, before the repair
+  # below it: two facts about two files whose names agree in their last component
+  # are two rows, and collapsing them would tell a reader about one declaration.
+  # The rows the repair earns are deduplicated among themselves, one repaired
+  # subject being one fact about one table.
   mkTable =
     rows:
     let
       judged = map (r: {
         row = r;
         ok = isValidSubject r.subject;
-      }) rows;
+      }) (dedup rows);
       invalid = filter (j: !j.ok) judged;
       disciplined =
         map (j: if j.ok then j.row else j.row // { subject = util.baseNameOfString j.row.subject; }) judged
-        ++ map (j: subjectRow j.row) invalid;
+        ++ dedup (map (j: subjectRow j.row) invalid);
     in
     sort (
       a: b:
@@ -133,7 +168,7 @@ rec {
         a.subject < b.subject
       else
         a.message < b.message
-    ) (dedup disciplined);
+    ) disciplined;
 
   hasError = table: any (r: r.severity == "error") table;
 

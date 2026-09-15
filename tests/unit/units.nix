@@ -16,6 +16,7 @@ let
     rowIds
     severityById
     soleRoot
+    subjectsById
     systemdService
     ;
 
@@ -1142,7 +1143,12 @@ in
         entryIsInThePlan = result.plan ? "svc:only@one";
       };
       expected = {
-        rows = [ "config-file-disposition" ];
+        # The file states two dispositions and a `source` that is no store
+        # object, which are two facts and two rows.
+        rows = [
+          "config-file-disposition"
+          "config-file-source-refused"
+        ];
         namesTheFile = true;
         identity = { };
         entryIsInThePlan = true;
@@ -1626,15 +1632,63 @@ in
     {
       expr = {
         rows = rowIds result;
-        severity = severityById "unit-value-newline" result;
+        severity = severityById "unit-env-name-malformed" result;
         applicable = result.applicable;
         theTableCarriesNoDirectiveLine = hasInfix "\nExecStartPost" table;
       };
       expected = {
-        rows = [ "unit-value-newline" ];
+        # One name, one row: the grammar refuses it, so the line-break rule the
+        # values are held to says nothing about it a second time.
+        rows = [ "unit-env-name-malformed" ];
         severity = "error";
         applicable = false;
         theTableCarriesNoDirectiveLine = false;
+      };
+    };
+
+  # The same rule for a name the grammar refuses for a reason no other rule
+  # looks at: `1st-choice` opens with a digit and carries a hyphen, and neither
+  # is a character a service manager carries in the left half of an assignment.
+  testAnEnvironmentNameIsHeldToTheEnvironmentNameGrammar =
+    let
+      id = "unit-env-name-malformed";
+      result = placed [ "one" ] (_: {
+        units.say = {
+          command = "/bin/true";
+          env = {
+            "1st-choice" = "never rendered";
+            MOTD = "one line";
+          };
+        };
+      });
+    in
+    {
+      expr = {
+        # One name, one row: the grammar refuses it once, and the character
+        # classes it is outside of are not four rows.
+        rows = rowIds result;
+        severity = severityById id result;
+        subjects = subjectsById id result;
+        names = map (needle: hasInfix needle (messageById id result)) [
+          "`say`"
+          "`1st-choice`"
+        ];
+        # The name is on no unit and so is the value written under it.
+        recorded = (entryOf result "one").units.say.env;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ id ];
+        severity = "error";
+        subjects = [ "svc:only@one" ];
+        names = [
+          true
+          true
+        ];
+        recorded = {
+          MOTD = "one line";
+        };
+        applicable = false;
       };
     };
 

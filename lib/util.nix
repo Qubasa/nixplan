@@ -2,6 +2,7 @@
 # list and attrset helpers nixpkgs lib would have supplied live here instead.
 let
   inherit (builtins)
+    all
     any
     attrNames
     concatLists
@@ -13,6 +14,7 @@ let
     hashString
     head
     isAttrs
+    isFunction
     isList
     isString
     length
@@ -21,6 +23,7 @@ let
     replaceStrings
     sort
     split
+    stringLength
     substring
     ;
 
@@ -83,13 +86,22 @@ rec {
 
   carriesKeySeparator = name: isString name && match ".*[@:/].*" name != null;
 
+  # The whole grammar a name entering a key is held to: the three separators
+  # above, and the two more a key built from them can be neither recovered from
+  # nor rendered. The empty name recovers as nothing, and a control character
+  # reaches a rendered table and a unit file name as a line of its own.
+  unkeyableName =
+    name:
+    !(isString name) || name == "" || carriesKeySeparator name || match ".*[[:cntrl:]].*" name != null;
+
+  nameAdmits = "a non-empty name of no control character and none of ${quoteList keySeparators}";
+
   # The grammar of one word a rendered shell step can carry. A path and an
   # address are rendered into single-quoted words, so one carrying a quote would
   # be one that closes it. Two steps of this repository render such a word, the
   # secrets delivery and the image attach script, so the rule has one home here
   # and neither reading states it again.
-  wordRule = "[a-zA-Z0-9_./:@%+=,~-]+";
-  wordAdmits = quoteList [
+  wordExtras = [
     "_"
     "."
     "/"
@@ -103,7 +115,61 @@ rec {
     "-"
   ];
 
+  # The two a service manager reads as its own inside the value of a bind: `:`
+  # separates one bind from the next, and `%` introduces a specifier it expands
+  # before the bind is made. A host path reaches a bind as well as a shell word,
+  # so its grammar is the word grammar without them.
+  bindReserved = [
+    ":"
+    "%"
+  ];
+
+  pathExtras = subtractList wordExtras bindReserved;
+
+  characterClass = extras: "[a-zA-Z0-9${concatStringsSep "" extras}]+";
+
+  wordRule = characterClass wordExtras;
+  wordAdmits = quoteList wordExtras;
+
+  pathRule = characterClass pathExtras;
+  pathAdmits = quoteList pathExtras;
+
   unrenderable = value: match wordRule value == null;
+
+  unbindable = value: match pathRule value == null;
+
+  # The grammar a service manager carries for an environment variable's name. An
+  # assignment is written `NAME=value`, so a name outside this is a directive the
+  # manager refuses in part and a unit that starts without the variable.
+  envNameRule = "[a-zA-Z_][a-zA-Z0-9_]*";
+  envNameAdmits = "a letter or an underscore followed by letters, digits and underscores";
+
+  unassignable = name: !(isString name) || match envNameRule name == null;
+
+  # Whether a function accepts the argument record a caller is about to hand it.
+  # A closed attribute pattern refuses a key it does not name and a formal with
+  # no default it is not given, and the interpreter lets a caller catch neither,
+  # so the pattern is read before the application rather than recovered from
+  # after it. `builtins.toXML` of a function prints its pattern and never its
+  # body, and is the one place the ellipsis is observable: `functionArgs`
+  # answers the same record for `{ a }` and for `{ a, ... }`.
+  formalsRefused =
+    f: record:
+    let
+      pattern = builtins.toXML f;
+      formals = builtins.functionArgs f;
+      closed = match ".*<attrspat.*" pattern != null && match ".*ellipsis=\"1\".*" pattern == null;
+    in
+    if !closed then
+      {
+        extra = [ ];
+        missing = [ ];
+      }
+    else
+      {
+        extra = subtractList (attrNames record) (attrNames formals);
+        missing = filter (n: !formals.${n} && !(record ? ${n})) (attrNames formals);
+      };
 
   sortStrings = sort (a: b: a < b);
 
@@ -172,6 +238,39 @@ rec {
     in
     value: if !isString value then [ ] else map head (filter isList (split pattern value));
 
+  # Whether a string names a path inside the store: exactly one store root, at
+  # the front of it. A configuration file's `source` is a path inside a store
+  # object rather than the object itself, so this is not the rule a generator's
+  # `program` is held to.
+  inStore =
+    storeDir:
+    let
+      scan = storePathsIn storeDir;
+    in
+    value:
+    isString value
+    && (
+      let
+        roots = scan value;
+      in
+      length roots == 1 && substring 0 (stringLength (head roots)) value == head roots
+    );
+
+  # Whether a value carries a function anywhere inside it, which is what makes
+  # it unserialisable: `toJSON` of one is a coercion no recovery catches, and a
+  # settings knob is serialised into an entry's key. The walk stops at a record
+  # carrying `outPath`, which is what `toJSON` itself serialises by that string.
+  carriesFunction =
+    value:
+    if isFunction value then
+      true
+    else if isList value then
+      any carriesFunction value
+    else if isAttrs value then
+      !(value ? outPath) && any (name: carriesFunction value.${name}) (attrNames value)
+    else
+      false;
+
   storePathsDeep =
     storeDir:
     let
@@ -189,16 +288,30 @@ rec {
     in
     deep;
 
-  # Which of `needles` a value mentions anywhere inside it. The same traversal as
-  # storePathsDeep, for paths that are not store paths and have no grammar of
-  # their own: a generated file's path is whatever the planner fixed it to.
-  mentionsDeep =
-    needles:
+  # Where a generated value lands on a machine. One home, because the reading
+  # that builds the path and the scan that recognises one have to agree about
+  # its shape.
+  varsRoot = "/run/vars";
+
+  # Every generated value path a string names: the root, the instance, the
+  # generator and the file. Read by its shape and never by comparison against
+  # the paths the plan carries, because a fleet makes both lists fleet-sized and
+  # a comparison is then a scan per value per string. What a caller does with a
+  # token is look it up, so a path this misreads names no value and is no row.
+  varsPathsIn =
+    let
+      component = "[^/[:space:]\"]+";
+      pattern = "(${escapeRegex varsRoot}/${component}/${component}/${component})";
+    in
+    value: if !isString value then [ ] else map head (filter isList (split pattern value));
+
+  # The same traversal storePathsDeep does, for those paths.
+  varsPathsDeep =
     let
       deep =
         value:
         if isString value then
-          filter (needle: match ".*${escapeRegex needle}.*" value != null) needles
+          varsPathsIn value
         else if isList value then
           concatLists (map deep value)
         else if isAttrs value then
@@ -250,6 +363,13 @@ rec {
 
   # A line-oriented file cannot carry a line break inside a value. A space, a
   # quote and a backslash it can: those are escaped where the value is rendered.
+  # One list serves the scan and the repair below it, so a character the scan
+  # counts cannot survive the repair.
+  lineBreaks = [
+    "\n"
+    "\r"
+  ];
+
   carriesLineBreak = value: isString value && match ".*[\n\r].*" value != null;
 
   # The same question with no bookkeeping, so a caller gates stringsDeep on it and
@@ -321,7 +441,26 @@ rec {
     || (elem file.group (declaredGroups unit) && opensDigit (substring 2 1 file.mode))
     || opensDigit (substring 3 1 file.mode);
 
-  isVarsFile = value: isAttrs value && (value.__varsFile or false);
+  # A generated file reference, recognised by the record a caller indexes and not
+  # by the marker alone: an export carrying the marker and nothing else would be
+  # read as one and then indexed for fields it does not carry.
+  varsFileKeys = [
+    "__varsFile"
+    "content"
+    "deploy"
+    "entry"
+    "file"
+    "generator"
+    "group"
+    "mode"
+    "owner"
+    "path"
+    "present"
+    "secrecy"
+  ];
+
+  isVarsFile =
+    value: isAttrs value && (value.__varsFile or false) && all (k: value ? ${k}) varsFileKeys;
 
   # A short content hash, truncated because people read plans. The context is
   # discarded because hashString refuses a string that carries one, and a plan of a
@@ -366,5 +505,5 @@ rec {
     && match "\\.\\./.*" s == null
     && match ".*[[:space:]].*" s == null;
 
-  oneLine = s: replaceStrings [ "\n" ] [ " " ] s;
+  oneLine = s: replaceStrings lineBreaks (map (_: " ") lineBreaks) s;
 }

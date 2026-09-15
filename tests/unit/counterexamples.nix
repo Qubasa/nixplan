@@ -251,11 +251,10 @@ in
       };
     };
 
-  # Keys and identity: "only the ones the declaration actually stated enter the
-  # value's key". `stated` is "the declaration carried the key", not "the
-  # declaration changed the value", so writing a field's own default re-keys a
-  # value whose record is byte-identical - and a re-keyed value is a regenerated
-  # secret.
+  # Keys and identity: "A field enters a key only where its value differs from
+  # the default it would resolve to unstated". A record byte-identical to the one
+  # an omission resolves to therefore keys as it did, and a re-keyed value is a
+  # regenerated secret.
   testStatingAGeneratedFileDefaultDoesNotRekeyTheValue =
     let
       valueOf =
@@ -284,10 +283,11 @@ in
       };
     };
 
-  # Keys and identity: "`owner` and `group` default to `root` and only what a
-  # declaration stated enters `keyInput`". Same mechanism one file kind over: the
-  # entry re-keys, which under the image realiser is a new digest, a new artifact
-  # and a stop/detach/attach of a running unit for an edit that changes no byte.
+  # Keys and identity: "Stating a default is therefore no re-key, whichever
+  # record states it, and a configuration file's `mode`, which has no default to
+  # sit at, is always in the key". The same rule one file kind over: an entry
+  # re-keyed here is a new digest under the image realiser, a new artifact and a
+  # stop/detach/attach of a running unit for an edit that changes no byte.
   testStatingAConfigurationFileOwnershipDefaultDoesNotRekeyTheEntry =
     let
       entryOf =
@@ -360,11 +360,11 @@ in
     {
       expr = {
         renderedBlocks = length (blocks rendered);
-        renderedLines = length (lines rendered);
+        linesPerBlock = map (block: length (lines block)) (blocks rendered);
       };
       expected = {
         renderedBlocks = length result.diagnostics;
-        renderedLines = length result.diagnostics * 4;
+        linesPerBlock = map (_: 4) result.diagnostics;
       };
     };
 
@@ -431,9 +431,7 @@ in
       refusing = planner.interface {
         name = "pub";
         exports.text = publicString;
-        fold = _: {
-          refused = "\r  ! vault:only@one  every value of this set was accepted";
-        };
+        fold = _: planner.refuse "\r  ! vault:only@one  every value of this set was accepted";
       };
       provider = _: {
         provides.pub.interface = refusing;
@@ -558,11 +556,11 @@ in
       };
     };
 
-  # Interfaces: a claimed identity is "a nominal brand over a structural
-  # fingerprint", and the documented trade is one atom over two predicates.
-  # korora's `struct` puts no member in `type.name`, so a whole record schema is
-  # outside the fingerprint: the wire resolves and the consumer is rendered from a
-  # record its own declared type refuses.
+  # Interfaces: a claimed identity is nominal and name-deep, so korora's `struct`
+  # putting no member in `type.name` is the recorded trade and not the defect: two
+  # member sets under one claim are one identity and the edge resolves. What the
+  # claim may not do is stand in for the structural check, which is made where the
+  # value crosses the wire, against the consuming interface's own declared type.
   testAClaimedIdentityDoesNotCollapseTwoStructSchemas =
     let
       endpointOf =
@@ -623,10 +621,33 @@ in
     {
       expr = {
         identitiesAgree = planner.identityOf provided == planner.identityOf consumed;
+        rows = map (
+          row:
+          removeAttrs row [
+            "evidence"
+            "message"
+            "resolution"
+            "severity"
+          ]
+        ) (rowsById "slot-read-type-mismatch" result);
+        namesTheSlot = hasInfix "slot `far` of `consumer:only`" (
+          (head (rowsById "slot-read-type-mismatch" result)).message
+        );
+        slotFilled = result.plan."consumer:only@one".reads.far ? values;
+        providerStillPlanned = result.plan ? "provider:only@one";
         applicable = result.applicable;
       };
       expected = {
-        identitiesAgree = false;
+        identitiesAgree = true;
+        rows = [
+          {
+            id = "slot-read-type-mismatch";
+            subject = "consumer:only";
+          }
+        ];
+        namesTheSlot = true;
+        slotFilled = false;
+        providerStillPlanned = true;
         applicable = false;
       };
     };
@@ -783,10 +804,13 @@ in
       };
     };
 
-  # Interfaces: "The fold returns `{ refused = "<why>"; }` and supplies the
-  # message". The sentinel is in band, so a partitioning fold - the shape a fold
-  # exists for - cannot succeed: its own `refused` list is read as a refusal of
-  # the whole set, and a correct deployment is inapplicable.
+  # Diagnostics: "A refusal is recognised by the marker attribute that
+  # constructor writes and by nothing else, so a fold's own successful result may
+  # carry an attribute named `refused`". A partitioning fold - the shape a fold
+  # exists for - therefore delivers its set: its own `refused` list is a member
+  # of the result and no refusal of the whole. The delivered set is named by the
+  # consumer's own unit, so the one row this deployment earns is the warning any
+  # set-valued read whose membership enters a key earns.
   testAFoldMayReturnAnAttributeCalledRefused =
     let
       partitioning = planner.interface {
@@ -845,12 +869,14 @@ in
     {
       expr = {
         applicable = result.applicable;
-        ids = rowIds result;
+        refusals = rowsById "interface-fold-refused" result;
+        malformed = rowsById "interface-fold-refusal-malformed" result;
         accepted = result.plan."consumer:only@one".units.main.env.ACCEPTED;
       };
       expected = {
         applicable = true;
-        ids = [ ];
+        refusals = [ ];
+        malformed = [ ];
         accepted = "provider:only@one";
       };
     };

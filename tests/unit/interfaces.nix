@@ -32,10 +32,23 @@ let
     };
   };
 
+  # An interface's rows are reached from the modules that imported it, never from
+  # the attribution, so a scenario about a declaration places a member declaring
+  # it and the attribution beside it decides only which file a row names.
+  importing =
+    interfaceValues:
+    builtins.mapAttrs (_: iface: {
+      module = soleRoot {
+        module = providerOf iface;
+        provides = [ "identity" ];
+      };
+      placement.every.only.machines = [ "one" ];
+    }) interfaceValues;
+
   scenario =
     {
       interfaceValues,
-      instances,
+      instances ? importing interfaceValues,
     }:
     planOf {
       inherit instances;
@@ -95,10 +108,30 @@ let
       };
     };
 
+  # A module that imports an interface and resolves nothing from it. The conflict
+  # is the registry pass's own observation, and this deployment is what "with no
+  # wire" means: the slot each member declares is unwired on purpose.
+  importerOf = iface: _: {
+    uses.far = {
+      interface = iface;
+      reads = [ ];
+    };
+    impl = _: { units.only.command = "/bin/true"; };
+  };
+
   conflicting =
     { mine, theirs }:
     planOf {
-      instances = { };
+      instances = {
+        first = {
+          module = soleRoot { module = importerOf mine; };
+          placement.every.only.machines = [ "one" ];
+        };
+        second = {
+          module = soleRoot { module = importerOf theirs; };
+          placement.every.only.machines = [ "two" ];
+        };
+      };
       interfaces = {
         "interfaces/mine.nix".identity = mine;
         "interfaces/theirs.nix".identity = theirs;
@@ -159,7 +192,6 @@ in
       };
       result = scenario {
         interfaceValues.identity = withLocality;
-        instances = { };
       };
     in
     {
@@ -193,7 +225,6 @@ in
       };
       result = scenario {
         interfaceValues.identity = withLifecycle;
-        instances = { };
       };
     in
     {
@@ -400,7 +431,6 @@ in
       };
       result = scenario {
         interfaceValues.identity = notAFunction;
-        instances = { };
       };
       row = builtins.head (rowsById "interface-fold-not-a-function" result);
     in
@@ -568,7 +598,6 @@ in
       };
       result = scenario {
         interfaceValues.identity = unnamed;
-        instances = { };
       };
       row = builtins.head (rowsById "interface-id-unnamed-fold" result);
     in
@@ -648,7 +677,6 @@ in
       };
       result = scenario {
         interfaceValues = { inherit dotted slashed; };
-        instances = { };
       };
     in
     {
@@ -874,6 +902,86 @@ in
       };
     };
 
+  # One deployment planned twice over the same interface value, listed and not:
+  # every condition the table reports is the same condition, and the only thing
+  # that moves is the file each row names.
+  testAttributionChangesOnlyTheFileARowNames =
+    let
+      instances = {
+        writer = {
+          module = soleRoot {
+            module = providerOf identity;
+            provides = [ "identity" ];
+          };
+          placement.every.only.machines = [ "one" ];
+          exposes = [ "identity" ];
+        };
+        # A slot nobody wired, so the table carries a row whose text names the
+        # interface's declaring file.
+        reader = {
+          module = soleRoot { module = readerOf identity; };
+          placement.every.only.machines = [ "two" ];
+        };
+      };
+      listed = planOf {
+        inherit instances;
+        interfaces."interfaces/default.nix".identity = identity;
+      };
+      bare = planOf { inherit instances; };
+      labelled = "`identity` (interfaces/default.nix)";
+      unlabelled = "`identity` (declaring file not recorded in the `interfaces` argument of mkPlan)";
+      conditions = result: map (r: { inherit (r) id subject; }) result.diagnostics;
+      # The only value of the plan attribution decides: an interface nothing
+      # attributed was declared in a file the plan cannot name.
+      withoutTheDeclaringFile =
+        result:
+        result.plan
+        // {
+          "writer:only@one" = result.plan."writer:only@one" // {
+            provides.identity = removeAttrs result.plan."writer:only@one".provides.identity [
+              "declaringFile"
+            ];
+          };
+        };
+      substituted =
+        row:
+        builtins.mapAttrs (
+          _: v: if builtins.isString v then builtins.replaceStrings [ unlabelled ] [ labelled ] v else v
+        ) row;
+    in
+    {
+      expr = {
+        conditions = conditions bare == conditions listed;
+        onlyTheFileMoves = map substituted bare.diagnostics == listed.diagnostics;
+        namesTheFile = hasInfix labelled (evidenceById "slot-unwired" listed);
+        namesNoFile = hasInfix unlabelled (evidenceById "slot-unwired" bare);
+        declaringFile = [
+          (listed.plan."writer:only@one".provides.identity.declaringFile)
+          (bare.plan."writer:only@one".provides.identity.declaringFile)
+        ];
+        samePlan = withoutTheDeclaringFile bare == withoutTheDeclaringFile listed;
+        applicable = [
+          bare.applicable
+          listed.applicable
+        ];
+      };
+      expected = {
+        conditions = true;
+        onlyTheFileMoves = true;
+        namesTheFile = true;
+        namesNoFile = true;
+        declaringFile = [
+          "interfaces/default.nix"
+          null
+        ];
+        samePlan = true;
+        applicable = [
+          false
+          false
+        ];
+      };
+    };
+
   # The defect this change exists for: an atom of this library is built by
   # applying a function to korora, so a second evaluation of `lib/` produces an
   # unequal atom and an unequal interface over it, and a wire that is obviously
@@ -994,7 +1102,6 @@ in
       };
       result = scenario {
         interfaceValues.identity = bare;
-        instances = { };
       };
     in
     {

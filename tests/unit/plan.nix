@@ -1877,7 +1877,7 @@ in
       };
       expected = {
         namesTheMachine = [ "deployment/machines.nix" ];
-        message = "a machine of the registry is named `be@ta`, and a name a plan key is built from carries none of `/`, `@`, `:`";
+        message = "a machine of the registry is named `be@ta`, and a name a plan key is built from is a non-empty name of no control character and none of `/`, `@`, `:`";
         keysNamingIt = [ ];
         delivery = [ "one" ];
       };
@@ -1973,6 +1973,134 @@ in
         everyInstanceIsDeclared = true;
         everyMachineIsDeclared = true;
         theValueNamespaceIsStillSpelled = true;
+      };
+    };
+
+  # The three additions to the grammar, at the four declarations a key is built
+  # from: the empty name at a machine and at a generator, a line break at an
+  # instance and a tab at a member. Each earns the row a separator already
+  # earns, and the instance that named nothing wrong is planned beside them.
+  testAnEmptyNameIsRefusedByTheKeyGrammar =
+    let
+      id = "name-carries-key-separator";
+      result = planOf {
+        machines = support.machines // {
+          "" = {
+            address = "nowhere.example:22";
+            tags = [ "everywhere" ];
+            system = "x86_64-linux";
+            serviceManager = "systemd";
+          };
+        };
+        instances = {
+          ${"in\nstance"} = placedOn [ "one" ] (soleRoot {
+            module = quiet;
+          });
+          ok = {
+            module = root {
+              members.${"mem\tber"} = {
+                module = quiet;
+              };
+            };
+            placement.every.${"mem\tber"}.machines = [ "one" ];
+          };
+          gen = placedOn [ "one" ] (soleRoot {
+            module = _: {
+              vars."".per = "instance";
+              impl = _: { units.only.command = "/bin/true"; };
+            };
+          });
+          fine = placedOn [ "one" ] (soleRoot {
+            module = quiet;
+          });
+        };
+      };
+      messages = map (r: r.message) (rowsById id result);
+    in
+    {
+      expr = {
+        every = sortStrings (rowIds result);
+        # Each row names the declaration it is about and the name it refused,
+        # the line break reaching the sentence as the space `oneLine` made of it.
+        named = map (needle: any (m: hasInfix needle m) messages) [
+          "a machine of the registry is named ``"
+          "an instance of the deployment is named `in stance`"
+          "a member of the root of instance `ok` is named `mem\tber`"
+          "generator `` of "
+        ];
+        # The refused name earns the row and the rest of the deployment is read
+        # around it: the well-formed instance, the instance whose generator was
+        # the name at fault, and the machine record every placement depends on.
+        notPlanned = filter (key: !(result.plan ? ${key})) [
+          "fine:only@one"
+          "gen:only@one"
+          "machine:one"
+        ];
+        theGoodEntryStillRunsItsUnit = attrNames result.plan."fine:only@one".units;
+      };
+      expected = {
+        every = [
+          "name-carries-key-separator"
+          "name-carries-key-separator"
+          "name-carries-key-separator"
+          "name-carries-key-separator"
+        ];
+        named = [
+          true
+          true
+          true
+          true
+        ];
+        notPlanned = [ ];
+        theGoodEntryStillRunsItsUnit = [ "only" ];
+      };
+    };
+
+  # `machine` is a legal instance name and `one` a legal member name, so the
+  # keyspace holds a machine's own record and an unplaced service entry under
+  # `machine:one`. The row is the one neither family's own reading can make, so
+  # it names both claimants rather than the family it was noticed from.
+  testTwoClaimantsOfOnePlanKeyAreBothNamed =
+    let
+      id = "plan-key-claimed-twice";
+      result = planOf {
+        instances = {
+          machine = {
+            module = root {
+              members.one = {
+                module = quiet;
+              };
+            };
+          };
+          svc = placedOn [ "one" ] (soleRoot {
+            module = quiet;
+          });
+        };
+      };
+    in
+    {
+      expr = {
+        # One collision, one row, however many of the two readings observed it.
+        count = countById id result;
+        severity = severityById id result;
+        subjects = subjectsById id result;
+        names = map (needle: hasInfix needle (said messageById id result)) [
+          "`machine:one`"
+          "the record of machine `one`"
+          "the unplaced entry of member `one` of instance `machine`"
+        ];
+        applicable = result.applicable;
+      };
+      expected = {
+        count = 1;
+        severity = "error";
+        subjects = [ "machine:one" ];
+        names = [
+          true
+          true
+          true
+        ];
+        applicable = false;
       };
     };
 
@@ -2555,6 +2683,47 @@ in
       };
     };
 
+  # Nesting is equality observed one directory up, and a longer name beginning
+  # with another's text is neither: `/etc/apple` is not inside `/etc/app`, so
+  # both paths exist at once and the entry is shown both.
+  testAShownHostPathSharingAPrefixWithAnotherIsNotNested =
+    let
+      result = planOf {
+        instances.svc = placedOn [ "one" ] (soleRoot {
+          module = _: {
+            impl = _: {
+              configData = {
+                "/etc/app" = {
+                  mode = "0644";
+                  render = [ { text = "one\n"; } ];
+                };
+                "/etc/apple" = {
+                  mode = "0644";
+                  render = [ { text = "two\n"; } ];
+                };
+              };
+              units.only.command = "/bin/true";
+            };
+          };
+        });
+      };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        shown = sortStrings (attrNames result.plan."svc:only@one".configData);
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ ];
+        shown = [
+          "/etc/app"
+          "/etc/apple"
+        ];
+        applicable = true;
+      };
+    };
+
   # The protocol is part of the claim, so the second deployment below claims one
   # number twice and collides with nobody. Both claims state an address, so the
   # row names the one the contention is on.
@@ -2834,6 +3003,78 @@ in
         fixtureKeyHeld = "sha256-a090a60d56683eba";
         moved = true;
         theOtherHeld = true;
+      };
+    };
+
+  # The other half of the two statements that state nothing: a value differing
+  # from the one the field resolves to unstated asks for a different file, so it
+  # moves that record's key and no other. The generated file's mode is keyed
+  # against `0400` and the configuration file's group against `root`, and the two
+  # records sit on two machines so that each statement is observed against the
+  # other's key.
+  testAStatedValueThatDiffersFromTheDefaultMovesTheKey =
+    let
+      deployment =
+        {
+          file ? { },
+          config ? { },
+        }:
+        planOf {
+          instances = {
+            holder = placedOn [ "one" ] (soleRoot {
+              module = _: {
+                vars.token.files."key" = {
+                  secrecy = "secret";
+                }
+                // file;
+                impl =
+                  { vars, ... }:
+                  {
+                    units.only = {
+                      command = "/bin/true";
+                      env.KEYFILE = vars.token."key".path;
+                    };
+                  };
+              };
+            });
+            writer = placedOn [ "two" ] (soleRoot {
+              module = ownedFileAt config;
+            });
+          };
+          varsState."holder:vars/token@one"."key".present = true;
+        };
+      plain = deployment { };
+      moded = deployment { file.mode = "0440"; };
+      grouped = deployment { config.group = "borg"; };
+      movedBy =
+        other: filter (key: other.plan.${key}.key != plain.plan.${key}.key) (attrNames plain.plan);
+    in
+    {
+      expr = {
+        rows = rowIds moded ++ rowIds grouped;
+        recordsHeld = [
+          moded.plan."holder:vars/token@one".files."key".mode
+          grouped.plan."writer:only@two".configData."/etc/thing.conf".group
+        ];
+        keyspaceHeld = [
+          (attrNames moded.plan == attrNames plain.plan)
+          (attrNames grouped.plan == attrNames plain.plan)
+        ];
+        movedByTheMode = movedBy moded;
+        movedByTheGroup = movedBy grouped;
+      };
+      expected = {
+        rows = [ ];
+        recordsHeld = [
+          "0440"
+          "borg"
+        ];
+        keyspaceHeld = [
+          true
+          true
+        ];
+        movedByTheMode = [ "holder:vars/token@one" ];
+        movedByTheGroup = [ "writer:only@two" ];
       };
     };
 
