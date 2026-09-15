@@ -876,6 +876,10 @@ let
   );
 in
 {
+  # Three kinds of test and two files beside them. `counterexamples` is the third
+  # kind because a nix-unit `expr` cannot hold an uncatchable raise: it takes the
+  # run that would report it, so those probes are evaluated one process each by
+  # `checks.planner-counterexamples-eval` rather than by the suite.
   testTheTestTreeIsRead = {
     expr = {
       layers = sorted (directoriesIn testsRoot);
@@ -883,6 +887,7 @@ in
     };
     expected = {
       layers = [
+        "counterexamples"
         "e2e"
         "unit"
       ];

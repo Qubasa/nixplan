@@ -573,12 +573,15 @@ Recorded so the question is answered once.
   and one description per condition: `rows` and `generation` answer a table and raise nothing,
   `store`, `configuration` and `deliveriesOf` refuse with the sentence that row states, and
   `operator.mkGeneration` writes `diagnostics.json` and `diagnostics.txt` into the generation farm
-  and refuses through `planner.render` of the whole table. Three of its conditions are reachable
+  and refuses through `planner.render` of the whole table. Four of its conditions are reachable
   from a plan the planner calls applicable: a value recording no `program`, a file name outside the
-  contract's grammar, and an address the rendered step cannot carry as one shell word. A recipient
+  contract's grammar, a component the contract's grammar refuses where the planner's separator
+  denylist admits it (`app+1`, a space, anything non-ASCII), and a word the rendered step cannot
+  carry - the path, and the address. A recipient
   machine with no address is no longer one of them, the planner refusing that registry before a
   plan exists, and it stays an error here because the rendered step is the one build artifact that
-  carries an address.
+  carries an address. A file record's ownership is a fifth word the step escapes and `rows` asks
+  nothing about, which is `counterexamples.testAnOwnershipTheRenderRefusesIsARowFirst`.
 - The secrets realiser projects a value's key onto `<instance>:<generator>`, and onto
   `<instance>:<generator>:<machine>` for a per-placement value. A colon is what the contract's
   `safe-name` admits and `/` and `@` are not, and a hash would make the tool's own listing and its
@@ -785,6 +788,10 @@ silently unobserved.
 - A new unit suite goes in `suites` in `tests/default.nix`. That attrset is the only registration
   point, and its key names feed the coverage cross-walk. `coverage` is passed its own name too;
   that is not a cycle.
+- A counterexample goes where its own failure allows: the suite, the probe file or the command's
+  test file, under "Counterexamples on record". A probe is named by existing - `flake-module.nix`
+  reads `builtins.attrNames` of `tests/counterexamples/probes.nix` - and a directory beside
+  `tests/unit/` and `tests/e2e/` goes in `layers.testTheTestTreeIsRead`.
 - A new top-level file or directory goes in `classOf` in `tests/unit/layers.nix`, and in
   `scannedDirectories` there if its files should be held to the path scan.
 - A deliverable with its own flake wiring goes in the `imports` of `flake.nix`, the way
@@ -1193,13 +1200,51 @@ silently unobserved.
   `except A, B:`, so it parses under python 3.14 and under nothing older. The pinned nixpkgs'
   `python3` is 3.14, which is the only reason the composition runs at all.
 - An entry realised into nothing carries no artifact path: `operator/read.nix` omits `path` from its
-  record and the command reads the field as optional. Both sides move together, and a record that
-  states `path` as `null` rather than omitting it refuses the whole deployment for every subcommand,
-  because the command's field reader demands a non-empty string. Observed as that refusal before
-  `openspec/changes/hold-every-stated-guarantee` was applied to the tree.
+  record and the command reads the field as optional. Both sides move together. A record stating
+  `path` as `null` is read as an omission, not refused: JSON `null` decodes to `None` and
+  `record.get("path")` cannot tell it from an absent key (`cli/manifest.py`). Only the empty string
+  is refused. The behaviour is the useful one; the sentence that claimed otherwise was stale.
 - A fold's refusal is an in-band sentinel: `lib/resolve.nix` reads a returned attrset carrying a
   `refused` attribute as a refusal, so a fold whose own successful result carries that name cannot
   succeed. A tagged pair costs one line per fold.
 - The purity scan in `tests/unit/diagnostics.nix` is substring matching over comment-stripped text,
   so `.check ` matches inside a string literal and `assert ` misses a call spelled with no space.
+  It also misses korora's `check` bound as a value rather than applied - `atoms.port.check` written
+  `.check;`, `.check)` or at the end of a line - and it can only see a raising call at all, while
+  every probe in `tests/counterexamples/` raises through a call of a non-function, a wrong-arity
+  pattern, a missing attribute or a coercion. A `throw`-free file is not a total file.
   `ast-grep` is installed and parses.
+- `util.shortHash` discards string context to keep store references out of a key string, not
+  because `builtins.hashString` refuses one: under nix 2.34.8 it accepts a context-carrying string.
+  The discard is still load-bearing; the reason recorded beside it was wrong.
+
+## Counterexamples on record
+
+Every invariant above that the tree does not hold has a test that asserts the claim rather than the
+behaviour, so each is red until the claim is made true or withdrawn. Three homes, by what the
+counterexample does:
+
+- It can be evaluated: `tests/unit/counterexamples.nix`, a suite like any other, registered in
+  `tests/default.nix` with its figure in `docs/tooling.md`.
+- It ends the evaluation: `tests/counterexamples/probes.nix`, one attribute per break, each
+  evaluated in its own process by `checks.planner-counterexamples-eval`. A nix-unit `expr` cannot
+  hold an uncatchable raise - a call of a non-function, a missing attribute, `toJSON` of a function
+  - because the raise takes the run that would report it. An attribute answering `"ok"` means the
+  defect is fixed, and the probe stays as the regression pin. `tests/` therefore holds three kinds
+  of test, which `layers.testTheTestTreeIsRead` states.
+- It is about the operator's command: `cli/counterexample_test.py`, run by
+  `checks.planner-counterexamples-cli`. Python, because the command is run rather than evaluated.
+
+The families they cover: `lib/` raising where a row is owed (an `impl` that is not a function, one
+with strict formals, one that raises inside the guard that caught it, a recipe fragment of another
+kind, a settings knob holding a function, `mkPlan`'s own arguments, a `varsState` answer of another
+kind); a key that names two things (two entries of one machine deriving one unit file name, a
+service entry replacing a machine record, a value the secrets projection cannot see); a no-op
+declaration edit that re-keys (a file record or a configuration file's ownership stated at its own
+default); the diagnostics discipline (a subject carrying a line break, a name the key grammar
+admits and the subject rule refuses, two rows collapsing into one, a severity outside the domain, a
+fold refusal carrying a carriage return); secrecy and readability (a secret export backed by a
+public file, a unit that cannot open its own value, a value path named outside its delivery set);
+identity (two struct schemas under one claimed `id`, attribution deciding applicability); and the
+realisers (a `configData` source outside the store, two shown paths that nest, a unit name or an
+`env` name that forges a directive, a version digest that ignores the confinement profile).

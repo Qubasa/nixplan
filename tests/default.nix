@@ -35,6 +35,16 @@ let
     interfaces = import ./unit/interfaces.nix { inherit planner support libSource; };
     composition = import ./unit/composition.nix { inherit planner support; };
     resolution = import ./unit/resolution.nix { inherit planner support; };
+    counterexamples = import ./unit/counterexamples.nix {
+      inherit
+        planner
+        support
+        operatorSource
+        imageSource
+        flakeletSource
+        secretsSource
+        ;
+    };
     consumer = import ./unit/consumer.nix {
       inherit
         planner

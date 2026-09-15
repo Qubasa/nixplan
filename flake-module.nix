@@ -33,6 +33,19 @@ let
     perfSource = ./perf;
     repoSource = ./.;
   };
+
+  # The counterexample probes, named rather than listed by hand: each is
+  # evaluated in its own process by `checks.planner-counterexamples-eval`,
+  # because an uncatchable raise takes the run that would report it.
+  probes = import ./tests/counterexamples/probes.nix {
+    inherit
+      planner
+      imageSource
+      flakeletSource
+      operatorSource
+      secretsSource
+      ;
+  };
 in
 {
   flake.lib = planner;
@@ -271,6 +284,24 @@ in
         '';
       };
 
+      # The probes of tests/counterexamples/, one `nix eval` each. A probe that
+      # answers "ok" holds; one that raises is a deployment the library ends the
+      # evaluation over where a diagnostics row is owed, and the raise is what a
+      # nix-unit `expr` cannot assert - it would take the run reporting it.
+      probeFile = pkgs.writeText "planner-counterexamples.nix" ''
+        import ${./tests/counterexamples/probes.nix} {
+          planner = import ${./lib} {
+            korora = import ${inputs.korora}/types.nix;
+            systems = (import ${inputs.nixpkgs}/lib).systems;
+            platformSource = "${platformSource}";
+          };
+          imageSource = ${imageSource};
+          flakeletSource = ${flakeletSource};
+          operatorSource = ${operatorSource};
+          secretsSource = ${secretsSource};
+        }
+      '';
+
     in
     {
       checks.planner-tests =
@@ -281,6 +312,45 @@ in
           ''
             export HOME="$(mktemp -d)"
             nix-unit --eval-store "$HOME" ${suite}
+            touch "$out"
+          '';
+
+      checks.planner-counterexamples-eval =
+        pkgs.runCommand "planner-counterexamples-eval"
+          {
+            nativeBuildInputs = [ pkgs.nix ];
+          }
+          ''
+            export HOME="$(mktemp -d)"
+            export NIX_CONFIG="experimental-features = nix-command"
+            broke=0
+            for name in ${pkgs.lib.concatStringsSep " " (builtins.attrNames probes)}; do
+              if said="$(nix eval --eval-store "$HOME" --raw \
+                  --file ${probeFile} --apply "p: p.$name" 2>&1)"; then
+                printf 'ok      %s\n' "$name"
+              else
+                printf 'raises  %s\n' "$name"
+                printf '%s\n' "$said" | sed -n 's/^ *\(error: .*\)$/        \1/p'
+                broke=1
+              fi
+            done
+            if [ "$broke" = 1 ]; then
+              echo "each probe above ends an evaluation where a row is owed: tests/counterexamples/README.md" >&2
+              exit 1
+            fi
+            touch "$out"
+          '';
+
+      # The operator's command, against the invariants it states about itself.
+      # Red for the same reason the suite above is: each test asserts the claim.
+      checks.planner-counterexamples-cli =
+        pkgs.runCommand "planner-counterexamples-cli"
+          {
+            nativeBuildInputs = [ pytestEnv ];
+          }
+          ''
+            export PYTHONPATH=${./cli}
+            python3 -m pytest -q -rs --no-header -p no:cacheprovider ${./cli}/counterexample_test.py
             touch "$out"
           '';
 
