@@ -24,6 +24,16 @@ let
   reader = import (secretsSource + "/read.nix") { inherit planner; };
   deployStep = import (secretsSource + "/backend.nix") { inherit planner reader; };
 
+  # The same renderer over a reading whose word rule admits everything. The
+  # grammar and the escape have to fail independently, so the escape is read
+  # where the grammar catches nothing.
+  unruled = import (secretsSource + "/backend.nix") {
+    inherit planner;
+    reader = reader // {
+      unrenderable = _: false;
+    };
+  };
+
   imageReader = import (imageSource + "/read.nix") { inherit planner; };
   flakeletReader = import (flakeletSource + "/read.nix") {
     inherit planner;
@@ -774,6 +784,35 @@ in
           resolution = "write `two` as one shell word of ASCII letters, digits, `_`, `.`, `/`, `:`, `@`, `%`, `+`, `=`, `,`, `~`, `-` and nothing else";
         };
         theStepIsNotRendered = true;
+      };
+    };
+
+  # The rule above refuses a quote, so this reads the escape with the rule
+  # switched off: what is asserted is that the value the grammar never reached
+  # still renders as one inert word.
+  testAWordCarryingAQuoteIsEscapedRatherThanQuotedByHand =
+    let
+      hostile = worked.plan // {
+        "machine:two" = worked.plan."machine:two" // {
+          address = "10.0.0.11' ; id ; '";
+        };
+      };
+      script = unruled.render {
+        plan = hostile;
+        get = getProgram;
+      };
+    in
+    {
+      expr = {
+        theGrammarRefusesItToday = reader.unrenderable "root@10.0.0.11' ; id ; '";
+        theWordsAreStillOne = filter (hasInfix "10.0.0.11") (deliverLines script);
+      };
+      expected = {
+        theGrammarRefusesItToday = true;
+        theWordsAreStillOne = [
+          "    deliver 'issuer:host:two' 'key' 'root@10.0.0.11'\\'' ; id ; '\\''' '/run/vars/issuer/host' '/run/vars/issuer/host/key' '0400' 'root:root'"
+          "    deliver 'issuer:session' 'token' 'root@10.0.0.11'\\'' ; id ; '\\''' '/run/vars/issuer/session' '/run/vars/issuer/session/token' '0400' 'root:root'"
+        ];
       };
     };
 

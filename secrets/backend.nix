@@ -37,8 +37,11 @@ let
           ;
       }
     else
-      "'${value}'";
+      quoted value;
 
+  # Every value the local shell parses goes through this, a word the rule above
+  # already admitted included: the rule and the escape hold independently, or the
+  # next character the rule gains closes the quoting it was relying on.
   quoted = value: "'${replaceStrings [ "'" ] [ "'\\''" ] value}'";
 
   # One branch per file the tool may name on standard input, and one `deliver` per
