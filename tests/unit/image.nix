@@ -93,6 +93,8 @@ let
 
   namedInsideQuotes = needle: text: filter (piece: hasInfix needle piece) (insideDoubleQuotes text);
 
+  occurrences = needle: text: length (nixpkgsLib.splitString needle text) - 1;
+
   # One entry with a staged configuration file, a reloading unit and a scheduled
   # one, built, so what these tests read is the script text a machine runs.
   staged =
@@ -188,6 +190,35 @@ let
   # deepSeq, because a refusal guards fields a lazy read would never force. Without
   # it every refusal test passes without testing anything.
   raises = value: !(tryEval (builtins.deepSeq value value)).success;
+
+  # A platform string no rule has reached: `image/read.nix` accepts
+  # `target.system` on the sole condition that the record carries a `system`, so
+  # a hand-written plan is where these bytes reach the attach script's own
+  # messages. Inside double quotes a substitution needs no quote of its own,
+  # which is why the closing one here is spare rather than load-bearing.
+  hostileSystem = "x86_64-linux\"; $(id > /tmp/pwned); echo \"";
+
+  hostile =
+    let
+      p = planned { } (_: {
+        closure = [ borgbackup ];
+        units.only.command = "${borgbackup}/bin/borg serve";
+      });
+      entry = p.plan.${p.key};
+    in
+    builder.build {
+      inherit (p) key;
+      profile = "trusted";
+      plan = p.plan // {
+        ${p.key} = entry // {
+          target = entry.target // {
+            system = entry.target.system // {
+              system = hostileSystem;
+            };
+          };
+        };
+      };
+    };
 
   # The denial reads the record rather than the secrecy, so a value the
   # deployment opened to an account is not refused for having been generated.
@@ -2184,6 +2215,29 @@ in
       bareInTheDetach = [ ];
     };
   };
+
+  testAValueNoRuleReachedIsOneWordInAMessage =
+    let
+      quotes = occurrences "\"" hostile.attach;
+    in
+    {
+      expr = {
+        # The comparison's argument and the message's word, so the counts below
+        # are counts of something.
+        namings = occurrences hostileSystem hostile.attach;
+        asOneWord = occurrences "'${hostileSystem}'" hostile.attach;
+        # The message closes its double-quoted string around the word, which is
+        # what makes the substitution inside it bytes rather than a command.
+        closedAroundIt = occurrences "\"'${hostileSystem}'\"" hostile.attach;
+        quotesPair = quotes - (quotes / 2) * 2 == 0;
+      };
+      expected = {
+        namings = 2;
+        asOneWord = 2;
+        closedAroundIt = 1;
+        quotesPair = true;
+      };
+    };
 
   testAUnitListIsEscapedWordByWord =
     let

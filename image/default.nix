@@ -280,7 +280,7 @@ in
         root="''${PORTABLE_PLANNER_ROOT:-}"
 
         fail() {
-          echo "planner image ${image.name}: $1" >&2
+          echo "planner image ${escapedWord image.name}: $1" >&2
           exit 1
         }
       '';
@@ -289,7 +289,7 @@ in
         # The target the image was built for, compared before anything starts.
         actualSystem="$(uname -m)-$(uname -s | tr '[:upper:]' '[:lower:]')"
         [ "$actualSystem" = ${lib.escapeShellArg attachment.target.system} ] || fail \
-          "built for system ${attachment.target.system} and this machine is $actualSystem"
+          "built for system ${escapedWord attachment.target.system} and this machine is $actualSystem"
 
         if command -v systemctl > /dev/null 2>&1; then
           actualManager=systemd
@@ -297,7 +297,7 @@ in
           actualManager=unknown
         fi
         [ "$actualManager" = ${lib.escapeShellArg attachment.target.serviceManager} ] || fail \
-          "built for service manager ${attachment.target.serviceManager} and this machine runs $actualManager"
+          "built for service manager ${escapedWord attachment.target.serviceManager} and this machine runs $actualManager"
       '';
 
       # Every host path the assembly reads, checked before it writes anything, so a
@@ -393,7 +393,7 @@ in
           # Which units run at all is decided here and never by the reload below.
           if [ "$(portablectl is-attached ${raw}/${attachment.image} 2> /dev/null || echo detached)" = detached ]; then
             portablectl attach --profile=${lib.escapeShellArg image.profile} ${raw}/${attachment.image} > /dev/null
-            echo "attached ${attachment.image}"
+            echo "attached "${quoted attachment.image}
             systemctl start ${unitWords}
             echo "started "${unitWords}
             changed=1
