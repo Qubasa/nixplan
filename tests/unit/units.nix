@@ -2,6 +2,7 @@
 let
   inherit (builtins)
     attrNames
+    filter
     toJSON
     ;
 
@@ -1605,6 +1606,68 @@ in
         namesTheField = true;
         namesTheType = true;
         fields = [ "command" ];
+      };
+    };
+
+  testAnEnvironmentNameNoUnitFileHasALineFor =
+    let
+      hostile = "A\nExecStartPost=/bin/sh -c evil\n#";
+      result = placed [ "one" ] (_: {
+        units.say = {
+          command = "/bin/true";
+          env = {
+            ${hostile} = "x";
+            MOTD = "one line";
+          };
+        };
+      });
+      table = planner.render result.diagnostics;
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        severity = severityById "unit-value-newline" result;
+        applicable = result.applicable;
+        theTableCarriesNoDirectiveLine = hasInfix "\nExecStartPost" table;
+      };
+      expected = {
+        rows = [ "unit-value-newline" ];
+        severity = "error";
+        applicable = false;
+        theTableCarriesNoDirectiveLine = false;
+      };
+    };
+
+  # The cheap scan gates the walk in `lib/module.nix`, so a record the walk has a
+  # row about and the scan answers no for is a row nobody sees.
+  testTheCheapScanSeesEveryStringTheWalkReports =
+    let
+      records = [
+        { env.MOTD = "one line"; }
+        { env.MOTD = "first\nsecond"; }
+        { env."A\nUser=root" = "x"; }
+        {
+          list = [
+            "ok"
+            "bad\nUser=root"
+          ];
+        }
+        { nested.deep."A\nUser=root".inner = "x"; }
+      ];
+      walked = filter (
+        record:
+        filter (found: planner.util.carriesLineBreak found.value) (planner.util.stringsDeep record) != [ ]
+      ) records;
+      scanned = filter planner.util.anyLineBreak records;
+    in
+    {
+      expr = {
+        agree = walked == scanned;
+        found = builtins.length walked;
+      };
+      expected = {
+        agree = true;
+        found = 4;
       };
     };
 }

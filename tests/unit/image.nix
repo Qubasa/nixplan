@@ -879,6 +879,46 @@ in
       };
     };
 
+  testAnEnvironmentKeyCarriesANewline =
+    let
+      withKey =
+        key:
+        readOf { } (_: {
+          closure = [ borgbackup ];
+          units.say = {
+            command = "${borgbackup}/bin/borg serve";
+            env.${key} = "x";
+          };
+        });
+      plannedWith =
+        key:
+        planned { } (_: {
+          closure = [ borgbackup ];
+          units.say = {
+            command = "${borgbackup}/bin/borg serve";
+            env.${key} = "x";
+          };
+        });
+      smuggled = "A\nExecStartPost=/bin/sh -c evil\n#";
+      broken = (plannedWith smuggled).result;
+    in
+    {
+      expr = {
+        refused = raises (withKey smuggled);
+        # An environment key is the left half of one quoted assignment, so a
+        # break in it is a directive line of its own the moment it is rendered.
+        noSecondDirective = raises (reader.renderUnit (withKey smuggled) "say");
+        oneKeyBuilds = raises (withKey "TOKEN");
+        theRowAboveTheRaise = support.rowIds broken;
+      };
+      expected = {
+        refused = true;
+        noSecondDirective = true;
+        oneKeyBuilds = false;
+        theRowAboveTheRaise = [ "unit-value-newline" ];
+      };
+    };
+
   testAnOrderingIsNotARequirement =
     let
       image = readOf { } (_: {

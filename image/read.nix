@@ -41,6 +41,7 @@ let
     carriesLineBreak
     escapeRegex
     mapAttrsToList
+    oneLine
     quote
     quoteList
     shortHash
@@ -759,7 +760,7 @@ rec {
       let
         first = builtins.head unprintable;
       in
-      fail accounts.unitValueNewline "entry ${quote key} unit ${quote first.unit} sets ${quote first.path} to a value containing a newline, which a unit file has no line to put"
+      fail accounts.unitValueNewline "entry ${quote key} unit ${quote first.unit} sets ${quote (oneLine first.path)} to a value containing a newline, which a unit file has no line to put"
     else
       {
         inherit

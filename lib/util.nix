@@ -2,6 +2,7 @@
 # list and attrset helpers nixpkgs lib would have supplied live here instead.
 let
   inherit (builtins)
+    any
     attrNames
     concatLists
     concatStringsSep
@@ -210,7 +211,10 @@ rec {
   # Every string a value carries at any depth, beside the field path it sits at.
   # storePathsDeep's traversal, keeping the path so a caller can name the field
   # rather than the record, and iterating the value rather than a list of fields
-  # so a field added anywhere inside it is covered by existing.
+  # so a field added anywhere inside it is covered by existing. An attribute name
+  # is one of those strings: it reaches a line-oriented file the way its value
+  # does, so it is emitted at the same path the value is. The path stays a thunk
+  # nothing on a clean walk forces.
   stringsDeep =
     let
       deep =
@@ -224,7 +228,21 @@ rec {
         else if isList value then
           concatLists (genList (i: deep "${path}[${toString i}]" (elemAt value i)) (length value))
         else if isAttrs value then
-          concatLists (mapAttrsToList (name: deep (if path == "" then name else "${path}.${name}")) value)
+          concatLists (
+            mapAttrsToList (
+              name: attr:
+              let
+                at = if path == "" then name else "${path}.${name}";
+              in
+              [
+                {
+                  path = at;
+                  value = name;
+                }
+              ]
+              ++ deep at attr
+            ) value
+          )
         else
           [ ];
     in
@@ -233,6 +251,22 @@ rec {
   # A line-oriented file cannot carry a line break inside a value. A space, a
   # quote and a backslash it can: those are escaped where the value is rendered.
   carriesLineBreak = value: isString value && match ".*[\n\r].*" value != null;
+
+  # The same question with no bookkeeping, so a caller gates stringsDeep on it and
+  # pays for a field path only where there is a row to name one. It reads each
+  # attribute's name beside its value in one pass over the names, because the walk
+  # it gates reports a name too and a gate that missed one would answer no for a
+  # record stringsDeep has a row about.
+  anyLineBreak =
+    value:
+    if isString value then
+      carriesLineBreak value
+    else if isList value then
+      any anyLineBreak value
+    else if isAttrs value then
+      any (name: carriesLineBreak name || anyLineBreak value.${name}) (attrNames value)
+    else
+      false;
 
   isVarsFile = value: isAttrs value && (value.__varsFile or false);
 

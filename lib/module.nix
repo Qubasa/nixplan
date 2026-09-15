@@ -1025,7 +1025,11 @@ rec {
             }
         );
 
-      unprintable = filter (found: util.carriesLineBreak found.value) (util.stringsDeep record);
+      unprintable =
+        if util.anyLineBreak record then
+          filter (found: util.carriesLineBreak found.value) (util.stringsDeep record)
+        else
+          [ ];
 
       rows =
         map (
