@@ -790,7 +790,7 @@ Two files by convention: the machine registry and the instances.
 | `system` | the system string, elaborated into the platform record every entry's `target` carries — **required once a placement selects the machine** |
 | `serviceManager` | what runs the machine's units — **required once a placement selects the machine** |
 | `microarchitecture` | optional; becomes the record's `gcc.arch` and `gcc.tune`, **replacing** whatever codegen group the platform itself carries, and is recorded on the machine entry when declared |
-| `reserves` | optional; the host resources the machine already holds outside the deployment, `{ ports.<name> = { proto, number }; paths = [ … ]; }`, checked against what the entries placed on it claim and recorded in no plan field |
+| `reserves` | optional; the host resources the machine already holds outside the deployment, `{ ports.<name> = { proto, address, number }; paths = [ … ]; }`, checked against what the entries placed on it claim and recorded in no plan field |
 
 A machine declares those six keys and nothing else. A machine a placement
 selected that declares no `address`, no `system` or no `serviceManager` is
@@ -813,16 +813,27 @@ outside the deployment entirely:
 reserves = {
   ports.sshd = {
     proto = "tcp";
+    address = "10.0.0.9";
     number = 22;
   };
   paths = [ "/etc/ssh/sshd_config" ];
 };
 ```
 
+A reserved port carries the same three typed fields an entry's claim carries,
+with the claim's `fixed` spelled `number`. `proto` and `address` are both
+optional and an unstated one reads as every value of it, which is the same
+widening an entry's claim gets. A key the subset does not read is
+`declaration-unknown-key` rather than a statement silently discarded.
+
 A reserved resource is a claimant of the collision index beside the entries
-placed on that machine, keyed `machine:<name>`: a port an entry claims with the
-same protocol and number earns `entry-port-claimed-twice`, and a path an entry
-writes a configuration file to earns `entry-host-path-claimed-twice`. An absent
+placed on that machine, keyed `machine:<name>`. Two claims of one number on one
+machine collide when they **overlap** rather than when they are equal: an
+unstated protocol or address is every value of it, so a reservation stating
+`proto = "tcp"` and no address collides with an entry claiming that number and
+stating neither, while two claims of one number on two stated addresses do not
+collide at all. An overlapping port earns `entry-port-claimed-twice` and a path
+an entry writes a configuration file to earns `entry-host-path-claimed-twice`. An absent
 statement checks nothing, so a registry written before the key existed produces
 the plan and the table it always produced. No plan field records the statement
 and no realiser reads it: it opens no port, renders no socket unit and creates

@@ -180,8 +180,11 @@ Recorded so the question is answered once.
   buckets compared pairwise inside one `(machine, number)` group rather than by one grouping key,
   and one claim may earn more than one row.
 - A machine may state the host resources its own image already holds, `reserves.ports.<name>` as
-  the same three typed fields an entry's claim carries and `reserves.paths` as host paths, and that
-  statement is a claimant of the same index keyed `machine:<name>`. It takes part in the one
+  `{ proto, address, number }`, which is an entry's claim's three typed fields with `fixed` spelled
+  `number`, and `reserves.paths` as host paths, and that
+  statement is a claimant of the same index keyed `machine:<name>`. Both nested records are
+  key-checked, so a misspelling is `declaration-unknown-key` rather than a reservation that
+  silently checks nothing. It takes part in the one
   ordering the row already follows, so the machine is the subject exactly when its key sorts first
   and a named claimant either way, and it earns `entry-host-path-claimed-twice` and
   `entry-port-claimed-twice` rather than identifiers of its own: a reader would otherwise have to
@@ -197,14 +200,28 @@ Recorded so the question is answered once.
   key exists. A composed `entryKey` was rejected there, since a key carries the two separators a
   name may not, and nothing about the key input moves.
 - `unit-value-newline` is about every string a unit record carries at any depth - a plain field, an
-  element of a list, a value of an attribute set, and every field of every extension application -
-  and the scan walks the record rather than a list of fields, so a field added to the vocabulary or
-  declared by an extension author is covered by existing. One identifier covers every field because
+  element of a list, a name or a value of an attribute set, and every field of every extension
+  application - and the scan walks the record rather than a list of fields, so a field added to the
+  vocabulary or
+  declared by an extension author is covered by existing. A name is in scope because
+  `image/read.nix` renders a unit's `env` key into the file as `Environment="<k>=<v>"` and escapes
+  the key with nothing, so a line break in a name is the same free directive line a value would be.
+  One identifier covers every field because
   two would ask a reader to learn which field belongs to which and would report one mistake twice
-  for a value written into two of them; the row names the field path instead. The nine fields whose
-  atoms are grammars refuse a line break as `unit-field-type-mismatch` and are never in the record,
+  for a value written into two of them; the row names the field path instead. Every field whose
+  atom is a grammar refuses a line break as `unit-field-type-mismatch` and is never in the record,
   so one fact still earns one row. `image/read.nix` scans the same record and refuses, because a
   caller reaching it directly gets no table.
+- The row records the offending value and keeps reading, and the entry is still planned: the row,
+  `applicable = false` and the realiser's own refusal are the three things that stop the bytes.
+  Pruning the value would make one identifier behave two ways, so a future change that prunes has
+  to prune a name and a value alike.
+- Two scans of one record hold that rule and they must agree. `util.anyLineBreak` answers the
+  yes-or-no question with no allocation and gates the `util.stringsDeep` walk that builds the field
+  paths, because the walk allocates a record and an interpolated path per string at every depth for
+  a row almost no unit earns: gating it removes about 8.7 thunks per entry on `fleet` and 13.3 on
+  `mesh`, which is most of the cost of the change that introduced it. A gate that skipped a shape
+  the walk reports switches the check off silently, which is why both read attribute names.
 - A configuration file's host path is held to the grammar one word of a rendered shell step can
   carry, and that grammar's one home is `lib/util.nix` beside `keySeparators`: `secrets/read.nix`
   reads it rather than stating it, because a widened grammar admitting a character in one rendered
@@ -256,9 +273,9 @@ Recorded so the question is answered once.
 - `varsState` is keyed by the value's entry, not by machine: one value has one answer about
   whether it exists however many machines receive it.
 - The reservation a machine states is deliberately outside `machineRecords` and `targetOf`, and
-  lives in a third projection of the same reading. `machineKey` hashes the record it is handed
-  (`lib/plan.nix:28`), every placed entry depends on that key (`lib/plan.nix:810`) and so does
-  every per-placement generated value (`lib/plan.nix:987`), so recording it would ask for a
+  lives in a third projection of the same reading. `machineKey` hashes the record it is handed,
+  every placed entry depends on that key through its own `dependsOn`, and so does
+  every per-placement generated value, so recording it would ask for a
   redelivery of every entry on the machine and a regeneration of bytes that are still correct each
   time an operator corrected a line of it. The plan records it nowhere for the same reason, and
   nothing reads it: no realiser, no subcommand.
@@ -388,13 +405,23 @@ Recorded so the question is answered once.
   earlier as `slot-reads-value-unreadable-by-user` for a consumer's declared reads. A unit's
   declared groups are whatever an extension application records under `supplementaryGroups`,
   under any backend, which is how `lib/` asks the question without naming a realiser.
-- The readability comparison is one predicate, `admits`, asked at the three sites that hold the
+- The readability comparison is one predicate, `util.admits`, asked at the three sites that hold the
   facts, and each site names its own row. `lib/plan.nix` asks it of a consumer's declared reads
   (`slot-reads-value-unreadable-by-user`) and of a configuration file the entry's own units are
   shown (`entry-config-file-unreadable-by-user`); `image/read.nix` asks it of the account a
   profile imposes (`imageReader.denials`, over a delivered file and a configuration file alike);
   `operator/read.nix` mirrors the third as `operator-entry-access-denied` by mapping the
   builder's own denial list rather than comparing again. A fourth site is a place to forget it.
+- Its one home is `lib/util.nix`, beside `keySeparators` and the renderable-word grammar, and the
+  one thing its callers differ on is an argument rather than a second copy. `rootAdmitted` is true
+  for the planner, which reads a unit running unconfined as the account it declares, so a unit
+  declaring no account and a unit declaring `root` both open anything and answer alike. It is false
+  for the image reader, because a confining profile imposes the account and never imposes root, so
+  an undeclared account there matches no file's owner and only the world bit admits it. Two copies
+  is what the tree had, and they disagreed:
+  the planner's refused a unit spelling its account `root`, which `entry-config-file-unreadable-by-user`
+  made deployment-fatal. The group clause asks about the unit's declared groups and not about its
+  account, under either answer, so a unit naming a group and no account is admitted by that group.
 - Every row an interface can earn is reached from the modules that imported it, never from the
   `interfaces` argument. Attribution decides what a row says and nothing about which rows exist,
   so an interface a deployment lists nowhere earns the same identity, fold and export rows a
@@ -484,6 +511,15 @@ Recorded so the question is answered once.
   escape is what holds for a value no rule has reached yet. `lib.escapeShellArg` leaves a
   safe-looking word bare, which is why `image/default.nix` has a `quoted` of its own for the
   messages.
+- Independence stops at a value the receiving shell re-parses, and the `deploy.remote` step
+  `secrets/backend.nix` renders is where that line falls. Its local half escapes every word, so the
+  address, which reaches `ssh` as an operand and is never re-parsed, is carried by the escape alone.
+  Its remote half is one `ssh` command whose text names `'$4'` through `'$7'` inside single quotes,
+  so the parent directory, the path, the mode and the ownership are re-parsed on the machine and
+  are held by `util.wordRule` and nothing else: fourteen sites across those four positions. Those
+  four are grammar-dependent by construction, and widening `wordRule` to admit a quote breaks them
+  however well the local side escapes. A second escape cannot fix it, because the escape would have
+  to survive a round trip the step has no way to perform.
 - Each realiser states its own name rule and its own unit rule as the sentence its refusal prints,
   and `operator/read.nix` asks the stated realiser for the two rather than testing which realiser
   it is, so a third publishing them is asked by existing. The image realiser's rule is the
@@ -760,6 +796,11 @@ silently unobserved.
 - A new `spec.md` anywhere goes in `accountable` or `excused` in `tests/unit/coverage.nix`.
 - A directory kind goes in `directoryKinds` in `lib/module.nix`, which is what `unitVocabulary`,
   the two rows about a directory, `directoriesOf` in `lib/plan.nix` and the claim index all read.
+  `unitVocabulary` reads it by deriving the kind's own field and its mode field from it rather than
+  spelling the six out, because a hand-written vocabulary let a fourth kind be registered and stay
+  silently inert: the field was dropped before `typed`, so `unit-directory-declared-twice` and
+  `unit-directory-mode-without-directory` could not fire for it and the unit declaring it earned
+  `implementation-unknown-key` instead.
   Adding a third *declaration site* for one is the open question
   `openspec/changes/declare-service-state` carries: its path-keyed `implKeys.state` would be a
   third place one directory is stated, and `unit-directory-declared-twice` only refuses two.
