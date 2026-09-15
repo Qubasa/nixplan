@@ -504,6 +504,33 @@ in
     };
   };
 
+  # The rules the two realisers hold differ, and this unit file is where they do:
+  # the image builder's store name set carries no `@`, and this endpoint's own
+  # rule reads one as systemd's instance marker.
+  testAUnitThisEndpointAcceptsAndTheImageBuilderRefuses =
+    let
+      instanced = _: {
+        closure = [ borgbackup ];
+        units."web@one".command = "${borgbackup}/bin/borg serve";
+      };
+    in
+    {
+      expr = {
+        refused = raises (readOf { } instanced);
+        rowAbove = rowsAbove { } instanced;
+        file = (readOf { } instanced).units."web@one".file;
+        theImageBuildersRule = imageReader.acceptsUnit "svc-only" "svc-only-web@one.service";
+        thisEndpointsRule = reader.acceptsUnit "svc-only" "svc-only-web@one.service";
+      };
+      expected = {
+        refused = false;
+        rowAbove = [ ];
+        file = "svc-only-web@one.service";
+        theImageBuildersRule = false;
+        thisEndpointsRule = true;
+      };
+    };
+
   testAWellFormedEntryIsNotRefused = {
     expr = {
       simple = raises (readOf { } simple);

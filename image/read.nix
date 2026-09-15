@@ -262,6 +262,29 @@ let
   acceptsUnit =
     name: unit: match "${escapeRegex name}-[A-Za-z0-9_.-]+\\.(service|timer)" unit != null;
 
+  # The two rules belong to the realiser that meets the entry and not to this
+  # reading, which flakelet forces for the units and the digest too: a refusal
+  # made under the image's grammar would name this builder for an entry nobody
+  # stated as an image, and would state a rule its row does not.
+  imageRules = {
+    inherit
+      nameRule
+      acceptsName
+      unitRule
+      acceptsUnit
+      ;
+    nameRefused =
+      { key, name }:
+      fail accounts.nameRefused "entry ${quote key} derives the service name ${quote name}, which this builder refuses: ${nameRule}";
+    unitRefused =
+      {
+        key,
+        name,
+        file,
+      }:
+      fail accounts.unitRefused "entry ${quote key} renders the unit file ${quote file}, which this builder refuses: ${unitRule name}";
+  };
+
   # Where the host holds what it shows one image. One directory per image, so
   # detaching removes what attaching created and nothing else.
   stagingOf = name: "/run/portable-planner/${name}";
@@ -568,6 +591,7 @@ rec {
       plan,
       key,
       profile,
+      rules ? imageRules,
     }:
     let
       entry =
@@ -687,24 +711,27 @@ rec {
         ) (attrNames units)
       );
 
-      # Every name this builder derives, before a store name is built from one.
-      # A name outside the rule is refused here rather than left to whatever the
-      # build system makes of it, which names neither the entry nor the
-      # declaration.
+      # Every name the realiser meeting this entry derives, before a store name
+      # is built from one. A name outside its rule is refused here rather than
+      # left to whatever the build system makes of it, which names neither the
+      # entry nor the declaration.
       unitFiles = concatLists (
         map (
           u: [ (unitFileName name u) ] ++ (if units.${u} ? schedule then [ (timerFileName name u) ] else [ ])
         ) (attrNames units)
       );
 
-      refusedUnits = filter (file: !(acceptsUnit name file)) unitFiles;
+      refusedUnits = filter (file: !(rules.acceptsUnit name file)) unitFiles;
     in
-    if !(acceptsName name) then
-      fail accounts.nameRefused "entry ${quote key} derives the service name ${quote name}, which this builder refuses: ${nameRule}"
+    if !(rules.acceptsName name) then
+      rules.nameRefused { inherit key name; }
     else if !(isAttrs units) || units == { } then
       fail accounts.entryRealisesNothing "entry ${quote key} records no unit, so there is nothing to attach"
     else if refusedUnits != [ ] then
-      fail accounts.unitRefused "entry ${quote key} renders the unit file ${quote (builtins.head (sortStrings refusedUnits))}, which this builder refuses: ${unitRule name}"
+      rules.unitRefused {
+        inherit key name;
+        file = builtins.head (sortStrings refusedUnits);
+      }
     else if serviceManager != backend then
       fail accounts.serviceManagerMismatch "entry ${quote key} is planned for a machine running ${quote serviceManager}, and this builder emits images for ${quote backend}"
     else if rootsOutsideTheStore != [ ] then

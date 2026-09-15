@@ -40,10 +40,15 @@ let
     uniqueStrings
     ;
 
-  realisers = [
-    "flakelet"
-    "image"
-  ];
+  # The realisers there are, each under the name a statement spells. A reading
+  # asks the one it resolves for the rules only that realiser knows, so a third
+  # entry here is asked by existing and an unlisted name resolves to nothing.
+  readers = {
+    image = imageReader;
+    flakelet = flakeletReader;
+  };
+
+  realisers = attrNames readers;
 
   defaultRealiser = "flakelet";
 
@@ -143,7 +148,7 @@ let
       steps = statementSteps realise key parts;
       statedRealiser = fieldOf steps "realiser";
       realiser = if statedRealiser == null then defaultRealiser else statedRealiser;
-      known = elem realiser realisers;
+      known = endpoint != null;
       profile = fieldOf steps "profile";
       inDomain = elem profile imageReader.profileNames;
       record = machineRecordOf plan parts.machine;
@@ -170,17 +175,7 @@ let
         else
           [ ];
 
-      # The name rules are the stated realiser's own, asked of it rather than
-      # tested for by name, so a realiser publishing the two is asked by
-      # existing. An unknown realiser is asked nothing: the row that names it is
-      # the one below.
-      endpoint =
-        if !known then
-          null
-        else if realiser == "image" then
-          imageReader
-        else
-          flakeletReader;
+      endpoint = readers.${realiser} or null;
       refusedNames =
         if endpoint != null && !(endpoint.acceptsName name) then
           [

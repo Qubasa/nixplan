@@ -532,6 +532,17 @@ in
     let
       reading = readOf { "svc:only".realiser = "podman"; } one;
       row = builtins.head (rowsById "operator-realiser-unknown" reading);
+
+      # A name every realiser's rule refuses, stated for a realiser there is
+      # none of: the statement resolves to no endpoint, so nothing is asked of
+      # one and the row naming the statement is the only row.
+      refusedName = planOf {
+        instances."sv?c" = {
+          module = soleRoot { module = _: { impl = simple; }; };
+          placement.every.only.machines = [ "one" ];
+        };
+      };
+      unrouted = readOf { default.realiser = "podman"; } refusedName;
     in
     {
       expr = {
@@ -542,6 +553,7 @@ in
         namesWhatExists = hasInfix "`flakelet`, `image`" row.message;
         refused = reading.refused;
         realisers = reader.realisers;
+        askedOfNoEndpoint = idsOf unrouted;
       };
       expected = {
         ids = [ "operator-realiser-unknown" ];
@@ -554,6 +566,7 @@ in
           "flakelet"
           "image"
         ];
+        askedOfNoEndpoint = [ "operator-realiser-unknown" ];
       };
     };
 
@@ -1415,6 +1428,68 @@ in
         theRowIsProduced = "operator-entry-name-refused";
         theRowStatesTheRealisersRule = true;
         andItIsNotFlakelets = false;
+      };
+    };
+
+  # The two realisers render one unit set under two rules, and this file is where
+  # they differ: `@` is the service manager's instance marker and no character of
+  # a store name.
+  testAUnitFileIsHeldToTheStatedRealisersRule =
+    let
+      result = deployment (_: {
+        closure = [ borgbackup ];
+        units."web@one".command = "${borgbackup}/bin/borg serve";
+      });
+      asAnImage = readOf {
+        default = {
+          realiser = "image";
+          profile = "trusted";
+        };
+      } result;
+      row = builtins.head (rowsById "operator-entry-name-refused" asAnImage);
+      raised = builtins.tryEval (
+        let
+          artifact = imageReader.read {
+            inherit (result) plan;
+            key = oneKey;
+            profile = "trusted";
+          };
+        in
+        builtins.deepSeq artifact artifact
+      );
+      read = builtins.tryEval (
+        let
+          artifact = flakeletReader.read {
+            inherit (result) plan;
+            key = oneKey;
+          };
+        in
+        builtins.deepSeq artifact artifact
+      );
+    in
+    {
+      expr = {
+        thePlannerAllowsIt = map (r: r.id) result.diagnostics;
+        rows = idsOf asAnImage;
+        subject = row.subject;
+        namesTheFile = hasInfix "`svc-only-web@one.service`" row.message;
+        statesTheImagesRule = hasInfix (imageReader.unitRule "svc-only") row.message;
+        theImageRaisesToo = raised.success;
+        # The same entry under the default realiser, whose rule reads the `@` as
+        # an instance marker: no row and no refusal, the image's rule reaching it
+        # nowhere.
+        underTheDefault = idsOf (readOf { } result);
+        theEndpointReadsIt = read.success;
+      };
+      expected = {
+        thePlannerAllowsIt = [ ];
+        rows = [ "operator-entry-name-refused" ];
+        subject = oneKey;
+        namesTheFile = true;
+        statesTheImagesRule = true;
+        theImageRaisesToo = false;
+        underTheDefault = [ ];
+        theEndpointReadsIt = true;
       };
     };
 

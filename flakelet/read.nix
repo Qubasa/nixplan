@@ -19,8 +19,6 @@
 }:
 let
   inherit (builtins)
-    attrNames
-    concatLists
     filter
     head
     length
@@ -30,7 +28,7 @@ let
     stringLength
     ;
 
-  inherit (planner.util) escapeRegex quote sortStrings;
+  inherit (planner.util) escapeRegex quote;
 
   # Every refusal this reading can make, and the row that reports the same
   # condition first. The pairing is data the refusal carries, so rewording a
@@ -94,17 +92,27 @@ let
       prefix == name || match "${escapeRegex name}-.*" prefix != null
     );
 
-  filesOf =
-    image:
-    concatLists (
-      map (
-        unitName:
-        let
-          u = image.units.${unitName};
-        in
-        [ u.file ] ++ (if u.timer == null then [ ] else [ u.timer ])
-      ) (attrNames image.units)
-    );
+  # The two rules above, as the shared reading is handed them: it renders the
+  # units of either realiser, so the refusal it makes is the endpoint's own
+  # rather than the image builder's.
+  rules = {
+    inherit
+      nameRule
+      acceptsName
+      unitRule
+      acceptsUnit
+      ;
+    nameRefused =
+      { key, name }:
+      fail accounts.nameRefused "entry ${quote key} derives the service name ${quote name}, which the endpoint refuses: ${nameRule}";
+    unitRefused =
+      {
+        key,
+        name,
+        file,
+      }:
+      fail accounts.unitRefused "entry ${quote key} renders the unit file ${quote file}, which the endpoint refuses: ${unitRule name}";
+  };
 
   # The install section is the binding's decision, not a plan field. The plan says
   # when a unit runs, and "enabled" means something different to every backend:
@@ -163,11 +171,9 @@ in
     { plan, key }:
     let
       image = reader.read {
-        inherit plan key;
+        inherit plan key rules;
         profile = confinement;
       };
-
-      refusedUnits = filter (file: !(acceptsUnit image.name file)) (filesOf image);
 
       shownPaths = sort (a: b: a.path < b.path) (filter (p: !(acceptsHostPath p)) image.hostPaths);
 
@@ -175,11 +181,7 @@ in
         filter (p: acceptsHostPath p && !(acceptsRecord p)) image.hostPaths
       );
     in
-    if !(acceptsName image.name) then
-      fail accounts.nameRefused "entry ${quote key} derives the service name ${quote image.name}, which the endpoint refuses: ${nameRule}"
-    else if refusedUnits != [ ] then
-      fail accounts.unitRefused "entry ${quote key} renders the unit file ${quote (head (sortStrings refusedUnits))}, which the endpoint refuses: ${unitRule image.name}"
-    else if shownPaths != [ ] then
+    if shownPaths != [ ] then
       let
         first = head shownPaths;
       in

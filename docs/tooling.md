@@ -94,8 +94,8 @@ The suites, and how many tests each holds:
 | `platform` | 26 | a machine's target, elaborated |
 | `closure` | 25 | what a unit may name and what it must declare |
 | `image` | 55 | the portable-service-image realiser's reading of an entry |
-| `flakelet` | 27 | the flakelet realiser's reading: enablement, identity, the two name refusals, and which host paths it carries, by when their bytes exist and by the record they state |
-| `operator` | 39 | the deployment build's reading: the artifact name, `manifest.json`, the realiser statement, its refusals |
+| `flakelet` | 28 | the flakelet realiser's reading: enablement, identity, the two name refusals, and which host paths it carries, by when their bytes exist and by the record they state |
+| `operator` | 40 | the deployment build's reading: the artifact name, `manifest.json`, the realiser statement, its refusals |
 | `secrets` | 23 | the secrets realiser's reading: a plan as a generator configuration, the name projection, the rendered deploy step, and the rows it answers a refused plan with |
 | `consumer` | 2 | what this flake publishes: the recorded platform identity, and a plan keyed by a caller's own nixpkgs |
 | `perf` | 6 | the synthetic fleet is deterministic and realises nothing |
@@ -110,7 +110,7 @@ nix eval --json '.#debug.suites' \
 ```
 
 Nineteen suites, counted as the keys of `suites` in `tests/default.nix`, and
-624 tests, counted as the test attributes of the files under `tests/unit/`. Both
+626 tests, counted as the test attributes of the files under `tests/unit/`. Both
 numbers, and every figure in the table above, are compared against the tree by
 `coverage.testASuiteGainsATest`, so a suite that gains a test fails a check
 naming this document rather than leaving a stale number in it. That
