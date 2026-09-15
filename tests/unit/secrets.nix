@@ -151,6 +151,20 @@ let
       get = getProgram;
     };
 
+  # A file record as the planner writes one. The ownership and the mode are
+  # always there, the rendered step carrying all three as words, so a record
+  # missing one is a row about the record rather than about the file's name.
+  handFile =
+    attrs:
+    {
+      owner = "root";
+      group = "root";
+      mode = "0400";
+      secrecy = "secret";
+      inPlan = "reference";
+    }
+    // attrs;
+
   # A value entry as the planner emits one, for the two refusals a plan the
   # planner produces cannot reach: a key two components can be read out of, and a
   # component carrying the character the name joins on.
@@ -172,17 +186,24 @@ let
         delivery = [ "one" ];
         deliveryDerivedFrom = [ "written by hand" ];
         program = programOf "hand";
-        files.token = {
-          path = "/run/vars/hand/token";
-          secrecy = "secret";
-          inPlan = "reference";
-        };
+        files.token = handFile { path = "/run/vars/hand/token"; };
       }
       // entry
     ) entries;
 
   lines = text: filter builtins.isString (builtins.split "\n" text);
   deliverLines = text: filter (line: builtins.match " *deliver .*" line != null) (lines text);
+
+  # The worked plan with one field of the shared value's only file replaced, so
+  # a word the rendered step carries can be moved one at a time.
+  sessionFileWith =
+    attrs:
+    worked.plan
+    // {
+      "issuer:vars/session" = worked.plan."issuer:vars/session" // {
+        files.token = worked.plan."issuer:vars/session".files.token // attrs;
+      };
+    };
 in
 {
   testAGeneratedValueBecomesOneStoreEntry =
@@ -407,7 +428,7 @@ in
       };
       reserved = synthetic {
         "a:vars/b" = {
-          files.".nixos-secrets-metadata".path = "/run/vars/a/b/meta";
+          files.".nixos-secrets-metadata" = handFile { path = "/run/vars/a/b/meta"; };
         };
       };
     in
@@ -637,7 +658,7 @@ in
         named: programless:
         let
           plan = synthetic {
-            ${named}.files."key@id".path = "/run/vars/a/key";
+            ${named}.files."key@id" = handFile { path = "/run/vars/a/key"; };
             ${programless} = { };
           };
         in
@@ -684,7 +705,7 @@ in
     let
       named = synthetic {
         "a:vars/b" = {
-          files."key@id".path = "/run/vars/a/b/key";
+          files."key@id" = handFile { path = "/run/vars/a/b/key"; };
         };
       };
     in
@@ -707,7 +728,7 @@ in
     let
       reserved = synthetic {
         "a:vars/b" = {
-          files.".nixos-secrets-metadata".path = "/run/vars/a/b/meta";
+          files.".nixos-secrets-metadata" = handFile { path = "/run/vars/a/b/meta"; };
         };
       };
     in
@@ -895,6 +916,221 @@ in
           "issuer:session"
         ];
         theStepIsRendered = true;
+      };
+    };
+
+  testEveryValueTheRenderedStepEscapesIsCrossedAgainstTheReading =
+    let
+      # The step and the reading are crossed through the words the reading
+      # publishes: the call carries one word per entry of that set and the shell
+      # function reads exactly those positions, so a set the two halves do not
+      # share is a call the function cannot take apart.
+      crossing =
+        words:
+        let
+          script =
+            (import (secretsSource + "/backend.nix") {
+              inherit planner;
+              reader = reader // {
+                renderedWords = words;
+              };
+            }).render
+              {
+                plan = worked.plan;
+                get = getProgram;
+              };
+          call = head (deliverLines script);
+          carried =
+            builtins.length (filter (word: builtins.isString word && word != "") (builtins.split " +" call))
+            - 1;
+          read = filter (n: hasInfix ("$" + toString n) script) (builtins.genList (i: i + 1) 9);
+        in
+        {
+          fields = map (word: word.field) words;
+          theStepCarriesOneWordPerField = carried == 2 + builtins.length words;
+          theStepReadsThemAll = read == builtins.genList (i: i + 1) (2 + builtins.length words);
+        };
+
+      # One plan per word, each moving that word alone out of what a rendered
+      # word admits.
+      hostile = {
+        address = worked.plan // {
+          "machine:one" = worked.plan."machine:one" // {
+            address = "10.0.0.10 ";
+          };
+        };
+        parent = sessionFileWith { path = "/token"; };
+        path = sessionFileWith { path = "/run/vars/issuer/ses sion/token"; };
+        mode = sessionFileWith { mode = "0 400"; };
+        ownership = sessionFileWith { owner = "svc$"; };
+      };
+
+      checks = filter (
+        word:
+        builtins.any (row: hasInfix "${word.what} of " row.message) (
+          rowsById "secrets-rendered-word-refused" hostile.${word.field}
+        )
+      ) reader.renderedWords;
+
+      held = crossing reader.renderedWords;
+      andOneWordMore = crossing (reader.renderedWords ++ [ (head reader.renderedWords) ]);
+      andOneWordFewer = crossing (builtins.tail reader.renderedWords);
+    in
+    {
+      expr = {
+        inherit held;
+        checkedByTheReading = map (word: word.field) checks;
+        # The row of a word the reading never checked before: it names the
+        # field, the value entry and the text the step cannot carry.
+        theOwnershipRow = removeAttrs (oneRow "secrets-rendered-word-refused" hostile.ownership) [
+          "evidence"
+        ];
+        # A path whose own word is refused is one mistake, so the word derived
+        # from it is not a second row.
+        aRefusedPathIsOneRow = map (row: row.message) (
+          rowsById "secrets-rendered-word-refused" hostile.path
+        );
+        # And the refusal is the second time each fact is stated: the reading
+        # rowed it, the step will not render it.
+        theStepRefusesEachOfThem = map (word: raises (renderOf hostile.${word.field})) reader.renderedWords;
+        # A word only the rendering half carries: the call grows and the
+        # function reads no more than it did.
+        aWordOnlyTheStepCarries = andOneWordMore.theStepReadsThemAll;
+        # And the other way: a word the reading checks that the call does not
+        # carry leaves the function reading a position nothing supplies.
+        aWordTheStepDoesNotCarry = andOneWordFewer.theStepReadsThemAll;
+      };
+      expected = {
+        held = {
+          fields = [
+            "address"
+            "parent"
+            "path"
+            "mode"
+            "ownership"
+          ];
+          theStepCarriesOneWordPerField = true;
+          theStepReadsThemAll = true;
+        };
+        checkedByTheReading = [
+          "address"
+          "parent"
+          "path"
+          "mode"
+          "ownership"
+        ];
+        theOwnershipRow = {
+          id = "secrets-rendered-word-refused";
+          subject = "issuer:vars/session";
+          severity = "error";
+          message = "the ownership of `issuer:vars/session` is `svc$:root`, which is not something this reading will render into a shell script";
+          resolution = "write `issuer:vars/session` as one shell word of ASCII letters, digits, `_`, `.`, `/`, `:`, `@`, `%`, `+`, `=`, `,`, `~`, `-` and nothing else";
+        };
+        aRefusedPathIsOneRow = [
+          "the path of `issuer:vars/session` is `/run/vars/issuer/ses sion/token`, which is not something this reading will render into a shell script"
+        ];
+        theStepRefusesEachOfThem = [
+          true
+          true
+          true
+          true
+          true
+        ];
+        aWordOnlyTheStepCarries = false;
+        aWordTheStepDoesNotCarry = false;
+      };
+    };
+
+  testAnOwnershipTheReadingAdmitsRenders =
+    let
+      owned = sessionFileWith {
+        owner = "svc";
+        group = "readers";
+      };
+      script = renderOf owned;
+    in
+    {
+      expr = {
+        rows = idsOf owned;
+        theStepCarriesBoth = filter (hasInfix "issuer:session") (deliverLines script);
+        theStepSetsThem = filter (hasInfix "chown '$7'") (lines script) != [ ];
+      };
+      expected = {
+        rows = [ ];
+        theStepCarriesBoth = [
+          "    deliver 'issuer:session' 'token' 'root@one.example:22' '/run/vars/issuer/session' '/run/vars/issuer/session/token' '0400' 'svc:readers'"
+          "    deliver 'issuer:session' 'token' 'root@two.example:22' '/run/vars/issuer/session' '/run/vars/issuer/session/token' '0400' 'svc:readers'"
+        ];
+        theStepSetsThem = true;
+      };
+    };
+
+  testAValueEntryIsRecognisedByTheDeliveryItRecords =
+    let
+      # An instance called `machine`, beside a machine of that name: the value's
+      # key text is a machine record's and its record is a value's.
+      named = synthetic { "machine:vars/token" = { }; } // {
+        "machine:machine" = {
+          key = "sha256-0000000000000000";
+          address = "m.example";
+          tags = [ ];
+        };
+      };
+      unreadable = synthetic { "vars/token" = { }; };
+    in
+    {
+      expr = {
+        names = attrNames (storeOf named);
+        itRowsNothing = idsOf named;
+        theMachineRecordIsNoValue =
+          reader.valuesOf named == reader.valuesOf (removeAttrs named [ "machine:machine" ]);
+        # A record the reading recognises and whose key names no components: one
+        # row against the key the plan carries, and no store entry.
+        unreadableRow = removeAttrs (oneRow "secrets-key-not-a-value" unreadable) [ "evidence" ];
+        refused = raises (storeOf unreadable);
+        andNothingIsDelivered = raises (reader.deliveriesOf unreadable);
+      };
+      expected = {
+        names = [ "machine:token" ];
+        itRowsNothing = [ ];
+        theMachineRecordIsNoValue = true;
+        unreadableRow = {
+          id = "secrets-key-not-a-value";
+          subject = "vars/token";
+          severity = "error";
+          message = "`vars/token` is not a generated value's key of the form `<instance>:vars/<generator>` or `<instance>:vars/<generator>@<machine>`";
+          resolution = "plan this deployment again, so that every generated value sits at the key the planner writes and every read names one of them";
+        };
+        refused = true;
+        andNothingIsDelivered = true;
+      };
+    };
+
+  testAServiceEntryWhoseKeyNamesAGeneratorContributesNoStoreEntry =
+    let
+      # One placed service entry of the worked plan, moved to the key a
+      # generated value of the same instance would sit at.
+      impostor = worked.plan // {
+        "issuer:vars/only@one" = worked.plan."issuer:only@one";
+      };
+    in
+    {
+      expr = {
+        itIsAPlacedEntry = impostor."issuer:vars/only@one" ? placement;
+        names = attrNames (storeOf impostor);
+        rows = idsOf impostor;
+        theStepNamesIt = hasInfix "issuer:only" (renderOf impostor);
+      };
+      expected = {
+        itIsAPlacedEntry = true;
+        names = [
+          "issuer:ca"
+          "issuer:host:one"
+          "issuer:host:two"
+          "issuer:session"
+        ];
+        rows = [ ];
+        theStepNamesIt = false;
       };
     };
 }

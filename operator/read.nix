@@ -17,11 +17,13 @@
 }:
 let
   inherit (builtins)
+    all
     attrNames
     concatLists
     elem
     elemAt
     filter
+    groupBy
     head
     isAttrs
     isString
@@ -72,6 +74,12 @@ let
       "machine"
     else
       null;
+
+  # A member no placement kept records its settings and nothing a realisation
+  # reads, and a placed entry records all three of these. The two are told apart
+  # by that rather than by the text of the key, which is the one question an
+  # unreadable key cannot answer.
+  placedRecord = record: record ? target || record ? units || record ? closure;
 
   machineRecordOf =
     plan: machine:
@@ -163,19 +171,49 @@ let
 
       # Each realiser is asked what it accepts rather than restated here, so the
       # sentence a row states and the sentence its raise states are one string.
-      confinement = if realiser == "image" then profile else flakeletReader.confinement;
+      # A statement that resolved to no realiser, or to an image and no profile
+      # of the domain, produces no confinement, so nothing a realiser holds
+      # about a profile is indexed with what the statement carried.
+      confinement =
+        if !known then
+          null
+        else if realiser == "image" then
+          (if inDomain then profile else null)
+        else
+          flakeletReader.confinement;
+      imposed = if confinement == null then "" else confinement;
       emits = if realiser == "image" then imageReader.backend else flakeletReader.backend;
       runs = (entry.target or { }).serviceManager or null;
       hostPaths = imageReader.hostPaths { inherit key entry; };
+      recordFields = [
+        "owner"
+        "group"
+        "mode"
+      ];
+      statesARecord = p: p.kind != "configuration-file" || all (f: isString p.${f}) recordFields;
+      # A configuration file the planner refused for its mode is recorded with
+      # none, and both comparisons below interpolate the record, so a path whose
+      # record is not three strings is named here and reaches neither.
+      unrecorded = concatLists (
+        map (
+          p:
+          map (field: {
+            inherit (p) path;
+            inherit field;
+            value = p.${field};
+          }) (filter (f: !(isString p.${f})) recordFields)
+        ) (filter (p: !(statesARecord p)) hostPaths)
+      );
+      recorded = filter statesARecord hostPaths;
       unassemblable =
-        if realiser == "flakelet" then filter (p: !(flakeletReader.acceptsHostPath p)) hostPaths else [ ];
+        if realiser == "flakelet" then filter (p: !(flakeletReader.acceptsHostPath p)) recorded else [ ];
       uninstallable =
         if realiser == "flakelet" then
-          filter (p: flakeletReader.acceptsHostPath p && !(flakeletReader.acceptsRecord p)) hostPaths
+          filter (p: flakeletReader.acceptsHostPath p && !(flakeletReader.acceptsRecord p)) recorded
         else
           [ ];
 
-      endpoint = readers.${realiser} or null;
+      endpoint = if isString realiser then readers.${realiser} or null else null;
       refusedNames =
         if endpoint != null && !(endpoint.acceptsName name) then
           [
@@ -243,7 +281,10 @@ let
       units = unitFilesOf name (entry.units or { });
       # The identity the endpoint records for the artifact, so a report can
       # compare a machine against a build. The plan entry key stays in the plan.
-      digest = imageReader.versionFor { inherit key entry; };
+      digest = imageReader.versionFor {
+        inherit key entry;
+        profile = imposed;
+      };
       rows =
         optional (malformed != [ ]) (
           planner.error {
@@ -256,13 +297,23 @@ let
             resolution = "write `${found.from} = { realiser = <realiser>; };` in the deployment's `realise` argument";
           }
         )
+        ++ map (
+          r:
+          planner.error {
+            id = "operator-plan-field-malformed";
+            subject = key;
+            message = "the plan record ${quote key} records ${quote r.field} on configuration file ${quote r.path} as ${shown r.value}, and the reading of it needs a string";
+            evidence = "a record the planner already refused is recorded incompletely, and every comparison this reading makes against it interpolates the three fields it states";
+            resolution = "state ${quote r.field} on ${quote r.path} in the module, which is what the planner's own row about that file asks for";
+          }
+        ) unrecorded
         ++ (
           if !realised then
             optional named (
               planner.error {
                 id = "operator-entry-realises-nothing";
                 subject = key;
-                message = "entry ${quote key} is stated to be realised by ${quote realiser} and declares no unit, so there is nothing to realise for it";
+                message = "entry ${quote key} is stated to be realised by ${shown realiser} and declares no unit, so there is nothing to realise for it";
                 evidence = "an entry whose whole contribution is an export runs nothing, and a realiser of it would produce an artifact with no unit to attach";
                 resolution = "remove ${quote key} from the deployment's `realise` argument, or declare a unit for it";
               }
@@ -272,7 +323,7 @@ let
               planner.error {
                 id = "operator-realiser-unknown";
                 subject = key;
-                message = "entry ${quote key} is stated to be realised by ${quote realiser}, and the realisers that exist are ${quoteList realisers}";
+                message = "entry ${quote key} is stated to be realised by ${shown realiser}, and the realisers that exist are ${quoteList realisers}";
                 evidence = "the realisation statement is read by plan key, then by the `<instance>:<service>` prefix, then by `default`";
                 resolution = "state one of ${quoteList realisers} for ${quote key} in the deployment's `realise` argument";
               }
@@ -458,6 +509,53 @@ let
         )
       ) names
     );
+
+  # Every unit file name the realisers derive, indexed per machine. The artifact
+  # name above carries the machine and so cannot collide inside one, while a
+  # derived unit file name joins the instance, the member and the unit into one
+  # string, so two members whose names and unit names differ can spell one file.
+  # Both realisers spend these names, which is why the index is here and not in
+  # either of them.
+  unitFileRows =
+    entries:
+    let
+      claims = concatLists (
+        map (
+          key:
+          map (file: {
+            inherit key file;
+            inherit (entries.${key}) machine;
+          }) entries.${key}.units
+        ) (sortStrings (attrNames entries))
+      );
+      buckets =
+        of: claimants:
+        let
+          grouped = groupBy of claimants;
+        in
+        map (name: grouped.${name}) (attrNames grouped);
+    in
+    concatLists (
+      map (
+        onMachine:
+        concatLists (
+          map (
+            spending:
+            optional (length spending > 1) (
+              planner.error {
+                id = "operator-entry-unit-file-collision";
+                subject = (head spending).key;
+                message = "entries ${
+                  quoteList (map (c: c.key) spending)
+                } all derive the unit file ${quote (head spending).file} on machine ${quote (head spending).machine}";
+                evidence = "a realiser derives a unit file name from the instance, the member and the unit name, so the second entry's file replaces the first on the machine and one entry runs the other's unit";
+                resolution = "rename one of the members, or the unit inside it, so that the unit files of machine ${quote (head spending).machine} name one entry each";
+              }
+            )
+          ) (buckets (c: c.file) onMachine)
+        )
+      ) (buckets (c: c.machine) claims)
+    );
 in
 {
   inherit projected parseKey realisers;
@@ -478,6 +576,24 @@ in
       keys = sortStrings (attrNames plan);
 
       placedKeys = filter (key: shapeOf plan.${key} == "entry" && parseKey key != null) keys;
+
+      # A name the key grammar refuses is still planned, so a key this reading
+      # cannot split is named rather than left out of the reading: every placed
+      # entry of the plan is read or is the subject of a row.
+      unreadableKeys = filter (
+        key: shapeOf plan.${key} == "entry" && parseKey key == null && placedRecord plan.${key}
+      ) keys;
+
+      keyRows = map (
+        key:
+        planner.error {
+          id = "operator-plan-key-unreadable";
+          subject = key;
+          message = "the plan record ${quote key} is a placed entry whose key does not split into an instance, a member and a machine, so no artifact of it can be named and no realiser chosen for it";
+          evidence = "a plan key is `<instance>:<member>@<machine>`, and a name the key grammar refuses is recorded rather than dropped, so the record reaches this reading";
+          resolution = "give the instance, the member and the machine of ${quote key} a name each in the deployment";
+        }
+      ) unreadableKeys;
 
       valueKeys = filter (key: shapeOf plan.${key} == "value") keys;
 
@@ -531,7 +647,9 @@ in
         ++ concatLists (map (key: values.${key}.rows) valueKeys)
         ++ shapeRows
         ++ statementRows
-        ++ collisionRows entries;
+        ++ collisionRows entries
+        ++ unitFileRows entries
+        ++ keyRows;
 
       table = planner.mkTable (diagnostics ++ rows);
 

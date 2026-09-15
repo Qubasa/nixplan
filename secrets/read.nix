@@ -13,9 +13,11 @@
 { planner }:
 let
   inherit (builtins)
+    all
     attrNames
     concatLists
     concatStringsSep
+    elem
     elemAt
     filter
     genList
@@ -32,6 +34,7 @@ let
     quote
     quoteList
     sortStrings
+    uniqueStrings
     unrenderable
     wordAdmits
     ;
@@ -57,8 +60,10 @@ let
 
   # Greedy on the instance: a plan key holds one colon before the marker, and a
   # key holding two is a key two components could be read out of, which is what
-  # the collision check is here to catch rather than to read one way.
-  keyRule = "(.+):vars/(.+)";
+  # the collision check is here to catch rather than to read one way. A
+  # component may be empty, because a name the grammar refuses is a component
+  # the reading names rather than a key it cannot see.
+  keyRule = "(.*):vars/(.*)";
 
   carriesSeparator = value: match ".*${separator}.*" value != null;
   outsideComponentRule = value: match componentRule value == null;
@@ -73,8 +78,8 @@ let
       says = key: {
         subject = key;
         message = "${quote key} is not a generated value's key of the form `<instance>:vars/<generator>` or `<instance>:vars/<generator>@<machine>`";
-        evidence = "the reading stores one value per generated value entry, and a record of any other shape is read by something else";
-        resolution = "declare the read against a generated value of this plan, or stop asking this reading for the stored name of ${quote key}";
+        evidence = "the reading stores one value per generated value entry and projects its stored name out of its key, which is the only place an instance and a generator are written";
+        resolution = "plan this deployment again, so that every generated value sits at the key the planner writes and every read names one of them";
       };
     };
 
@@ -234,7 +239,7 @@ let
         {
           subject = key;
           message = "${what} of ${quote named} is ${quote value}, which is not something this reading will render into a shell script";
-          evidence = "a path and an address are rendered into single-quoted words of the deploy step, and one carrying a quote would be one that closes it";
+          evidence = "every value the deploy step carries reaches it as a single-quoted word, and one carrying a quote would be one that closes it";
           resolution = "write ${quote named} as one shell word of ASCII letters, digits, ${wordAdmits} and nothing else";
         };
     };
@@ -272,6 +277,80 @@ let
   required =
     key: entry: field:
     requiredAt key "" entry field;
+
+  # The parent directory the step creates before it writes the file, as a word,
+  # or `null` where the path names no directory to create: a word the reading
+  # has no value for is skipped by the half that answers the table and refused
+  # by the half that renders.
+  parentOf =
+    path:
+    let
+      m = match "(.*)/[^/]*" path;
+    in
+    if m == null then null else head m;
+
+  # Every value the rendered deploy step carries as one shell word, in the order
+  # it takes them, stated here once so the two halves cross rather than list the
+  # same words twice: `backend.nix` renders this list and the table-answering
+  # half derives its checks from it, so a word a field adds to the step is
+  # checked by existing. `scope` is what a word varies with, a file of the value
+  # or a machine of its delivery set. `needs` is what the record has to record
+  # for the word to exist at all, and `derivedFrom` names the word a word is
+  # computed out of, which is reported once rather than twice.
+  renderedWords = [
+    {
+      field = "address";
+      scope = "machine";
+      needs = [ "address" ];
+      what = "the address";
+      named = ctx: ctx.machine;
+      word = ctx: "${ctx.user}@${ctx.address}";
+    }
+    {
+      field = "parent";
+      scope = "file";
+      needs = [ "path" ];
+      derivedFrom = "path";
+      what = "the parent directory of the path";
+      named = ctx: ctx.key;
+      word = ctx: parentOf ctx.path;
+      absent = ctx: fail accounts.pathNamesNoDirectory { inherit (ctx) key path; };
+    }
+    {
+      field = "path";
+      scope = "file";
+      needs = [ "path" ];
+      what = "the path";
+      named = ctx: ctx.key;
+      word = ctx: ctx.path;
+    }
+    {
+      field = "mode";
+      scope = "file";
+      needs = [ "mode" ];
+      what = "the mode";
+      named = ctx: ctx.key;
+      word = ctx: ctx.mode;
+    }
+    {
+      field = "ownership";
+      scope = "file";
+      needs = [
+        "owner"
+        "group"
+      ];
+      what = "the ownership";
+      named = ctx: ctx.key;
+      word = ctx: "${ctx.owner}:${ctx.group}";
+    }
+  ];
+
+  # What a file record has to answer for the words of a file to exist, read off
+  # the set above rather than listed again: it is what `deliveriesOf` requires
+  # and what the reading rows about where a record answers none of it.
+  fileWordFields = uniqueStrings (
+    concatLists (map (word: word.needs) (filter (word: word.scope == "file") renderedWords))
+  );
 
   # A per-placement value's key ends in `@<machine>`, so the machine is what
   # follows the last `@`. A generator whose own name carries one is refused by the
@@ -365,7 +444,22 @@ let
     else
       name;
 
-  keysOf = plan: sortStrings (filter (key: match keyRule key != null) (attrNames plan));
+  # A plan record is classified by what it records and never by the text of the
+  # key it sits at: an instance may legitimately be called `machine` and a member
+  # after the prefix a value's key carries, so a key match answers wrongly for a
+  # plan the planner calls applicable. A record carrying a placement is a service
+  # entry, one carrying a delivery set is a generated value, and one carrying
+  # neither is a machine record. `files` is a field a value owes rather than one
+  # that recognises it, so a record recording none is a row and not a record this
+  # reading cannot see.
+  isValue = entry: !(entry ? placement) && entry ? delivery;
+
+  keysOf = plan: sortStrings (filter (key: isValue plan.${key}) (attrNames plan));
+
+  # The values a name can be projected out of. One whose key is not of the form
+  # the projection reads is the `keyNotAValue` row, and taking it into the
+  # collision index would compare a name nothing could read back.
+  projectedKeysOf = plan: filter (key: match keyRule key != null) (keysOf plan);
 
   parsedOf = plan: map (parseKey plan) (keysOf plan);
 
@@ -374,7 +468,7 @@ let
   collisionsOf =
     plan:
     let
-      byName = groupBy joined (map (partsOf plan) (keysOf plan));
+      byName = groupBy joined (map (partsOf plan) (projectedKeysOf plan));
     in
     map (name: {
       inherit name;
@@ -454,13 +548,18 @@ let
     plan:
     map (value: {
       inherit (value) key name;
-      files = mapAttrsToList (fname: file: {
-        file = fileName value fname;
-        path = requiredAt value.key " on file ${quote fname}" file "path";
-        owner = requiredAt value.key " on file ${quote fname}" file "owner";
-        group = requiredAt value.key " on file ${quote fname}" file "group";
-        mode = requiredAt value.key " on file ${quote fname}" file "mode";
-      }) (required value.key value.entry "files");
+      files = mapAttrsToList (
+        fname: file:
+        {
+          file = fileName value fname;
+        }
+        // listToAttrs (
+          map (field: {
+            name = field;
+            value = requiredAt value.key " on file ${quote fname}" file field;
+          }) fileWordFields
+        )
+      ) (required value.key value.entry "files");
       machines = map (machine: {
         inherit machine;
         address = addressOf plan value machine;
@@ -488,6 +587,34 @@ let
             rowOf accounts.nameOutsideGrammar { inherit key role value; }
           );
 
+      # Every word the rendered step carries, checked where the record answers
+      # it. A word derived from another is named only where that one was
+      # admitted, or an operator reads one mistake as two rows.
+      wordRowsOf =
+        scope: ctx:
+        let
+          carried = filter (
+            word: word.scope == scope && all (field: ctx ? ${field}) word.needs
+          ) renderedWords;
+          refused = filter (
+            word:
+            let
+              value = word.word ctx;
+            in
+            value != null && unrenderable value
+          ) carried;
+          fields = map (word: word.field) refused;
+        in
+        map (
+          word:
+          rowOf accounts.wordUnrenderable {
+            inherit key;
+            inherit (word) what;
+            named = word.named ctx;
+            value = word.word ctx;
+          }
+        ) (filter (word: !(elem (word.derivedFrom or null) fields)) refused);
+
       fileRowsOf =
         name: file:
         (
@@ -499,23 +626,15 @@ let
         ++ (
           if !deployed then
             [ ]
-          else if !(file ? path) then
-            [
-              (rowOf accounts.fieldMissing {
-                inherit key;
-                field = "path";
-                at = " on file ${quote name}";
-              })
-            ]
           else
-            optional (delivery != [ ] && unrenderable file.path) (
-              rowOf accounts.wordUnrenderable {
-                inherit key;
-                what = "the path";
-                named = key;
-                value = file.path;
+            map (
+              field:
+              rowOf accounts.fieldMissing {
+                inherit key field;
+                at = " on file ${quote name}";
               }
-            )
+            ) (filter (field: !(file ? ${field})) fileWordFields)
+            ++ (if delivery == [ ] then [ ] else wordRowsOf "file" ({ inherit key user; } // file))
         );
 
       machineRowsOf =
@@ -528,36 +647,35 @@ let
         else if !(record ? address) || !isString record.address then
           [ (rowOf accounts.machineNoAddress { inherit key machine; }) ]
         else
-          optional (unrenderable "${user}@${record.address}") (
-            rowOf accounts.wordUnrenderable {
-              inherit key;
-              what = "the address";
-              named = machine;
-              value = "${user}@${record.address}";
-            }
-          );
+          wordRowsOf "machine" {
+            inherit key user machine;
+            inherit (record) address;
+          };
     in
-    map (field: rowOf accounts.fieldMissing { inherit key field; }) (
-      filter (field: !(entry ? ${field})) (
-        [
-          "per"
-          "deploy"
-          "files"
-        ]
-        ++ optional deployed "delivery"
+    if match keyRule key == null then
+      [ (rowOf accounts.keyNotAValue key) ]
+    else
+      map (field: rowOf accounts.fieldMissing { inherit key field; }) (
+        filter (field: !(entry ? ${field})) (
+          [
+            "per"
+            "deploy"
+            "files"
+          ]
+          ++ optional deployed "delivery"
+        )
       )
-    )
-    ++ optional (!(entry ? program)) (rowOf accounts.programMissing key)
-    ++ componentRows "instance" parts.instance
-    ++ componentRows "generator" parts.generator
-    ++ (if parts.machine == null then [ ] else componentRows "machine" parts.machine)
-    ++ concatLists (mapAttrsToList fileRowsOf (entry.files or { }))
-    ++ concatLists (map machineRowsOf delivery)
-    ++ concatLists (
-      map (read: optional (match keyRule read == null) (rowOf accounts.keyNotAValue read)) (
-        entry.reads or [ ]
-      )
-    );
+      ++ optional (!(entry ? program)) (rowOf accounts.programMissing key)
+      ++ componentRows "instance" parts.instance
+      ++ componentRows "generator" parts.generator
+      ++ (if parts.machine == null then [ ] else componentRows "machine" parts.machine)
+      ++ concatLists (mapAttrsToList fileRowsOf (entry.files or { }))
+      ++ concatLists (map machineRowsOf delivery)
+      ++ concatLists (
+        map (read: optional (match keyRule read == null) (rowOf accounts.keyNotAValue read)) (
+          entry.reads or [ ]
+        )
+      );
 
   rowsOf =
     plan: user:
@@ -577,7 +695,11 @@ in
   # refusal it states is this file's. The rule itself is `planner.util`'s, read
   # here rather than restated, because the image attach script renders a word by
   # the same grammar: one condition, one description, one account.
-  inherit unrenderable fail;
+  #
+  # `renderedWords` is the set both halves read: the step renders one word per
+  # entry of it and the rows above check the same entries, so neither half holds
+  # a word the other does not.
+  inherit renderedWords unrenderable fail;
 
   # What this plan would be refused for, as rows and without raising. `user` is
   # the account the rendered step dials with, because the word it renders is

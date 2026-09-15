@@ -16,25 +16,27 @@ let
   inherit (builtins)
     concatStringsSep
     filter
-    match
     replaceStrings
     ;
 
-  # The rule an address and a path are held to is the reading's, asked of it
-  # rather than restated, so the row it reports and the refusal here are one
-  # sentence.
-  inherit (reader) accounts;
+  # The words the step carries are the reading's, asked of it rather than
+  # restated, so a word this renders is a word that plan was already refused
+  # for and the row and the refusal are one sentence.
+  inherit (reader) accounts renderedWords;
 
   wordOf =
-    key: what: named: value:
-    if reader.unrenderable value then
+    ctx: word:
+    let
+      value = word.word ctx;
+    in
+    if value == null then
+      word.absent ctx
+    else if reader.unrenderable value then
       reader.fail accounts.wordUnrenderable {
-        inherit
-          key
-          what
-          named
-          value
-          ;
+        inherit (ctx) key;
+        inherit (word) what;
+        named = word.named ctx;
+        inherit value;
       }
     else
       quoted value;
@@ -49,33 +51,22 @@ let
   # means the configuration and this script were rendered from two plans.
   branch =
     user: delivery: file:
-    let
-      word = wordOf delivery.key;
-    in
     [
       "  ${quoted "${delivery.name} ${file.file}"})"
     ]
     ++ map (
       target:
-      "    deliver ${quoted delivery.name} ${quoted file.file} ${
-            word "the address" target.machine "${user}@${target.address}"
-          } ${word "the parent directory of the path" delivery.key (parentOf delivery.key file.path)} ${
-            word "the path" delivery.key file.path
-          } ${word "the mode" delivery.key file.mode} ${
-            word "the ownership" delivery.key "${file.owner}:${file.group}"
-          }"
+      let
+        ctx = {
+          inherit (delivery) key;
+          inherit user;
+        }
+        // file
+        // target;
+      in
+      "    deliver ${quoted delivery.name} ${quoted file.file} ${concatStringsSep " " (map (wordOf ctx) renderedWords)}"
     ) delivery.machines
     ++ [ "    ;;" ];
-
-  parentOf =
-    key: path:
-    let
-      m = match "(.*)/[^/]*" path;
-    in
-    if m == null then
-      reader.fail accounts.pathNamesNoDirectory { inherit key path; }
-    else
-      builtins.head m;
 
   # The contract says a deploy step takes what else it needs from the environment,
   # and reaching a machine whose host key nobody has accepted yet is exactly that:

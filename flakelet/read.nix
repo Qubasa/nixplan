@@ -19,12 +19,11 @@
 }:
 let
   inherit (builtins)
+    concatStringsSep
     filter
     head
-    length
     match
     sort
-    split
     stringLength
     ;
 
@@ -57,40 +56,29 @@ let
   acceptsName = name: stringLength name <= 128 && match "[A-Za-z0-9][A-Za-z0-9_-]*" name != null;
 
   # flakelet's unit rule: a unit file's base is the service name or begins with it
-  # followed by a hyphen, and an instance is one @ at most.
+  # followed by a hyphen, an instance is one `@` at most, and the suffix is one the
+  # endpoint links. Every class is closed rather than a wildcard, because the
+  # endpoint links a file by the name it is handed and reads that name as one
+  # line: a wildcard admitting a line break makes the second line a directive no
+  # module wrote, and one admitting `/` names another directory.
+  unitSuffixes = [
+    "service"
+    "socket"
+    "target"
+    "timer"
+    "path"
+  ];
+
+  unitWord = "[A-Za-z0-9_.-]";
+
   unitRule =
     unitsOf:
-    "a unit file's base is ${quote unitsOf} or begins with ${quote "${unitsOf}-"}, and carries at most one `@`";
-
-  baseOf =
-    unit:
-    let
-      m = match "(.*)\\.[a-z]+" unit;
-    in
-    if m == null then null else head m;
-
-  instanceOf =
-    base:
-    let
-      m = match "([^@]*)@.*" base;
-    in
-    if m == null then base else head m;
-
-  atCount = base: (length (split "@" base) - 1) / 2;
+    "a unit file's base is ${quote unitsOf} or begins with ${quote "${unitsOf}-"} and carries only ASCII alphanumerics, `-`, `_` and `.` after it, then at most one `@` and an instance of those same characters, and its suffix is one of `${concatStringsSep "`, `" unitSuffixes}`";
 
   acceptsUnit =
     name: unit:
-    let
-      base = baseOf unit;
-    in
-    base != null
-    && atCount base <= 1
-    && (
-      let
-        prefix = instanceOf base;
-      in
-      prefix == name || match "${escapeRegex name}-.*" prefix != null
-    );
+    match "${escapeRegex name}(-${unitWord}+)?(@${unitWord}*)?\\.(${concatStringsSep "|" unitSuffixes})" unit
+    != null;
 
   # The two rules above, as the shared reading is handed them: it renders the
   # units of either realiser, so the refusal it makes is the endpoint's own

@@ -37,6 +37,7 @@ let
     ;
   inherit (planner.util)
     carriesLineBreak
+    envNameAdmits
     escapeRegex
     mapAttrsToList
     oneLine
@@ -48,6 +49,7 @@ let
     storePathsIn
     stringsDeep
     subtractList
+    unassignable
     uniqueStrings
     ;
 
@@ -177,6 +179,7 @@ let
     closureRootIsReference.id = "closure-root-is-delivered";
     accessDenied.id = "operator-entry-access-denied";
     unitValueNewline.id = "unit-value-newline";
+    envNameRefused.id = "unit-env-name-malformed";
     nameRefused.id = "operator-entry-name-refused";
     unitRefused.id = "operator-entry-name-refused";
     hostPathUnassembled = {
@@ -552,9 +555,15 @@ rec {
   # A shown path enters the digest by what its bytes are rather than by where a
   # builder put them: a file assembled from literals is described by the
   # literals, so two readings of one entry - one handed an assembly and one not -
-  # answer the same digest, which is what lets `operator/read.nix` publish it.
+  # answer the same digest, which is what lets `operator/read.nix` publish it. The
+  # stated confinement profile is in it because it decides directives the rendered
+  # unit files carry: two artifacts whose bytes differ may not publish one digest.
   versionFor =
-    { key, entry }:
+    {
+      key,
+      entry,
+      profile,
+    }:
     let
       parts = parseKey key;
       name = nameOf parts;
@@ -562,7 +571,7 @@ rec {
       byPath = path: builtins.head (filter (f: f.path == path) (configFilesOf name entry));
     in
     versionOf {
-      inherit name;
+      inherit name profile;
       units = entry.units or { };
       closure = entry.closure or [ ];
       storeDir = entry.storeDir or "";
@@ -642,7 +651,7 @@ rec {
       # then fails at NAMESPACE rather than at anything an operator can read.
       hostPaths = hostPathsOf { inherit name entry; };
 
-      version = versionFor { inherit key entry; };
+      version = versionFor { inherit key entry profile; };
 
       mentions = unit: uniqueStrings (storePathsDeep storeDir (removeAttrs unit [ "extends" ]));
 
@@ -785,10 +794,28 @@ rec {
       optional = cond: lines: if cond then lines else [ ];
 
       # systemd splits an unquoted Environment= on whitespace, so a value with a
-      # space in it becomes two assignments and the second is garbage.
-      environment = map (
-        k: "Environment=\"${k}=${replaceStrings [ "\\" "\"" ] [ "\\\\" "\\\"" ] unit.env.${k}}\""
-      ) (sortStrings (attrNames (unit.env or { })));
+      # space in it becomes two assignments and the second is garbage. Both halves
+      # of the assignment go through the one escape: a name that closed the quoting
+      # would leave the rest of the line to whoever wrote the name.
+      escaped = replaceStrings [ "\\" "\"" ] [ "\\\\" "\\\"" ];
+
+      envNames = sortStrings (attrNames (unit.env or { }));
+
+      environment = map (k: "Environment=\"${escaped k}=${escaped unit.env.${k}}\"") envNames;
+
+      # The name is the left half of the assignment, written with no escape of
+      # its own, so it is held to the grammar the library states for one rather
+      # than to a scan of this renderer's own. The value's one uncarriable part
+      # is a line break: a unit file is line-oriented, so a break ends the
+      # directive and the rest is a directive line of its own.
+      envRefused = filter unassignable envNames;
+
+      uncarried = filter (p: carriesLineBreak p.value) (
+        map (k: {
+          name = k;
+          value = unit.env.${k};
+        }) envNames
+      );
 
       # Every shown path has to name bytes the machine holds. A literal recipe's
       # bytes are the builder's to write, so a reading handed no assembly cannot
@@ -817,7 +844,11 @@ rec {
         map (f: optional (unit ? ${f}) [ "${unitDirectives.${f}}=${spell unit.${f}}" ]) directoryFields
       );
     in
-    if unassembled != [ ] then
+    if envRefused != [ ] then
+      fail accounts.envNameRefused "entry ${quote image.key} unit ${quote unitName} sets the environment variable ${quote (oneLine (builtins.head envRefused))}, and this renderer writes a name as the left half of an assignment with no escape of its own: a name is ${envNameAdmits}"
+    else if uncarried != [ ] then
+      fail accounts.unitValueNewline "entry ${quote image.key} unit ${quote unitName} sets the environment variable ${quote (oneLine (builtins.head uncarried).name)} to a value containing a newline, which a unit file has no line to put"
+    else if unassembled != [ ] then
       fail accounts.hostPathUnassembled "entry ${quote image.key} is shown the host path ${quote (builtins.head unassembled).path} whose bytes this reading was handed no way to assemble"
     else
       builtins.concatStringsSep "\n" (

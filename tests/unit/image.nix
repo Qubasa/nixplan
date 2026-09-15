@@ -935,18 +935,107 @@ in
     in
     {
       expr = {
-        refused = raises (withKey smuggled);
         # An environment key is the left half of one quoted assignment, so a
         # break in it is a directive line of its own the moment it is rendered.
-        noSecondDirective = raises (reader.renderUnit (withKey smuggled) "say");
+        # The planner refuses the name by its grammar and records neither it nor
+        # its value, so what reaches the renderer has no such half to render.
+        theRecordCarriesTheName = (withKey smuggled).units.say.record ? env;
+        noSecondDirective = hasInfix "\nExecStartPost" (reader.renderUnit (withKey smuggled) "say");
         oneKeyBuilds = raises (withKey "TOKEN");
         theRowAboveTheRaise = support.rowIds broken;
       };
       expected = {
-        refused = true;
-        noSecondDirective = true;
+        theRecordCarriesTheName = false;
+        noSecondDirective = false;
         oneKeyBuilds = false;
-        theRowAboveTheRaise = [ "unit-value-newline" ];
+        theRowAboveTheRaise = [ "unit-env-name-malformed" ];
+      };
+    };
+
+  testARenderedDirectiveReadsBackAsTheNameAndTheValueThePlanRecords =
+    let
+      name = "CERT_CHAIN";
+      value = "say \"hi\" c:\\path here";
+      image = readOf { } (_: {
+        closure = [ borgbackup ];
+        units.web = {
+          command = "${borgbackup}/bin/borg serve";
+          env.${name} = value;
+        };
+      });
+      envLines = filter (l: hasInfix "Environment=" l) (support.lines (reader.renderUnit image "web"));
+      # What the service manager is left with: the quoting comes off and one
+      # escape is undone, over the whole assignment rather than over half of it.
+      assignment = builtins.head (builtins.match "Environment=\"(.*)\"" (builtins.head envLines));
+      readBack = builtins.replaceStrings [ "\\\"" "\\\\" ] [ "\"" "\\" ] assignment;
+    in
+    {
+      expr = {
+        assignments = length envLines;
+        line = builtins.head envLines;
+        roundTrip = readBack;
+        bothHalves = readBack == "${name}=${value}";
+      };
+      expected = {
+        assignments = 1;
+        line = "Environment=\"CERT_CHAIN=say \\\"hi\\\" c:\\\\path here\"";
+        roundTrip = "CERT_CHAIN=say \"hi\" c:\\path here";
+        bothHalves = true;
+      };
+    };
+
+  testAnEnvironmentNameTheRendererCannotCarryIsRefused =
+    let
+      smuggled = "A\nExecStartPost=/bin/sh -c evil\n#";
+      p = planned { } (_: {
+        closure = [ borgbackup ];
+        units.say = {
+          command = "${borgbackup}/bin/borg serve";
+          env.${smuggled} = "x";
+        };
+      });
+      built = builder.build {
+        inherit (p) plan key;
+        profile = "trusted";
+      };
+      # The renderer's own half, handed the record directly: the reading refuses
+      # first, so nothing else reaches the line this name would be rendered into.
+      forged =
+        let
+          whole = readOf { } (_: {
+            closure = [ borgbackup ];
+            units.say.command = "${borgbackup}/bin/borg serve";
+          });
+        in
+        whole
+        // {
+          units = whole.units // {
+            say = whole.units.say // {
+              record = whole.units.say.record // {
+                env.${smuggled} = "x";
+              };
+            };
+          };
+        };
+    in
+    {
+      expr = {
+        # The name is in no record the plan carries, so nothing of this build is
+        # stopped: the row is the report and the forged half never exists.
+        theBuildIsStopped = raises built;
+        theRendererRefusesTheRecord = raises (reader.renderUnit forged "say");
+        accountedAs = reader.accounts.envNameRefused.id;
+        theRowAboveTheRaise = support.rowIds p.result;
+        namesTheUnit = hasInfix "`say`" (support.messageById "unit-env-name-malformed" p.result);
+        namesTheName = hasInfix "A ExecStartPost" (support.messageById "unit-env-name-malformed" p.result);
+      };
+      expected = {
+        theBuildIsStopped = false;
+        theRendererRefusesTheRecord = true;
+        accountedAs = "unit-env-name-malformed";
+        theRowAboveTheRaise = [ "unit-env-name-malformed" ];
+        namesTheUnit = true;
+        namesTheName = true;
       };
     };
 
@@ -1586,6 +1675,112 @@ in
         otherUnitUnchanged = true;
         tunedVersionMoved = true;
         tunedUnitMoved = true;
+      };
+    };
+
+  # Two statements of one entry differing in nothing but the confinement: the
+  # profile decides directives the rendered units carry, so the identity the
+  # machine is compared against has to move with it.
+  testATightenedProfileIsABuildTheMachineDoesNotHold =
+    let
+      result = (planned { } simple).result;
+      loose = builtFrom { profile = "default"; } result;
+      tightened = builtFrom { profile = "strict"; } result;
+      thisBuild = "${tightened.raw}/${tightened.attachment.image}";
+      units = concatStringsSep " " (map (unit: "'${unit}'") tightened.attachment.units);
+    in
+    {
+      expr = {
+        digestMoved = loose.image.version != tightened.image.version;
+        imageNameMoved = loose.attachment.image != tightened.attachment.image;
+        namesTheOtherBuild = hasInfix loose.attachment.image tightened.attach;
+        asksWhatTheMachineHolds = hasInfix "held=\"$(systemctl show -P RootImage" tightened.attach;
+        comparedAgainstThisBuild = hasInfix "[ \"$held\" != ${thisBuild} ]" tightened.attach;
+        stopped = hasInfix "systemctl stop ${units}" tightened.attach;
+        detached = hasInfix "portablectl detach \"$held\"" tightened.attach;
+        attachedUnderTheStatement = hasInfix "portablectl attach --profile=strict ${thisBuild}" tightened.attach;
+        # The second apply: both branches are guarded by what the machine holds,
+        # and the run says so when neither of them ran.
+        attachedOnlyWhenDetached = hasInfix "\"$(portablectl is-attached ${thisBuild} 2> /dev/null || echo detached)\" = detached" tightened.attach;
+        nothingChanged = hasInfix "[ \"$changed\" = 1 ] || echo \"nothing changed\"" tightened.attach;
+      };
+      expected = {
+        digestMoved = true;
+        imageNameMoved = true;
+        namesTheOtherBuild = false;
+        asksWhatTheMachineHolds = true;
+        comparedAgainstThisBuild = true;
+        stopped = true;
+        detached = true;
+        attachedUnderTheStatement = true;
+        attachedOnlyWhenDetached = true;
+        nothingChanged = true;
+      };
+    };
+
+  # An edit the entry is not in, under the same statement: the digest, the bytes
+  # and the path an apply compares are all where they were.
+  testAnEntryWhoseStatementDidNotChangeKeepsItsDigest =
+    let
+      deployment =
+        command:
+        planOf {
+          instances = {
+            svc = {
+              module = soleRoot {
+                module = _: {
+                  impl = _: {
+                    closure = [ borgbackup ];
+                    units.only.command = "${borgbackup}/bin/borg serve";
+                  };
+                };
+              };
+              placement.every.only.machines = [ "one" ];
+            };
+            other = {
+              module = soleRoot {
+                module = _: {
+                  impl = _: {
+                    closure = [ openssh ];
+                    units.only.command = command;
+                  };
+                };
+              };
+              placement.every.only.machines = [ "two" ];
+            };
+          };
+        };
+      builtWith =
+        key: command:
+        builtFrom {
+          inherit key;
+          profile = "strict";
+        } (deployment command);
+      before = builtWith "svc:only@one" "${openssh}/bin/sshd";
+      after = builtWith "svc:only@one" "${openssh}/bin/sshd -D";
+    in
+    {
+      expr = {
+        version = before.image.version == after.image.version;
+        unitFiles = before.units == after.units;
+        # The fake store path of this layer is keyed by the bytes it is handed,
+        # so one path on both sides is one artifact.
+        artifact = before.raw.outPath == after.raw.outPath;
+        image = before.attachment.image == after.attachment.image;
+        # What an apply compares, so the held image is this one and neither the
+        # detach branch nor the attach branch runs.
+        attachStep = before.attach == after.attach;
+        theEditedEntryMoved =
+          (builtWith "other:only@two" "${openssh}/bin/sshd").image.version
+          != (builtWith "other:only@two" "${openssh}/bin/sshd -D").image.version;
+      };
+      expected = {
+        version = true;
+        unitFiles = true;
+        artifact = true;
+        image = true;
+        attachStep = true;
+        theEditedEntryMoved = true;
       };
     };
 

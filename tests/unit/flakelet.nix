@@ -504,6 +504,37 @@ in
     };
   };
 
+  # The endpoint links a file by the name it is handed, so a second line of that
+  # name is a directive no module wrote.
+  testAUnitNameCarryingALineBreakIsRefusedByTheRestatedRule =
+    let
+      forged = _: {
+        closure = [ borgbackup ];
+        units."main\nConditionPathExists=/nonexistent".command = "${borgbackup}/bin/borg serve";
+      };
+      message = messageAbove { } forged;
+    in
+    {
+      expr = {
+        rule = reader.acceptsUnit "svc-only" "svc-only-main\nConditionPathExists=/nonexistent.service";
+        wellFormed = reader.acceptsUnit "svc-only" "svc-only-main.service";
+        refused = raises (readOf { } forged);
+        rowAbove = rowsAbove { } forged;
+        theRowNamesTheEntry = support.hasInfix "svc:only@one" message;
+        theRowNamesTheName = support.hasInfix "ConditionPathExists=/nonexistent.service" message;
+        theRowStatesTheSameRule = support.hasInfix (reader.unitRule "svc-only") message;
+      };
+      expected = {
+        rule = false;
+        wellFormed = true;
+        refused = true;
+        rowAbove = [ "operator-entry-name-refused" ];
+        theRowNamesTheEntry = true;
+        theRowNamesTheName = true;
+        theRowStatesTheSameRule = true;
+      };
+    };
+
   # The rules the two realisers hold differ, and this unit file is where they do:
   # the image builder's store name set carries no `@`, and this endpoint's own
   # rule reads one as systemd's instance marker.

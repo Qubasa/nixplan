@@ -9,6 +9,7 @@ let
   inherit (builtins)
     attrNames
     filter
+    isString
     length
     toJSON
     ;
@@ -175,6 +176,48 @@ let
         module = root { members."b-c".module = _: { impl = simple; }; };
         placement.every."b-c".machines = [ "one" ];
       };
+    };
+  };
+
+  unitNamed = unit: _: {
+    closure = [ borgbackup ];
+    units.${unit}.command = "${borgbackup}/bin/borg serve";
+  };
+
+  # Two members of one instance whose artifact names differ and whose derived
+  # unit file names do not: `a:b` declaring `c-main` and `a:b-c` declaring
+  # `main` both spell `a-b-c-main.service` on `one`.
+  sharingAUnitFile = planOf {
+    instances.a = {
+      module = root {
+        members.b.module = _: { impl = unitNamed "c-main"; };
+        members."b-c".module = _: { impl = unitNamed "main"; };
+      };
+      placement.every.b.machines = [ "one" ];
+      placement.every."b-c".machines = [ "one" ];
+    };
+  };
+
+  # The same two members, one unit name apart.
+  distinctUnitFiles = planOf {
+    instances.a = {
+      module = root {
+        members.b.module = _: { impl = unitNamed "main"; };
+        members."b-c".module = _: { impl = unitNamed "main"; };
+      };
+      placement.every.b.machines = [ "one" ];
+      placement.every."b-c".machines = [ "one" ];
+    };
+  };
+
+  # A configuration file the planner refused for its missing `mode`, which it
+  # records as none: the entry is planned and its record states no account.
+  modeless = _: {
+    closure = [ borgbackup ];
+    units.only.command = "${borgbackup}/bin/borg serve";
+    configData."/etc/agent.conf" = {
+      reload = [ "only" ];
+      render = [ { text = "listen = yes\n"; } ];
     };
   };
 
@@ -425,12 +468,95 @@ in
         refused = reading.refused;
       };
       expected = {
-        ids = [ "operator-entry-name-collision" ];
+        # Two keys that project onto one artifact name also derive one unit file
+        # name, and the two are two facts: one directory cannot hold two
+        # entries, and one machine cannot hold two unit files of one name.
+        ids = [
+          "operator-entry-name-collision"
+          "operator-entry-unit-file-collision"
+        ];
         count = 1;
         subject = "a-b:c@one";
         namesBoth = true;
         namesTheName = true;
         refused = true;
+      };
+    };
+
+  # The unit file names both realisers derive are one namespace per machine, and
+  # the artifact name beside them carries the machine, so it cannot see a
+  # collision inside one. The row is the shared reading's, which is why one pair
+  # of entries earns the same row under either statement.
+  testAUnitFileNameCollisionIsReportedUnderEitherRealiser =
+    let
+      asImage = readOf {
+        default = {
+          realiser = "image";
+          profile = "trusted";
+        };
+      };
+      asService = readOf { default.realiser = "flakelet"; };
+      imaged = asImage sharingAUnitFile;
+      served = asService sharingAUnitFile;
+      row = builtins.head (rowsById "operator-entry-unit-file-collision" served);
+      derived = key: served.manifest.entries.${key}.units;
+    in
+    {
+      expr = {
+        ids = idsOf served;
+        underEitherRealiser = idsOf imaged == idsOf served;
+        theSameRow = rowsById "operator-entry-unit-file-collision" imaged == [ row ];
+        subject = row.subject;
+        namesBoth = hasInfix "`a:b-c@one`, `a:b@one`" row.message;
+        namesTheFile = hasInfix "`a-b-c-main.service`" row.message;
+        namesTheMachine = hasInfix "`one`" row.message;
+        # The name is derived rather than stated, so the two entries spend one
+        # file name whichever realiser is asked to emit it.
+        spent = {
+          "a:b@one" = derived "a:b@one";
+          "a:b-c@one" = derived "a:b-c@one";
+        };
+        # The artifact names of the pair differ, so this is the only row: the
+        # projection above sees nothing and neither builder is reached.
+        artifacts = sorted (
+          map (key: served.manifest.entries.${key}.path) (placedOf sharingAUnitFile.plan)
+        );
+        refused = {
+          image = imaged.refused;
+          service = served.refused;
+        };
+        # One unit name apart, and neither reading has anything to say.
+        distinct = {
+          image = idsOf (asImage distinctUnitFiles);
+          service = idsOf (asService distinctUnitFiles);
+          refused = (asService distinctUnitFiles).refused;
+        };
+      };
+      expected = {
+        ids = [ "operator-entry-unit-file-collision" ];
+        underEitherRealiser = true;
+        theSameRow = true;
+        subject = "a:b-c@one";
+        namesBoth = true;
+        namesTheFile = true;
+        namesTheMachine = true;
+        spent = {
+          "a:b@one" = [ "a-b-c-main.service" ];
+          "a:b-c@one" = [ "a-b-c-main.service" ];
+        };
+        artifacts = [
+          "entries/a-b-c-one"
+          "entries/a-b-one"
+        ];
+        refused = {
+          image = true;
+          service = true;
+        };
+        distinct = {
+          image = [ ];
+          service = [ ];
+          refused = false;
+        };
       };
     };
 
@@ -567,6 +693,39 @@ in
           "image"
         ];
         askedOfNoEndpoint = [ "operator-realiser-unknown" ];
+      };
+    };
+
+  # The statement is a record a caller writes, so it is read for its kind before
+  # it is indexed: a realiser of another kind resolves to no endpoint and earns
+  # the row an unimplemented name earns, rather than ending the reading.
+  testARealisationStatementNamesARealiserOfAnotherKind =
+    let
+      reading = readOf { default.realiser = 3; } one;
+      row = builtins.head (rowsById "operator-realiser-unknown" reading);
+    in
+    {
+      expr = {
+        ids = idsOf reading;
+        count = length (rowsById "operator-realiser-unknown" reading);
+        subject = row.subject;
+        namesWhatWasStated = hasInfix "by a int" row.message;
+        namesWhatExists = hasInfix "`flakelet`, `image`" row.message;
+        # A table, not an evaluation error, and no realiser chosen for the entry
+        # on the statement's behalf.
+        table = map (r: r.id) reading.diagnostics;
+        realiser = reading.manifest.entries.${oneKey}.realiser;
+        refused = reading.refused;
+      };
+      expected = {
+        ids = [ "operator-realiser-unknown" ];
+        count = 1;
+        subject = oneKey;
+        namesWhatWasStated = true;
+        namesWhatExists = true;
+        table = [ "operator-realiser-unknown" ];
+        realiser = 3;
+        refused = true;
       };
     };
 
@@ -1052,6 +1211,42 @@ in
       };
     };
 
+  # A profile of another kind is the same fact as a profile outside the domain,
+  # so it earns the same row and indexes nothing the realiser holds: the digest
+  # the manifest publishes forces beside it.
+  testAStatementCarriesAProfileOfAnotherKind =
+    let
+      reading = readOf {
+        default = {
+          realiser = "image";
+          profile = 3;
+        };
+      } one;
+      row = builtins.head (rowsById "operator-image-profile-unknown" reading);
+    in
+    {
+      expr = {
+        rows = idsOf reading;
+        subject = row.subject;
+        namesWhatWasStated = hasInfix "profile a int" row.message;
+        namesTheProfilesThatExist = hasInfix "`strict`" row.message && hasInfix "`trusted`" row.message;
+        # The value reaches no profile table, so nothing is denied on the
+        # entry's behalf and the record the manifest publishes is answerable.
+        denied = rowsById "operator-entry-access-denied" reading;
+        digest = isString reading.manifest.entries.${oneKey}.key;
+        refused = reading.refused;
+      };
+      expected = {
+        rows = [ "operator-image-profile-unknown" ];
+        subject = oneKey;
+        namesWhatWasStated = true;
+        namesTheProfilesThatExist = true;
+        denied = [ ];
+        digest = true;
+        refused = true;
+      };
+    };
+
   testAStatementNamesAnEntryThePlanDoesNotCarry =
     let
       reading = readOf {
@@ -1162,6 +1357,49 @@ in
         statesTheRealisersOwnRule = true;
         resolutionNamesBothWaysOut = true;
         everyEntryStillRead = [ oneKey ];
+        refused = true;
+      };
+    };
+
+  # A plan record is read for its kind too. The planner refuses a configuration
+  # file that states no mode and records it with none, and the comparisons this
+  # reading makes against that record interpolate it, so the absence is a row
+  # here rather than a coercion.
+  testAConfigurationFileRecordCarriesNoMode =
+    let
+      result = deployment modeless;
+      reading = reader.read { inherit (result) plan diagnostics; };
+      row = builtins.head (rowsById "operator-plan-field-malformed" reading);
+    in
+    {
+      expr = {
+        # The planner records the file with no mode rather than pruning it.
+        recorded = result.plan.${oneKey}.configData."/etc/agent.conf".mode;
+        rows = idsOf reading;
+        subject = row.subject;
+        namesTheField = hasInfix "`mode`" row.message;
+        namesTheFile = hasInfix "`/etc/agent.conf`" row.message;
+        namesWhatWasFound = hasInfix "as a null" row.message;
+        severity = row.severity;
+        # The table the deployment's other rows are in, and no decision about
+        # the file: the path reaches neither of the two record comparisons.
+        table = map (r: r.id) reading.diagnostics;
+        entries = attrNames reading.manifest.entries;
+        refused = reading.refused;
+      };
+      expected = {
+        recorded = null;
+        rows = [ "operator-plan-field-malformed" ];
+        subject = oneKey;
+        namesTheField = true;
+        namesTheFile = true;
+        namesWhatWasFound = true;
+        severity = "error";
+        table = [
+          "config-file-mode-missing"
+          "operator-plan-field-malformed"
+        ];
+        entries = [ oneKey ];
         refused = true;
       };
     };
