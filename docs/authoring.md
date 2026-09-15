@@ -40,8 +40,8 @@ declaring files.
 ```
 
 The `korora` argument is `planner.korora`: korora's own types, the atom types
-this library owns, and the three constructors — `interface`, `unitExtension` and
-`fold`.
+this library owns, and the four constructors — `interface`, `unitExtension`,
+`fold` and `refuse`.
 
 **An export atom declares `type` and may declare `secrecy`, and nothing else.**
 `secrecy` defaults to `"public"` and takes `"public"` or `"secret"`. Any other
@@ -103,9 +103,7 @@ sshHostIdentity = korora.interface {
       blank = builtins.filter (entry: set.${entry}.publicKey == "") entries;
     in
     if blank != [ ] then
-      {
-        refused = "no host key published by ${builtins.concatStringsSep ", " blank}";
-      }
+      korora.refuse "no host key published by ${builtins.concatStringsSep ", " blank}"
     else
       map (entry: {
         inherit entry;
@@ -655,7 +653,9 @@ wiring mistake behind a fallback.
 
 Every row is the planner's. A module has exactly one channel through which it
 can refuse a value another module produced: the `fold` of an interface it
-declares. A fold refuses by returning `{ refused = "<why>"; }`, and the split is
+declares. A fold refuses by returning `korora.refuse "<why>"`, whose marker
+attribute is the one thing a refusal is recognised by, so a result of the fold's
+own may carry an attribute called `refused` and is delivered. The split is
 fixed — the fold states the message, the planner states the row's identifier
 (`interface-fold-refused`), its subject (the consuming entry) and its severity
 (error). The slot is then absent from `results`, as any refused read is.

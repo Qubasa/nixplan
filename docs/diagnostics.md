@@ -103,7 +103,7 @@ discipline and deduplication applied).
 | `interface-id-unnamed-fold` | an interface claims an `id` and declares a fold carrying no name; the evidence states that a fold's name is part of an identity and a bare function supplies none, and the resolution names the fold constructor or deleting the `id`. The claim is disregarded |
 | `interface-id-unnamespaced` (warning) | a declared `id` carries neither `.` nor `/`; the evidence states that the namespace is shared with every other author and the resolution names a qualified form. The claim still identifies and the plan stays applicable |
 | `interface-id-conflict` | two interfaces claim one `id` and their identities differ, observed from the `interfaces` map or at a wire and reported once; the row is subjected to the first of the two declaring files by sort order, names the second, and its evidence states what differs — an export one side declares alone, an export's two type names, an export's two secrecies, or two fold names. An edge between them is refused |
-| `interface-fold-refusal-malformed` | an interface's fold refused a set-valued read with something other than a string in `refused`; the row names the fold, the slot and the consuming entry, and states that a refusal is a returned value the planner renders. The slot is left absent |
+| `interface-fold-refusal-malformed` | an interface's fold refused a set-valued read with `planner.refuse` of something other than a sentence: a value of another kind, or an empty string. The row names the fold, the slot and the consuming entry, and states that a refusal travels to the table as the row's whole message. The slot is left absent |
 
 ### Leaf modules
 
@@ -150,6 +150,7 @@ discipline and deduplication applied).
 | `settings-not-member-keyed` | the deployment defines a knob outside any member's namespace |
 | `settings-undeclared-knob` | the member declares it neither as a default nor as fixed |
 | `settings-fixed-path` | the deployment writes a path the module declared `fixed`; the row names both files and neither value silently wins |
+| `settings-knob-unkeyable` | a knob resolves to a value carrying a function, and the resolved settings are serialised into the entry's key; the row names the module file that declares the knob and the deployment file that sets it, and the value is recorded in no entry and in no key |
 | `placement-unknown-member` | `placement.every.<m>` names a member the root does not own |
 | `placement-unknown-machine` | a placement names a machine the registry does not hold |
 | `member-not-placed` | a member matched no machine and no tag, so nothing it declares runs anywhere |
@@ -167,6 +168,7 @@ discipline and deduplication applied).
 | id | Raised when |
 | --- | --- |
 | `implementation-malformed` | an `impl` returned something other than an attribute set |
+| `implementation-formals-closed` | an `impl` names its arguments closed, so the pattern refuses a name the planner hands it or requires one the planner does not, and the interpreter lets a caller catch neither refusal. The implementation is not applied, the entry is planned and records no unit, and the resolution names the `...` an implementation's contract asks for |
 | `implementation-unknown-key` | a key outside the unit vocabulary, the implementation's own keys or an `extends` entry's keys — a service manager's raw stanza is this row, and for an implementation's own keys the resolution names the interface fold as where a refusal belongs |
 | `unit-field-type-mismatch` | a unit field's value fails its type; the failing value is not recorded |
 | `unit-reference-unknown` | `after` or `requires` names a unit the module did not declare |
@@ -179,6 +181,7 @@ discipline and deduplication applied).
 | `unit-extension-type-mismatch` | an assigned value fails its field's type |
 | `unit-extension-backend-mismatch` | the extension's `backend` is not the target machine's `serviceManager`; the fields are still recorded under that backend |
 | `unit-value-newline` | a value a unit record carries at any depth holds a line break, which a unit file has no line to put; the row names the field path |
+| `unit-env-name-malformed` | a unit declares an environment name outside the grammar a service manager carries. An assignment is written `NAME=value` with no escape of its own, so a name outside it is a directive the manager refuses in part; neither the name nor its value is recorded |
 | `unit-restart-delay-without-policy` | a unit declares `restartSec` and no `restart`, so the delay changes nothing; the delay is not recorded |
 | `unit-restart-contradicts-one-shot` | a `oneShot` unit declares `restart = "always"`, which restarts it for as long as it keeps succeeding; the policy is not recorded |
 | `unit-restart-on-scheduled` | a unit declares a `schedule` and a restart policy other than `no`, which is a second schedule nobody declared; the policy is not recorded |
@@ -191,6 +194,7 @@ discipline and deduplication applied).
 | `config-file-disposition` | a file declares both `source` and `render`, or neither |
 | `config-file-ownership-malformed` | a configuration file's `owner` or `group` fails its type; the failing value is not recorded and the default is installed |
 | `config-file-path-refused` | a configuration file's host path carries a character outside the grammar a rendered step can carry as one shell word; the file is not recorded |
+| `config-file-source-refused` | a configuration file's `source` is a value of another kind, or a path outside the store directory the plan is read against. The library records one literal store path and resolves nothing, the way it records a generator's `program`, so the file is not recorded |
 
 ### Closures and pins
 
@@ -221,11 +225,14 @@ discipline and deduplication applied).
 | `provider-export-extra` | the entry publishes an export the interface does not declare; the extra export is delivered to nobody |
 | `export-type-mismatch` | a published value fails its atom's type |
 | `export-secret-not-a-reference` | an export declared `secret` publishes something other than a generated file, so its bytes would be in the plan rather than its path |
+| `export-secret-backed-by-public-file` | an export an interface declares secret is published from a generated file that declares no secrecy of its own, so bytes a plan carries in the open would travel under the name of a value an interface calls secret. The plan carries the value at the stricter of the two declarations and the export publishes nothing |
 | `slot-reads-undeployed-value` | a `reads` entry names a secret export backed by a `deploy = false` generator, so the path it names resolves to nothing at run time |
+| `slot-read-type-mismatch` | a read is delivered a value the type the consuming interface declares for it refuses; the row names the read, the far end and korora's own report. A claimed identity is name-deep, so this is where the shape of a value that crossed the wire is compared |
 | `slot-reads-value-unreadable-by-user` | a unit runs as an account the recorded ownership and mode of a file backing one of the entry's reads do not admit, so the unit starts and fails with `EACCES` |
 | `entry-config-file-unreadable-by-user` | a unit runs as an account the record of a configuration file its own entry shows it does not admit, so the unit starts and fails with `EACCES`. The same comparison as the row above, over the entry's own declaration rather than another entry's delivered value |
+| `entry-value-unreadable-by-user` | a unit names the path of a file of its own entry's generator, and runs as an account the recorded ownership and mode of that file do not admit, so the unit starts and fails with `EACCES`. The same comparison as the two rows above, over a value the entry produces itself rather than one another entry publishes |
 | `interface-fold-raised` | the interface's `fold` raised while combining the set the slot collected; the slot is then absent from `results`, and the row renders only where no implementation forces that slot |
-| `interface-fold-refused` | the interface's `fold` returned `{ refused = "<why>"; }`; the fold states the message and the planner states the identifier, the consuming entry as subject and the severity. The slot is absent from `results`, so a consumer reading it under `results ? <slot>` renders the row and one reading it unconditionally ends the evaluation of the whole table with a missing attribute |
+| `interface-fold-refused` | the interface's `fold` returned `planner.refuse "<why>"`; the fold states the message and the planner states the identifier, the consuming entry as subject and the severity. The slot is absent from `results`, so a consumer reading it under `results ? <slot>` renders the row and one reading it unconditionally ends the evaluation of the whole table with a missing attribute |
 | `module-raised` | a module's own code raised a catchable error; its value is recorded as not computed and the rest of the plan is still produced |
 
 ### The plan itself
@@ -235,10 +242,14 @@ discipline and deduplication applied).
 | `set-entry-absent` | a read names an entry whose value has not been generated; the entry stays in the set with a null value and an absent marker |
 | `set-read-in-key` (warning) | a set-valued read's membership is part of the reading entry's key, so that entry is re-keyed when a machine joins or leaves the set |
 | `vars-not-deployed-opened` | a unit or configuration file of the owning module names the path of a `deploy = false` generator's file |
+| `vars-path-off-delivery-set` | a unit or a configuration file of a placed entry names the path of a generated value the entry's own machine does not receive. A delivery set is what the owner's placements and the declared reads make it, so the mention resolves to nothing rather than widening it, and the row names the machines that do receive the value. `vars-not-deployed-opened` is the same rule where that set is empty |
 | `vars-generator-claimed-twice` | two members of one instance declare the same generator name, which is one address for two values |
 | `diagnostic-subject-invalid` | a row carried a subject that is not a plan key, a deployment-relative path or an issue identifier |
+| `diagnostic-severity-invalid` | a row was built with a severity outside `error` and `warning`. The row that carried it is replaced by this one, so nothing in the table carries a severity no producer may state, and the resolution names `error` and `warning` as the two constructors a producer has |
 | `declaration-field-missing` | a field of the deployment's own half - a machine, an instance, a member's placement or a wire - is absent where the reading needs one. A key the reading cannot default is reported rather than read as an empty value |
 | `declaration-field-malformed` | the same field carries a value of the wrong kind. The deployment's half is read with the tolerance the module's half is read with, so the rest of the deployment is still read |
+| `plan-key-claimed-twice` | two records of different families claim one plan key: a machine record and a service entry, or a generated value and an entry. A reader takes a key apart to recover what a record is, so the first claimant in sort order is the record the key names and every other one is in no plan |
+| `planner-argument-malformed` | an argument of `mkPlan` carries a value of another kind than the reading below it indexes, coerces or hashes: `machines`, `instances`, `interfaces`, `varsState`, `sources` or one of its four fields, or `storeDir`. The argument is read as unstated, the rest of the deployment is still planned, and the subject is the file the caller writes its deployment in |
 
 ### What two claimants of one machine both claim
 
@@ -264,6 +275,7 @@ selects, both leave the table as it was.
 | `entry-host-path-claimed-twice` | two entries placed on one machine declare a configuration file at one host path, so the entry applied last is the one whose rendering survives. A machine reserving that path is the second claimant where one entry declares the file |
 | `entry-port-claimed-twice` | two entries placed on one machine claim one number whose protocols and whose addresses both overlap, so every entry after the first cannot bind. Two protocols overlap when they are the same or either claim states none, an unstated protocol claiming the number on every protocol of the domain; two addresses overlap when they are the same or either claim states none, an unstated address being every address of the machine. Two claims of one number binding two different addresses are two listeners that run, and are no row. Overlap is not equality, so one claim can take part in more than one collision and each row names its own claimants, protocol, and address. A machine reserving a number whose protocol and address overlap is the second claimant where one entry claims it |
 | `entry-unit-directory-shared` (warning) | two entries placed on one machine record one unit directory name under `runtimeDirectory`, `stateDirectory` or `cacheDirectory`. A warning rather than an error: the service manager deletes a runtime directory when its unit restarts, and a shared state directory is a handoff a deployment may intend. This one has no reservation half, a unit directory name being in the service manager's own namespace rather than a host path the registry can state |
+| `entry-host-path-nested` | two claimants of one machine show one host path inside another, so one of them asks for a file where the other asks for the directory holding it. A realiser carries a file at every host path it is shown, and the builder that meets the pair names a store path and no declaration |
 
 ### Every row the deployment build can produce
 
@@ -288,6 +300,9 @@ caller reads them in the same table as the planner's own.
 | `operator-entry-access-denied` | a unit needs an access the confinement profile the statement produced denies |
 | `operator-entry-name-collision` | two plan keys project onto one artifact name |
 | `operator-plan-field-missing` | a plan record carries no field the reading of it indexes. The plan prunes a field whose value was empty, and this names the record and the field rather than ending the evaluation |
+| `operator-plan-key-unreadable` | a plan record is a placed entry whose key does not split into an instance, a member and a machine, so no artifact of it can be named and no realiser chosen for it. A name the key grammar refuses is recorded rather than dropped, so every placed entry of the plan is read or is the subject of a row |
+| `operator-plan-field-malformed` | a plan record carries a configuration file's `owner`, `group` or `mode` as a value of another kind, and every comparison this reading makes against the record interpolates the three. The planner's own row about that file is what the resolution names, and neither comparison is made |
+| `operator-entry-unit-file-collision` | two entries placed on one machine derive one unit file name. A realiser derives that name from the instance, the member and the unit name, so the second entry's file replaces the first on the machine and one entry runs the other's unit |
 
 ### Every row the secrets reading can produce
 
@@ -334,13 +349,16 @@ construct to prove none of them is silently accepted.
 
 ## What is not caught
 
-Evaluation is total for everything the interpreter lets a library catch. Two
+Evaluation is total for everything the interpreter lets a library catch. Three
 things it does not:
 
 - **`abort`** — no `tryEval` catches it.
 - **A missing attribute** — including a module dereferencing a slot that did not
   deliver (see [authoring.md](authoring.md#when-a-read-is-refused)).
+- **A function called without an argument its pattern requires** — which is why
+  an `impl` whose argument pattern is closed is read for its pattern and earns
+  `implementation-formals-closed` rather than being applied.
 
-Both are documented as propagating rather than claimed to be contained. Inside
+All three are documented as propagating rather than claimed to be contained. Inside
 library source they are bugs, and `tests/unit/diagnostics.nix` greps this tree
 to keep `throw`, `abort`, `assert` and korora's raising `check` out of it.

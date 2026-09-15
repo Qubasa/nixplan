@@ -17,17 +17,17 @@
       "date": "2026-09-15",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 950.6364,
-        "nrFunctionCalls": 542.3637,
-        "nrPrimOpCalls": 382.3637,
-        "values.number": 1139.2728,
-        "sets.bytes": 14034.9091,
-        "envs.bytes": 12152.7273,
-        "list.elements": 212,
-        "nrOpUpdateValuesCopied": 55.2728,
-        "gc.totalBytes": 54075.6364
+        "nrThunks": 1073.2728,
+        "nrFunctionCalls": 620.1819,
+        "nrPrimOpCalls": 444,
+        "values.number": 1284.2728,
+        "sets.bytes": 15594.9091,
+        "envs.bytes": 13912,
+        "list.elements": 247.9091,
+        "nrOpUpdateValuesCopied": 55,
+        "gc.totalBytes": 59793.4546
       },
-      "note": "Re-recorded on the review that closed ten totality violations and the wildcard, reservation-key and root-account soundness holes. Two things moved these figures. The budgets had not been re-recorded since 2026-09-11, so eleven feature merges of accumulated cost are folded in at once: 58% of the overage this re-record absorbs predates the seven merges under review, which contributed 7.4% to 9.8% between them, and `type-a-port-claim-and-its-collision` was a net saving of 1.27 thunks per entry. The fixtures also now exercise what the features added: a second port claim of one number under a different address so the overlap comparison is entered, a machine reservation on every registry machine, a configuration file with a stated owner and group read by a unit that declares an account and a group, a per-entry runtime directory and one deliberately shared state directory. Against this a throw planted in `contends`, `opens`, `reservedBy`, `claimedUnder` or `collisionRow` fires, where before it never did and the gated figures measured the old deployment shape. Working the other way, gating the deep string walk on `util.anyLineBreak` returned 9.67 thunks per entry on fleet and 14.33 on mesh, which is most of the newest merge's cost."
+      "note": "Re-recorded for hold-every-invariant-a-counterexample-breaks, which turned forty-nine counterexamples into rows. Every gated counter rose between 11% and 27% per entry and nrOpUpdateValuesCopied fell, and five readings account for it: the generated-value state answer is now read for its kind at three depths per file, every settings knob is verified against its declared type before it enters a key input, each implementation's argument pattern is read with builtins.toXML before it is applied, each delivered read is verified against the consuming interface's own export type, and the claim index gained the nesting pass and the plan-key families. The growth bound improved at the same time - list.elements across sizes 4 to 256 went from 1.251 to 0.740 - because the mention scan stopped comparing every value of the fleet against every string and now reads the paths a site names by their own shape and looks each up."
     },
     "fleet-4": {
       "fixture": "fleet",
@@ -35,17 +35,17 @@
       "date": "2026-09-15",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 1037,
-        "nrFunctionCalls": 646.5385,
-        "nrPrimOpCalls": 497.8462,
-        "values.number": 1230.7693,
-        "sets.bytes": 14900.3077,
-        "envs.bytes": 13903.3847,
-        "list.elements": 274.6924,
-        "nrOpUpdateValuesCopied": 38.6154,
-        "gc.totalBytes": 57853.5385
+        "nrThunks": 1188.7693,
+        "nrFunctionCalls": 756.2308,
+        "nrPrimOpCalls": 597.6924,
+        "values.number": 1411.7693,
+        "sets.bytes": 16652.9231,
+        "envs.bytes": 16205.5385,
+        "list.elements": 327.1539,
+        "nrOpUpdateValuesCopied": 38.3077,
+        "gc.totalBytes": 67069.5385
       },
-      "note": "Re-recorded on the review that closed ten totality violations and the wildcard, reservation-key and root-account soundness holes. Two things moved these figures. The budgets had not been re-recorded since 2026-09-11, so eleven feature merges of accumulated cost are folded in at once: 58% of the overage this re-record absorbs predates the seven merges under review, which contributed 7.4% to 9.8% between them, and `type-a-port-claim-and-its-collision` was a net saving of 1.27 thunks per entry. The fixtures also now exercise what the features added: a second port claim of one number under a different address so the overlap comparison is entered, a machine reservation on every registry machine, a configuration file with a stated owner and group read by a unit that declares an account and a group, a per-entry runtime directory and one deliberately shared state directory. Against this a throw planted in `contends`, `opens`, `reservedBy`, `claimedUnder` or `collisionRow` fires, where before it never did and the gated figures measured the old deployment shape. Working the other way, gating the deep string walk on `util.anyLineBreak` returned 9.67 thunks per entry on fleet and 14.33 on mesh, which is most of the newest merge's cost."
+      "note": "Re-recorded for hold-every-invariant-a-counterexample-breaks, which turned forty-nine counterexamples into rows. Every gated counter rose between 11% and 27% per entry and nrOpUpdateValuesCopied fell, and five readings account for it: the generated-value state answer is now read for its kind at three depths per file, every settings knob is verified against its declared type before it enters a key input, each implementation's argument pattern is read with builtins.toXML before it is applied, each delivered read is verified against the consuming interface's own export type, and the claim index gained the nesting pass and the plan-key families. The growth bound improved at the same time - list.elements across sizes 4 to 256 went from 1.251 to 0.740 - because the mention scan stopped comparing every value of the fleet against every string and now reads the paths a site names by their own shape and looks each up."
     },
     "fleet-16": {
       "fixture": "fleet",
@@ -53,17 +53,17 @@
       "date": "2026-09-15",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 697.3266,
-        "nrFunctionCalls": 485.7347,
-        "nrPrimOpCalls": 380.6531,
-        "values.number": 826.8572,
-        "sets.bytes": 9800,
-        "envs.bytes": 9983.5103,
-        "list.elements": 213.6939,
-        "nrOpUpdateValuesCopied": 15.5511,
-        "gc.totalBytes": 39779.2654
+        "nrThunks": 837.5103,
+        "nrFunctionCalls": 592.2245,
+        "nrPrimOpCalls": 475.7143,
+        "values.number": 995.1225,
+        "sets.bytes": 11363.4286,
+        "envs.bytes": 12175.347,
+        "list.elements": 263.6123,
+        "nrOpUpdateValuesCopied": 14.5715,
+        "gc.totalBytes": 47001.1429
       },
-      "note": "Re-recorded on the review that closed ten totality violations and the wildcard, reservation-key and root-account soundness holes. Two things moved these figures. The budgets had not been re-recorded since 2026-09-11, so eleven feature merges of accumulated cost are folded in at once: 58% of the overage this re-record absorbs predates the seven merges under review, which contributed 7.4% to 9.8% between them, and `type-a-port-claim-and-its-collision` was a net saving of 1.27 thunks per entry. The fixtures also now exercise what the features added: a second port claim of one number under a different address so the overlap comparison is entered, a machine reservation on every registry machine, a configuration file with a stated owner and group read by a unit that declares an account and a group, a per-entry runtime directory and one deliberately shared state directory. Against this a throw planted in `contends`, `opens`, `reservedBy`, `claimedUnder` or `collisionRow` fires, where before it never did and the gated figures measured the old deployment shape. Working the other way, gating the deep string walk on `util.anyLineBreak` returned 9.67 thunks per entry on fleet and 14.33 on mesh, which is most of the newest merge's cost."
+      "note": "Re-recorded for hold-every-invariant-a-counterexample-breaks, which turned forty-nine counterexamples into rows. Every gated counter rose between 11% and 27% per entry and nrOpUpdateValuesCopied fell, and five readings account for it: the generated-value state answer is now read for its kind at three depths per file, every settings knob is verified against its declared type before it enters a key input, each implementation's argument pattern is read with builtins.toXML before it is applied, each delivered read is verified against the consuming interface's own export type, and the claim index gained the nesting pass and the plan-key families. The growth bound improved at the same time - list.elements across sizes 4 to 256 went from 1.251 to 0.740 - because the mention scan stopped comparing every value of the fleet against every string and now reads the paths a site names by their own shape and looks each up."
     },
     "fleet-64": {
       "fixture": "fleet",
@@ -71,17 +71,17 @@
       "date": "2026-09-15",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 605.8083,
-        "nrFunctionCalls": 442.4094,
-        "nrPrimOpCalls": 349.0778,
-        "values.number": 718.0311,
-        "sets.bytes": 8428.4767,
-        "envs.bytes": 8927.3783,
-        "list.elements": 197.2591,
-        "nrOpUpdateValuesCopied": 9.5026,
-        "gc.totalBytes": 34445.0156
+        "nrThunks": 742.8705,
+        "nrFunctionCalls": 548.0363,
+        "nrPrimOpCalls": 442.8498,
+        "values.number": 882.8653,
+        "sets.bytes": 9938.2798,
+        "envs.bytes": 11089.4923,
+        "list.elements": 246.4923,
+        "nrOpUpdateValuesCopied": 8.1762,
+        "gc.totalBytes": 41622.3835
       },
-      "note": "Re-recorded on the review that closed ten totality violations and the wildcard, reservation-key and root-account soundness holes. Two things moved these figures. The budgets had not been re-recorded since 2026-09-11, so eleven feature merges of accumulated cost are folded in at once: 58% of the overage this re-record absorbs predates the seven merges under review, which contributed 7.4% to 9.8% between them, and `type-a-port-claim-and-its-collision` was a net saving of 1.27 thunks per entry. The fixtures also now exercise what the features added: a second port claim of one number under a different address so the overlap comparison is entered, a machine reservation on every registry machine, a configuration file with a stated owner and group read by a unit that declares an account and a group, a per-entry runtime directory and one deliberately shared state directory. Against this a throw planted in `contends`, `opens`, `reservedBy`, `claimedUnder` or `collisionRow` fires, where before it never did and the gated figures measured the old deployment shape. Working the other way, gating the deep string walk on `util.anyLineBreak` returned 9.67 thunks per entry on fleet and 14.33 on mesh, which is most of the newest merge's cost."
+      "note": "Re-recorded for hold-every-invariant-a-counterexample-breaks, which turned forty-nine counterexamples into rows. Every gated counter rose between 11% and 27% per entry and nrOpUpdateValuesCopied fell, and five readings account for it: the generated-value state answer is now read for its kind at three depths per file, every settings knob is verified against its declared type before it enters a key input, each implementation's argument pattern is read with builtins.toXML before it is applied, each delivered read is verified against the consuming interface's own export type, and the claim index gained the nesting pass and the plan-key families. The growth bound improved at the same time - list.elements across sizes 4 to 256 went from 1.251 to 0.740 - because the mention scan stopped comparing every value of the fleet against every string and now reads the paths a site names by their own shape and looks each up."
     },
     "fleet-256": {
       "fixture": "fleet",
@@ -89,17 +89,17 @@
       "date": "2026-09-15",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 582.4825,
-        "nrFunctionCalls": 431.3668,
-        "nrPrimOpCalls": 341.03,
-        "values.number": 690.2939,
-        "sets.bytes": 8077.5761,
-        "envs.bytes": 8658.1951,
-        "list.elements": 193.0703,
-        "nrOpUpdateValuesCopied": 7.8778,
-        "gc.totalBytes": 33081.0716
+        "nrThunks": 718.7491,
+        "nrFunctionCalls": 536.7738,
+        "nrPrimOpCalls": 434.4734,
+        "values.number": 854.2536,
+        "sets.bytes": 9575.043,
+        "envs.bytes": 10812.7335,
+        "list.elements": 242.1288,
+        "nrOpUpdateValuesCopied": 6.5462,
+        "gc.totalBytes": 40222.1483
       },
-      "note": "Re-recorded on the review that closed ten totality violations and the wildcard, reservation-key and root-account soundness holes. Two things moved these figures. The budgets had not been re-recorded since 2026-09-11, so eleven feature merges of accumulated cost are folded in at once: 58% of the overage this re-record absorbs predates the seven merges under review, which contributed 7.4% to 9.8% between them, and `type-a-port-claim-and-its-collision` was a net saving of 1.27 thunks per entry. The fixtures also now exercise what the features added: a second port claim of one number under a different address so the overlap comparison is entered, a machine reservation on every registry machine, a configuration file with a stated owner and group read by a unit that declares an account and a group, a per-entry runtime directory and one deliberately shared state directory. Against this a throw planted in `contends`, `opens`, `reservedBy`, `claimedUnder` or `collisionRow` fires, where before it never did and the gated figures measured the old deployment shape. Working the other way, gating the deep string walk on `util.anyLineBreak` returned 9.67 thunks per entry on fleet and 14.33 on mesh, which is most of the newest merge's cost."
+      "note": "Re-recorded for hold-every-invariant-a-counterexample-breaks, which turned forty-nine counterexamples into rows. Every gated counter rose between 11% and 27% per entry and nrOpUpdateValuesCopied fell, and five readings account for it: the generated-value state answer is now read for its kind at three depths per file, every settings knob is verified against its declared type before it enters a key input, each implementation's argument pattern is read with builtins.toXML before it is applied, each delivered read is verified against the consuming interface's own export type, and the claim index gained the nesting pass and the plan-key families. The growth bound improved at the same time - list.elements across sizes 4 to 256 went from 1.251 to 0.740 - because the mention scan stopped comparing every value of the fleet against every string and now reads the paths a site names by their own shape and looks each up."
     },
     "mesh-4": {
       "fixture": "mesh",
@@ -107,17 +107,17 @@
       "date": "2026-09-15",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 1105.6924,
-        "nrFunctionCalls": 705.4616,
-        "nrPrimOpCalls": 559.3077,
-        "values.number": 1322.8462,
-        "sets.bytes": 15561.2308,
-        "envs.bytes": 15001.2308,
-        "list.elements": 311.3077,
-        "nrOpUpdateValuesCopied": 38.8462,
-        "gc.totalBytes": 62790.1539
+        "nrThunks": 1238.7693,
+        "nrFunctionCalls": 799.4616,
+        "nrPrimOpCalls": 653.8462,
+        "values.number": 1482.1539,
+        "sets.bytes": 16994.4616,
+        "envs.bytes": 16951.3847,
+        "list.elements": 359.3847,
+        "nrOpUpdateValuesCopied": 38.2308,
+        "gc.totalBytes": 69656.6154
       },
-      "note": "Re-recorded on the review that closed ten totality violations and the wildcard, reservation-key and root-account soundness holes. Two things moved these figures. The budgets had not been re-recorded since 2026-09-11, so eleven feature merges of accumulated cost are folded in at once: 58% of the overage this re-record absorbs predates the seven merges under review, which contributed 7.4% to 9.8% between them, and `type-a-port-claim-and-its-collision` was a net saving of 1.27 thunks per entry. The fixtures also now exercise what the features added: a second port claim of one number under a different address so the overlap comparison is entered, a machine reservation on every registry machine, a configuration file with a stated owner and group read by a unit that declares an account and a group, a per-entry runtime directory and one deliberately shared state directory. Against this a throw planted in `contends`, `opens`, `reservedBy`, `claimedUnder` or `collisionRow` fires, where before it never did and the gated figures measured the old deployment shape. Working the other way, gating the deep string walk on `util.anyLineBreak` returned 9.67 thunks per entry on fleet and 14.33 on mesh, which is most of the newest merge's cost."
+      "note": "Re-recorded for hold-every-invariant-a-counterexample-breaks, which turned forty-nine counterexamples into rows. Every gated counter rose between 11% and 27% per entry and nrOpUpdateValuesCopied fell, and five readings account for it: the generated-value state answer is now read for its kind at three depths per file, every settings knob is verified against its declared type before it enters a key input, each implementation's argument pattern is read with builtins.toXML before it is applied, each delivered read is verified against the consuming interface's own export type, and the claim index gained the nesting pass and the plan-key families. The growth bound improved at the same time - list.elements across sizes 4 to 256 went from 1.251 to 0.740 - because the mention scan stopped comparing every value of the fleet against every string and now reads the paths a site names by their own shape and looks each up."
     },
     "mesh-16": {
       "fixture": "mesh",
@@ -125,17 +125,17 @@
       "date": "2026-09-15",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 772.8572,
-        "nrFunctionCalls": 550.8776,
-        "nrPrimOpCalls": 448.1633,
-        "values.number": 927.9388,
-        "sets.bytes": 10559.1837,
-        "envs.bytes": 11188.4082,
-        "list.elements": 253.7756,
-        "nrOpUpdateValuesCopied": 15.8572,
-        "gc.totalBytes": 44335.347
+        "nrThunks": 893.1429,
+        "nrFunctionCalls": 640.7143,
+        "nrPrimOpCalls": 537.898,
+        "values.number": 1073.0613,
+        "sets.bytes": 11785.1429,
+        "envs.bytes": 13006.6939,
+        "list.elements": 299.8368,
+        "nrOpUpdateValuesCopied": 14.5511,
+        "gc.totalBytes": 50223.0205
       },
-      "note": "Re-recorded on the review that closed ten totality violations and the wildcard, reservation-key and root-account soundness holes. Two things moved these figures. The budgets had not been re-recorded since 2026-09-11, so eleven feature merges of accumulated cost are folded in at once: 58% of the overage this re-record absorbs predates the seven merges under review, which contributed 7.4% to 9.8% between them, and `type-a-port-claim-and-its-collision` was a net saving of 1.27 thunks per entry. The fixtures also now exercise what the features added: a second port claim of one number under a different address so the overlap comparison is entered, a machine reservation on every registry machine, a configuration file with a stated owner and group read by a unit that declares an account and a group, a per-entry runtime directory and one deliberately shared state directory. Against this a throw planted in `contends`, `opens`, `reservedBy`, `claimedUnder` or `collisionRow` fires, where before it never did and the gated figures measured the old deployment shape. Working the other way, gating the deep string walk on `util.anyLineBreak` returned 9.67 thunks per entry on fleet and 14.33 on mesh, which is most of the newest merge's cost."
+      "note": "Re-recorded for hold-every-invariant-a-counterexample-breaks, which turned forty-nine counterexamples into rows. Every gated counter rose between 11% and 27% per entry and nrOpUpdateValuesCopied fell, and five readings account for it: the generated-value state answer is now read for its kind at three depths per file, every settings knob is verified against its declared type before it enters a key input, each implementation's argument pattern is read with builtins.toXML before it is applied, each delivered read is verified against the consuming interface's own export type, and the claim index gained the nesting pass and the plan-key families. The growth bound improved at the same time - list.elements across sizes 4 to 256 went from 1.251 to 0.740 - because the mention scan stopped comparing every value of the fleet against every string and now reads the paths a site names by their own shape and looks each up."
     },
     "mesh-64": {
       "fixture": "mesh",
@@ -143,17 +143,17 @@
       "date": "2026-09-15",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 683.1814,
-        "nrFunctionCalls": 509.1866,
-        "nrPrimOpCalls": 418.1969,
-        "values.number": 821.5389,
-        "sets.bytes": 9214.1348,
-        "envs.bytes": 10160.456,
-        "list.elements": 238.2747,
-        "nrOpUpdateValuesCopied": 9.8291,
-        "gc.totalBytes": 39167.5026
+        "nrThunks": 800.0208,
+        "nrFunctionCalls": 597.9016,
+        "nrPrimOpCalls": 506.6374,
+        "values.number": 962.8394,
+        "sets.bytes": 10381.5959,
+        "envs.bytes": 11943.2125,
+        "list.elements": 283.7928,
+        "nrOpUpdateValuesCopied": 8.171,
+        "gc.totalBytes": 45221.7203
       },
-      "note": "Re-recorded on the review that closed ten totality violations and the wildcard, reservation-key and root-account soundness holes. Two things moved these figures. The budgets had not been re-recorded since 2026-09-11, so eleven feature merges of accumulated cost are folded in at once: 58% of the overage this re-record absorbs predates the seven merges under review, which contributed 7.4% to 9.8% between them, and `type-a-port-claim-and-its-collision` was a net saving of 1.27 thunks per entry. The fixtures also now exercise what the features added: a second port claim of one number under a different address so the overlap comparison is entered, a machine reservation on every registry machine, a configuration file with a stated owner and group read by a unit that declares an account and a group, a per-entry runtime directory and one deliberately shared state directory. Against this a throw planted in `contends`, `opens`, `reservedBy`, `claimedUnder` or `collisionRow` fires, where before it never did and the gated figures measured the old deployment shape. Working the other way, gating the deep string walk on `util.anyLineBreak` returned 9.67 thunks per entry on fleet and 14.33 on mesh, which is most of the newest merge's cost."
+      "note": "Re-recorded for hold-every-invariant-a-counterexample-breaks, which turned forty-nine counterexamples into rows. Every gated counter rose between 11% and 27% per entry and nrOpUpdateValuesCopied fell, and five readings account for it: the generated-value state answer is now read for its kind at three depths per file, every settings knob is verified against its declared type before it enters a key input, each implementation's argument pattern is read with builtins.toXML before it is applied, each delivered read is verified against the consuming interface's own export type, and the claim index gained the nesting pass and the plan-key families. The growth bound improved at the same time - list.elements across sizes 4 to 256 went from 1.251 to 0.740 - because the mention scan stopped comparing every value of the fleet against every string and now reads the paths a site names by their own shape and looks each up."
     },
     "mesh-256": {
       "fixture": "mesh",
@@ -161,17 +161,17 @@
       "date": "2026-09-15",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 660.3251,
-        "nrFunctionCalls": 498.5605,
-        "nrPrimOpCalls": 410.5592,
-        "values.number": 794.4201,
-        "sets.bytes": 8869.9818,
-        "envs.bytes": 9898.4552,
-        "list.elements": 234.3238,
-        "nrOpUpdateValuesCopied": 8.2094,
-        "gc.totalBytes": 37818.6528
+        "nrThunks": 776.2861,
+        "nrFunctionCalls": 586.9896,
+        "nrPrimOpCalls": 498.6698,
+        "values.number": 934.7465,
+        "sets.bytes": 10023.8648,
+        "envs.bytes": 11672.1561,
+        "list.elements": 279.7036,
+        "nrOpUpdateValuesCopied": 6.5449,
+        "gc.totalBytes": 43771.4851
       },
-      "note": "Re-recorded on the review that closed ten totality violations and the wildcard, reservation-key and root-account soundness holes. Two things moved these figures. The budgets had not been re-recorded since 2026-09-11, so eleven feature merges of accumulated cost are folded in at once: 58% of the overage this re-record absorbs predates the seven merges under review, which contributed 7.4% to 9.8% between them, and `type-a-port-claim-and-its-collision` was a net saving of 1.27 thunks per entry. The fixtures also now exercise what the features added: a second port claim of one number under a different address so the overlap comparison is entered, a machine reservation on every registry machine, a configuration file with a stated owner and group read by a unit that declares an account and a group, a per-entry runtime directory and one deliberately shared state directory. Against this a throw planted in `contends`, `opens`, `reservedBy`, `claimedUnder` or `collisionRow` fires, where before it never did and the gated figures measured the old deployment shape. Working the other way, gating the deep string walk on `util.anyLineBreak` returned 9.67 thunks per entry on fleet and 14.33 on mesh, which is most of the newest merge's cost."
+      "note": "Re-recorded for hold-every-invariant-a-counterexample-breaks, which turned forty-nine counterexamples into rows. Every gated counter rose between 11% and 27% per entry and nrOpUpdateValuesCopied fell, and five readings account for it: the generated-value state answer is now read for its kind at three depths per file, every settings knob is verified against its declared type before it enters a key input, each implementation's argument pattern is read with builtins.toXML before it is applied, each delivered read is verified against the consuming interface's own export type, and the claim index gained the nesting pass and the plan-key families. The growth bound improved at the same time - list.elements across sizes 4 to 256 went from 1.251 to 0.740 - because the mention scan stopped comparing every value of the fleet against every string and now reads the paths a site names by their own shape and looks each up."
     }
   }
 }

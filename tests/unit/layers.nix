@@ -5,6 +5,7 @@
 let
   inherit (builtins)
     attrNames
+    bitAnd
     concatLists
     concatStringsSep
     elem
@@ -20,8 +21,10 @@ let
     pathExists
     readDir
     readFile
+    replaceStrings
     sort
     split
+    stringLength
     ;
   inherit (support)
     filesUnder
@@ -874,6 +877,211 @@ let
   ruleUnstated = map (needle: "README.md does not say ${needle}") (
     filter (needle: !(hasInfix needle (flattened rootDocument))) ruleSentences
   );
+
+  # The three homes a counterexample has, by what its own failure does: a suite
+  # that reports every assertion, a probe evaluated in a process of its own, and
+  # the tests of the program that is run rather than evaluated.
+  counterexampleHomes = [
+    "cli/counterexample_test.py"
+    "tests/counterexamples/probes.nix"
+    "tests/unit/counterexamples.nix"
+  ];
+
+  # What the repository states about itself: the index, the root document, the
+  # prose under `docs/`, and the source the load-bearing comments live in. Each
+  # text is flattened with its comment markers removed, because a sentence a test
+  # quotes wraps in the file that states it and wraps differently in the file that
+  # quotes it.
+  statedIn = [
+    "lib"
+    "cli"
+    "image"
+    "flakelet"
+    "secrets"
+    "operator"
+  ];
+
+  recordFiles = [
+    (repoRoot + "/CLAUDE.md")
+    (repoRoot + "/README.md")
+  ]
+  ++ map (rel: docsRoot + "/${rel}") (filter (rel: match ".*\\.md" rel != null) (filesUnder docsRoot))
+  ++ concatLists (
+    map (
+      dir:
+      map (rel: repoRoot + "/${dir}/${rel}") (
+        filter (rel: match ".*\\.(nix|py)" rel != null) (filesUnder (repoRoot + "/${dir}"))
+      )
+    ) statedIn
+  );
+
+  statedTexts = map (file: flattened (replaceStrings [ "#" ] [ " " ] (readFile file))) recordFiles;
+
+  # `replaceStrings` scans the text once, where `hasInfix` walks every offset of
+  # it: the corpus here is every record this repository keeps.
+  stated = needle: builtins.any (text: replaceStrings [ needle ] [ "" ] text != text) statedTexts;
+
+  commentOf =
+    line:
+    let
+      m = match "[[:space:]]*#(.*)" line;
+    in
+    if m == null then null else head m;
+
+  # One block per run of comment lines, which is the unit a comment names a claim
+  # in: above a nix-unit test or a probe, inside the body of a pytest test.
+  commentBlocks =
+    text:
+    let
+      walked =
+        foldl'
+          (
+            acc: line:
+            let
+              comment = commentOf line;
+            in
+            if comment != null then
+              acc // { current = acc.current ++ [ comment ]; }
+            else if acc.current == [ ] then
+              acc
+            else
+              {
+                blocks = acc.blocks ++ [ (concatStringsSep " " acc.current) ];
+                current = [ ];
+              }
+          )
+          {
+            blocks = [ ];
+            current = [ ];
+          }
+          (lines text);
+    in
+    walked.blocks ++ (if walked.current == [ ] then [ ] else [ (concatStringsSep " " walked.current) ]);
+
+  quotedIn =
+    block:
+    let
+      pieces = filter isString (split "\"" block);
+    in
+    map (i: elemAt pieces i) (filter (i: bitAnd i 1 == 1) (genList (i: i) (length pieces)));
+
+  trimmed =
+    text:
+    let
+      m = match "[[:space:].,;:]*(.*[^[:space:].,;:])[[:space:].,;:]*" (flattened text);
+    in
+    if m == null then "" else head m;
+
+  # The sentence a block pins is its first quoted fragment, and an elision inside
+  # it is a join of two fragments the record states apart. A later quote of the
+  # same block is a word of a rendered directive or a spelling, and a quote
+  # carrying a `"` of its own shifts every pairing after it.
+  pinnedIn =
+    block:
+    let
+      quotes = quotedIn block;
+    in
+    if quotes == [ ] then [ ] else map trimmed (filter isString (split "\\.\\.\\." (head quotes)));
+
+  # A fragment shorter than this is a token rather than a sentence: an identifier,
+  # a field name, a severity.
+  sentenceLength = 24;
+
+  pinsOf =
+    rel:
+    filter (frag: stringLength frag >= sentenceLength) (
+      concatLists (map pinnedIn (commentBlocks (readFile (repoRoot + "/${rel}"))))
+    );
+
+  withdrawnClaims = sorted (
+    concatLists (
+      map (
+        rel: map (frag: "${rel}: ${frag}") (filter (frag: !(stated frag)) (pinsOf rel))
+      ) counterexampleHomes
+    )
+  );
+
+  quotingHomes = sorted (filter (rel: pinsOf rel != [ ]) counterexampleHomes);
+
+  probesText = readFile (testsRoot + "/counterexamples/probes.nix");
+
+  # The attributes of the probe file, which are the lines below its own `in`: the
+  # bindings above it are the deployment the probes are written against.
+  probeNames = sorted (
+    filter (name: name != null) (
+      map
+        (
+          line:
+          let
+            m = match "  ([a-zA-Z][a-zA-Z0-9]*) = .*" line;
+          in
+          if m == null then null else head m
+        )
+        (foldl'
+          (
+            acc: line:
+            if acc.reached then acc // { body = acc.body ++ [ line ]; } else acc // { reached = line == "in"; }
+          )
+          {
+            reached = false;
+            body = [ ];
+          }
+          (lines probesText)
+        ).body
+    )
+  );
+
+  # What the check that evaluates the probes has to say, so that adding an
+  # attribute is adding the attribute: the names come off the file, each is a
+  # process of its own, and each answers in a line of its own.
+  probeCheckSentences = [
+    "builtins.attrNames probes"
+    "for name in"
+    "--apply \"p: p.$name\""
+    "printf 'ok"
+    "printf 'raises"
+  ];
+
+  probeCheckUnsaid = map (needle: "flake-module.nix does not say ${needle}") (
+    filter (needle: !(hasInfix needle flakeModule)) probeCheckSentences
+  );
+
+  probesListedByHand = sorted (filter (name: hasInfix name flakeModule) probeNames);
+
+  commandTestFile = "cli/counterexample_test.py";
+
+  definitionOf =
+    line:
+    let
+      m = match "def (test_[a-z0-9_]*)\\(.*" line;
+    in
+    if m == null then null else head m;
+
+  definedIn =
+    rel: filter (name: name != null) (map definitionOf (lines (readFile (repoRoot + "/${rel}"))));
+
+  commandTestNames = sorted (definedIn commandTestFile);
+
+  coverageText = readFile (unitRoot + "/coverage.nix");
+
+  # Every other counted pytest file, so that a name answering for a scenario
+  # answers from one kind: the cross-walk fails a name two kinds carry, and the
+  # command's tests are counted like any other.
+  otherPytestFiles = [
+    "perf/check_test.py"
+  ]
+  ++ map (rel: "tests/e2e/${rel}") (filter (rel: isTestFile (baseNameOf rel)) (filesUnder e2eRoot));
+
+  namesInTwoKinds = sorted (
+    concatLists (
+      map (
+        rel:
+        map (name: "${name} is in ${rel} and in ${commandTestFile}") (
+          filter (name: elem name commandTestNames) (definedIn rel)
+        )
+      ) otherPytestFiles
+    )
+  );
 in
 {
   # Three kinds of test and two files beside them. `counterexamples` is the third
@@ -1230,6 +1438,56 @@ in
     expected = {
       present = true;
       unstated = [ ];
+    };
+  };
+
+  # A quote of a sentence nobody states any more fails here rather than passing
+  # unread, so a claim this repository narrows has to be requoted where it is
+  # pinned. A home quoting nothing is not counted as holding anything.
+  testACounterexampleQuotesTheClaimItPins = {
+    expr = {
+      withdrawn = withdrawnClaims;
+      quoting = quotingHomes;
+    };
+    expected = {
+      withdrawn = [ ];
+      quoting = [
+        "cli/counterexample_test.py"
+        "tests/counterexamples/probes.nix"
+        "tests/unit/counterexamples.nix"
+      ];
+    };
+  };
+
+  # The check reads the probe file's own attribute names, so adding a probe is
+  # adding the attribute: a name written into the flake would be the hand-written
+  # list this asserts the absence of.
+  testAProbeIsDiscoveredRatherThanListedByHand = {
+    expr = {
+      listed = probesListedByHand;
+      unsaid = probeCheckUnsaid;
+      pinned = elem "anImplementationWithStrictFormalsIsARow" probeNames;
+    };
+    expected = {
+      listed = [ ];
+      unsaid = [ ];
+      pinned = true;
+    };
+  };
+
+  # The command is run rather than evaluated, and its tests answer for scenarios
+  # the way an evaluating suite's and a folder's do: the cross-walk reads their
+  # names off the file, and one name may not be carried by two kinds.
+  testTheCommandsOwnTestsAreCounted = {
+    expr = {
+      counted = hasInfix commandTestFile coverageText;
+      answering = commandTestNames != [ ];
+      inTwoKinds = namesInTwoKinds;
+    };
+    expected = {
+      counted = true;
+      answering = true;
+      inTwoKinds = [ ];
     };
   };
 }
