@@ -55,6 +55,32 @@ let
     "narHash"
   ];
 
+  # The three kinds of directory a service manager creates for a unit and owns on
+  # its behalf, each with the mode that kind is applied at. A mode is per kind
+  # because that is the grain a service manager applies one at. The vocabulary
+  # below reads this, so a fourth kind is one edit rather than a list and a
+  # spelling that can disagree.
+  directoryKinds = {
+    stateDirectory = "stateDirectoryMode";
+    runtimeDirectory = "runtimeDirectoryMode";
+    cacheDirectory = "cacheDirectoryMode";
+  };
+
+  directoryVocabulary = listToAttrs (
+    builtins.concatLists (
+      util.mapAttrsToList (kind: mode: [
+        {
+          name = kind;
+          value = atoms.listOf atoms.directoryName;
+        }
+        {
+          name = mode;
+          value = atoms.fileMode;
+        }
+      ]) directoryKinds
+    )
+  );
+
   unitVocabulary = {
     command = atoms.string;
     env = atoms.attrsOf atoms.string;
@@ -69,24 +95,10 @@ let
     reloadCommand = atoms.string;
     restart = atoms.restartPolicy;
     restartSec = atoms.duration;
-    stateDirectory = atoms.listOf atoms.directoryName;
-    runtimeDirectory = atoms.listOf atoms.directoryName;
-    cacheDirectory = atoms.listOf atoms.directoryName;
-    stateDirectoryMode = atoms.fileMode;
-    runtimeDirectoryMode = atoms.fileMode;
-    cacheDirectoryMode = atoms.fileMode;
     startIfPathPresent = atoms.absolutePath;
     startIfPathAbsent = atoms.absolutePath;
-  };
-
-  # The three kinds of directory a service manager creates for a unit and owns on
-  # its behalf, each with the mode that kind is applied at. A mode is per kind
-  # because that is the grain a service manager applies one at.
-  directoryKinds = {
-    stateDirectory = "stateDirectoryMode";
-    runtimeDirectory = "runtimeDirectoryMode";
-    cacheDirectory = "cacheDirectoryMode";
-  };
+  }
+  // directoryVocabulary;
 
   unitKeys = attrNames unitVocabulary ++ [ "extends" ];
 
