@@ -693,6 +693,8 @@ rec {
     };
   };
 
+  hostResourceKinds = builtins.attrNames hostResources;
+
   # A unit directory is a claim however it was declared: the three fields the unit
   # vocabulary carries, and whatever an extension application records under the
   # same names, under any backend, read the way a unit's declared groups are. The
@@ -765,7 +767,7 @@ rec {
           inherit kind claim;
           group = if ports then toString claim.fixed else claim;
         }) (if ports then util.distinct claimed else util.uniqueStrings claimed)
-      ) (builtins.attrNames hostResources);
+      ) hostResourceKinds;
 
   # Two claims of one machine and one number contend when their protocols
   # overlap and their addresses do, an unstated field being every value of it.

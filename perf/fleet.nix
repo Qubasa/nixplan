@@ -34,6 +34,14 @@ let
     };
   };
 
+  serviceUnit = planner.unitExtension {
+    backend = "systemd";
+    name = "systemd-service";
+    fields.supplementaryGroups = {
+      type = k.listOf k.string;
+    };
+  };
+
   agentModule =
     { settings, ... }:
     {
@@ -61,6 +69,8 @@ let
           vars,
           results,
           machine,
+          instance,
+          member,
           ...
         }:
         {
@@ -69,6 +79,15 @@ let
             publicKey = vars.hostKey."key.pub".content;
             privateKey = vars.hostKey."key";
           };
+          configData."/etc/fleet/agent.conf" = {
+            mode = "0440";
+            owner = "fleet-agent";
+            group = "fleet";
+            reload = [ "agent" ];
+            render = [
+              { text = "interval ${toString settings.interval}"; }
+            ];
+          };
           units.agent = {
             command = "${agentPkg}/bin/agent --registry ${results.registry.url}";
             env = {
@@ -76,6 +95,15 @@ let
               FLEET_SELF = machine;
               FLEET_INTERVAL = toString settings.interval;
             };
+            user = "fleet-agent";
+            runtimeDirectory = [ "${instance}-${member}" ];
+            stateDirectory = [ "fleet-handoff" ];
+            extends = [
+              {
+                extension = serviceUnit;
+                values.supplementaryGroups = [ "fleet" ];
+              }
+            ];
           };
         };
     };
@@ -85,9 +113,20 @@ let
     {
       platforms = [ "x86_64-linux" ];
 
-      claims.ports.api = {
-        proto = "tcp";
-        fixed = settings.port;
+      # Two claims of one number and two narrow addresses, so the pair is compared
+      # and found not to contend. The state directory below is shared with the agent
+      # on m0 on purpose, so a collision row is produced and stays a warning.
+      claims.ports = {
+        api = {
+          proto = "tcp";
+          address = "10.0.0.1";
+          fixed = settings.port;
+        };
+        api-local = {
+          proto = "tcp";
+          address = "127.0.0.1";
+          fixed = settings.port;
+        };
       };
 
       uses.peers = {
@@ -99,12 +138,19 @@ let
       provides.registry.interface = registry;
 
       impl =
-        { alloc, results, ... }:
+        {
+          alloc,
+          results,
+          instance,
+          member,
+          ...
+        }:
         {
           closure = [ agentPkg ];
           provides.registry.exports.url = "https://hub.example:${toString alloc.ports.api}/registry";
           configData."/etc/fleet/peers" = {
-            mode = "0444";
+            mode = "0440";
+            group = "fleet";
             reload = [ "hub" ];
             render = [
               {
@@ -114,7 +160,18 @@ let
               }
             ];
           };
-          units.hub.command = "${agentPkg}/bin/hub --port ${toString alloc.ports.api}";
+          units.hub = {
+            command = "${agentPkg}/bin/hub --port ${toString alloc.ports.api}";
+            user = "fleet-hub";
+            runtimeDirectory = [ "${instance}-${member}" ];
+            stateDirectory = [ "fleet-handoff" ];
+            extends = [
+              {
+                extension = serviceUnit;
+                values.supplementaryGroups = [ "fleet" ];
+              }
+            ];
+          };
         };
     };
 
@@ -153,6 +210,14 @@ in
         tags = [ "fleet" ];
         system = "x86_64-linux";
         serviceManager = "systemd";
+        reserves = {
+          ports.sshd = {
+            proto = "tcp";
+            address = "10.0.0.1";
+            number = 22;
+          };
+          paths = [ "/etc/ssh/sshd_config" ];
+        };
       };
     }) machineNames
   );

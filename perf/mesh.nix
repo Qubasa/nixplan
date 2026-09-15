@@ -47,6 +47,14 @@ let
     };
   };
 
+  serviceUnit = planner.unitExtension {
+    backend = "systemd";
+    name = "systemd-service";
+    fields.supplementaryGroups = {
+      type = k.listOf k.string;
+    };
+  };
+
   agentModule =
     { settings, ... }:
     {
@@ -74,6 +82,8 @@ let
           vars,
           results,
           machine,
+          instance,
+          member,
           ...
         }:
         {
@@ -82,12 +92,30 @@ let
             publicKey = vars.hostKey."key.pub".content;
             agentPath = pkgByMachine.${machine};
           };
+          configData."/etc/mesh/agent.conf" = {
+            mode = "0440";
+            owner = "mesh-agent";
+            group = "mesh";
+            reload = [ "agent" ];
+            render = [
+              { text = "interval ${toString settings.interval}"; }
+            ];
+          };
           units.agent = {
             command = "${pkgByMachine.${machine}}/bin/agent --registry ${results.registry.url}";
             env = {
               FLEET_REGISTRY = results.registry.url;
               FLEET_INTERVAL = toString settings.interval;
             };
+            user = "mesh-agent";
+            runtimeDirectory = [ "${instance}-${member}" ];
+            stateDirectory = [ "mesh-handoff" ];
+            extends = [
+              {
+                extension = serviceUnit;
+                values.supplementaryGroups = [ "mesh" ];
+              }
+            ];
           };
         };
     };
@@ -97,9 +125,20 @@ let
     {
       platforms = [ "x86_64-linux" ];
 
-      claims.ports.api = {
-        proto = "tcp";
-        fixed = 8443;
+      # Two claims of one number and two narrow addresses, so the pair is compared
+      # and found not to contend. The state directory below is shared with the agent
+      # on m0 on purpose, so a collision row is produced and stays a warning.
+      claims.ports = {
+        api = {
+          proto = "tcp";
+          address = "10.1.0.1";
+          fixed = 8443;
+        };
+        api-local = {
+          proto = "tcp";
+          address = "127.0.0.1";
+          fixed = 8443;
+        };
       };
 
       uses.peers = {
@@ -114,7 +153,13 @@ let
       provides.registry.interface = registry;
 
       impl =
-        { alloc, results, ... }:
+        {
+          alloc,
+          results,
+          instance,
+          member,
+          ...
+        }:
         let
           peers = attrValues results.peers;
 
@@ -134,7 +179,8 @@ let
           provides.registry.exports.url = "https://hub.example:${toString alloc.ports.api}/registry";
 
           configData."/etc/mesh/peers" = {
-            mode = "0444";
+            mode = "0440";
+            group = "mesh";
             reload = [ "hub" ];
             render = map (peer: {
               text = "${peer.publicKey} ${peer.agentPath}\n";
@@ -145,7 +191,18 @@ let
             [
               {
                 name = "hub";
-                value.command = "${hubPkg}/bin/hub --port ${toString alloc.ports.api}";
+                value = {
+                  command = "${hubPkg}/bin/hub --port ${toString alloc.ports.api}";
+                  user = "mesh-hub";
+                  runtimeDirectory = [ "${instance}-${member}" ];
+                  stateDirectory = [ "mesh-handoff" ];
+                  extends = [
+                    {
+                      extension = serviceUnit;
+                      values.supplementaryGroups = [ "mesh" ];
+                    }
+                  ];
+                };
               }
             ]
             ++ peerUnits
@@ -187,6 +244,14 @@ in
         tags = [ "mesh" ];
         system = "x86_64-linux";
         serviceManager = "systemd";
+        reserves = {
+          ports.sshd = {
+            proto = "tcp";
+            address = "10.1.0.1";
+            number = 22;
+          };
+          paths = [ "/etc/ssh/sshd_config" ];
+        };
       };
     }) machineNames
   );

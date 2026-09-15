@@ -14,164 +14,164 @@
     "worked": {
       "fixture": "worked",
       "interpreter": "2.34.8",
-      "date": "2026-09-11",
+      "date": "2026-09-15",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 794.7273,
-        "nrFunctionCalls": 448.5455,
-        "nrPrimOpCalls": 309.3637,
-        "values.number": 972.2728,
-        "sets.bytes": 12528.7273,
-        "envs.bytes": 10074.9091,
-        "list.elements": 187.3637,
-        "nrOpUpdateValuesCopied": 51.6364,
-        "gc.totalBytes": 47861.8182
+        "nrThunks": 950.6364,
+        "nrFunctionCalls": 542.3637,
+        "nrPrimOpCalls": 382.3637,
+        "values.number": 1139.2728,
+        "sets.bytes": 14034.9091,
+        "envs.bytes": 12152.7273,
+        "list.elements": 212,
+        "nrOpUpdateValuesCopied": 55.2728,
+        "gc.totalBytes": 54075.6364
       },
-      "note": "Moved by hold-every-stated-guarantee: the deployment half of a declaration is read through the guarded reader the module half already used, every name entering a key is held to the key grammar, and every interface the deployment reaches earns its rows rather than only the interfaces the deployment attributed. The cost is about 7% per plan entry at every one of 4, 16, 64 and 256, so it is a constant added to the reading of one entry rather than a new term in how the reading grows."
+      "note": "Re-recorded on the review that closed ten totality violations and the wildcard, reservation-key and root-account soundness holes. Two things moved these figures. The budgets had not been re-recorded since 2026-09-11, so eleven feature merges of accumulated cost are folded in at once: 58% of the overage this re-record absorbs predates the seven merges under review, which contributed 7.4% to 9.8% between them, and `type-a-port-claim-and-its-collision` was a net saving of 1.27 thunks per entry. The fixtures also now exercise what the features added: a second port claim of one number under a different address so the overlap comparison is entered, a machine reservation on every registry machine, a configuration file with a stated owner and group read by a unit that declares an account and a group, a per-entry runtime directory and one deliberately shared state directory. Against this a throw planted in `contends`, `opens`, `reservedBy`, `claimedUnder` or `collisionRow` fires, where before it never did and the gated figures measured the old deployment shape. Working the other way, gating the deep string walk on `util.anyLineBreak` returned 9.67 thunks per entry on fleet and 14.33 on mesh, which is most of the newest merge's cost."
     },
     "fleet-4": {
       "fixture": "fleet",
       "interpreter": "2.34.8",
-      "date": "2026-09-11",
+      "date": "2026-09-15",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 694.7693,
-        "nrFunctionCalls": 386.6154,
-        "nrPrimOpCalls": 275.9231,
-        "values.number": 836.3847,
-        "sets.bytes": 10654.7693,
-        "envs.bytes": 8617.8462,
-        "list.elements": 161.4616,
-        "nrOpUpdateValuesCopied": 34.0,
-        "gc.totalBytes": 40067.6924
+        "nrThunks": 1037,
+        "nrFunctionCalls": 646.5385,
+        "nrPrimOpCalls": 497.8462,
+        "values.number": 1230.7693,
+        "sets.bytes": 14900.3077,
+        "envs.bytes": 13903.3847,
+        "list.elements": 274.6924,
+        "nrOpUpdateValuesCopied": 38.6154,
+        "gc.totalBytes": 57853.5385
       },
-      "note": "Moved by hold-every-stated-guarantee: the deployment half of a declaration is read through the guarded reader the module half already used, every name entering a key is held to the key grammar, and every interface the deployment reaches earns its rows rather than only the interfaces the deployment attributed. The cost is about 7% per plan entry at every one of 4, 16, 64 and 256, so it is a constant added to the reading of one entry rather than a new term in how the reading grows."
+      "note": "Re-recorded on the review that closed ten totality violations and the wildcard, reservation-key and root-account soundness holes. Two things moved these figures. The budgets had not been re-recorded since 2026-09-11, so eleven feature merges of accumulated cost are folded in at once: 58% of the overage this re-record absorbs predates the seven merges under review, which contributed 7.4% to 9.8% between them, and `type-a-port-claim-and-its-collision` was a net saving of 1.27 thunks per entry. The fixtures also now exercise what the features added: a second port claim of one number under a different address so the overlap comparison is entered, a machine reservation on every registry machine, a configuration file with a stated owner and group read by a unit that declares an account and a group, a per-entry runtime directory and one deliberately shared state directory. Against this a throw planted in `contends`, `opens`, `reservedBy`, `claimedUnder` or `collisionRow` fires, where before it never did and the gated figures measured the old deployment shape. Working the other way, gating the deep string walk on `util.anyLineBreak` returned 9.67 thunks per entry on fleet and 14.33 on mesh, which is most of the newest merge's cost."
     },
     "fleet-16": {
       "fixture": "fleet",
       "interpreter": "2.34.8",
-      "date": "2026-09-11",
+      "date": "2026-09-15",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 420.898,
-        "nrFunctionCalls": 265.1837,
-        "nrPrimOpCalls": 190.5103,
-        "values.number": 504.7552,
-        "sets.bytes": 6322.6123,
-        "envs.bytes": 5546.449,
-        "list.elements": 117.7756,
-        "nrOpUpdateValuesCopied": 13.5919,
-        "gc.totalBytes": 24496.6531
+        "nrThunks": 697.3266,
+        "nrFunctionCalls": 485.7347,
+        "nrPrimOpCalls": 380.6531,
+        "values.number": 826.8572,
+        "sets.bytes": 9800,
+        "envs.bytes": 9983.5103,
+        "list.elements": 213.6939,
+        "nrOpUpdateValuesCopied": 15.5511,
+        "gc.totalBytes": 39779.2654
       },
-      "note": "Moved by hold-every-stated-guarantee: the deployment half of a declaration is read through the guarded reader the module half already used, every name entering a key is held to the key grammar, and every interface the deployment reaches earns its rows rather than only the interfaces the deployment attributed. The cost is about 7% per plan entry at every one of 4, 16, 64 and 256, so it is a constant added to the reading of one entry rather than a new term in how the reading grows."
+      "note": "Re-recorded on the review that closed ten totality violations and the wildcard, reservation-key and root-account soundness holes. Two things moved these figures. The budgets had not been re-recorded since 2026-09-11, so eleven feature merges of accumulated cost are folded in at once: 58% of the overage this re-record absorbs predates the seven merges under review, which contributed 7.4% to 9.8% between them, and `type-a-port-claim-and-its-collision` was a net saving of 1.27 thunks per entry. The fixtures also now exercise what the features added: a second port claim of one number under a different address so the overlap comparison is entered, a machine reservation on every registry machine, a configuration file with a stated owner and group read by a unit that declares an account and a group, a per-entry runtime directory and one deliberately shared state directory. Against this a throw planted in `contends`, `opens`, `reservedBy`, `claimedUnder` or `collisionRow` fires, where before it never did and the gated figures measured the old deployment shape. Working the other way, gating the deep string walk on `util.anyLineBreak` returned 9.67 thunks per entry on fleet and 14.33 on mesh, which is most of the newest merge's cost."
     },
     "fleet-64": {
       "fixture": "fleet",
       "interpreter": "2.34.8",
-      "date": "2026-09-11",
+      "date": "2026-09-15",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 347.1089,
-        "nrFunctionCalls": 232.4664,
-        "nrPrimOpCalls": 167.4975,
-        "values.number": 415.4042,
-        "sets.bytes": 5158.0519,
-        "envs.bytes": 4718.9223,
-        "list.elements": 106.0052,
-        "nrOpUpdateValuesCopied": 8.2591,
-        "gc.totalBytes": 20177.0778
+        "nrThunks": 605.8083,
+        "nrFunctionCalls": 442.4094,
+        "nrPrimOpCalls": 349.0778,
+        "values.number": 718.0311,
+        "sets.bytes": 8428.4767,
+        "envs.bytes": 8927.3783,
+        "list.elements": 197.2591,
+        "nrOpUpdateValuesCopied": 9.5026,
+        "gc.totalBytes": 34445.0156
       },
-      "note": "Moved by hold-every-stated-guarantee: the deployment half of a declaration is read through the guarded reader the module half already used, every name entering a key is held to the key grammar, and every interface the deployment reaches earns its rows rather than only the interfaces the deployment attributed. The cost is about 7% per plan entry at every one of 4, 16, 64 and 256, so it is a constant added to the reading of one entry rather than a new term in how the reading grows."
+      "note": "Re-recorded on the review that closed ten totality violations and the wildcard, reservation-key and root-account soundness holes. Two things moved these figures. The budgets had not been re-recorded since 2026-09-11, so eleven feature merges of accumulated cost are folded in at once: 58% of the overage this re-record absorbs predates the seven merges under review, which contributed 7.4% to 9.8% between them, and `type-a-port-claim-and-its-collision` was a net saving of 1.27 thunks per entry. The fixtures also now exercise what the features added: a second port claim of one number under a different address so the overlap comparison is entered, a machine reservation on every registry machine, a configuration file with a stated owner and group read by a unit that declares an account and a group, a per-entry runtime directory and one deliberately shared state directory. Against this a throw planted in `contends`, `opens`, `reservedBy`, `claimedUnder` or `collisionRow` fires, where before it never did and the gated figures measured the old deployment shape. Working the other way, gating the deep string walk on `util.anyLineBreak` returned 9.67 thunks per entry on fleet and 14.33 on mesh, which is most of the newest merge's cost."
     },
     "fleet-256": {
       "fixture": "fleet",
       "interpreter": "2.34.8",
-      "date": "2026-09-11",
+      "date": "2026-09-15",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 328.3017,
-        "nrFunctionCalls": 224.1275,
-        "nrPrimOpCalls": 161.632,
-        "values.number": 392.6307,
-        "sets.bytes": 4859.9012,
-        "envs.bytes": 4508.0053,
-        "list.elements": 103.0053,
-        "nrOpUpdateValuesCopied": 6.8167,
-        "gc.totalBytes": 19036.5046
+        "nrThunks": 582.4825,
+        "nrFunctionCalls": 431.3668,
+        "nrPrimOpCalls": 341.03,
+        "values.number": 690.2939,
+        "sets.bytes": 8077.5761,
+        "envs.bytes": 8658.1951,
+        "list.elements": 193.0703,
+        "nrOpUpdateValuesCopied": 7.8778,
+        "gc.totalBytes": 33081.0716
       },
-      "note": "Moved by hold-every-stated-guarantee: the deployment half of a declaration is read through the guarded reader the module half already used, every name entering a key is held to the key grammar, and every interface the deployment reaches earns its rows rather than only the interfaces the deployment attributed. The cost is about 7% per plan entry at every one of 4, 16, 64 and 256, so it is a constant added to the reading of one entry rather than a new term in how the reading grows."
+      "note": "Re-recorded on the review that closed ten totality violations and the wildcard, reservation-key and root-account soundness holes. Two things moved these figures. The budgets had not been re-recorded since 2026-09-11, so eleven feature merges of accumulated cost are folded in at once: 58% of the overage this re-record absorbs predates the seven merges under review, which contributed 7.4% to 9.8% between them, and `type-a-port-claim-and-its-collision` was a net saving of 1.27 thunks per entry. The fixtures also now exercise what the features added: a second port claim of one number under a different address so the overlap comparison is entered, a machine reservation on every registry machine, a configuration file with a stated owner and group read by a unit that declares an account and a group, a per-entry runtime directory and one deliberately shared state directory. Against this a throw planted in `contends`, `opens`, `reservedBy`, `claimedUnder` or `collisionRow` fires, where before it never did and the gated figures measured the old deployment shape. Working the other way, gating the deep string walk on `util.anyLineBreak` returned 9.67 thunks per entry on fleet and 14.33 on mesh, which is most of the newest merge's cost."
     },
     "mesh-4": {
       "fixture": "mesh",
       "interpreter": "2.34.8",
-      "date": "2026-09-11",
+      "date": "2026-09-15",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 749.6924,
-        "nrFunctionCalls": 433.4616,
-        "nrPrimOpCalls": 324.2308,
-        "values.number": 914.4616,
-        "sets.bytes": 11326.1539,
-        "envs.bytes": 9460.9231,
-        "list.elements": 195.4616,
-        "nrOpUpdateValuesCopied": 34.2308,
-        "gc.totalBytes": 43015.3847
+        "nrThunks": 1105.6924,
+        "nrFunctionCalls": 705.4616,
+        "nrPrimOpCalls": 559.3077,
+        "values.number": 1322.8462,
+        "sets.bytes": 15561.2308,
+        "envs.bytes": 15001.2308,
+        "list.elements": 311.3077,
+        "nrOpUpdateValuesCopied": 38.8462,
+        "gc.totalBytes": 62790.1539
       },
-      "note": "Moved by hold-every-stated-guarantee: the deployment half of a declaration is read through the guarded reader the module half already used, every name entering a key is held to the key grammar, and every interface the deployment reaches earns its rows rather than only the interfaces the deployment attributed. The cost is about 7% per plan entry at every one of 4, 16, 64 and 256, so it is a constant added to the reading of one entry rather than a new term in how the reading grows."
+      "note": "Re-recorded on the review that closed ten totality violations and the wildcard, reservation-key and root-account soundness holes. Two things moved these figures. The budgets had not been re-recorded since 2026-09-11, so eleven feature merges of accumulated cost are folded in at once: 58% of the overage this re-record absorbs predates the seven merges under review, which contributed 7.4% to 9.8% between them, and `type-a-port-claim-and-its-collision` was a net saving of 1.27 thunks per entry. The fixtures also now exercise what the features added: a second port claim of one number under a different address so the overlap comparison is entered, a machine reservation on every registry machine, a configuration file with a stated owner and group read by a unit that declares an account and a group, a per-entry runtime directory and one deliberately shared state directory. Against this a throw planted in `contends`, `opens`, `reservedBy`, `claimedUnder` or `collisionRow` fires, where before it never did and the gated figures measured the old deployment shape. Working the other way, gating the deep string walk on `util.anyLineBreak` returned 9.67 thunks per entry on fleet and 14.33 on mesh, which is most of the newest merge's cost."
     },
     "mesh-16": {
       "fixture": "mesh",
       "interpreter": "2.34.8",
-      "date": "2026-09-11",
+      "date": "2026-09-15",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 481.5103,
-        "nrFunctionCalls": 316.8368,
-        "nrPrimOpCalls": 243.7552,
-        "values.number": 590.6123,
-        "sets.bytes": 7084.5715,
-        "envs.bytes": 6470.2041,
-        "list.elements": 154.7143,
-        "nrOpUpdateValuesCopied": 13.898,
-        "gc.totalBytes": 28379.1021
+        "nrThunks": 772.8572,
+        "nrFunctionCalls": 550.8776,
+        "nrPrimOpCalls": 448.1633,
+        "values.number": 927.9388,
+        "sets.bytes": 10559.1837,
+        "envs.bytes": 11188.4082,
+        "list.elements": 253.7756,
+        "nrOpUpdateValuesCopied": 15.8572,
+        "gc.totalBytes": 44335.347
       },
-      "note": "Moved by hold-every-stated-guarantee: the deployment half of a declaration is read through the guarded reader the module half already used, every name entering a key is held to the key grammar, and every interface the deployment reaches earns its rows rather than only the interfaces the deployment attributed. The cost is about 7% per plan entry at every one of 4, 16, 64 and 256, so it is a constant added to the reading of one entry rather than a new term in how the reading grows."
+      "note": "Re-recorded on the review that closed ten totality violations and the wildcard, reservation-key and root-account soundness holes. Two things moved these figures. The budgets had not been re-recorded since 2026-09-11, so eleven feature merges of accumulated cost are folded in at once: 58% of the overage this re-record absorbs predates the seven merges under review, which contributed 7.4% to 9.8% between them, and `type-a-port-claim-and-its-collision` was a net saving of 1.27 thunks per entry. The fixtures also now exercise what the features added: a second port claim of one number under a different address so the overlap comparison is entered, a machine reservation on every registry machine, a configuration file with a stated owner and group read by a unit that declares an account and a group, a per-entry runtime directory and one deliberately shared state directory. Against this a throw planted in `contends`, `opens`, `reservedBy`, `claimedUnder` or `collisionRow` fires, where before it never did and the gated figures measured the old deployment shape. Working the other way, gating the deep string walk on `util.anyLineBreak` returned 9.67 thunks per entry on fleet and 14.33 on mesh, which is most of the newest merge's cost."
     },
     "mesh-64": {
       "fixture": "mesh",
       "interpreter": "2.34.8",
-      "date": "2026-09-11",
+      "date": "2026-09-15",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 409.2539,
-        "nrFunctionCalls": 285.3731,
-        "nrPrimOpCalls": 222.0519,
-        "values.number": 503.3576,
-        "sets.bytes": 5944.4146,
-        "envs.bytes": 5663.7513,
-        "list.elements": 143.7358,
-        "nrOpUpdateValuesCopied": 8.5855,
-        "gc.totalBytes": 24371.2332
+        "nrThunks": 683.1814,
+        "nrFunctionCalls": 509.1866,
+        "nrPrimOpCalls": 418.1969,
+        "values.number": 821.5389,
+        "sets.bytes": 9214.1348,
+        "envs.bytes": 10160.456,
+        "list.elements": 238.2747,
+        "nrOpUpdateValuesCopied": 9.8291,
+        "gc.totalBytes": 39167.5026
       },
-      "note": "Moved by hold-every-stated-guarantee: the deployment half of a declaration is read through the guarded reader the module half already used, every name entering a key is held to the key grammar, and every interface the deployment reaches earns its rows rather than only the interfaces the deployment attributed. The cost is about 7% per plan entry at every one of 4, 16, 64 and 256, so it is a constant added to the reading of one entry rather than a new term in how the reading grows."
+      "note": "Re-recorded on the review that closed ten totality violations and the wildcard, reservation-key and root-account soundness holes. Two things moved these figures. The budgets had not been re-recorded since 2026-09-11, so eleven feature merges of accumulated cost are folded in at once: 58% of the overage this re-record absorbs predates the seven merges under review, which contributed 7.4% to 9.8% between them, and `type-a-port-claim-and-its-collision` was a net saving of 1.27 thunks per entry. The fixtures also now exercise what the features added: a second port claim of one number under a different address so the overlap comparison is entered, a machine reservation on every registry machine, a configuration file with a stated owner and group read by a unit that declares an account and a group, a per-entry runtime directory and one deliberately shared state directory. Against this a throw planted in `contends`, `opens`, `reservedBy`, `claimedUnder` or `collisionRow` fires, where before it never did and the gated figures measured the old deployment shape. Working the other way, gating the deep string walk on `util.anyLineBreak` returned 9.67 thunks per entry on fleet and 14.33 on mesh, which is most of the newest merge's cost."
     },
     "mesh-256": {
       "fixture": "mesh",
       "interpreter": "2.34.8",
-      "date": "2026-09-11",
+      "date": "2026-09-15",
       "margin": 0.15,
       "perEntry": {
-        "nrThunks": 390.8375,
-        "nrFunctionCalls": 277.3538,
-        "nrPrimOpCalls": 216.5202,
-        "values.number": 481.1184,
-        "sets.bytes": 5652.4838,
-        "envs.bytes": 5458.2055,
-        "list.elements": 140.9376,
-        "nrOpUpdateValuesCopied": 7.1483,
-        "gc.totalBytes": 23227.3186
+        "nrThunks": 660.3251,
+        "nrFunctionCalls": 498.5605,
+        "nrPrimOpCalls": 410.5592,
+        "values.number": 794.4201,
+        "sets.bytes": 8869.9818,
+        "envs.bytes": 9898.4552,
+        "list.elements": 234.3238,
+        "nrOpUpdateValuesCopied": 8.2094,
+        "gc.totalBytes": 37818.6528
       },
-      "note": "Moved by hold-every-stated-guarantee: the deployment half of a declaration is read through the guarded reader the module half already used, every name entering a key is held to the key grammar, and every interface the deployment reaches earns its rows rather than only the interfaces the deployment attributed. The cost is about 7% per plan entry at every one of 4, 16, 64 and 256, so it is a constant added to the reading of one entry rather than a new term in how the reading grows."
+      "note": "Re-recorded on the review that closed ten totality violations and the wildcard, reservation-key and root-account soundness holes. Two things moved these figures. The budgets had not been re-recorded since 2026-09-11, so eleven feature merges of accumulated cost are folded in at once: 58% of the overage this re-record absorbs predates the seven merges under review, which contributed 7.4% to 9.8% between them, and `type-a-port-claim-and-its-collision` was a net saving of 1.27 thunks per entry. The fixtures also now exercise what the features added: a second port claim of one number under a different address so the overlap comparison is entered, a machine reservation on every registry machine, a configuration file with a stated owner and group read by a unit that declares an account and a group, a per-entry runtime directory and one deliberately shared state directory. Against this a throw planted in `contends`, `opens`, `reservedBy`, `claimedUnder` or `collisionRow` fires, where before it never did and the gated figures measured the old deployment shape. Working the other way, gating the deep string walk on `util.anyLineBreak` returned 9.67 thunks per entry on fleet and 14.33 on mesh, which is most of the newest merge's cost."
     }
   }
 }
