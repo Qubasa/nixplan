@@ -241,7 +241,7 @@ state read back carries the public file's bytes with an empty diagnostics table.
 ### A deviation from design.md D9
 
 D9 of
-[design.md](../openspec/changes/generate-values-with-nixos-secrets/design.md)
+[design.md](../openspec/changes/archive/2026-09-16-generate-values-with-nixos-secrets/design.md)
 says the folder uses the PR's own example `age` backend. It does not: it builds its own, at
 `tests/e2e/generated-secret/deployment/backend.py`. The reason is mechanical rather than a judgement about the
 example. The configuration has to carry a build-time `.drv` path for every backend program, and the

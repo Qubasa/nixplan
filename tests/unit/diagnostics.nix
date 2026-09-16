@@ -37,7 +37,7 @@ let
     systemdService
     ;
 
-  inherit (planner.util) sortStrings uniqueStrings;
+  inherit (planner.util) sortStrings subtractList uniqueStrings;
 
   ids = result: uniqueStrings (rowIds result);
 
@@ -1071,40 +1071,26 @@ let
     };
   };
 
-  exclusionHeader = "| Out | Why not now | Trigger to add it |";
-
-  fixtureReadme = builtins.readFile "${support.folder}/README.md";
-
-  exclusionTableRows =
-    (builtins.foldl'
-      (
-        st: line:
-        if st.closed then
-          st
-        else if !st.open then
-          st // { open = line == exclusionHeader; }
-        else if substring 0 1 line != "|" then
-          st // { closed = true; }
-        else if builtins.match "[|[:space:]-]+" line != null then
-          st
-        else
-          st // { rows = st.rows + 1; }
-      )
-      {
-        open = false;
-        closed = false;
-        rows = 0;
-      }
-      (support.lines fixtureReadme)
-    ).rows;
-
-  # The exclusion suite as data rather than as text: which constructs it refuses
-  # is what it states, and a row nobody refuses is what this crosses.
+  # The exclusion table as data, and the suite beside this one as data too: which
+  # constructs it refuses is read off its own test names, so a construct nobody
+  # refuses is a name here rather than a sentence in a document.
   exclusionSuite = import (repoSource + "/tests/unit/exclusions.nix") { inherit planner support; };
 
-  exclusionCoverage = exclusionSuite.testEveryExclusionTableRowIsCovered;
+  constructNames = attrNames planner.excluded.constructs;
 
-  constructRows = map (construct: construct.row) (builtins.attrValues planner.excluded.constructs);
+  constructRows = map (name: planner.excluded.constructs.${name}.row) constructNames;
+
+  tailOf = name: substring 1 (builtins.stringLength name) name;
+
+  refusalTails = filter (tail: tail != null) (
+    map (
+      test:
+      let
+        named = builtins.match "test.(.*)IsRefused" test;
+      in
+      if named == null then null else builtins.head named
+    ) (attrNames exclusionSuite)
+  );
 in
 {
   testAnInstanceNamesNoModule =
@@ -2815,57 +2801,19 @@ in
       };
     };
 
-  # The table, the suite that refuses one deployment per row, and the fixture
-  # README that publishes it: a row leaves all three or the three disagree here.
-  testTheTableTheSuiteAndTheFixturesReadmeAgree = {
-    expr = {
-      libraryRows = sortStrings (uniqueStrings planner.excluded.rows);
-      readmeRows = exclusionTableRows;
-      suiteRows = sortStrings exclusionCoverage.expr.coveredRows;
-      constructsWithoutARefusal = exclusionCoverage.expr.constructsWithoutATest;
-      refusalsAsserted = length (filter (name: hasInfix "IsRefused" name) (attrNames exclusionSuite));
-      theTableNamesMemberCuts = elem "member cuts" (planner.excluded.rows ++ constructRows);
-      theSuiteNamesMemberCuts = elem "member cuts" (
-        exclusionCoverage.expr.coveredRows ++ exclusionCoverage.expected.coveredRows
-      );
-      theReadmeNamesMemberCuts = hasInfix "member cuts" fixtureReadme;
-    };
-    expected = {
-      libraryRows = [
-        "collect family"
-        "externals"
-        "lifecycle"
-        "locality"
-        "placement.pick/strategy/allocation"
-        "runtime plane"
-      ];
-      readmeRows = 6;
-      suiteRows = [
-        "collect family"
-        "externals"
-        "lifecycle"
-        "locality"
-        "placement.pick/strategy/allocation"
-        "runtime plane"
-      ];
-      constructsWithoutARefusal = [ ];
-      refusalsAsserted = length (attrNames planner.excluded.constructs);
-      theTableNamesMemberCuts = false;
-      theSuiteNamesMemberCuts = false;
-      theReadmeNamesMemberCuts = false;
-    };
-  };
-
-  testTheSixRemainingRowsAreStillRefused = {
+  # The table, as data, against the suite that refuses one deployment per
+  # construct: a row with no construct, a construct with no refusal test and a
+  # refusal test with no construct are three lines here rather than one verdict.
+  testEveryExcludedConstructIsRefused = {
     expr = {
       rows = sortStrings (uniqueStrings planner.excluded.rows);
-      rowOfEveryConstruct = sortStrings (uniqueStrings constructRows);
-      constructsNamingNoRow = filter (
-        name: !elem planner.excluded.constructs.${name}.row planner.excluded.rows
-      ) (attrNames planner.excluded.constructs);
-      constructsNamingNoTrigger = filter (name: planner.excluded.constructs.${name}.trigger == "") (
-        attrNames planner.excluded.constructs
-      );
+      rowsWithoutAConstruct = subtractList planner.excluded.rows constructRows;
+      constructRowsOutsideTheTable = subtractList constructRows planner.excluded.rows;
+      constructsWithoutARefusal = filter (name: !(elem (tailOf name) refusalTails)) constructNames;
+      refusalsWithoutAConstruct = subtractList refusalTails (map tailOf constructNames);
+      constructsNamingNoTrigger = filter (
+        name: planner.excluded.constructs.${name}.trigger == ""
+      ) constructNames;
     };
     expected = {
       rows = [
@@ -2876,15 +2824,10 @@ in
         "placement.pick/strategy/allocation"
         "runtime plane"
       ];
-      rowOfEveryConstruct = [
-        "collect family"
-        "externals"
-        "lifecycle"
-        "locality"
-        "placement.pick/strategy/allocation"
-        "runtime plane"
-      ];
-      constructsNamingNoRow = [ ];
+      rowsWithoutAConstruct = [ ];
+      constructRowsOutsideTheTable = [ ];
+      constructsWithoutARefusal = [ ];
+      refusalsWithoutAConstruct = [ ];
       constructsNamingNoTrigger = [ ];
     };
   };

@@ -195,10 +195,7 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run one invocation of the command.
-
-    Args:
-        argv: The arguments to parse, the process's own by default.
+    """Run one invocation of the command, over ``argv`` or the process's own.
 
     Returns:
         The exit status: zero, or one for a refusal reported on stderr.

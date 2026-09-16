@@ -17,37 +17,24 @@ let
   inherit (support)
     hasInfix
     planOf
+    pub
     root
     soleRoot
     ;
 
   inherit (support.worked) borgbackup openssh;
 
-  # The image reader arrives as an argument for the reason flakelet's does: this
-  # suite holds each directory as its own store path, so a relative import out of
-  # one would resolve outside the store.
-  imageReader = import (imageSource + "/read.nix") { inherit planner; };
-
-  flakeletReader = import (flakeletSource + "/read.nix") {
-    inherit planner;
-    reader = imageReader;
+  realiser = support.realiser {
+    inherit imageSource flakeletSource operatorSource;
   };
 
-  reader = import (operatorSource + "/read.nix") {
-    inherit planner imageReader flakeletReader;
-  };
+  inherit (realiser) imageReader flakeletReader;
+
+  reader = realiser.operatorReader;
 
   sorted = builtins.sort (a: b: a < b);
 
-  pub = planner.interface {
-    name = "pub";
-    exports.publicKey = support.publicString;
-  };
-
-  simple = _: {
-    closure = [ borgbackup ];
-    units.only.command = "${borgbackup}/bin/borg serve";
-  };
+  simple = support.serving "only";
 
   scheduled = _: {
     closure = [ borgbackup ];
@@ -67,44 +54,21 @@ let
     units.only.command = "${borgbackup}/bin/borg serve";
   };
 
-  deployment =
-    implementation:
-    planOf {
-      instances.svc = {
-        module = soleRoot { module = _: { impl = implementation; }; };
-        placement.every.only.machines = [ "one" ];
-      };
-    };
+  deployment = implementation: (realiser.planned { } implementation).result;
 
   # A configuration file whose recipe reads a delivered path: its bytes exist on
   # no machine until that path is written, which is the one host path the default
   # realiser still runs no step for.
-  refBearing = planOf {
-    instances.svc = {
-      module = soleRoot {
-        module = _: {
-          vars.hostKey.files."key".secrecy = "secret";
-          impl =
-            { vars, ... }:
-            {
-              closure = [ borgbackup ];
-              units.only.command = "${borgbackup}/bin/borg serve";
-              configData."/etc/agent.conf" = {
-                mode = "0400";
-                reload = [ "only" ];
-                render = [
-                  { text = "key_file = "; }
-                  { ref = vars.hostKey."key".path; }
-                ];
-              };
-            };
-        };
+  refBearing = support.valuePlan {
+    extra = vars: {
+      configData."/etc/agent.conf" = {
+        mode = "0400";
+        reload = [ "only" ];
+        render = [
+          { text = "key_file = "; }
+          { ref = vars.hostKey."key".path; }
+        ];
       };
-      placement.every.only.machines = [ "one" ];
-    };
-    varsState."svc:vars/hostKey@one"."key" = {
-      present = true;
-      content = "PRIVATE-KEY-BYTES";
     };
   };
 
@@ -137,6 +101,28 @@ let
       inherit (result) plan;
       inherit realise;
     };
+
+  # The one statement most of these readings make: the image realiser under a
+  # profile, for every entry the deployment places.
+  underImage =
+    profile:
+    readOf {
+      default = {
+        realiser = "image";
+        inherit profile;
+      };
+    };
+
+  # A realiser's reading of one entry, forced, so `success` answers whether the
+  # refusal the row above it predicts was made.
+  forced =
+    read: args:
+    builtins.tryEval (
+      let
+        artifact = read args;
+      in
+      builtins.deepSeq artifact artifact
+    );
 
   worked = support.workedResult;
 
@@ -291,8 +277,7 @@ let
     plan: key: field:
     plan // { ${key} = builtins.removeAttrs plan.${key} [ field ]; };
 
-  rowsById = id: reading: filter (r: r.id == id) reading.rows;
-  idsOf = reading: sorted (map (r: r.id) reading.rows);
+  inherit (realiser) idsOf rowsById;
 in
 {
   testAValueEntryRecordsNoFiles =
@@ -489,12 +474,7 @@ in
   # of entries earns the same row under either statement.
   testAUnitFileNameCollisionIsReportedUnderEitherRealiser =
     let
-      asImage = readOf {
-        default = {
-          realiser = "image";
-          profile = "trusted";
-        };
-      };
+      asImage = underImage "trusted";
       asService = readOf { default.realiser = "flakelet"; };
       imaged = asImage sharingAUnitFile;
       served = asService sharingAUnitFile;
@@ -1549,15 +1529,10 @@ in
       };
       reading = readOf { } result;
       row = builtins.head (rowsById "operator-entry-name-refused" reading);
-      raised = builtins.tryEval (
-        let
-          artifact = flakeletReader.read {
-            inherit (result) plan;
-            key = "svc:needs.a.dot@one";
-          };
-        in
-        builtins.deepSeq artifact artifact
-      );
+      raised = forced flakeletReader.read {
+        inherit (result) plan;
+        key = "svc:needs.a.dot@one";
+      };
     in
     {
       expr = {
@@ -1589,23 +1564,13 @@ in
           placement.every.only.machines = [ "one" ];
         };
       };
-      reading = readOf {
-        default = {
-          realiser = "image";
-          profile = "trusted";
-        };
-      } result;
+      reading = underImage "trusted" result;
       row = builtins.head (rowsById "operator-entry-name-refused" reading);
-      raised = builtins.tryEval (
-        let
-          artifact = imageReader.read {
-            inherit (result) plan;
-            key = "sv?c:only@one";
-            profile = "trusted";
-          };
-        in
-        builtins.deepSeq artifact artifact
-      );
+      raised = forced imageReader.read {
+        inherit (result) plan;
+        key = "sv?c:only@one";
+        profile = "trusted";
+      };
     in
     {
       expr = {
@@ -1640,12 +1605,7 @@ in
           placement.every.only.machines = [ "one" ];
         };
       };
-      reading = readOf {
-        default = {
-          realiser = "image";
-          profile = "trusted";
-        };
-      } result;
+      reading = underImage "trusted" result;
       row = builtins.head (rowsById "operator-entry-name-refused" reading);
     in
     {
@@ -1678,32 +1638,17 @@ in
         closure = [ borgbackup ];
         units."web@one".command = "${borgbackup}/bin/borg serve";
       });
-      asAnImage = readOf {
-        default = {
-          realiser = "image";
-          profile = "trusted";
-        };
-      } result;
+      asAnImage = underImage "trusted" result;
       row = builtins.head (rowsById "operator-entry-name-refused" asAnImage);
-      raised = builtins.tryEval (
-        let
-          artifact = imageReader.read {
-            inherit (result) plan;
-            key = oneKey;
-            profile = "trusted";
-          };
-        in
-        builtins.deepSeq artifact artifact
-      );
-      read = builtins.tryEval (
-        let
-          artifact = flakeletReader.read {
-            inherit (result) plan;
-            key = oneKey;
-          };
-        in
-        builtins.deepSeq artifact artifact
-      );
+      raised = forced imageReader.read {
+        inherit (result) plan;
+        key = oneKey;
+        profile = "trusted";
+      };
+      read = forced flakeletReader.read {
+        inherit (result) plan;
+        key = oneKey;
+      };
     in
     {
       expr = {
@@ -1740,18 +1685,8 @@ in
           user = "borg";
         };
       });
-      confined = readOf {
-        default = {
-          realiser = "image";
-          profile = "strict";
-        };
-      } result;
-      allowed = readOf {
-        default = {
-          realiser = "image";
-          profile = "trusted";
-        };
-      } result;
+      confined = underImage "strict" result;
+      allowed = underImage "trusted" result;
       row = builtins.head (rowsById "operator-entry-access-denied" confined);
     in
     {
@@ -1913,32 +1848,8 @@ in
 
   testARootOnlyValueUnderAConfiningProfile =
     let
-      result = planOf {
-        instances.svc = {
-          module = soleRoot {
-            module = _: {
-              vars.hostKey.files."key".secrecy = "secret";
-              impl =
-                { vars, ... }:
-                {
-                  closure = [ borgbackup ];
-                  units.only = {
-                    command = "${borgbackup}/bin/borg serve";
-                    env.KEYFILE = vars.hostKey."key".path;
-                  };
-                };
-            };
-          };
-          placement.every.only.machines = [ "one" ];
-        };
-        varsState."svc:vars/hostKey@one"."key".present = true;
-      };
-      confined = readOf {
-        default = {
-          realiser = "image";
-          profile = "strict";
-        };
-      } result;
+      result = support.valuePlan { openIt = true; };
+      confined = underImage "strict" result;
       row = builtins.head (rowsById "operator-entry-access-denied" confined);
     in
     {

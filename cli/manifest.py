@@ -127,23 +127,14 @@ class Deployment:
 
 
 def store_dir() -> str:
-    """Return the store directory this command runs against.
-
-    Returns:
-        The store nix itself resolves a path in: `NIX_STORE_DIR` where the
-        caller set it, and the default store otherwise.
-    """
+    """Return the store nix resolves a path in: `NIX_STORE_DIR`, or the default store."""
     return os.environ.get(STORE_VARIABLE) or DEFAULT_STORE
 
 
 def resolve(target: str) -> Path:
     """Resolve a target to the built deployment directory it names.
 
-    Args:
-        target: A directory holding `manifest.json`, or a flake reference.
-
-    Returns:
-        The directory the deployment was built into.
+    A target is a directory holding `manifest.json`, or a flake reference.
 
     Raises:
         ApplyError: If the target is a directory that is neither, if it names a
@@ -187,10 +178,7 @@ def resolve(target: str) -> Path:
 
 
 def read(root: Path) -> Deployment:
-    """Read the built deployment at ``root``.
-
-    Args:
-        root: A directory holding `manifest.json` and `plan.json`.
+    """Read the built deployment at ``root``, holding `manifest.json` and `plan.json`.
 
     Returns:
         The deployment: its plan, its value entries, its diagnostics, and its
@@ -236,9 +224,6 @@ def address_of(entry: Entry) -> str:
     reading carries the absence and the refusal is made here, where the machine
     would be reached.
 
-    Args:
-        entry: The placed entry.
-
     Returns:
         The address the record carries for the entry's machine.
 
@@ -259,14 +244,6 @@ def machine_address(deployment: Deployment, machine: str, *, of: str) -> str:
     The address of a machine that receives a value is the registry's, not an
     entry's own target, and a value's machine need run no entry at all.
 
-    Args:
-        deployment: The deployment being applied.
-        machine: The machine name.
-        of: What is being delivered, for a refusal to name.
-
-    Returns:
-        The address to dial.
-
     Raises:
         ApplyError: If the plan carries no record for that machine, or the
             record declares no address.
@@ -281,13 +258,7 @@ def machine_address(deployment: Deployment, machine: str, *, of: str) -> str:
 
 
 def artifact_of(entry: Entry) -> Path:
-    """Return the artifact one placed entry was built into.
-
-    Args:
-        entry: The placed entry.
-
-    Returns:
-        The store path the build's link for that entry resolves to.
+    """Return the store path the build's link for one placed entry resolves to.
 
     Raises:
         ApplyError: If the entry declares no unit, so the build published no
@@ -304,21 +275,13 @@ def artifact_of(entry: Entry) -> Path:
 def service_name(entry: Entry) -> str:
     """Return the service name a flakelet artifact declares in its `meta.json`.
 
-    Args:
-        entry: A placed entry realised as a flakelet artifact.
-
     Returns:
         The name the endpoint registers the entry under.
 
     Raises:
         ApplyError: If the artifact declares no name, or the entry has none.
     """
-    artifact = artifact_of(entry)
-    meta = _load(artifact / "meta.json")
-    name = meta.get("name")
-    if not isinstance(name, str) or not name:
-        raise ApplyError(f"{entry.key}: {artifact}/meta.json declares no service name")
-    return name
+    return _declared(entry, "meta.json", "name", missing="declares no service name")
 
 
 def unit_files(entry: Entry) -> dict[str, str]:
@@ -329,12 +292,6 @@ def unit_files(entry: Entry) -> dict[str, str]:
     what makes the two comparable: the machine reports the paths it activated
     and this reports the paths the build produced.
 
-    Args:
-        entry: A placed entry realised as a flakelet artifact.
-
-    Returns:
-        Each unit file the entry declares, by name, resolved to its own path.
-
     Raises:
         ApplyError: If the entry has no artifact.
     """
@@ -343,23 +300,26 @@ def unit_files(entry: Entry) -> dict[str, str]:
 
 
 def image_file(entry: Entry) -> str:
-    """Return the image an image artifact carries, as `attachment.json` names it.
-
-    Args:
-        entry: A placed entry realised as a portable-service image.
-
-    Returns:
-        The image file name, relative to the artifact directory.
+    """Return the image file name `attachment.json` names, relative to the artifact.
 
     Raises:
         ApplyError: If the attachment names no image.
     """
+    return _declared(entry, "attachment.json", "image", missing="names no image")
+
+
+def _declared(entry: Entry, file: str, field: str, *, missing: str) -> str:
+    """Return one field of an entry's own artifact record, in the caller's words.
+
+    Raises:
+        ApplyError: If the record states no such name, naming the entry and the
+            file it was read from.
+    """
     artifact = artifact_of(entry)
-    attachment = _load(artifact / "attachment.json")
-    image = attachment.get("image")
-    if not isinstance(image, str) or not image:
-        raise ApplyError(f"{entry.key}: {artifact}/attachment.json names no image")
-    return image
+    stated = _load(artifact / file).get(field)
+    if not isinstance(stated, str) or not stated:
+        raise ApplyError(f"{entry.key}: {artifact}/{file} {missing}")
+    return stated
 
 
 def _shape(path: Path, interface: Mapping[str, Any]) -> None:
@@ -410,11 +370,6 @@ def _artifact(root: Path, key: str, stated: str) -> Path:
     of them points at a store path outside the build by design, so following
     them first would answer that no artifact is inside the build at all.
 
-    Args:
-        root: The build the record was read from.
-        key: The entry the path was stated for, for the refusal.
-        stated: The path the record states.
-
     Returns:
         The store path the build's link for that entry resolves to, which is the
         path the copy puts on the machine and the activation names there.
@@ -448,13 +403,14 @@ def _value(key: str, record: Mapping[str, Any]) -> Value:
 
 def _file(key: str, name: str, file: Any) -> ValueFile:
     record = _mapping(file, of=f"{key} file {name}")
+    at = f"{key}/{name}"
     return ValueFile(
         name=name,
-        path=_text(record, "path", of=f"{key}/{name}"),
-        secrecy=_text(record, "secrecy", of=f"{key}/{name}"),
-        owner=_text(record, "owner", of=f"{key}/{name}"),
-        group=_text(record, "group", of=f"{key}/{name}"),
-        mode=_text(record, "mode", of=f"{key}/{name}"),
+        path=_text(record, "path", of=at),
+        secrecy=_text(record, "secrecy", of=at),
+        owner=_text(record, "owner", of=at),
+        group=_text(record, "group", of=at),
+        mode=_text(record, "mode", of=at),
     )
 
 

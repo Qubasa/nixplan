@@ -5,12 +5,6 @@
 # here. This file adds only what the endpoint imposes and the plan does not say:
 # flakelet's two naming rules, the install section, and the metadata it reads back.
 #
-# The three refusals here raise, and each is a condition the deployment build
-# reports as an error row first: it asks this file's own predicates, because which
-# realiser meets an entry is a fact of the realisation statement and no plan field
-# carries it. A raise here is the answer a caller reaching this file directly
-# receives.
-#
 # reader is an argument so a caller holding the two files as store paths can hand
 # it over instead of relying on their relative positions.
 {
@@ -57,10 +51,10 @@ let
 
   # flakelet's unit rule: a unit file's base is the service name or begins with it
   # followed by a hyphen, an instance is one `@` at most, and the suffix is one the
-  # endpoint links. Every class is closed rather than a wildcard, because the
-  # endpoint links a file by the name it is handed and reads that name as one
-  # line: a wildcard admitting a line break makes the second line a directive no
-  # module wrote, and one admitting `/` names another directory.
+  # endpoint links. Every class is closed rather than a wildcard: the endpoint
+  # links a file by the name it is handed and reads that name as one line, so a
+  # wildcard admitting a line break makes the second line a directive no module
+  # wrote, and one admitting `/` names another directory.
   unitSuffixes = [
     "service"
     "socket"
@@ -102,15 +96,9 @@ let
       fail accounts.unitRefused "entry ${quote key} renders the unit file ${quote file}, which the endpoint refuses: ${unitRule name}";
   };
 
-  # The install section is the binding's decision, not a plan field. The plan says
-  # when a unit runs, and "enabled" means something different to every backend:
-  # flakelet starts a unit that carries one and leaves the rest to systemd, to be
-  # pulled in on demand by a socket or a timer.
-  #
-  # So a long-running unit is wanted by multi-user.target, while a scheduled unit's
-  # timer is wanted by timers.target and its service is wanted by nothing. An
-  # install section on that service would run the job once at deploy time and then
-  # again on its schedule, which is the mistake this rule prevents.
+  # The install section is the binding's decision, not a plan field: "enabled"
+  # means something different to every backend, and the plan says only when a
+  # unit runs.
   installSection = target: "\n[Install]\nWantedBy=${target}\n";
 
   # A host path this realiser shows has to name bytes the machine already holds,
@@ -137,6 +125,13 @@ let
   recordRule = "a configuration file this realiser shows carries the record a store object carries, ${reader.recordOf reader.storeRecord}, because it binds store objects and runs no step on the machine to install another";
 
   acceptsRecord = p: p.kind != "configuration-file" || !p.install;
+
+  renderUnit =
+    image: unitName:
+    reader.renderUnit image unitName
+    + (if image.units.${unitName}.timer == null then installSection "multi-user.target" else "");
+
+  renderTimer = image: unitName: reader.renderTimer image unitName + installSection "timers.target";
 in
 {
   inherit
@@ -153,7 +148,13 @@ in
     accounts
     ;
 
-  inherit (reader) backend;
+  inherit renderUnit renderTimer;
+
+  # The endpoint's own files, rendered by this realiser's two wrappers rather
+  # than by the shared reading's.
+  renderedUnits = reader.renderedUnitsBy { inherit renderUnit renderTimer; };
+
+  inherit (reader) backend systemdDirectives;
 
   read =
     { plan, key }:
@@ -183,13 +184,6 @@ in
       fail accounts.pathNotInstallable "entry ${quote key} is shown the host path ${quote first.path}, whose declaration states ${quote (reader.recordOf first)}: ${recordRule}"
     else
       image;
-
-  renderUnit =
-    image: unitName:
-    reader.renderUnit image unitName
-    + (if image.units.${unitName}.timer == null then installSection "multi-user.target" else "");
-
-  renderTimer = image: unitName: reader.renderTimer image unitName + installSection "timers.target";
 
   # What the endpoint reads back. The plan key goes in the field whose only
   # consumer is display and provenance, and settings_hash is the entry's version

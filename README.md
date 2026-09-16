@@ -40,7 +40,7 @@ tests/e2e/   six folders of real machines, and the harness they share
 fixtures/  the worked deployment the unit suites evaluate, with its golden plan
 perf/      two synthetic deployments, a measurement harness and committed budgets
 docs/      the documentation, starting at docs/README.md
-openspec/  the change records this repository was built from
+openspec/  one spec per capability, the open changes, and the archive they land in
 ```
 
 ## Using it from your own flake

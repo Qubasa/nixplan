@@ -10,7 +10,7 @@
   libSource,
   perfSource,
   repoSource,
-  changesRoot,
+  openspecRoot,
   imageSource,
   operatorSource,
   secretsSource,
@@ -112,7 +112,6 @@ let
     };
     flakelet = import ./unit/flakelet.nix {
       inherit
-        planner
         support
         flakeletSource
         imageSource
@@ -125,7 +124,7 @@ let
     coverage = import ./unit/coverage.nix {
       inherit
         support
-        changesRoot
+        openspecRoot
         perfSource
         repoSource
         ;

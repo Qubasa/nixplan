@@ -5,7 +5,7 @@
 from ``$PLANNER_E2E_GUEST_IMAGE``, puts the deployment on the machines its plan
 placed the entries on with ``planner apply``, and observes what the two machines
 then do. One test per scenario of
-``openspec/changes/prove-plan-on-real-machines/specs/delivery/real-cluster/spec.md``,
+``openspec/specs/delivery/real-cluster/spec.md``,
 named after it.
 
 The build runs in this process and the apply runs through ``Cluster.run``

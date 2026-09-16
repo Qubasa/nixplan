@@ -1,5 +1,8 @@
 {
   "margin": 0.15,
+  "interpreter": "2.34.8",
+  "date": "2026-09-15",
+  "note": "Re-recorded for hold-every-invariant-a-counterexample-breaks, which turned forty-nine counterexamples into rows. Every gated counter rose between 11% and 27% per entry and nrOpUpdateValuesCopied fell, and five readings account for it: the generated-value state answer is now read for its kind at three depths per file, every settings knob is verified against its declared type before it enters a key input, each implementation's argument pattern is read with builtins.toXML before it is applied, each delivered read is verified against the consuming interface's own export type, and the claim index gained the nesting pass and the plan-key families. The growth bound improved at the same time - list.elements across sizes 4 to 256 went from 1.251 to 0.740 - because the mention scan stopped comparing every value of the fleet against every string and now reads the paths a site names by their own shape and looks each up.",
   "growth": {
     "bound": 1.25,
     "sizes": [
@@ -13,9 +16,6 @@
   "fixtures": {
     "worked": {
       "fixture": "worked",
-      "interpreter": "2.34.8",
-      "date": "2026-09-15",
-      "margin": 0.15,
       "perEntry": {
         "nrThunks": 1073.2728,
         "nrFunctionCalls": 620.1819,
@@ -26,14 +26,10 @@
         "list.elements": 247.9091,
         "nrOpUpdateValuesCopied": 55,
         "gc.totalBytes": 59793.4546
-      },
-      "note": "Re-recorded for hold-every-invariant-a-counterexample-breaks, which turned forty-nine counterexamples into rows. Every gated counter rose between 11% and 27% per entry and nrOpUpdateValuesCopied fell, and five readings account for it: the generated-value state answer is now read for its kind at three depths per file, every settings knob is verified against its declared type before it enters a key input, each implementation's argument pattern is read with builtins.toXML before it is applied, each delivered read is verified against the consuming interface's own export type, and the claim index gained the nesting pass and the plan-key families. The growth bound improved at the same time - list.elements across sizes 4 to 256 went from 1.251 to 0.740 - because the mention scan stopped comparing every value of the fleet against every string and now reads the paths a site names by their own shape and looks each up."
+      }
     },
     "fleet-4": {
       "fixture": "fleet",
-      "interpreter": "2.34.8",
-      "date": "2026-09-15",
-      "margin": 0.15,
       "perEntry": {
         "nrThunks": 1188.7693,
         "nrFunctionCalls": 756.2308,
@@ -44,14 +40,10 @@
         "list.elements": 327.1539,
         "nrOpUpdateValuesCopied": 38.3077,
         "gc.totalBytes": 67069.5385
-      },
-      "note": "Re-recorded for hold-every-invariant-a-counterexample-breaks, which turned forty-nine counterexamples into rows. Every gated counter rose between 11% and 27% per entry and nrOpUpdateValuesCopied fell, and five readings account for it: the generated-value state answer is now read for its kind at three depths per file, every settings knob is verified against its declared type before it enters a key input, each implementation's argument pattern is read with builtins.toXML before it is applied, each delivered read is verified against the consuming interface's own export type, and the claim index gained the nesting pass and the plan-key families. The growth bound improved at the same time - list.elements across sizes 4 to 256 went from 1.251 to 0.740 - because the mention scan stopped comparing every value of the fleet against every string and now reads the paths a site names by their own shape and looks each up."
+      }
     },
     "fleet-16": {
       "fixture": "fleet",
-      "interpreter": "2.34.8",
-      "date": "2026-09-15",
-      "margin": 0.15,
       "perEntry": {
         "nrThunks": 837.5103,
         "nrFunctionCalls": 592.2245,
@@ -62,14 +54,10 @@
         "list.elements": 263.6123,
         "nrOpUpdateValuesCopied": 14.5715,
         "gc.totalBytes": 47001.1429
-      },
-      "note": "Re-recorded for hold-every-invariant-a-counterexample-breaks, which turned forty-nine counterexamples into rows. Every gated counter rose between 11% and 27% per entry and nrOpUpdateValuesCopied fell, and five readings account for it: the generated-value state answer is now read for its kind at three depths per file, every settings knob is verified against its declared type before it enters a key input, each implementation's argument pattern is read with builtins.toXML before it is applied, each delivered read is verified against the consuming interface's own export type, and the claim index gained the nesting pass and the plan-key families. The growth bound improved at the same time - list.elements across sizes 4 to 256 went from 1.251 to 0.740 - because the mention scan stopped comparing every value of the fleet against every string and now reads the paths a site names by their own shape and looks each up."
+      }
     },
     "fleet-64": {
       "fixture": "fleet",
-      "interpreter": "2.34.8",
-      "date": "2026-09-15",
-      "margin": 0.15,
       "perEntry": {
         "nrThunks": 742.8705,
         "nrFunctionCalls": 548.0363,
@@ -80,14 +68,10 @@
         "list.elements": 246.4923,
         "nrOpUpdateValuesCopied": 8.1762,
         "gc.totalBytes": 41622.3835
-      },
-      "note": "Re-recorded for hold-every-invariant-a-counterexample-breaks, which turned forty-nine counterexamples into rows. Every gated counter rose between 11% and 27% per entry and nrOpUpdateValuesCopied fell, and five readings account for it: the generated-value state answer is now read for its kind at three depths per file, every settings knob is verified against its declared type before it enters a key input, each implementation's argument pattern is read with builtins.toXML before it is applied, each delivered read is verified against the consuming interface's own export type, and the claim index gained the nesting pass and the plan-key families. The growth bound improved at the same time - list.elements across sizes 4 to 256 went from 1.251 to 0.740 - because the mention scan stopped comparing every value of the fleet against every string and now reads the paths a site names by their own shape and looks each up."
+      }
     },
     "fleet-256": {
       "fixture": "fleet",
-      "interpreter": "2.34.8",
-      "date": "2026-09-15",
-      "margin": 0.15,
       "perEntry": {
         "nrThunks": 718.7491,
         "nrFunctionCalls": 536.7738,
@@ -98,14 +82,10 @@
         "list.elements": 242.1288,
         "nrOpUpdateValuesCopied": 6.5462,
         "gc.totalBytes": 40222.1483
-      },
-      "note": "Re-recorded for hold-every-invariant-a-counterexample-breaks, which turned forty-nine counterexamples into rows. Every gated counter rose between 11% and 27% per entry and nrOpUpdateValuesCopied fell, and five readings account for it: the generated-value state answer is now read for its kind at three depths per file, every settings knob is verified against its declared type before it enters a key input, each implementation's argument pattern is read with builtins.toXML before it is applied, each delivered read is verified against the consuming interface's own export type, and the claim index gained the nesting pass and the plan-key families. The growth bound improved at the same time - list.elements across sizes 4 to 256 went from 1.251 to 0.740 - because the mention scan stopped comparing every value of the fleet against every string and now reads the paths a site names by their own shape and looks each up."
+      }
     },
     "mesh-4": {
       "fixture": "mesh",
-      "interpreter": "2.34.8",
-      "date": "2026-09-15",
-      "margin": 0.15,
       "perEntry": {
         "nrThunks": 1238.7693,
         "nrFunctionCalls": 799.4616,
@@ -116,14 +96,10 @@
         "list.elements": 359.3847,
         "nrOpUpdateValuesCopied": 38.2308,
         "gc.totalBytes": 69656.6154
-      },
-      "note": "Re-recorded for hold-every-invariant-a-counterexample-breaks, which turned forty-nine counterexamples into rows. Every gated counter rose between 11% and 27% per entry and nrOpUpdateValuesCopied fell, and five readings account for it: the generated-value state answer is now read for its kind at three depths per file, every settings knob is verified against its declared type before it enters a key input, each implementation's argument pattern is read with builtins.toXML before it is applied, each delivered read is verified against the consuming interface's own export type, and the claim index gained the nesting pass and the plan-key families. The growth bound improved at the same time - list.elements across sizes 4 to 256 went from 1.251 to 0.740 - because the mention scan stopped comparing every value of the fleet against every string and now reads the paths a site names by their own shape and looks each up."
+      }
     },
     "mesh-16": {
       "fixture": "mesh",
-      "interpreter": "2.34.8",
-      "date": "2026-09-15",
-      "margin": 0.15,
       "perEntry": {
         "nrThunks": 893.1429,
         "nrFunctionCalls": 640.7143,
@@ -134,14 +110,10 @@
         "list.elements": 299.8368,
         "nrOpUpdateValuesCopied": 14.5511,
         "gc.totalBytes": 50223.0205
-      },
-      "note": "Re-recorded for hold-every-invariant-a-counterexample-breaks, which turned forty-nine counterexamples into rows. Every gated counter rose between 11% and 27% per entry and nrOpUpdateValuesCopied fell, and five readings account for it: the generated-value state answer is now read for its kind at three depths per file, every settings knob is verified against its declared type before it enters a key input, each implementation's argument pattern is read with builtins.toXML before it is applied, each delivered read is verified against the consuming interface's own export type, and the claim index gained the nesting pass and the plan-key families. The growth bound improved at the same time - list.elements across sizes 4 to 256 went from 1.251 to 0.740 - because the mention scan stopped comparing every value of the fleet against every string and now reads the paths a site names by their own shape and looks each up."
+      }
     },
     "mesh-64": {
       "fixture": "mesh",
-      "interpreter": "2.34.8",
-      "date": "2026-09-15",
-      "margin": 0.15,
       "perEntry": {
         "nrThunks": 800.0208,
         "nrFunctionCalls": 597.9016,
@@ -152,14 +124,10 @@
         "list.elements": 283.7928,
         "nrOpUpdateValuesCopied": 8.171,
         "gc.totalBytes": 45221.7203
-      },
-      "note": "Re-recorded for hold-every-invariant-a-counterexample-breaks, which turned forty-nine counterexamples into rows. Every gated counter rose between 11% and 27% per entry and nrOpUpdateValuesCopied fell, and five readings account for it: the generated-value state answer is now read for its kind at three depths per file, every settings knob is verified against its declared type before it enters a key input, each implementation's argument pattern is read with builtins.toXML before it is applied, each delivered read is verified against the consuming interface's own export type, and the claim index gained the nesting pass and the plan-key families. The growth bound improved at the same time - list.elements across sizes 4 to 256 went from 1.251 to 0.740 - because the mention scan stopped comparing every value of the fleet against every string and now reads the paths a site names by their own shape and looks each up."
+      }
     },
     "mesh-256": {
       "fixture": "mesh",
-      "interpreter": "2.34.8",
-      "date": "2026-09-15",
-      "margin": 0.15,
       "perEntry": {
         "nrThunks": 776.2861,
         "nrFunctionCalls": 586.9896,
@@ -170,8 +138,7 @@
         "list.elements": 279.7036,
         "nrOpUpdateValuesCopied": 6.5449,
         "gc.totalBytes": 43771.4851
-      },
-      "note": "Re-recorded for hold-every-invariant-a-counterexample-breaks, which turned forty-nine counterexamples into rows. Every gated counter rose between 11% and 27% per entry and nrOpUpdateValuesCopied fell, and five readings account for it: the generated-value state answer is now read for its kind at three depths per file, every settings knob is verified against its declared type before it enters a key input, each implementation's argument pattern is read with builtins.toXML before it is applied, each delivered read is verified against the consuming interface's own export type, and the claim index gained the nesting pass and the plan-key families. The growth bound improved at the same time - list.elements across sizes 4 to 256 went from 1.251 to 0.740 - because the mention scan stopped comparing every value of the fleet against every string and now reads the paths a site names by their own shape and looks each up."
+      }
     }
   }
 }

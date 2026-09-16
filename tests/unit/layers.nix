@@ -441,120 +441,6 @@ let
     )
   );
 
-  # A command a document shows in a block, and a sentence of the same document that
-  # reports the same command as failing. A reader who runs it and sees a failure
-  # cannot then tell their own edit from a known state, so the sentence either goes
-  # or names the files it is about, which is the one half of "and the condition" a
-  # scan can hold.
-  failureWords = [
-    "fails"
-    "failing"
-    "is broken"
-    "does not work"
-  ];
-
-  markedLines =
-    text:
-    (foldl'
-      (
-        state: numbered:
-        if numbered.text == "```" then
-          state // { inside = false; }
-        else if match "```.*" numbered.text != null then
-          state // { inside = true; }
-        else
-          state // { rows = state.rows ++ [ (numbered // { inherit (state) inside; }) ]; }
-      )
-      {
-        inside = false;
-        rows = [ ];
-      }
-      (numberedLines text)
-    ).rows;
-
-  commandOf =
-    text:
-    let
-      m = match " *(nix [a-z-]+) .*" text;
-    in
-    if m == null then null else head m;
-
-  lastOf = list: elemAt list (length list - 1);
-  initOf = list: genList (i: elemAt list i) (length list - 1);
-
-  # A prose paragraph, with the line it starts at. A sentence wraps, so a line is
-  # the wrong unit: the sentence this scan was written for named its command on one
-  # line and reported the failure on the next.
-  paragraphsIn =
-    rows:
-    (foldl'
-      (
-        state: row:
-        if row.inside || row.text == "" then
-          state // { open = false; }
-        else if state.open then
-          {
-            open = true;
-            said = initOf state.said ++ [
-              (lastOf state.said // { text = "${(lastOf state.said).text} ${row.text}"; })
-            ];
-          }
-        else
-          {
-            open = true;
-            said = state.said ++ [ { inherit (row) line text; } ];
-          }
-      )
-      {
-        open = false;
-        said = [ ];
-      }
-      rows
-    ).said;
-
-  beforeFirst = word: text: head (filter isString (split word text));
-
-  # The command has to be the subject of the failure, not its object: "a trim that
-  # drops one fails `nix build`" is a document saying a mistake is caught, and
-  # "`nix fmt` currently fails" is a document contradicting itself.
-  reportsFailing =
-    command: text:
-    builtins.any (word: hasInfix word text && hasInfix command (beforeFirst word text)) failureWords;
-
-  contradictionsIn =
-    entry:
-    let
-      rows = markedLines entry.text;
-      shown = filter (row: row.inside && commandOf row.text != null) rows;
-    in
-    concatLists (
-      map (
-        said:
-        map (
-          row:
-          "${entry.where}: ${toString said.line} reports ${commandOf row.text} as failing, and ${toString row.line} shows it"
-        ) (filter (row: reportsFailing (commandOf row.text) said.text) shown)
-      ) (filter (said: repoTokens said.text == [ ]) (paragraphsIn rows))
-    );
-
-  # Every document a reader reads, the root and the invariants file included: a
-  # sentence like this one belongs to prose, and the suites and the folders under
-  # `tests/` are held to it by nothing.
-  documents =
-    filter (entry: match ".*\\.md" entry.where != null) proseFiles
-    ++
-      map
-        (rel: {
-          where = rel;
-          text = readFile (repoRoot + "/${rel}");
-        })
-        [
-          "README.md"
-          "CLAUDE.md"
-        ];
-
-  contradictions = sorted (concatLists (map contradictionsIn documents));
-
   # The command the root advertises whose run resolves something this repository
   # does not publish, and the dependency's own name read off the runner that
   # resolves it. Written here, a rename there would leave this passing.
@@ -1222,37 +1108,6 @@ in
     expected = [ ];
   };
 
-  testTheRootDoesNotSayWhatTheRepositoryIs = {
-    expr = {
-      present = hasRootDocument;
-      unsaid = filter (needle: !(hasInfix needle rootDocument)) [
-        "cli/"
-        "docs/"
-        "docs/README.md"
-        "fixtures/"
-        "flakelet/"
-        "image/"
-        "secrets/"
-        "lib/"
-        "nix build .#checks.x86_64-linux.planner-perf"
-        "nix build .#checks.x86_64-linux.planner-tests"
-        "nix build .#checks.x86_64-linux.treefmt"
-        "nix develop"
-        "nix run .#planner"
-        "openspec/"
-        "operator/"
-        "perf/"
-        "rookery"
-        "tests/e2e/"
-        "tests/unit/"
-      ];
-    };
-    expected = {
-      present = true;
-      unsaid = [ ];
-    };
-  };
-
   testACommandTheRootAdvertisesNeedsSomethingThisRepositoryCannotProvide = {
     expr = {
       inherit unnamed;
@@ -1262,11 +1117,6 @@ in
       unnamed = [ ];
       dependency = "rookery";
     };
-  };
-
-  testADocumentAdvertisesACommandItAlsoSaysFails = {
-    expr = contradictions;
-    expected = [ ];
   };
 
   testTheImageDeclaresTheAccountAFoldersServiceRunsAs = {

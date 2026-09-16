@@ -9,7 +9,7 @@ let
   folder = ./fixtures/minimal-typed-edge;
   planner = import ./lib { inherit korora systems platformSource; };
   worked = planner.mkPlan (import ./tests/unit/worked.nix { inherit planner folder; }).args;
-  changesRoot = ./openspec/changes;
+  openspecRoot = ./openspec;
   imageSource = ./image;
   secretsSource = ./secrets;
   flakeletSource = ./flakelet;
@@ -21,7 +21,7 @@ let
       nixpkgsLib
       platformSource
       folder
-      changesRoot
+      openspecRoot
       ;
     libSource = ./lib;
     inherit
@@ -100,7 +100,7 @@ in
           operatorSource = ${./operator};
           perfSource = ${./perf};
           repoSource = ${./.};
-          changesRoot = ${changesRoot};
+          openspecRoot = ${openspecRoot};
         }
       '';
 

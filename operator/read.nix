@@ -2,11 +2,8 @@
 # builds each, what the result is addressed by, and every way the build is
 # refused. Everything here is a pure function of the plan and the realisation
 # statement, and it is total - a refusal is a row, and default.nix is what raises
-# on one.
-#
-# The split is the realisers': read.nix is the whole reading, and everything
-# beside it is derivations over what this returned. The evaluating layer has no
-# `pkgs`, so a unit suite can assert this file and never a built artifact.
+# on one. The evaluating layer has no `pkgs`, so a unit suite can assert this
+# file and never a built artifact.
 {
   planner,
   imageReader ? import ../image/read.nix { inherit planner; },
@@ -21,7 +18,6 @@ let
     attrNames
     concatLists
     elem
-    elemAt
     filter
     groupBy
     head
@@ -29,11 +25,11 @@ let
     isString
     length
     mapAttrs
-    match
     typeOf
     ;
 
   inherit (planner.util)
+    indexBy
     optional
     quote
     quoteList
@@ -55,10 +51,7 @@ let
   defaultRealiser = "flakelet";
 
   # A plan key in a path would be legal and awful: `@` and `:` are the two
-  # characters the key grammar splits on, so every consumer would quote them. The
-  # projection is one rule and the manifest records the mapping, so nothing
-  # reconstructs a name from a key. It is not injective, which is why a collision
-  # is a refusal rather than a mangling.
+  # characters the key grammar splits on, so every consumer would quote them.
   projected = builtins.replaceStrings [ ":" "@" ] [ "-" "-" ];
 
   # What a record is, is decided by what it records. `machine` is a legal instance
@@ -88,19 +81,9 @@ let
     in
     if shapeOf record == "machine" then record else { };
 
-  parseKey =
-    key:
-    let
-      m = match "([^:]+):([^@]+)@(.+)" key;
-    in
-    if m == null then
-      null
-    else
-      {
-        instance = elemAt m 0;
-        service = elemAt m 1;
-        machine = elemAt m 2;
-      };
+  # The key grammar is the shared reading's, read here rather than restated: the
+  # total half of it is what a layer that may not raise asks.
+  parseKey = imageReader.keyParts;
 
   prefixOf = parts: "${parts.instance}:${parts.service}";
 
@@ -111,20 +94,19 @@ let
   # than per field would leave a reader having to know which fields inherit.
   statementSteps =
     realise: key: parts:
-    filter (s: s.value != null) [
-      {
-        from = key;
-        value = realise.${key} or null;
-      }
-      {
-        from = prefixOf parts;
-        value = realise.${prefixOf parts} or null;
-      }
-      {
-        from = "default";
-        value = realise.default or null;
-      }
-    ];
+    let
+      stepOf = from: {
+        inherit from;
+        value = realise.${from} or null;
+      };
+    in
+    filter (s: s.value != null) (
+      map stepOf [
+        key
+        (prefixOf parts)
+        "default"
+      ]
+    );
 
   fieldOf =
     steps: field:
@@ -133,25 +115,19 @@ let
     in
     if carrying == [ ] then null else (head carrying).value.${field};
 
-  unitFilesOf =
-    name: units:
-    sortStrings (
-      concatLists (
-        map (
-          unitName:
-          [ (imageReader.unitFileName name unitName) ]
-          ++ optional (units.${unitName} ? schedule) (imageReader.timerFileName name unitName)
-        ) (attrNames units)
-      )
-    );
+  # The names are the shared reading's own derivation, read here rather than
+  # derived a second time: a row about a unit file name and the refusal over the
+  # same name ask one function.
+  unitFilesOf = name: units: sortStrings (imageReader.unitFilesOf name units);
 
   readEntry =
-    {
-      plan,
-      realise,
-    }:
+    { plan, realise }:
     key:
     let
+      # Every row below is about this entry, so the subject is the reading's and
+      # what a site states is the identifier and the sentences.
+      row = said: planner.error (said // { subject = key; });
+
       parts = parseKey key;
       steps = statementSteps realise key parts;
       statedRealiser = fieldOf steps "realiser";
@@ -182,7 +158,7 @@ let
         else
           flakeletReader.confinement;
       imposed = if confinement == null then "" else confinement;
-      emits = if realiser == "image" then imageReader.backend else flakeletReader.backend;
+      emits = if known then endpoint.backend else readers.${defaultRealiser}.backend;
       runs = (entry.target or { }).serviceManager or null;
       hostPaths = imageReader.hostPaths { inherit key entry; };
       recordFields = [
@@ -205,11 +181,15 @@ let
         ) (filter (p: !(statesARecord p)) hostPaths)
       );
       recorded = filter statesARecord hostPaths;
+      # A realiser that runs no step on the machine states which paths it can be
+      # shown, and is recognised by publishing the two predicates rather than by
+      # its name.
+      statesShownPaths = known && endpoint ? acceptsHostPath;
       unassemblable =
-        if realiser == "flakelet" then filter (p: !(flakeletReader.acceptsHostPath p)) recorded else [ ];
+        if statesShownPaths then filter (p: !(endpoint.acceptsHostPath p)) recorded else [ ];
       uninstallable =
-        if realiser == "flakelet" then
-          filter (p: flakeletReader.acceptsHostPath p && !(flakeletReader.acceptsRecord p)) recorded
+        if statesShownPaths then
+          filter (p: endpoint.acceptsHostPath p && !(endpoint.acceptsRecord p)) recorded
         else
           [ ];
 
@@ -246,11 +226,7 @@ let
       # The directive table is the stated realiser's own, asked of it rather than
       # restated here, so a directive added to a builder is a field this row
       # stops naming with no edit in this file.
-      directives =
-        if realiser == "image" then
-          imageReader.systemdDirectives
-        else
-          flakeletReader.reader.systemdDirectives;
+      directives = if known then endpoint.systemdDirectives else { };
       unrendered =
         if !known then
           [ ]
@@ -286,22 +262,18 @@ let
         profile = imposed;
       };
       rows =
-        optional (malformed != [ ]) (
-          planner.error {
-            id = "operator-statement-not-a-record";
-            subject = key;
-            message = "the realisation statement ${quote found.from} that entry ${quote key} is read by is ${
-              if isString found.value then "the string ${quote found.value}" else "a ${typeOf found.value}"
-            } rather than a record";
-            evidence = "a statement is a record of the facts a realisation needs that no plan field carries, and a bare value carries none of them";
-            resolution = "write `${found.from} = { realiser = <realiser>; };` in the deployment's `realise` argument";
-          }
-        )
+        optional (malformed != [ ]) (row {
+          id = "operator-statement-not-a-record";
+          message = "the realisation statement ${quote found.from} that entry ${quote key} is read by is ${
+            if isString found.value then "the string ${quote found.value}" else "a ${typeOf found.value}"
+          } rather than a record";
+          evidence = "a statement is a record of the facts a realisation needs that no plan field carries, and a bare value carries none of them";
+          resolution = "write `${found.from} = { realiser = <realiser>; };` in the deployment's `realise` argument";
+        })
         ++ map (
           r:
-          planner.error {
+          row {
             id = "operator-plan-field-malformed";
-            subject = key;
             message = "the plan record ${quote key} records ${quote r.field} on configuration file ${quote r.path} as ${shown r.value}, and the reading of it needs a string";
             evidence = "a record the planner already refused is recorded incompletely, and every comparison this reading makes against it interpolates the three fields it states";
             resolution = "state ${quote r.field} on ${quote r.path} in the module, which is what the planner's own row about that file asks for";
@@ -309,87 +281,68 @@ let
         ) unrecorded
         ++ (
           if !realised then
-            optional named (
-              planner.error {
-                id = "operator-entry-realises-nothing";
-                subject = key;
-                message = "entry ${quote key} is stated to be realised by ${shown realiser} and declares no unit, so there is nothing to realise for it";
-                evidence = "an entry whose whole contribution is an export runs nothing, and a realiser of it would produce an artifact with no unit to attach";
-                resolution = "remove ${quote key} from the deployment's `realise` argument, or declare a unit for it";
-              }
-            )
+            optional named (row {
+              id = "operator-entry-realises-nothing";
+              message = "entry ${quote key} is stated to be realised by ${shown realiser} and declares no unit, so there is nothing to realise for it";
+              evidence = "an entry whose whole contribution is an export runs nothing, and a realiser of it would produce an artifact with no unit to attach";
+              resolution = "remove ${quote key} from the deployment's `realise` argument, or declare a unit for it";
+            })
           else
-            optional (!known) (
-              planner.error {
-                id = "operator-realiser-unknown";
-                subject = key;
-                message = "entry ${quote key} is stated to be realised by ${shown realiser}, and the realisers that exist are ${quoteList realisers}";
-                evidence = "the realisation statement is read by plan key, then by the `<instance>:<service>` prefix, then by `default`";
-                resolution = "state one of ${quoteList realisers} for ${quote key} in the deployment's `realise` argument";
-              }
-            )
-            ++ optional (known && realiser == "image" && profile == null) (
-              planner.error {
-                id = "operator-image-profile-missing";
-                subject = key;
-                message = "entry ${quote key} is stated to be realised as an image and its statement carries no ${quote "profile"}";
-                evidence = "a confinement profile is a build input no plan field records, so it is stated rather than chosen by the builder";
-                resolution = "add a `profile` to the `realise` statement of ${quote key}: one of ${quoteList imageReader.profileNames}";
-              }
-            )
-            ++ optional (known && realiser == "image" && profile != null && !inDomain) (
-              planner.error {
-                id = "operator-image-profile-unknown";
-                subject = key;
-                message = "entry ${quote key} is stated to be realised as an image under the confinement profile ${shown profile}, and the profiles the realiser implements are ${quoteList imageReader.profileNames}";
-                evidence = "a confinement profile is a build input no plan field records, so it is stated rather than chosen by the builder";
-                resolution = "state one of ${quoteList imageReader.profileNames} as the `profile` of ${quote key}";
-              }
-            )
+            optional (!known) (row {
+              id = "operator-realiser-unknown";
+              message = "entry ${quote key} is stated to be realised by ${shown realiser}, and the realisers that exist are ${quoteList realisers}";
+              evidence = "the realisation statement is read by plan key, then by the `<instance>:<service>` prefix, then by `default`";
+              resolution = "state one of ${quoteList realisers} for ${quote key} in the deployment's `realise` argument";
+            })
+            ++ optional (known && realiser == "image" && profile == null) (row {
+              id = "operator-image-profile-missing";
+              message = "entry ${quote key} is stated to be realised as an image and its statement carries no ${quote "profile"}";
+              evidence = "a confinement profile is a build input no plan field records, so it is stated rather than chosen by the builder";
+              resolution = "add a `profile` to the `realise` statement of ${quote key}: one of ${quoteList imageReader.profileNames}";
+            })
+            ++ optional (known && realiser == "image" && profile != null && !inDomain) (row {
+              id = "operator-image-profile-unknown";
+              message = "entry ${quote key} is stated to be realised as an image under the confinement profile ${shown profile}, and the profiles the realiser implements are ${quoteList imageReader.profileNames}";
+              evidence = "a confinement profile is a build input no plan field records, so it is stated rather than chosen by the builder";
+              resolution = "state one of ${quoteList imageReader.profileNames} as the `profile` of ${quote key}";
+            })
             ++ map (
               p:
-              planner.error {
+              row {
                 id = "operator-entry-path-not-assembled";
-                subject = key;
-                message = "entry ${quote key} is stated to be realised by ${quote realiser} and is shown the host path ${quote p.path}, whose recipe reads ${quote (p.needs or p.from)}, and ${flakeletReader.pathRule}";
+                message = "entry ${quote key} is stated to be realised by ${quote realiser} and is shown the host path ${quote p.path}, whose recipe reads ${quote (p.needs or p.from)}, and ${endpoint.pathRule}";
                 evidence = "a realisation statement decides which realiser meets the entry, and this one runs no step on the machine";
                 resolution = "state ${quote "image"} for ${quote key}, or stop declaring the ${p.kind} the path is assembled from";
               }
             ) unassemblable
             ++ map (
               p:
-              planner.error {
+              row {
                 id = "operator-entry-path-not-installable";
-                subject = key;
-                message = "entry ${quote key} is stated to be realised by ${quote realiser} and is shown the host path ${quote p.path}, whose declaration states ${quote (imageReader.recordOf p)}, and ${flakeletReader.recordRule}";
+                message = "entry ${quote key} is stated to be realised by ${quote realiser} and is shown the host path ${quote p.path}, whose declaration states ${quote (imageReader.recordOf p)}, and ${endpoint.recordRule}";
                 evidence = "a realisation statement decides which realiser meets the entry, and this one binds a store object rather than installing a file on the machine";
                 resolution = "state ${quote (imageReader.recordOf imageReader.storeRecord)} on ${quote p.path} in the module, or state ${quote "image"} for ${quote key}";
               }
             ) uninstallable
             ++ map (
               f:
-              planner.error {
+              row {
                 id = "operator-entry-extension-field-unrendered";
-                subject = key;
                 message = "entry ${quote key} unit ${quote f.unit} records the ${quote emits} extension field ${quote f.field}, and the stated realiser ${quote realiser} renders no directive for it";
                 evidence = "an extension declares the fields it accepts and the library accepts them, and which of them reach a unit file is the realiser's own directive table, asked of it rather than restated here";
                 resolution = "drop ${quote f.field} from the extension the unit applies in the module, or state a realiser whose table carries it";
               }
             ) unrendered
-            ++ optional (known && runs != null && runs != emits) (
-              planner.error {
-                id = "operator-entry-service-manager-mismatch";
-                subject = key;
-                message = "entry ${quote key} is planned for machine ${quote parts.machine}, which runs ${shown runs}, and the stated realiser ${quote realiser} emits for ${quote emits}";
-                evidence = "which service manager an artifact is emitted for is the realiser's, and which one a machine runs is the registry's";
-                resolution = "place ${quote key} on a machine running ${quote emits}, or state a realiser that emits for ${shown runs}";
-              }
-            )
+            ++ optional (known && runs != null && runs != emits) (row {
+              id = "operator-entry-service-manager-mismatch";
+              message = "entry ${quote key} is planned for machine ${quote parts.machine}, which runs ${shown runs}, and the stated realiser ${quote realiser} emits for ${quote emits}";
+              evidence = "which service manager an artifact is emitted for is the realiser's, and which one a machine runs is the registry's";
+              resolution = "place ${quote key} on a machine running ${quote emits}, or state a realiser that emits for ${shown runs}";
+            })
             ++ map (
               refused:
-              planner.error {
+              row {
                 id = "operator-entry-name-refused";
-                subject = key;
                 message = "entry ${quote key} is stated to be realised by ${quote realiser}, whose endpoint refuses ${refused.what} ${quote refused.named}: ${refused.rule}";
                 evidence = "the rule is the realiser's own, asked of it rather than restated, so this row and the realiser's refusal say one thing";
                 resolution = "rename the instance or the service of ${quote key} so that ${refused.what} it derives is one the endpoint accepts";
@@ -397,9 +350,8 @@ let
             ) (refusedNames ++ refusedUnits)
             ++ map (
               denial:
-              planner.error {
+              row {
                 id = "operator-entry-access-denied";
-                subject = key;
                 message = "entry ${quote key} unit ${quote denial.unit} needs ${denial.access}${
                   if denial ? path then
                     " at ${quote denial.path}, recorded ${quote denial.record} and read by ${quote denial.account},"
@@ -444,25 +396,26 @@ let
         rows = [ (fieldRow { inherit key field at; }) ];
       };
 
+  # The fields a delivered file's record owes the command, in the order a row
+  # about one is printed: the secrecy the report reads and the four the write
+  # reads.
+  fileFields = [
+    "path"
+    "secrecy"
+    "owner"
+    "group"
+    "mode"
+  ];
+
   readFile =
     key: name: file:
     let
       at = " on file ${quote name}";
-      path = planned key at file "path" "";
-      secrecy = planned key at file "secrecy" "";
-      owner = planned key at file "owner" "";
-      group = planned key at file "group" "";
-      mode = planned key at file "mode" "";
+      read = map (field: { inherit field; } // planned key at file field "") fileFields;
     in
     {
-      value = {
-        path = path.value;
-        secrecy = secrecy.value;
-        owner = owner.value;
-        group = group.value;
-        mode = mode.value;
-      };
-      rows = path.rows ++ secrecy.rows ++ owner.rows ++ group.rows ++ mode.rows;
+      value = indexBy (f: f.field) (f: f.value) read;
+      rows = concatLists (map (f: f.rows) read);
     };
 
   # `program` is recorded only where the plan records one, so the manifest of a
@@ -510,12 +463,9 @@ let
       ) names
     );
 
-  # Every unit file name the realisers derive, indexed per machine. The artifact
-  # name above carries the machine and so cannot collide inside one, while a
-  # derived unit file name joins the instance, the member and the unit into one
-  # string, so two members whose names and unit names differ can spell one file.
-  # Both realisers spend these names, which is why the index is here and not in
-  # either of them.
+  # Every unit file name the realisers derive, indexed per machine: two members
+  # whose names and unit names differ can spell one file, and both realisers
+  # spend these names, which is why the index is here and not in either of them.
   unitFileRows =
     entries:
     let

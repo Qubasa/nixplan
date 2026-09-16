@@ -1,11 +1,14 @@
 { planner, support }:
 let
   inherit (support)
+    consumer
     countById
     evidenceById
     hasInfix
+    identity
     messageById
     planOf
+    providerOf
     publicString
     publicUrl
     resolutionById
@@ -15,11 +18,6 @@ let
     soleRoot
     subjectsById
     ;
-
-  identity = planner.interface {
-    name = "identity";
-    exports.publicKey = publicString;
-  };
 
   pair = planner.interface {
     name = "host-identity";
@@ -42,15 +40,20 @@ let
     };
   };
 
-  registry."interfaces/default.nix" = { inherit identity pair; };
-
-  provider = _: {
-    provides.identity.interface = identity;
-    impl = _: {
-      provides.identity.exports.publicKey = "ssh-ed25519 AAAA";
-      units.only.command = "/bin/true";
+  # The same map with the two folders a set-valued read is attributed against,
+  # which is what every fold scenario plans over.
+  foldSources = sources // {
+    modules = sources.modules // {
+      authz = "modules/authz/default.nix";
+      hosts = "modules/hosts/default.nix";
+    };
+    leaves = sources.leaves // {
+      authz.only = "modules/authz/leaf.nix";
+      hosts.only = "modules/hosts/leaf.nix";
     };
   };
+
+  registry."interfaces/default.nix" = { inherit identity pair; };
 
   endpoint = planner.interface {
     name = "endpoint";
@@ -168,63 +171,17 @@ let
   # compares as an empty list rather than ending the evaluation.
   pathsOf = result: key: builtins.attrNames (result.plan.${key}.configData or { });
 
-  # The consumer records the names of what it received, so a refused slot is
-  # observable without the test touching it and aborting the suite.
-  consumer =
-    {
-      interface ? identity,
-      reach ? null,
-      reads ? null,
-    }:
-    _: {
-      uses.far = {
-        inherit interface;
-      }
-      // (if reach == null then { } else { inherit reach; })
-      // (if reads == null then { } else { inherit reads; });
-      impl =
-        { results, ... }:
-        {
-          units.only = {
-            command = "/bin/true";
-            env = {
-              SLOTS = builtins.concatStringsSep "," (builtins.attrNames results);
-              FAR = if results ? far then builtins.concatStringsSep "," (builtins.attrNames results.far) else "";
-            };
-          };
-        };
-    };
-
+  # This suite's wires are attributed, so every edge carries the same source map
+  # and the same registry and a scenario states only what it varies.
   edge =
-    {
-      consumerModule,
-      providerModule ? provider,
-      providerMachines ? [ "one" ],
-      varsState ? { },
-      interfaces ? registry,
-      wire ? {
-        instance = "provider";
-        provides = "identity";
-      },
-    }:
-    planOf {
-      inherit sources varsState interfaces;
-      instances = {
-        consumer = {
-          module = soleRoot { module = consumerModule; };
-          placement.every.only.machines = [ "one" ];
-        }
-        // (if wire == null then { } else { wire.far = wire; });
-        provider = {
-          module = soleRoot {
-            module = providerModule;
-            provides = [ "identity" ];
-          };
-          placement.every.only.machines = providerMachines;
-          exposes = [ "identity" ];
-        };
-      };
-    };
+    args:
+    support.edge (
+      {
+        inherit sources;
+        interfaces = registry;
+      }
+      // args
+    );
 
   publishes =
     module:
@@ -276,14 +233,6 @@ let
     );
 
   folderRegistry = iface: registry // { "interfaces/folded.nix".folded = iface; };
-
-  providerOf = iface: _: {
-    provides.identity.interface = iface;
-    impl = _: {
-      provides.identity.exports.publicKey = "ssh-ed25519 AAAA";
-      units.only.command = "/bin/true";
-    };
-  };
 
   # The folded value is what the consumer received, so it is recorded verbatim
   # rather than walked: not walking it is the point of the fold.
@@ -426,16 +375,7 @@ let
       }) consumers;
     in
     planOf {
-      sources = sources // {
-        modules = sources.modules // {
-          authz = "modules/authz/default.nix";
-          hosts = "modules/hosts/default.nix";
-        };
-        leaves = sources.leaves // {
-          authz.only = "modules/authz/leaf.nix";
-          hosts.only = "modules/hosts/leaf.nix";
-        };
-      };
+      sources = foldSources;
       interfaces = registry;
       instances = consuming // {
         provider = {
@@ -1127,42 +1067,24 @@ in
 
   testTheAddressAConsumerReadsIsTheProducersNotItsOwn =
     let
-      result = planOf {
-        inherit sources;
-        interfaces = registry;
-        instances = {
-          provider = {
-            module = soleRoot {
-              module = publisher;
-              provides = [ "endpoint" ];
-            };
-            placement.every.only.machines = [ "one" ];
-            exposes = [ "endpoint" ];
+      result = edge {
+        capability = "endpoint";
+        providerModule = publisher;
+        consumerMachines = [ "two" ];
+        consumerModule = _: {
+          uses.far = {
+            interface = endpoint;
+            reach = "one";
+            reads = [ "url" ];
           };
-          consumer = {
-            module = soleRoot {
-              module = _: {
-                uses.far = {
-                  interface = endpoint;
-                  reach = "one";
-                  reads = [ "url" ];
-                };
-                impl =
-                  { results, ... }:
-                  {
-                    units.only = {
-                      command = "/bin/true";
-                      env.FAR = results.far.url;
-                    };
-                  };
+          impl =
+            { results, ... }:
+            {
+              units.only = {
+                command = "/bin/true";
+                env.FAR = results.far.url;
               };
             };
-            placement.every.only.machines = [ "two" ];
-            wire.far = {
-              instance = "provider";
-              provides = "endpoint";
-            };
-          };
         };
       };
       consuming = result.plan."consumer:only@two";
@@ -1332,32 +1254,15 @@ in
       };
       run =
         iface:
-        planOf {
-          inherit sources;
+        edge {
           interfaces."interfaces/folded.nix".held = iface;
           varsState."holder:vars/app@one"."key".present = true;
-          instances = {
-            holder = {
-              module = soleRoot {
-                module = holder iface;
-                provides = [ "identity" ];
-              };
-              placement.every.only.machines = [ "one" ];
-              exposes = [ "identity" ];
-            };
-            consumer = {
-              module = soleRoot {
-                module = folds {
-                  inherit iface;
-                  reads = [ "key" ];
-                };
-              };
-              placement.every.only.machines = [ "two" ];
-              wire.far = {
-                instance = "holder";
-                provides = "identity";
-              };
-            };
+          providerName = "holder";
+          providerModule = holder iface;
+          consumerMachines = [ "two" ];
+          consumerModule = folds {
+            inherit iface;
+            reads = [ "key" ];
           };
         };
       unfolded = run plain;
@@ -1543,40 +1448,17 @@ in
             };
           };
       };
-      consuming = {
-        module = soleRoot { module = guarded; };
-        placement.every.only.machines = [ "one" ];
-        wire.far = {
-          instance = "provider";
-          provides = "identity";
-        };
-      };
-      result = planOf {
-        sources = sources // {
-          modules = sources.modules // {
-            authz = "modules/authz/default.nix";
-            hosts = "modules/hosts/default.nix";
-          };
-          leaves = sources.leaves // {
-            authz.only = "modules/authz/leaf.nix";
-            hosts.only = "modules/hosts/leaf.nix";
-          };
-        };
+      result = edge {
+        sources = foldSources;
         interfaces = folderRegistry iface;
-        instances = {
-          provider = {
-            module = soleRoot {
-              module = providerOf iface;
-              provides = [ "identity" ];
-            };
-            placement.every.only.machines = [
-              "one"
-              "two"
-            ];
-            exposes = [ "identity" ];
-          };
-          authz = consuming;
-          hosts = consuming;
+        providerModule = providerOf iface;
+        providerMachines = [
+          "one"
+          "two"
+        ];
+        consumers = {
+          authz.module = guarded;
+          hosts.module = guarded;
         };
       };
     in
@@ -1655,40 +1537,17 @@ in
             };
           };
       };
-      consuming = module: {
-        module = soleRoot { inherit module; };
-        placement.every.only.machines = [ "one" ];
-        wire.far = {
-          instance = "provider";
-          provides = "identity";
-        };
-      };
-      result = planOf {
-        sources = sources // {
-          modules = sources.modules // {
-            authz = "modules/authz/default.nix";
-            hosts = "modules/hosts/default.nix";
-          };
-          leaves = sources.leaves // {
-            authz.only = "modules/authz/leaf.nix";
-            hosts.only = "modules/hosts/leaf.nix";
-          };
-        };
+      result = edge {
+        sources = foldSources;
         interfaces = folderRegistry iface;
-        instances = {
-          provider = {
-            module = soleRoot {
-              module = providerOf iface;
-              provides = [ "identity" ];
-            };
-            placement.every.only.machines = [
-              "one"
-              "two"
-            ];
-            exposes = [ "identity" ];
-          };
-          authz = consuming (rendering authorizedKeys);
-          hosts = consuming (rendering knownHosts);
+        providerModule = providerOf iface;
+        providerMachines = [
+          "one"
+          "two"
+        ];
+        consumers = {
+          authz.module = rendering authorizedKeys;
+          hosts.module = rendering knownHosts;
         };
       };
       authzUnit = result.plan."authz:only@one".units.only;
@@ -1746,43 +1605,26 @@ in
           units.only.command = "/bin/true";
         };
       };
-      consuming = reads: {
-        module = soleRoot { module = folds { inherit iface reads; }; };
-        placement.every.only.machines = [ "one" ];
-        wire.far = {
-          instance = "provider";
-          provides = "identity";
-        };
-      };
-      result = planOf {
-        sources = sources // {
-          modules = sources.modules // {
-            authz = "modules/authz/default.nix";
-            hosts = "modules/hosts/default.nix";
-          };
-          leaves = sources.leaves // {
-            authz.only = "modules/authz/leaf.nix";
-            hosts.only = "modules/hosts/leaf.nix";
-          };
-        };
+      result = edge {
+        sources = foldSources;
         interfaces = folderRegistry iface;
-        instances = {
-          provider = {
-            module = soleRoot {
-              module = both;
-              provides = [ "identity" ];
-            };
-            placement.every.only.machines = [
-              "one"
-              "two"
-            ];
-            exposes = [ "identity" ];
+        providerModule = both;
+        providerMachines = [
+          "one"
+          "two"
+        ];
+        consumers = {
+          authz.module = folds {
+            inherit iface;
+            reads = [ "publicKey" ];
           };
-          authz = consuming [ "publicKey" ];
-          hosts = consuming [
-            "publicKey"
-            "comment"
-          ];
+          hosts.module = folds {
+            inherit iface;
+            reads = [
+              "publicKey"
+              "comment"
+            ];
+          };
         };
       };
     in
@@ -1850,16 +1692,9 @@ in
       # capability alone, which is the half attribution used to decide.
       planned =
         interfaces:
-        planOf {
-          inherit sources interfaces;
-          instances.provider = {
-            module = soleRoot {
-              module = providerOf iface;
-              provides = [ "identity" ];
-            };
-            placement.every.only.machines = [ "one" ];
-            exposes = [ "identity" ];
-          };
+        edge {
+          inherit interfaces;
+          providerModule = providerOf iface;
         };
       listed = planned (folderRegistry iface);
       unlisted = planned { };
@@ -1910,31 +1745,19 @@ in
             };
           };
       };
-      result = planOf {
-        inherit sources;
+      result = edge {
         interfaces = folderRegistry iface;
-        instances = {
-          provider = {
-            module = soleRoot {
-              module = providerOf iface;
-              provides = [ "identity" ];
-            };
-            placement.every.only.machines = [ "one" ];
-            exposes = [ "identity" ];
+        providerModule = providerOf iface;
+        consumerModule = twoSlots;
+        slot = null;
+        wire = {
+          far = {
+            instance = "provider";
+            provides = "identity";
           };
-          consumer = {
-            module = soleRoot { module = twoSlots; };
-            placement.every.only.machines = [ "one" ];
-            wire = {
-              far = {
-                instance = "provider";
-                provides = "identity";
-              };
-              near = {
-                instance = "provider";
-                provides = "identity";
-              };
-            };
+          near = {
+            instance = "provider";
+            provides = "identity";
           };
         };
       };
@@ -2118,35 +1941,16 @@ in
           theirs,
           publishes ? "publicKey",
         }:
-        planOf {
-          inherit sources;
+        edge {
           interfaces = {
             "interfaces/mine.nix".identity = mine;
             "interfaces/theirs.nix".identity = theirs;
           };
-          instances = {
-            consumer = {
-              module = soleRoot {
-                module = consumer {
-                  interface = mine;
-                  reads = [ "publicKey" ];
-                };
-              };
-              placement.every.only.machines = [ "one" ];
-              wire.far = {
-                instance = "provider";
-                provides = "identity";
-              };
-            };
-            provider = {
-              module = soleRoot {
-                module = publishing theirs publishes;
-                provides = [ "identity" ];
-              };
-              placement.every.only.machines = [ "one" ];
-              exposes = [ "identity" ];
-            };
+          consumerModule = consumer {
+            interface = mine;
+            reads = [ "publicKey" ];
           };
+          providerModule = publishing theirs publishes;
         };
       byClaim = refusing {
         mine = claiming { exports.publicKey = publicString; };
@@ -2292,35 +2096,18 @@ in
       };
       run =
         slotInterface:
-        planOf {
-          inherit sources;
+        edge {
           interfaces = {
             "interfaces/mine.nix".identity = mine;
             "interfaces/theirs.nix".identity = theirs;
           };
           varsState."holder:vars/app@one"."key".present = true;
-          instances = {
-            holder = {
-              module = soleRoot {
-                module = holder;
-                provides = [ "identity" ];
-              };
-              placement.every.only.machines = [ "one" ];
-              exposes = [ "identity" ];
-            };
-            consumer = {
-              module = soleRoot {
-                module = consumer {
-                  interface = slotInterface;
-                  reads = [ "publicKey" ];
-                };
-              };
-              placement.every.only.machines = [ "two" ];
-              wire.far = {
-                instance = "holder";
-                provides = "identity";
-              };
-            };
+          providerName = "holder";
+          providerModule = holder;
+          consumerMachines = [ "two" ];
+          consumerModule = consumer {
+            interface = slotInterface;
+            reads = [ "publicKey" ];
           };
         };
       claimed = run mine;

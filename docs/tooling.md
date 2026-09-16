@@ -78,45 +78,44 @@ nix eval --json .#debug.suites --apply 'builtins.mapAttrs (_: builtins.attrNames
 `git add` a new file before evaluating: the flake does not see an untracked
 path, and the failure looks like a missing file rather than an unstaged one.
 
-The suites, and how many tests each holds:
+The suites and what each covers:
 
-| Suite | Tests | Subject |
-| --- | --- | --- |
-| `interfaces` | 27 | interface identity by value, export atoms, the omission rule |
-| `composition` | 44 | roots, members, the settings namespace, defaults and fixed |
-| `resolution` | 69 | wiring, arity, secrecy, placement, keyset equality |
-| `counterexamples` | 24 | one test per invariant this tree states and does not hold, each asserting the claim rather than the behaviour, so each is red until the claim is true or withdrawn |
-| `diagnostics` | 70 | totality, ordering, severity, rendering, the scan that finds no raising call under `lib/` or in the reading beside it, the row table against `docs/diagnostics.md`, and every realiser refusal against the row producer above it |
-| `plan` | 82 | keys, planes, absences, dependencies, serialisation, the golden fixture |
-| `postgres` | 10 | one provider instance and two consumers, planned |
-| `exclusions` | 15 | one deployment per excluded construct, each refused, and the counts the fixture README records about its own folder |
-| `vars` | 35 | a generated value's cardinality, its delivery set, its entry and the program that produces it |
-| `units` | 50 | the portable unit vocabulary, per field |
-| `platform` | 26 | a machine's target, elaborated |
-| `closure` | 25 | what a unit may name and what it must declare |
-| `image` | 59 | the portable-service-image realiser's reading of an entry |
-| `flakelet` | 29 | the flakelet realiser's reading: enablement, identity, the two name refusals, and which host paths it carries, by when their bytes exist and by the record they state |
-| `operator` | 44 | the deployment build's reading: the artifact name, `manifest.json`, the realiser statement, its refusals |
-| `secrets` | 27 | the secrets realiser's reading: a plan as a generator configuration, the name projection, the rendered deploy step, and the rows it answers a refused plan with |
-| `consumer` | 2 | what this flake publishes: the recorded platform identity, and a plan keyed by a caller's own nixpkgs |
-| `perf` | 6 | the synthetic fleet is deterministic and realises nothing |
-| `layers` | 32 | the shape of the test tree itself, the root document and the one shell |
-| `coverage` | 10 | every specification heading is a test, an omission or an alias, and every figure this document records |
+| Suite | Subject |
+| --- | --- |
+| `interfaces` | interface identity by value, export atoms, the omission rule |
+| `composition` | roots, members, the settings namespace, defaults and fixed |
+| `resolution` | wiring, arity, secrecy, placement, keyset equality |
+| `counterexamples` | one test per invariant this tree states and does not hold, each asserting the claim rather than the behaviour, so each is red until the claim is true or withdrawn |
+| `diagnostics` | totality, ordering, severity, rendering, the scan that finds no raising call under `lib/` or in the reading beside it, the row table against `docs/diagnostics.md`, and every realiser refusal against the row producer above it |
+| `plan` | keys, planes, absences, dependencies, serialisation, the golden fixture |
+| `postgres` | one provider instance and two consumers, planned |
+| `exclusions` | one deployment per excluded construct, each refused |
+| `vars` | a generated value's cardinality, its delivery set, its entry and the program that produces it |
+| `units` | the portable unit vocabulary, per field |
+| `platform` | a machine's target, elaborated |
+| `closure` | what a unit may name and what it must declare |
+| `image` | the portable-service-image realiser's reading of an entry |
+| `flakelet` | the flakelet realiser's reading: enablement, identity, the two name refusals, and which host paths it carries, by when their bytes exist and by the record they state |
+| `operator` | the deployment build's reading: the artifact name, `manifest.json`, the realiser statement, its refusals |
+| `secrets` | the secrets realiser's reading: a plan as a generator configuration, the name projection, the rendered deploy step, and the rows it answers a refused plan with |
+| `consumer` | what this flake publishes: the recorded platform identity, and a plan keyed by a caller's own nixpkgs |
+| `perf` | the synthetic fleet is deterministic and realises nothing |
+| `layers` | the shape of the test tree itself, the root document and the one shell |
+| `coverage` | every specification heading is a test, an omission or an alias |
 
-That column is a value, not a tally kept by hand:
+Ask the tree for the count rather than reading one here:
 
 ```bash
 nix eval --json '.#debug.suites' \
   --apply 'builtins.mapAttrs (_: s: builtins.length (builtins.attrNames s))'
 ```
 
-Twenty suites, counted as the keys of `suites` in `tests/default.nix`, and
-686 tests, counted as the test attributes of the files under `tests/unit/`. Both
-numbers, and every figure in the table above, are compared against the tree by
-`coverage.testASuiteGainsATest`, so a suite that gains a test fails a check
-naming this document rather than leaving a stale number in it. That
-attrset is the only registration point: a suite file nothing there imports is a
-file nothing runs, and the key names are what the coverage cross-walk reads. A
+The suites are the keys of `suites` in `tests/default.nix`, and the tests are the
+test attributes of the files under `tests/unit/`. No count is written into this
+document: nothing compares one against the tree, so a figure here would be a
+number that rots on the next commit. That attrset is the only registration point:
+a suite file nothing there imports is a file nothing runs, and the key names are
+what the coverage cross-walk reads. A
 suite that asserts a directory's reading takes it as an argument threaded from
 `flake-module.nix` - `operator` takes `operatorSource` and `imageSource` the way
 the two realiser suites take theirs - because a suite may name no built output.
@@ -168,10 +167,10 @@ is a failure naming both files rather than a matter of an author's judgement.
 **The residue is two lists**, both in `tests/unit/coverage.nix`, and nothing
 else:
 
-| List | Entries | What an entry says |
-| --- | --- | --- |
-| `omitted` | 11 | a heading this project deliberately does not observe, mapped to the sentence saying why. Two classes only: a failure `builtins.tryEval` does not catch, so asserting it would end the evaluation that would report it; and a property of running the suite that the suite cannot observe about itself without reading the flake that runs it. An omission for a heading that has since gained a test fails as stale, and an empty reason fails as no reason. |
-| `aliased` | 31 | a heading two capabilities word differently, mapped to the one test that observes it under the other's words. The named test must exist in one of the layers, and an alias for a heading whose own derived name is already a test fails as redundant. |
+| List | What an entry says |
+| --- | --- |
+| `omitted` | a heading this project deliberately does not observe, mapped to the sentence saying why. Two classes only: a failure `builtins.tryEval` does not catch, so asserting it would end the evaluation that would report it; and a property of running the suite that the suite cannot observe about itself without reading the flake that runs it. An omission for a heading that has since gained a test fails as stale, and an empty reason fails as no reason. |
+| `aliased` | a heading two capabilities word differently, mapped to the one test that observes it under the other's words. The named test must exist in one of the layers, and an alias for a heading whose own derived name is already a test fails as redundant. |
 
 A third file's names count as tests that exist without being a third layer:
 `perf/check_test.py`, the budget checker's own `unittest`. It sits beside the
@@ -179,16 +178,18 @@ tool it tests rather than in either layer - a budget checker is not the planner
 - but the `tooling/evaluation-performance` headings it observes are this
 package's, so calling them omissions would be a false sentence.
 
-The same suite classifies every `spec.md` in the repository: `accountable` lists
-the thirty-four this package's tests answer for, `excused` maps each of the others
-to the reason they are not this package's - an excluded construct, a
-specification a later change's delta removed, a change nothing here implements
-yet. A new specification is a failure naming the file rather than a silently
-smaller check.
+The same suite classifies every `spec.md` in the repository. `openspec/specs/`
+holds one current spec per capability, and `accountable` lists the ones this
+package's tests answer for; `excused` maps each of the others to the reason it is
+not this package's - an excluded construct, or a change nothing here implements
+yet, which is the three still under `openspec/changes/`. A landed change is
+archived under `openspec/changes/archive/`, which nothing reads. A new
+specification is a failure naming the file rather than a silently smaller check.
 
 To add a scenario:
 
-1. Add it to a spec under `openspec/changes/`.
+1. Add it to a capability under `openspec/specs/`, or to the delta of an open
+   change under `openspec/changes/`.
 2. `nix eval --json .#debug.failuresBySuite.coverage` now names
    `testAScenarioGainsNoTest`, and the failure prints the two names the heading
    requires along with any existing name that shares a long prefix with them -
@@ -294,7 +295,7 @@ the ratchet is that both directions are a decision.
 ## The other checks
 
 ```bash
-nix build .#checks.x86_64-linux.planner-perf-checker -L  # the checker's own 17 tests
+nix build .#checks.x86_64-linux.planner-perf-checker -L  # the checker's own tests
 nix build .#checks.x86_64-linux.treefmt -L               # every formatter and linter, python included
 nix fmt                                                  # the same set, applied to the tree
 ```
@@ -332,7 +333,7 @@ Everything the flake exposes, so a reader can tell what runs where:
 
 | `nix build .#checks.x86_64-linux.<name>` | Needs | Subject |
 | --- | --- | --- |
-| `planner-tests` | nothing | the nineteen nix-unit suites, evaluated |
+| `planner-tests` | nothing | the twenty nix-unit suites, evaluated |
 | `planner-delivery` | nothing | the pure half of the machine layer: the order `apply` walks, the refusals it makes before it dials, addressing |
 | `planner-perf` | nothing | the counter budgets and the growth bound |
 | `planner-perf-checker` | nothing | the budget checker's own tests |

@@ -11,17 +11,30 @@ let
     attrNames
     filter
     head
-    tryEval
     ;
 
   inherit (support)
     hasInfix
+    lines
     planOf
+    raises
     rowIds
     soleRoot
     ;
 
-  reader = import (secretsSource + "/read.nix") { inherit planner; };
+  realiser = support.realiser {
+    inherit
+      imageSource
+      flakeletSource
+      operatorSource
+      secretsSource
+      ;
+  };
+
+  inherit (realiser) operatorReader;
+
+  reader = realiser.secretsReader;
+
   deployStep = import (secretsSource + "/backend.nix") { inherit planner reader; };
 
   # The same renderer over a reading whose word rule admits everything. The
@@ -34,23 +47,10 @@ let
     };
   };
 
-  imageReader = import (imageSource + "/read.nix") { inherit planner; };
-  flakeletReader = import (flakeletSource + "/read.nix") {
-    inherit planner;
-    reader = imageReader;
-  };
-  operatorReader = import (operatorSource + "/read.nix") {
-    inherit planner;
-    inherit imageReader flakeletReader;
-  };
-
   rowsOf = plan: reader.rows { inherit plan; };
   idsOf = plan: map (row: row.id) (rowsOf plan);
   rowsById = id: plan: filter (row: row.id == id) (rowsOf plan);
   oneRow = id: plan: head (rowsById id plan);
-
-  # deepSeq, because a refusal guards fields a lazy read would never force.
-  raises = value: !(tryEval (builtins.deepSeq value value)).success;
 
   programOf = gen: "/nix/store/9dm4x2vqk7z1n5bpr3jlfg8ys6cwh0az-generate-${gen}.drv";
   getProgram = "/nix/store/3q8xk1p7v2mz9jd4rlnb6ycsfwg0h5aq-age-backend/bin/secrets-age-backend";
@@ -191,7 +191,6 @@ let
       // entry
     ) entries;
 
-  lines = text: filter builtins.isString (builtins.split "\n" text);
   deliverLines = text: filter (line: builtins.match " *deliver .*" line != null) (lines text);
 
   # The worked plan with one field of the shared value's only file replaced, so

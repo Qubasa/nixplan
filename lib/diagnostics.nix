@@ -128,16 +128,14 @@ rec {
   dedup =
     rows:
     builtins.attrValues (
-      builtins.listToAttrs (
-        map (r: {
-          name = util.joinLines [
-            r.id
-            r.subject
-            r.message
-          ];
-          value = r;
-        }) rows
-      )
+      util.mapToAttrs (r: {
+        name = util.joinLines [
+          r.id
+          r.subject
+          r.message
+        ];
+        value = r;
+      }) rows
     );
 
   # Ordered by identifier, then subject, then message, so two evaluations of one

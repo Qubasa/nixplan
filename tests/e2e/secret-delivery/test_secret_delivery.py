@@ -6,9 +6,9 @@ deployment with ``planner build``, boots three rookery VMs from
 its own, puts the deployment on the machines with ``planner apply --values``, and
 then asks the machines what they hold and what the units did. One test per
 scenario of
-``openspec/changes/deliver-secrets-across-machines/specs/delivery/real-cluster/spec.md``,
+``openspec/specs/delivery/real-cluster/spec.md``,
 each named after it, and one for the value-source scenario of
-``openspec/changes/apply-deployments-with-an-operator-command/specs/operator/apply-command/spec.md``
+``openspec/specs/operator/apply-command/spec.md``
 
 **The phases are ordered and the file order is the order.**
 

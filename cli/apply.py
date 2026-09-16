@@ -13,7 +13,6 @@ what was built.
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,14 +24,12 @@ import values
 from errors import ApplyError
 from manifest import (
     Deployment,
-    Entry,
     Value,
     ValueFile,
     address_of,
     artifact_of,
     image_file,
     machine_address,
-    service_name,
 )
 
 
@@ -50,11 +47,7 @@ class Write:
 def selection(
     deployment: Deployment, only: Sequence[str]
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """Return the placed entries to apply and the value entries `--only` named.
-
-    Args:
-        deployment: The deployment being applied.
-        only: The keys the caller restricted the run to, empty for all of them.
+    """Return the entries to apply and the values `--only` named, all of them for none.
 
     Returns:
         The placed entry keys, sorted, and the value keys named directly.
@@ -84,9 +77,6 @@ def selection(
 def refuse_inapplicable(deployment: Deployment) -> None:
     """Refuse a deployment whose diagnostics carry an error row.
 
-    Args:
-        deployment: The deployment being applied.
-
     Raises:
         ApplyError: If any row is an error, with the diagnostics as the planner
             rendered them as the message.
@@ -103,13 +93,8 @@ def writes(
 
     Every address is resolved and every file is read here, so a source or a plan
     that cannot answer is refused before a machine is dialled rather than after
-    the first write.
-
-    Args:
-        deployment: The deployment being applied.
-        source: The value source, or ``None`` when the operator named none.
-        reaching: The value entries this run is answerable for, each with the
-            machines of its delivery set this run writes it to.
+    the first write. `reaching` is the value entries this run is answerable for,
+    each with the machines of its delivery set this run writes it to.
 
     Returns:
         The writes, by value entry, then delivery-set order, then file name.
@@ -150,12 +135,8 @@ def rotations(
     correct and coarse, never wrong.
 
     An entry that declares no unit is not restarted: there is nothing on the
-    machine holding the bytes.
-
-    Args:
-        deployment: The deployment being applied.
-        keys: The placed entries this run activated.
-        moved: The value entry and machine of every write whose bytes changed.
+    machine holding the bytes. `moved` is the value entry and the machine of
+    every write whose bytes changed.
 
     Returns:
         One pair per restart, the value first, sorted, for the entries placed on
@@ -182,12 +163,8 @@ def _reads(plan: Mapping[str, Any], key: str, index: Mapping[str, str]) -> froze
     backs it, so the value a read names is the value the path it carries belongs
     to. A public export carries bytes rather than a path, and those bytes are
     part of the plan, so a move in them moves the artifact and is the
-    activation's business rather than this step's.
-
-    Args:
-        plan: The plan artifact, as read from its JSON.
-        key: The placed entry whose reads to read.
-        index: Every declared file path of the deployment, to its value entry.
+    activation's business rather than this step's. `index` is every declared file
+    path of the deployment, to its value entry.
 
     Returns:
         The value entry keys, empty for an entry reading no generated file.
@@ -199,33 +176,6 @@ def _reads(plan: Mapping[str, Any], key: str, index: Mapping[str, str]) -> froze
     return frozenset(
         index[path] for read in order.reads(plan, key) for path in read.paths if path in index
     )
-
-
-def activation(entry: Entry) -> str:
-    """Return the script that activates one entry on its machine.
-
-    Args:
-        entry: The placed entry.
-
-    Returns:
-        The shell script the machine runs: the endpoint's own activation for a
-        flakelet artifact, the artifact's own attach script for an image.
-
-    Raises:
-        ApplyError: If the entry states a realiser this command cannot activate.
-    """
-    if entry.realiser == "flakelet":
-        return remote.activate_script(service_name(entry), artifact_of(entry))
-    if entry.realiser == "image":
-        return remote.attach_script(artifact_of(entry))
-    raise ApplyError(
-        f"{entry.key} states realiser {entry.realiser}, and the command activates "
-        f"flakelet and image"
-    )
-
-
-def _ignore(line: str) -> None:
-    """Drop a step line, for a caller that reads the returned log instead."""
 
 
 @dataclass(frozen=True)
@@ -266,29 +216,20 @@ def apply(
     user: str = "root",
     base_env: Mapping[str, str] | None = None,
     dry_run: bool = False,
-    log: Callable[[str], None] = _ignore,
+    log: Callable[[str], None] = remote.ignore,
 ) -> tuple[str, ...]:
     """Apply a built deployment, in the order the plan implies.
 
-    Args:
-        deployment: The deployment to apply.
-        runner: The channel every remote step goes through.
-        source: The value source `--values` named, if any.
-        only: The keys to restrict the run to, empty for the whole deployment.
-        ssh_key: The private key `--ssh-key` named, if any.
-        user: The login user on every machine.
-        base_env: The environment a `nix copy` inherits, the process's own by
-            default.
-        dry_run: Whether to print the steps rather than take them.
-        log: Called with each step line as that step happens.
+    `only` restricts the run and applies the whole deployment where it names
+    nothing, and `dry_run` prints the steps rather than taking them.
 
     Returns:
-        The step lines, in the order the steps happened.
+        The step lines, in the order the steps happened, each handed to `log`
+        as it happened.
 
     Raises:
         ApplyError: For any refusal, all of which happen before the first dial.
     """
-    environment = os.environ if base_env is None else base_env
     channel = Nobody() if dry_run else runner
     refuse_inapplicable(deployment)
     keys, named = selection(deployment, only)
@@ -301,7 +242,7 @@ def apply(
     # accepts: there is no artifact to copy and no unit to activate, so the run
     # takes no step against its machine and refuses nothing on its account.
     taken = tuple(key for key in walked.order if deployment.entries[key].path is not None)
-    scripts = {key: activation(deployment.entries[key]) for key in taken}
+    scripts = {key: remote.activation(deployment.entries[key]) for key in taken}
     addresses = {key: address_of(deployment.entries[key]) for key in taken}
     # The record every image artifact carries is read here, where nothing has been
     # dialled: an artifact the build wrote wrongly refuses the whole run rather
@@ -310,13 +251,8 @@ def apply(
         if deployment.entries[key].realiser == "image":
             image_file(deployment.entries[key])
 
-    opts = remote.ssh_opts(ssh_key, inherited=environment.get("NIX_SSHOPTS"))
-    env = remote.copy_env(environment, opts)
-    lines: list[str] = []
-
-    def record(line: str) -> None:
-        lines.append(line)
-        log(line)
+    opts, env = remote.channel(base_env, ssh_key)
+    lines, record = remote.recording(log)
 
     for cycle in walked.cycles:
         record(f"cycle of {', '.join(cycle)}")
@@ -327,25 +263,17 @@ def apply(
     for consumer, provider in withheld:
         record(f"not applying {provider}, which {consumer} reads")
 
+    def take(step: str, address: str, script: str, *, stdin: bytes | None = None) -> str:
+        argv = remote.ssh_argv(address, script, opts=opts, user=user)
+        return remote.taken(channel, step, address, argv, env=env, record=record, stdin=stdin)
+
     moved: set[tuple[str, str]] = set()
     for write in planned:
         step = (
             f"value {write.value.key} {write.file.name} -> {user}@{write.address}:{write.file.path}"
             f" ({write.file.owner}:{write.file.group} {write.file.mode})"
         )
-        with remote.taking(step, write.address, record):
-            answered = channel.output(
-                remote.ssh_argv(
-                    write.address,
-                    remote.write_script(write.file),
-                    opts=opts,
-                    user=user,
-                ),
-                env=env,
-                stdin=write.content,
-            )
-        for line in answered.splitlines():
-            record(f"  {line}")
+        answered = take(step, write.address, remote.write_script(write.file), stdin=write.content)
         if "changed" in answered.split():
             moved.add((write.value.key, write.machine))
 
@@ -355,13 +283,7 @@ def apply(
         artifact = artifact_of(entry)
         with remote.taking(f"copy {key} {artifact} -> {user}@{address}", address, record):
             channel.run(remote.copy_argv(artifact, address, user=user), env=env)
-        step = f"activate {key} ({entry.realiser}) on {user}@{address}"
-        with remote.taking(step, address, record):
-            reported = channel.output(
-                remote.ssh_argv(address, scripts[key], opts=opts, user=user), env=env
-            )
-        for line in reported.splitlines():
-            record(f"  {line}")
+        take(f"activate {key} ({entry.realiser}) on {user}@{address}", address, scripts[key])
 
     # Last, and after every activation: a unit the activation has just started is
     # holding the bytes this run wrote, and a unit it did not start is one this
@@ -370,11 +292,5 @@ def apply(
         entry = deployment.entries[key]
         address = addresses[key]
         step = f"restart {key} for {value} on {entry.machine} at {user}@{address}"
-        with remote.taking(step, address, record):
-            reported = channel.output(
-                remote.ssh_argv(address, remote.restart_script(entry.units), opts=opts, user=user),
-                env=env,
-            )
-        for line in reported.splitlines():
-            record(f"  {line}")
+        take(step, address, remote.restart_script(entry.units))
     return tuple(lines)

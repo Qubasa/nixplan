@@ -32,6 +32,7 @@ let
   inherit (support)
     hasInfix
     hasRow
+    lines
     planOf
     publicString
     rowIds
@@ -43,16 +44,21 @@ let
   # The realiser readings, wired the way every other suite wires them: each
   # directory is its own store path here, so a relative import out of one would
   # resolve outside the store.
-  assemble = name: text: "/nix/store/${planner.util.shortHash text}-${name}";
-  imageReader = import (imageSource + "/read.nix") { inherit planner assemble; };
-  flakeletReader = import (flakeletSource + "/read.nix") {
-    inherit planner;
-    reader = imageReader;
+  readers = support.realiser {
+    inherit (support) assemble;
+    inherit
+      imageSource
+      flakeletSource
+      operatorSource
+      secretsSource
+      ;
   };
-  operatorReader = import (operatorSource + "/read.nix") {
-    inherit planner imageReader flakeletReader;
-  };
-  secretsReader = import (secretsSource + "/read.nix") { inherit planner; };
+
+  inherit (readers)
+    imageReader
+    secretsReader
+    ;
+
   secretsStep = import (secretsSource + "/backend.nix") {
     inherit planner;
     reader = secretsReader;
@@ -60,19 +66,23 @@ let
 
   readBy =
     realiser: result:
-    operatorReader.read {
+    readers.operatorReader.read {
       inherit (result) plan diagnostics;
       realise.default.realiser = realiser;
     };
 
-  lines = text: filter isString (split "\n" text);
   blocks = text: filter isString (split "\n\n" text);
 
   placedKeys = result: filter (key: result.plan.${key} ? placement) (attrNames result.plan);
   valueKeys = result: filter (key: result.plan.${key} ? delivery) (attrNames result.plan);
 
-  quiet = _: { impl = _: { units.main.command = "/bin/true"; }; };
+  running = _: { units.main.command = "/bin/true"; };
+  quiet = _: { impl = running; };
   unitNamed = name: _: { impl = _: { units.${name}.command = "/bin/true"; }; };
+
+  # One instance of one member on one machine, which is every deployment below
+  # that varies nothing but its implementation.
+  appPlan = support.entryPlan { instance = "app"; };
 
   onOne = module: {
     inherit module;
@@ -448,27 +458,10 @@ in
         };
         impl = _: { units.main.command = "/bin/true"; };
       };
-      result = planOf {
-        instances = {
-          provider =
-            onOne (soleRoot {
-              module = provider;
-              provides = [ "pub" ];
-            })
-            // {
-              exposes = [ "pub" ];
-            };
-          consumer =
-            onOne (soleRoot {
-              module = consumer;
-            })
-            // {
-              wire.far = {
-                instance = "provider";
-                provides = "pub";
-              };
-            };
-        };
+      result = support.edge {
+        capability = "pub";
+        providerModule = provider;
+        consumerModule = consumer;
       };
       row = head (rowsById "interface-fold-refused" result);
     in
@@ -595,27 +588,10 @@ in
         };
         impl = _: { units.main.command = "/bin/true"; };
       };
-      result = planOf {
-        instances = {
-          provider =
-            onOne (soleRoot {
-              module = provider;
-              provides = [ "endpoint" ];
-            })
-            // {
-              exposes = [ "endpoint" ];
-            };
-          consumer =
-            onOne (soleRoot {
-              module = consumer;
-            })
-            // {
-              wire.far = {
-                instance = "provider";
-                provides = "endpoint";
-              };
-            };
-        };
+      result = support.edge {
+        capability = "endpoint";
+        providerModule = provider;
+        consumerModule = consumer;
       };
     in
     {
@@ -730,25 +706,11 @@ in
             };
           };
       };
-      result = planOf {
-        instances = {
-          owner =
-            onOne (soleRoot {
-              module = owner;
-              provides = [ "identity" ];
-            })
-            // {
-              exposes = [ "identity" ];
-            };
-          consumer = {
-            module = soleRoot { module = consumer; };
-            placement.every.only.machines = [ "two" ];
-            wire.far = {
-              instance = "owner";
-              provides = "identity";
-            };
-          };
-        };
+      result = support.edge {
+        providerName = "owner";
+        providerModule = owner;
+        consumerModule = consumer;
+        consumerMachines = [ "two" ];
       };
     in
     {
@@ -843,27 +805,10 @@ in
             };
           };
       };
-      result = planOf {
-        instances = {
-          provider =
-            onOne (soleRoot {
-              module = provider;
-              provides = [ "pub" ];
-            })
-            // {
-              exposes = [ "pub" ];
-            };
-          consumer =
-            onOne (soleRoot {
-              module = consumer;
-            })
-            // {
-              wire.far = {
-                instance = "provider";
-                provides = "pub";
-              };
-            };
-        };
+      result = support.edge {
+        capability = "pub";
+        providerModule = provider;
+        consumerModule = consumer;
       };
     in
     {
@@ -915,23 +860,17 @@ in
   # duplicates only.
   testTwoShownHostPathsOfOneEntryMayNotNest =
     let
-      result = planOf {
-        instances.app = onOne (soleRoot {
-          module = _: {
-            impl = _: {
-              units.main.command = "/bin/true";
-              configData."/etc/app" = {
-                mode = "0444";
-                render = [ { text = "a\n"; } ];
-              };
-              configData."/etc/app/inner.conf" = {
-                mode = "0444";
-                render = [ { text = "b\n"; } ];
-              };
-            };
-          };
-        });
-      };
+      result = appPlan (_: {
+        units.main.command = "/bin/true";
+        configData."/etc/app" = {
+          mode = "0444";
+          render = [ { text = "a\n"; } ];
+        };
+        configData."/etc/app/inner.conf" = {
+          mode = "0444";
+          render = [ { text = "b\n"; } ];
+        };
+      });
     in
     {
       expr = result.applicable;
@@ -973,19 +912,15 @@ in
     let
       rowsFor =
         path:
-        rowIds (planOf {
-          instances.app = onOne (soleRoot {
-            module = _: {
-              impl = _: {
-                units.main.command = "/bin/true";
-                configData.${path} = {
-                  mode = "0444";
-                  render = [ { text = "hello\n"; } ];
-                };
-              };
+        rowIds (
+          appPlan (_: {
+            units.main.command = "/bin/true";
+            configData.${path} = {
+              mode = "0444";
+              render = [ { text = "hello\n"; } ];
             };
-          });
-        });
+          })
+        );
     in
     {
       expr = {
@@ -1004,18 +939,12 @@ in
   # answers `Invalid syntax, ignoring` and starts the unit without the variable.
   testAnEnvironmentNameIsEscapedTheWayItsValueIs =
     let
-      result = planOf {
-        instances.app = onOne (soleRoot {
-          module = _: {
-            impl = _: {
-              units.main = {
-                command = "/bin/true";
-                env."QUOTED\"KEY" = "v";
-              };
-            };
-          };
-        });
-      };
+      result = appPlan (_: {
+        units.main = {
+          command = "/bin/true";
+          env."QUOTED\"KEY" = "v";
+        };
+      });
       image = imageReader.read {
         inherit (result) plan;
         key = "app:only@one";
@@ -1039,11 +968,7 @@ in
   # one image name, `nothing changed` on every apply and `current` in the report.
   testTheVersionDigestCarriesTheConfinementProfile =
     let
-      result = planOf {
-        instances.app = onOne (soleRoot {
-          module = quiet;
-        });
-      };
+      result = appPlan running;
       versionUnder =
         profile:
         (imageReader.read {

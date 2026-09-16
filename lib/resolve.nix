@@ -20,6 +20,7 @@ let
     attrValues
     attrNames
     concatLists
+    concatMap
     elem
     filter
     head
@@ -103,10 +104,6 @@ let
     text = {
       what = "a string";
       is = builtins.isString;
-    };
-    number = {
-      what = "a number";
-      is = builtins.isInt;
     };
     port = {
       what = "a port";
@@ -291,19 +288,17 @@ in
             named = name;
           }
         ) badInstanceNames
-        ++ concatLists (
-          util.mapAttrsToList (
-            iname: inst:
-            map (
-              name:
-              nameRow {
-                file = moduleFileOf iname;
-                what = "a member of the root of instance ${util.quote iname}";
-                named = name;
-              }
-            ) inst.badMemberNames
-          ) resolved.instances
-        );
+        ++ util.concatMapAttrsToList (
+          iname: inst:
+          map (
+            name:
+            nameRow {
+              file = moduleFileOf iname;
+              what = "a member of the root of instance ${util.quote iname}";
+              named = name;
+            }
+          ) inst.badMemberNames
+        ) resolved.instances;
 
       # Every field of the machine registry, read once with its shape. A machine
       # is the deployment's own declaration, so a value of the wrong kind is a
@@ -363,13 +358,10 @@ in
               record,
               allowed,
             }:
-            map (
-              key:
-              module.keyRow {
-                subject = machinesFile;
-                inherit where key allowed;
-              }
-            ) (util.extraKeys allowed record);
+            module.unknownKeyRows {
+              subject = machinesFile;
+              inherit where record allowed;
+            };
           inside = "the reservation of machine ${util.quote name}";
           reserves = machineFieldOf name "reserves" shapes.record { };
           ports = read {
@@ -475,24 +467,20 @@ in
 
       machineFieldRows =
         concatLists (util.mapAttrsToList (_: record: record.rows) machineDeclarations)
-        ++ concatLists (
-          util.mapAttrsToList (
-            _: fields: concatLists (util.mapAttrsToList (_: f: f.rows) fields)
-          ) machineFields
-        );
+        ++ util.concatMapAttrsToList (
+          _: fields: concatLists (util.mapAttrsToList (_: f: f.rows) fields)
+        ) machineFields;
 
       # Machines by tag, indexed once for the whole deployment, so a selector asks
       # for a tag instead of scanning the registry per member per tag.
       machinesByTag = builtins.groupBy (p: p.tag) (
-        concatLists (
-          util.mapAttrsToList (
-            machine: _:
-            if selectable machine then
-              map (tag: { inherit tag machine; }) machineFields.${machine}.tags.value
-            else
-              [ ]
-          ) machines
-        )
+        util.concatMapAttrsToList (
+          machine: _:
+          if selectable machine then
+            map (tag: { inherit tag machine; }) machineFields.${machine}.tags.value
+          else
+            [ ]
+        ) machines
       );
 
       tagged = tag: map (p: p.machine) (machinesByTag.${tag} or [ ]);
@@ -511,19 +499,17 @@ in
 
       platformGuards = mapAttrs (
         system: names:
-        builtins.listToAttrs (
-          map (micro: {
-            name = micro;
-            value = safe {
-              subject = machinesFile;
-              what = "the platform record of ${util.quote system}";
-              fallback = null;
-              value = platform.record {
-                inherit system;
-                microarchitecture = if micro == "" then null else micro;
-              };
+        util.genAttrs (util.uniqueStrings (map microOf names)) (
+          micro:
+          safe {
+            subject = machinesFile;
+            what = "the platform record of ${util.quote system}";
+            fallback = null;
+            value = platform.record {
+              inherit system;
+              microarchitecture = if micro == "" then null else micro;
             };
-          }) (util.uniqueStrings (map microOf names))
+          }
         )
       ) (builtins.groupBy (m: machineFields.${m}.system.value) (attrNames targeted));
 
@@ -534,29 +520,20 @@ in
         in
         if system == null then null else platformGuards.${system}.${microOf name}.value;
 
-      platformRows = concatLists (
-        util.mapAttrsToList (
-          _: byMicro: concatLists (util.mapAttrsToList (_: g: g.rows) byMicro)
-        ) platformGuards
-      );
+      platformRows = util.concatMapAttrsToList (
+        _: byMicro: concatLists (util.mapAttrsToList (_: g: g.rows) byMicro)
+      ) platformGuards;
 
       # One walk of the deployment, indexed by machine, because which machines
       # carry a placement and which entries one machine carries would otherwise be
       # the same walk twice.
       placementsByMachine = builtins.groupBy (p: p.machine) (
-        concatLists (
-          util.mapAttrsToList (
-            iname: inst:
-            concatLists (
-              util.mapAttrsToList (
-                mname: m:
-                map (machine: {
-                  inherit machine;
-                  entry = "${iname}:${mname}";
-                }) m.requested
-              ) inst.members
-            )
-          ) resolved.instances
+        util.eachMember resolved (
+          iname: mname: m:
+          map (machine: {
+            inherit machine;
+            entry = "${iname}:${mname}";
+          }) m.requested
         )
       );
 
@@ -565,15 +542,12 @@ in
       machineRows =
         util.concatMapAttrsToList (
           name: _:
-          map (
-            key:
-            module.keyRow {
-              subject = machinesFile;
-              where = "machine ${util.quote name}";
-              inherit key;
-              allowed = machineRegistryKeys;
-            }
-          ) (util.extraKeys machineRegistryKeys machineDeclarations.${name}.value)
+          module.unknownKeyRows {
+            subject = machinesFile;
+            where = "machine ${util.quote name}";
+            allowed = machineRegistryKeys;
+            record = machineDeclarations.${name}.value;
+          }
         ) machines
         ++ map (
           incomplete:
@@ -680,7 +654,7 @@ in
         iname: given:
         let
           declared = declaredRecord {
-            subject = "${iname}:instance";
+            inherit subject;
             file = deploymentFile;
             where = "instance ${util.quote iname}";
             value = given;
@@ -690,7 +664,7 @@ in
           instanceField =
             field: shape: fallback: required:
             declaredField {
-              subject = "${iname}:instance";
+              inherit subject;
               file = deploymentFile;
               where = "instance ${util.quote iname}";
               record = idecl;
@@ -791,7 +765,7 @@ in
           blockOf =
             name:
             declaredField {
-              subject = "${iname}:instance";
+              inherit subject;
               file = deploymentFile;
               where = "`members.${name}` of instance ${util.quote iname}";
               record = declaredMembersBlock.value;
@@ -805,7 +779,7 @@ in
           enableOf =
             name:
             declaredField {
-              subject = "${iname}:instance";
+              inherit subject;
               file = deploymentFile;
               where = "`members.${name}` of instance ${util.quote iname}";
               record = memberBlocks.${name}.value;
@@ -829,19 +803,15 @@ in
             ++ malformedMemberRows
             ++ util.concatMapAttrsToList (_: b: b.rows) memberBlocks
             ++ util.concatMapAttrsToList (_: e: e.rows) memberEnables
-            ++ concatLists (
-              util.mapAttrsToList (
-                name: b:
-                map (
-                  key:
-                  module.keyRow {
-                    inherit subject key;
-                    where = "`members.${name}` of instance ${util.quote iname}";
-                    allowed = [ "enable" ];
-                  }
-                ) (util.extraKeys [ "enable" ] b.value)
-              ) memberBlocks
-            )
+            ++ util.concatMapAttrsToList (
+              name: b:
+              module.unknownKeyRows {
+                inherit subject;
+                where = "`members.${name}` of instance ${util.quote iname}";
+                allowed = [ "enable" ];
+                record = b.value;
+              }
+            ) memberBlocks
             ++
               map
                 (
@@ -902,12 +872,10 @@ in
           # `service`'s name argument is row text. A capability records the name
           # its member passed, so it is read back to the key here: placement,
           # settings and every plan key are then one spelling.
-          keyOfDeclaredName = builtins.listToAttrs (
-            map (key: {
-              name = members.${key}.name;
-              value = key;
-            }) memberNames
-          );
+          keyOfDeclaredName = util.mapToAttrs (key: {
+            name = members.${key}.name;
+            value = key;
+          }) memberNames;
           declaredRootProvides = rootField "provides";
           rootProvides = mapAttrs (_: p: p // { member = keyOfDeclaredName.${p.member} or p.member; }) (
             declaredRootProvides.value
@@ -935,14 +903,12 @@ in
           every = placed.every;
 
           placementRows =
-            map (
-              key:
-              module.keyRow {
-                inherit subject key;
-                where = "instance ${util.quote iname}";
-                allowed = [ "every" ];
-              }
-            ) (util.extraKeys [ "every" ] placement)
+            module.unknownKeyRows {
+              inherit subject;
+              where = "instance ${util.quote iname}";
+              allowed = [ "every" ];
+              record = placement;
+            }
             ++ map (
               m:
               diag.error {
@@ -1009,14 +975,12 @@ in
           ) (filter (name: elem name slotNames) memberNames);
 
           instanceRows =
-            map (
-              key:
-              module.keyRow {
-                inherit subject key;
-                where = "instance ${util.quote iname}";
-                allowed = instanceKeys;
-              }
-            ) (util.extraKeys instanceKeys idecl)
+            module.unknownKeyRows {
+              inherit subject;
+              where = "instance ${util.quote iname}";
+              allowed = instanceKeys;
+              record = idecl;
+            }
             ++ util.optional (idecl ? severity) (
               module.severityRow {
                 inherit subject;
@@ -1148,14 +1112,12 @@ in
               if selector == null then
                 [ ]
               else
-                map (
-                  key:
-                  module.keyRow {
-                    inherit subject key;
-                    where = "the placement of ${util.quote mname} in instance ${util.quote iname}";
-                    allowed = everyKeys;
-                  }
-                ) (util.extraKeys everyKeys selector)
+                module.unknownKeyRows {
+                  inherit subject;
+                  where = "the placement of ${util.quote mname} in instance ${util.quote iname}";
+                  allowed = everyKeys;
+                  record = selector;
+                }
             )
             ++ map (
               m:
@@ -1356,19 +1318,17 @@ in
           };
 
           memberRows =
-            map (
-              key:
-              module.keyRow {
-                inherit subject key;
-                where = "member ${util.quote mname} of instance ${util.quote iname}";
-                allowed = [
-                  "module"
-                  "defaults"
-                  "fixed"
-                  "wire"
-                ];
-              }
-            ) member.unknownKeys
+            module.unknownKeyRows {
+              inherit subject;
+              where = "member ${util.quote mname} of instance ${util.quote iname}";
+              allowed = [
+                "module"
+                "defaults"
+                "fixed"
+                "wire"
+              ];
+              keys = member.unknownKeys;
+            }
             ++ member.declarationRows
             ++ compose.slotSetRows {
               subject = moduleSubject;
@@ -1403,18 +1363,10 @@ in
             unplaced
             ;
           rows = memberRows ++ (if requested == [ ] then unplaced.rows else [ ]);
-          placed = builtins.listToAttrs (
-            map (machine: {
-              name = machine;
-              value = mkPlacement {
-                inherit
-                  iname
-                  mname
-                  machine
-                  ;
-              };
-            }) placements
-          );
+          placed = util.mapToAttrs (machine: {
+            name = machine;
+            value = mkPlacement { inherit iname mname machine; };
+          }) placements;
         };
 
       mkPlacement =
@@ -1520,35 +1472,33 @@ in
                 provided = asAttrs (applied.provides or null);
                 exportsOf = cap: asAttrs ((asAttrs (provided.${cap} or null)).exports or null);
               in
-              concatLists (
-                util.mapAttrsToList (
-                  cap: declared:
-                  let
-                    iface = declared.interface;
-                    raw = exportsOf cap;
-                    publishedAs =
-                      ename:
-                      let
-                        value = raw.${ename} or null;
-                      in
-                      if
-                        util.isVarsFile value
-                        && interface.secrecyOf iface.exports.${ename} == "secret"
-                        && (generators.${value.generator}.files.${value.file}.secrecy or "secret") != "secret"
-                      then
-                        [
-                          {
-                            inherit cap ename;
-                            gen = value.generator;
-                            file = value.file;
-                          }
-                        ]
-                      else
-                        [ ];
-                  in
-                  if iface == null then [ ] else concatLists (map publishedAs (interface.exportNames iface))
-                ) member.declaration.provides
-              );
+              util.concatMapAttrsToList (
+                cap: declared:
+                let
+                  iface = declared.interface;
+                  raw = exportsOf cap;
+                  publishedAs =
+                    ename:
+                    let
+                      value = raw.${ename} or null;
+                    in
+                    if
+                      util.isVarsFile value
+                      && interface.secrecyOf iface.exports.${ename} == "secret"
+                      && (generators.${value.generator}.files.${value.file}.secrecy or "secret") != "secret"
+                    then
+                      [
+                        {
+                          inherit cap ename;
+                          gen = value.generator;
+                          file = value.file;
+                        }
+                      ]
+                    else
+                      [ ];
+                in
+                if iface == null then [ ] else concatLists (map publishedAs (interface.exportNames iface))
+              ) member.declaration.provides;
           };
 
           secretOverPublic = if couldDisagree then probe.value else [ ];
@@ -1557,12 +1507,10 @@ in
 
           refusedExports = mapAttrs (
             cap: _:
-            builtins.listToAttrs (
-              map (c: {
-                name = c.ename;
-                value = c;
-              }) (filter (c: c.cap == cap) secretOverPublic)
-            )
+            util.mapToAttrs (c: {
+              name = c.ename;
+              value = c;
+            }) (filter (c: c.cap == cap) secretOverPublic)
           ) member.declaration.provides;
 
           # A module reads vars.<generator>.<file>. The declaration writes
@@ -1588,22 +1536,24 @@ in
                   shape = shapes.record;
                   fallback = { };
                 };
-                fieldOf =
-                  field: shape: fallback:
-                  stateField {
-                    inherit
-                      valueKey
-                      field
-                      shape
-                      fallback
-                      ;
-                    where = "the `varsState` answer for file ${util.quote fname} of ${util.quote valueKey}";
-                    record = fileRead.value;
-                  };
               in
               {
-                present = fieldOf "present" shapes.flag false;
-                content = fieldOf "content" shapes.text null;
+                present = stateField {
+                  inherit valueKey;
+                  where = "the `varsState` answer for file ${util.quote fname} of ${util.quote valueKey}";
+                  record = fileRead.value;
+                  field = "present";
+                  shape = shapes.flag;
+                  fallback = false;
+                };
+                content = stateField {
+                  inherit valueKey;
+                  where = "the `varsState` answer for file ${util.quote fname} of ${util.quote valueKey}";
+                  record = fileRead.value;
+                  field = "content";
+                  shape = shapes.text;
+                  fallback = null;
+                };
                 rows = state.rows ++ fileRead.rows;
               }
             ) g.files
@@ -1797,21 +1747,19 @@ in
           # An extension for another service manager is refused here and still
           # recorded under its own backend, so a binding for that backend refuses
           # knowingly instead of dropping fields.
-          backendRows = concatLists (
-            util.mapAttrsToList (
-              uname: u:
-              map (
-                e:
-                diag.error {
-                  subject = entryKey;
-                  id = "unit-extension-backend-mismatch";
-                  message = "unit ${util.quote uname} of ${entryKey} applies ${e.label}, whose backend is ${util.quote e.backend}, and ${util.quote machine} runs ${util.quote (toString target.serviceManager)}";
-                  evidence = "an extension adds the fields of one service manager, and the target of a placement is the machine the placement selected";
-                  resolution = "apply the extension only where `target.serviceManager` is ${util.quote e.backend} in ${member.moduleLabel}, or place the member on a machine that runs it";
-                }
-              ) (filter (e: e.backend != target.serviceManager) u.extensions)
-            ) units
-          );
+          backendRows = util.concatMapAttrsToList (
+            uname: u:
+            map (
+              e:
+              diag.error {
+                subject = entryKey;
+                id = "unit-extension-backend-mismatch";
+                message = "unit ${util.quote uname} of ${entryKey} applies ${e.label}, whose backend is ${util.quote e.backend}, and ${util.quote machine} runs ${util.quote (toString target.serviceManager)}";
+                evidence = "an extension adds the fields of one service manager, and the target of a placement is the machine the placement selected";
+                resolution = "apply the extension only where `target.serviceManager` is ${util.quote e.backend} in ${member.moduleLabel}, or place the member on a machine that runs it";
+              }
+            ) (filter (e: e.backend != target.serviceManager) u.extensions)
+          ) units;
 
           capabilities = mapAttrs (
             cap: declared:
@@ -1857,20 +1805,17 @@ in
             ++ implShape.rows
             ++ unitsRaw.rows
             ++ closureRaw.rows
-            ++ concatLists (
-              util.mapAttrsToList (_: files: concatLists (util.mapAttrsToList (_: f: f.rows) files)) varsReads
-            )
-            ++ map (
-              key:
-              module.keyRow {
-                subject = entryKey;
-                where = "the implementation of ${member.moduleLabel}";
-                inherit key;
-                allowed = module.implKeys;
-                id = "implementation-unknown-key";
-                note = "a refusal of a value another module produced belongs in the fold of the interface that carries it, where the fold states the message and the planner states the row's identifier, subject and severity";
-              }
-            ) (util.extraKeys module.implKeys implValue)
+            ++ util.concatMapAttrsToList (
+              _: files: concatLists (util.mapAttrsToList (_: f: f.rows) files)
+            ) varsReads
+            ++ module.unknownKeyRows {
+              subject = entryKey;
+              where = "the implementation of ${member.moduleLabel}";
+              allowed = module.implKeys;
+              record = implValue;
+              id = "implementation-unknown-key";
+              note = "a refusal of a value another module produced belongs in the fold of the interface that carries it, where the fold states the message and the planner states the row's identifier, subject and severity";
+            }
             ++ util.optional implNotAttrs (
               diag.error {
                 subject = entryKey;
@@ -2025,12 +1970,7 @@ in
                 );
             };
 
-          exports = builtins.listToAttrs (
-            map (ename: {
-              name = ename;
-              value = exportRecord ename;
-            }) (filter (e: raw ? ${e}) declaredNames)
-          );
+          exports = util.genAttrs (filter (e: raw ? ${e}) declaredNames) exportRecord;
         in
         {
           inherit
@@ -2195,12 +2135,10 @@ in
             machine:
             let
               record = providerMember.placed.${machine}.capabilities.${capability.capability};
-              picked = builtins.listToAttrs (
-                map (r: {
-                  name = r;
-                  value = if record.exports ? ${r} then record.exports.${r}.read else null;
-                }) slot.reads
-              );
+              picked = util.mapToAttrs (r: {
+                name = r;
+                value = if record.exports ? ${r} then record.exports.${r}.read else null;
+              }) slot.reads;
               absentReads = filter (r: !(record.exports ? ${r}) || record.exports.${r}.absent) slot.reads;
               undeployed = filter (
                 r:
@@ -2230,12 +2168,10 @@ in
               entryKey = "${target}:${capability.member}@${machine}";
               values = picked;
               # Which generated value each read names, for the delivery set.
-              varsFiles = builtins.listToAttrs (
-                map (r: {
-                  name = r;
-                  value = record.exports.${r}.varsFile;
-                }) (filter (r: record.exports ? ${r} && record.exports.${r}.varsFile != null) slot.reads)
-              );
+              varsFiles = util.mapToAttrs (r: {
+                name = r;
+                value = record.exports.${r}.varsFile;
+              }) (filter (r: record.exports ? ${r} && record.exports.${r}.varsFile != null) slot.reads);
             };
 
           collected = map readsAt placements;
@@ -2247,12 +2183,10 @@ in
 
           deliverable = slot.resolvable && (wire != null || isBound) && capability != null && arityOk;
 
-          entryKeyed = builtins.listToAttrs (
-            map (c: {
-              name = c.entryKey;
-              value = c.values;
-            }) collected
-          );
+          entryKeyed = util.mapToAttrs (c: {
+            name = c.entryKey;
+            value = c.values;
+          }) collected;
 
           declaredFold = if slot.interface == null then null else interface.foldOf slot.interface;
 
@@ -2414,38 +2348,34 @@ in
                 resolution = "place the far end in ${deploymentFile}";
               }
             )
-            ++ concatLists (
+            ++ concatMap (
+              c:
               map (
-                c:
-                map (
-                  r:
-                  diag.error {
-                    inherit subject;
-                    id = "slot-reads-undeployed-value";
-                    message = "slot ${util.quote slotName} of ${util.quote subject} reads ${util.quote r} of ${util.quote far}, whose value no machine receives";
-                    evidence = "${util.quote c.entryKey} publishes it from generator ${
-                      util.quote c.varsFiles.${r}.generator
-                    }, which declares `deploy = false`, so the path it names resolves to nothing at run time";
-                    resolution = "declare that generator deployed in the module that owns it, or stop reading ${util.quote r} in ${consumerFile}";
-                  }
-                ) c.undeployed
-              ) undeployedEntries
-            )
-            ++ concatLists (
+                r:
+                diag.error {
+                  inherit subject;
+                  id = "slot-reads-undeployed-value";
+                  message = "slot ${util.quote slotName} of ${util.quote subject} reads ${util.quote r} of ${util.quote far}, whose value no machine receives";
+                  evidence = "${util.quote c.entryKey} publishes it from generator ${
+                    util.quote c.varsFiles.${r}.generator
+                  }, which declares `deploy = false`, so the path it names resolves to nothing at run time";
+                  resolution = "declare that generator deployed in the module that owns it, or stop reading ${util.quote r} in ${consumerFile}";
+                }
+              ) c.undeployed
+            ) undeployedEntries
+            ++ concatMap (
+              c:
               map (
-                c:
-                map (
-                  m:
-                  diag.error {
-                    inherit subject;
-                    id = "slot-read-type-mismatch";
-                    message = "slot ${util.quote slotName} of ${util.quote subject} reads ${util.quote m.read} of ${util.quote c.entryKey} and is delivered a value ${ifaceLabel} refuses";
-                    evidence = "${consumerFile} declares ${m.read} as ${util.quote m.typeName}, ${util.quote far} is what the wire names, and korora reports: ${toString m.error}";
-                    resolution = "publish a value of that type in the module that declares ${util.quote far}, or declare ${util.quote m.read} in ${consumerFile} with the type the far end publishes";
-                  }
-                ) c.mismatches
-              ) mismatchedEntries
-            )
+                m:
+                diag.error {
+                  inherit subject;
+                  id = "slot-read-type-mismatch";
+                  message = "slot ${util.quote slotName} of ${util.quote subject} reads ${util.quote m.read} of ${util.quote c.entryKey} and is delivered a value ${ifaceLabel} refuses";
+                  evidence = "${consumerFile} declares ${m.read} as ${util.quote m.typeName}, ${util.quote far} is what the wire names, and korora reports: ${toString m.error}";
+                  resolution = "publish a value of that type in the module that declares ${util.quote far}, or declare ${util.quote m.read} in ${consumerFile} with the type the far end publishes";
+                }
+              ) c.mismatches
+            ) mismatchedEntries
             ++ (if foldApplies then folded.rows else [ ])
             ++ util.optional (refusal != null) (
               diag.error {
@@ -2496,21 +2426,17 @@ in
           consumers = if providerDeclared == null then "many" else providerDeclared.consumers;
           bound = isBound;
           entryKeys = map (c: c.entryKey) collected;
-          entryAbsences = builtins.listToAttrs (
-            map (c: {
-              name = c.entryKey;
-              value = c.absentReads;
-            }) collected
-          );
+          entryAbsences = util.mapToAttrs (c: {
+            name = c.entryKey;
+            value = c.absentReads;
+          }) collected;
 
           # Which generated value each read of each provider entry names, so the
           # delivery set can be derived from the reads and from nothing else.
-          entryVarsFiles = builtins.listToAttrs (
-            map (c: {
-              name = c.entryKey;
-              value = c.varsFiles;
-            }) collected
-          );
+          entryVarsFiles = util.mapToAttrs (c: {
+            name = c.entryKey;
+            value = c.varsFiles;
+          }) collected;
           value = if delivered then value else null;
           implValue = if delivered then implValue else null;
         };
@@ -2518,15 +2444,9 @@ in
       # An interface's fold is a policy, so one no read applies is one nobody is
       # held to. Derived from the slots the deployment resolved rather than from a
       # second traversal, and the same interface named twice is one row.
-      declaredSlots = concatLists (
-        util.mapAttrsToList (
-          _: inst:
-          concatLists (
-            util.mapAttrsToList (
-              _: member: util.mapAttrsToList (_: slot: slot) member.declaration.uses
-            ) inst.members
-          )
-        ) resolved.instances
+      declaredSlots = util.eachMember resolved (
+        _: _: member:
+        util.mapAttrsToList (_: slot: slot) member.declaration.uses
       );
 
       setReachInterfaces = map (slot: slot.interface) (
@@ -2554,15 +2474,9 @@ in
       reachedInterfaces = util.distinct (
         filter interface.isInterface (
           map (slot: slot.interface) declaredSlots
-          ++ concatLists (
-            util.mapAttrsToList (
-              _: inst:
-              concatLists (
-                util.mapAttrsToList (
-                  _: member: util.mapAttrsToList (_: cap: cap.interface) member.declaration.provides
-                ) inst.members
-              )
-            ) resolved.instances
+          ++ util.eachMember resolved (
+            _: _: member:
+            util.mapAttrsToList (_: cap: cap.interface) member.declaration.provides
           )
         )
       );
@@ -2584,22 +2498,15 @@ in
       # Which slot took which capability, across the whole deployment. Counted
       # over wires rather than placements or reads: a consumer placed on twelve
       # machines is one consumer, and a binding is a wire the module wrote.
-      takenCapabilities = concatLists (
-        util.mapAttrsToList (
-          iname: inst:
-          concatLists (
-            util.mapAttrsToList (
-              mname: member:
-              util.mapAttrsToList (slotName: edge: {
-                provider = "${edge.providerInstance}:${edge.providerMember}.${edge.capability}";
-                inherit (edge) consumers;
-                capability = edge.capability;
-                owner = "${edge.providerInstance}:${edge.providerMember}";
-                consumer = "${iname}:${mname}.${slotName}";
-              }) (util.filterAttrs (_: edge: edge.capability != null) member.edges)
-            ) inst.members
-          )
-        ) resolved.instances
+      takenCapabilities = util.eachMember resolved (
+        iname: mname: member:
+        util.mapAttrsToList (slotName: edge: {
+          provider = "${edge.providerInstance}:${edge.providerMember}.${edge.capability}";
+          inherit (edge) consumers;
+          capability = edge.capability;
+          owner = "${edge.providerInstance}:${edge.providerMember}";
+          consumer = "${iname}:${mname}.${slotName}";
+        }) (util.filterAttrs (_: edge: edge.capability != null) member.edges)
       );
 
       consumerRows =
@@ -2638,13 +2545,11 @@ in
           ++ nameRows
           ++ foldRows
           ++ consumerRows
-          ++ util.concatMapAttrsToList (
-            _: inst:
-            inst.rows
-            ++ util.concatMapAttrsToList (
-              _: member: member.rows ++ util.concatMapAttrsToList (_: p: p.rows) member.placed
-            ) inst.members
-          ) resolved.instances;
+          ++ util.concatMapAttrsToList (_: inst: inst.rows) resolved.instances
+          ++ util.eachMember resolved (
+            _: _: member:
+            member.rows ++ util.concatMapAttrsToList (_: p: p.rows) member.placed
+          );
       };
     in
     resolved;

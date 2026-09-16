@@ -5,10 +5,10 @@ folder declares with ``planner build $PLANNER_E2E_FLAKE#planner-e2e-portable-ima
 boots one rookery VM from ``$PLANNER_E2E_GUEST_IMAGE``, and puts the confined
 entry on it with ``planner apply``, which copies the artifact and runs the attach
 script that artifact carries. One test per scenario of
-``openspec/changes/emit-systemd-portable-service-images/specs/realiser/portable-service-image/spec.md``
+``openspec/specs/realiser/portable-service-image/spec.md``
 that is about what a real machine does with a built image, named after it, plus
 the image scenario of
-``openspec/changes/apply-deployments-with-an-operator-command/specs/operator/apply-command/spec.md``.
+``openspec/specs/operator/apply-command/spec.md``.
 
 It builds that deployment twice. The second build,
 ``planner-e2e-portable-image-changed``, is attached by nothing and exists so

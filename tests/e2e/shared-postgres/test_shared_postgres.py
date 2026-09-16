@@ -6,9 +6,9 @@ deployment with ``planner build``, boots two rookery VMs from
 source of its own, applies the deployment with ``planner apply --values``, and
 then asks the machines what is serving, what each of them holds and what the
 servers answer. One test per scenario of
-``openspec/changes/run-a-shared-database-on-real-machines/specs/delivery/real-cluster/spec.md``
+``openspec/specs/delivery/real-cluster/spec.md``
 and of
-``openspec/changes/give-every-instance-its-own-database/specs/delivery/real-cluster/spec.md``,
+``openspec/specs/delivery/real-cluster/spec.md``,
 each named after it.
 
 ``alpha`` runs four entries: the shared cluster, the consumer that shares its

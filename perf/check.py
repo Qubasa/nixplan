@@ -14,7 +14,7 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, TypedDict, cast
+from typing import Any, Literal
 
 GATED_COUNTERS: tuple[str, ...] = (
     "nrThunks",
@@ -27,7 +27,6 @@ GATED_COUNTERS: tuple[str, ...] = (
     "nrOpUpdateValuesCopied",
     "gc.totalBytes",
 )
-REQUIRED_BUDGET_FIELDS: tuple[str, ...] = ("fixture", "interpreter", "date", "margin")
 # What `measure.sh` writes beside its result files, one fixture key per line.
 REQUESTED = "requested"
 DEFAULT_MARGIN = 0.15
@@ -36,49 +35,24 @@ TOLERANCE = 1e-9
 type Kind = Literal["FAIL", "INVALID", "INFO"]
 
 
-class RawRun(TypedDict, total=False):
-    """One measured evaluation as ``measure.sh`` writes it."""
+@dataclass(frozen=True)
+class Budget:
+    """One fixture's budget, with the defaults the file states beside it resolved in."""
 
-    cpuTime: float
-    wallClock: float
-    counters: dict[str, float]
-
-
-class RawResult(TypedDict, total=False):
-    """One fixture and size as ``measure.sh`` writes it."""
-
-    fixture: str
-    size: int | None
-    interpreter: str
-    entries: int
-    runs: list[RawRun]
-
-
-class RawGrowth(TypedDict, total=False):
-    """The growth block of the budget file."""
-
-    bound: float
-    sizes: list[int]
-    note: str
-
-
-class RawBudgetEntry(TypedDict, total=False):
-    """One fixture's budget entry."""
-
-    fixture: str
-    interpreter: str
-    date: str
+    fixture: str | None
+    interpreter: str | None
+    date: str | None
     margin: float
-    perEntry: dict[str, float | None]
-    note: str
+    per_entry: dict[str, float | None]
 
 
-class RawBudgets(TypedDict, total=False):
-    """The budget file."""
+@dataclass(frozen=True)
+class Budgets:
+    """The budget file: one budget per fixture, and the growth bound over its sizes."""
 
-    margin: float
-    growth: RawGrowth
-    fixtures: dict[str, RawBudgetEntry]
+    fixtures: dict[str, Budget]
+    bound: float | None
+    sizes: list[int] | None
 
 
 @dataclass(frozen=True)
@@ -128,7 +102,7 @@ def per_entry(result: Result, counter: str) -> float:
 
 def parse_result(path: Path) -> tuple[Result | None, list[Finding]]:
     """Read one result file, or report why it cannot be compared."""
-    raw = cast(RawResult, json.loads(path.read_text(encoding="utf-8")))
+    raw: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
     missing = [name for name in ("fixture", "interpreter", "entries", "runs") if name not in raw]
     if missing:
         return None, [Finding("FAIL", f"result file {path.name} records no {', '.join(missing)}")]
@@ -136,28 +110,48 @@ def parse_result(path: Path) -> tuple[Result | None, list[Finding]]:
     if entries < 1:
         return None, [Finding("FAIL", f"result file {path.name} records {entries} plan entries")]
     runs = tuple(
-        Run(
-            cpu_time=run.get("cpuTime"),
-            wall_clock=run.get("wallClock"),
-            counters=dict(run.get("counters", {})),
-        )
+        Run(run.get("cpuTime"), run.get("wallClock"), dict(run.get("counters", {})))
         for run in raw["runs"]
     )
     if not runs:
         return None, [Finding("FAIL", f"result file {path.name} carries no runs")]
     size = raw.get("size")
     fixture = raw["fixture"]
-    return (
-        Result(
-            key=fixture if size is None else f"{fixture}-{size}",
-            fixture=fixture,
-            size=size,
-            interpreter=raw["interpreter"],
-            entries=entries,
-            runs=runs,
-            source=path.name,
-        ),
-        [],
+    result = Result(
+        key=fixture if size is None else f"{fixture}-{size}",
+        fixture=fixture,
+        size=size,
+        interpreter=raw["interpreter"],
+        entries=entries,
+        runs=runs,
+        source=path.name,
+    )
+    return result, []
+
+
+def parse_budgets(path: Path) -> Budgets:
+    """Read the budget file. A field an entry omits is the one the file states once."""
+    raw: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    growth: dict[str, Any] = raw.get("growth") or {}
+
+    def resolve(entry: dict[str, Any], field: str, fallback: Any = None) -> Any:
+        stated = entry.get(field)
+        stated = raw.get(field) if stated is None else stated
+        return fallback if stated is None else stated
+
+    return Budgets(
+        fixtures={
+            name: Budget(
+                fixture=entry.get("fixture"),
+                interpreter=resolve(entry, "interpreter"),
+                date=resolve(entry, "date"),
+                margin=float(resolve(entry, "margin", DEFAULT_MARGIN)),
+                per_entry=dict(entry.get("perEntry") or {}),
+            )
+            for name, entry in (raw.get("fixtures") or {}).items()
+        },
+        bound=growth.get("bound"),
+        sizes=growth.get("sizes"),
     )
 
 
@@ -184,35 +178,30 @@ def check_reproducibility(results: Sequence[Result]) -> tuple[set[str], list[Fin
         for counter in GATED_COUNTERS:
             values = [run.counters.get(counter) for run in result.runs]
             if any(not isinstance(value, int) or isinstance(value, bool) for value in values):
-                unstable.add(result.key)
-                findings.append(
-                    Finding(
-                        "FAIL",
-                        f"gated counter {counter} of fixture {result.key} is missing or not an "
-                        f"integer in {result.source}: {values}",
-                    )
-                )
+                reason = f"is missing or not an integer in {result.source}: {values}"
             elif len(set(values)) > 1:
-                unstable.add(result.key)
-                findings.append(
-                    Finding(
-                        "FAIL",
-                        f"gated counter {counter} of fixture {result.key} is not reproducible "
-                        f"across its {len(values)} runs: {values}; no budget result derived "
-                        f"from {result.key} is reported",
-                    )
+                reason = (
+                    f"is not reproducible across its {len(values)} runs: {values}; no budget "
+                    f"result derived from {result.key} is reported"
                 )
+            else:
+                continue
+            unstable.add(result.key)
+            findings.append(
+                Finding("FAIL", f"gated counter {counter} of fixture {result.key} {reason}")
+            )
     return unstable, findings
 
 
 def check_interpreter(
-    results: Sequence[Result], fixtures: dict[str, RawBudgetEntry]
+    results: Sequence[Result], fixtures: dict[str, Budget]
 ) -> tuple[set[str], list[Finding]]:
     """Invalidate, rather than fail, a comparison against another interpreter."""
     mismatched: set[str] = set()
     findings: list[Finding] = []
     for result in results:
-        recorded = fixtures.get(result.key, {}).get("interpreter")
+        budget = fixtures.get(result.key)
+        recorded = None if budget is None else budget.interpreter
         if recorded is None or recorded == result.interpreter:
             continue
         mismatched.add(result.key)
@@ -227,27 +216,30 @@ def check_interpreter(
     return mismatched, findings
 
 
-def entry_provenance(name: str, entry: RawBudgetEntry) -> list[Finding]:
+def entry_provenance(name: str, budget: Budget) -> list[Finding]:
     """Refuse a budget entry that records no provenance or no figure."""
-    findings: list[Finding] = []
-    for field in REQUIRED_BUDGET_FIELDS:
-        if entry.get(field) is None:
-            findings.append(Finding("FAIL", f"budget entry {name} records no {field}"))
-    per_entry_figures = entry.get("perEntry") or {}
-    for counter in GATED_COUNTERS:
-        if per_entry_figures.get(counter) is None:
-            findings.append(
-                Finding(
-                    "FAIL",
-                    f"budget figure not recorded: entry {name}, field {counter}; measure the "
-                    f"fixture and write the figure into the budget file",
-                )
-            )
-    return findings
+    findings = [
+        Finding("FAIL", f"budget entry {name} records no {field}")
+        for field, stated in (
+            ("fixture", budget.fixture),
+            ("interpreter", budget.interpreter),
+            ("date", budget.date),
+        )
+        if stated is None
+    ]
+    return findings + [
+        Finding(
+            "FAIL",
+            f"budget figure not recorded: entry {name}, field {counter}; measure the "
+            f"fixture and write the figure into the budget file",
+        )
+        for counter in GATED_COUNTERS
+        if budget.per_entry.get(counter) is None
+    ]
 
 
 def check_provenance(
-    results: Sequence[Result], fixtures: dict[str, RawBudgetEntry]
+    results: Sequence[Result], fixtures: dict[str, Budget]
 ) -> tuple[set[str], list[Finding]]:
     """Refuse an unknown fixture and any budget entry that cannot be compared against."""
     unusable: set[str] = set()
@@ -277,10 +269,7 @@ def ratchet_counter(result: Result, counter: str, budget: float, margin: float) 
         f"gated counter {counter} of fixture {result.key} costs {figure(measured)} per plan entry"
     )
     if measured > budget * (1.0 + TOLERANCE):
-        return Finding(
-            "FAIL",
-            f"{shared}, above its budget of {figure(budget)}",
-        )
+        return Finding("FAIL", f"{shared}, above its budget of {figure(budget)}")
     if measured < budget * (1.0 - margin) * (1.0 - TOLERANCE):
         return Finding(
             "FAIL",
@@ -309,19 +298,24 @@ def requested_fixtures(results_dir: Path) -> set[str] | None:
     return {line.strip() for line in asked if line.strip()}
 
 
-def gated_figures(fixtures: dict[str, RawBudgetEntry]) -> set[tuple[str, str]]:
+def gated_figures(fixtures: dict[str, Budget]) -> set[tuple[str, str]]:
     """Return every (fixture, counter) pair the budget file gates."""
     return {
         (name, counter)
-        for name, entry in fixtures.items()
+        for name, budget in fixtures.items()
         for counter in GATED_COUNTERS
-        if (entry.get("perEntry") or {}).get(counter) is not None
+        if budget.per_entry.get(counter) is not None
     }
+
+
+def covered_figures(fixtures: dict[str, Budget], asked: set[str] | None) -> set[tuple[str, str]]:
+    """Return the gated figures of the fixtures a run was asked to produce."""
+    return {figure for figure in gated_figures(fixtures) if asked is None or figure[0] in asked}
 
 
 def check_coverage(
     compared: set[tuple[str, str]],
-    fixtures: dict[str, RawBudgetEntry],
+    fixtures: dict[str, Budget],
     asked: set[str] | None,
 ) -> list[Finding]:
     """Refuse a run that compared nothing against a figure it was asked to cover.
@@ -331,44 +325,36 @@ def check_coverage(
     for: a comparison the run skipped for a reason it printed is uncovered too,
     because a reason printed beside a green gate is still a green gate.
     """
-    covered = {figure for figure in gated_figures(fixtures) if asked is None or figure[0] in asked}
+    gated = gated_figures(fixtures)
     absent: dict[str, list[str]] = {}
-    for name, counter in sorted(covered - compared):
+    for name, counter in sorted(covered_figures(fixtures, asked) - compared):
         absent.setdefault(name, []).append(counter)
     return [
         Finding(
             "FAIL",
-            f"the budget file gates {counters_of(fixtures, name)} figures of fixture {name} and "
-            f"this run compared none of {', '.join(counters)}",
+            f"the budget file gates {len([f for f in gated if f[0] == name])} figures of fixture "
+            f"{name} and this run compared none of {', '.join(counters)}",
         )
         for name, counters in sorted(absent.items())
     ]
 
 
-def counters_of(fixtures: dict[str, RawBudgetEntry], name: str) -> int:
-    """Return how many figures the budget file gates for one fixture."""
-    return len([figure for figure in gated_figures(fixtures) if figure[0] == name])
-
-
 def check_ratchet(
-    results: Sequence[Result], budgets: RawBudgets, skip: set[str]
+    results: Sequence[Result], budgets: Budgets, skip: set[str]
 ) -> tuple[set[tuple[str, str]], list[Finding]]:
     """Run the two-sided ratchet, returning the figures it compared and its findings."""
-    fixtures = budgets.get("fixtures", {})
-    default_margin = budgets.get("margin", DEFAULT_MARGIN)
     compared: set[tuple[str, str]] = set()
     findings: list[Finding] = []
     for result in results:
-        entry = fixtures.get(result.key)
+        entry = budgets.fixtures.get(result.key)
         if entry is None or result.key in skip:
             continue
-        margin = entry.get("margin", default_margin)
         for counter in GATED_COUNTERS:
-            budget = (entry.get("perEntry") or {}).get(counter)
+            budget = entry.per_entry.get(counter)
             if budget is None or counter not in result.runs[0].counters:
                 continue
             compared.add((result.key, counter))
-            findings.append(ratchet_counter(result, counter, budget, margin))
+            findings.append(ratchet_counter(result, counter, budget, entry.margin))
     return compared, findings
 
 
@@ -377,15 +363,15 @@ def sized_series(
 ) -> dict[str, list[Result]]:
     """Group every comparable sized result by fixture, ascending by size."""
     wanted = set(sizes) if sizes else None
-    grouped: dict[str, list[Result]] = {}
+    grouped: dict[str, list[tuple[int, Result]]] = {}
     for result in results:
         if result.size is None or result.key in skip:
             continue
         if wanted is not None and result.size not in wanted:
             continue
-        grouped.setdefault(result.fixture, []).append(result)
+        grouped.setdefault(result.fixture, []).append((result.size, result))
     return {
-        fixture: sorted(series, key=lambda result: cast(int, result.size))
+        fixture: [result for _, result in sorted(series, key=lambda sized: sized[0])]
         for fixture, series in sorted(grouped.items())
     }
 
@@ -428,13 +414,12 @@ def fixture_growth(fixture: str, series: Sequence[Result], bound: float) -> list
     return findings
 
 
-def check_growth(results: Sequence[Result], budgets: RawBudgets, skip: set[str]) -> list[Finding]:
+def check_growth(results: Sequence[Result], budgets: Budgets, skip: set[str]) -> list[Finding]:
     """Bound the per-entry cost of every fixture measured at more than one size."""
-    growth = budgets.get("growth")
-    if growth is None or growth.get("bound") is None:
+    bound = budgets.bound
+    if bound is None:
         return [Finding("FAIL", "the budget file states no growth bound")]
-    bound = growth["bound"]
-    grouped = sized_series(results, skip, growth.get("sizes"))
+    grouped = sized_series(results, skip, budgets.sizes)
     findings: list[Finding] = []
     for fixture, series in grouped.items():
         if len(series) < 2:
@@ -454,35 +439,20 @@ def check_growth(results: Sequence[Result], budgets: RawBudgets, skip: set[str])
     return findings
 
 
-def timing_series(label: str, values: Sequence[float | None]) -> str:
-    """Render an advisory timing series and its change across runs."""
-    present = [value for value in values if value is not None]
-    if not present:
-        return f"{label} was not recorded"
-    runs = ", ".join(f"{value:.4f}s" for value in present)
-    change = present[-1] - present[0]
-    return f"{label} per run: {runs} (change {change:+.4f}s, advisory, never gated)"
-
-
-def report_timings(results: Sequence[Result]) -> list[Finding]:
-    """Report wall clock and cpuTime for every fixture without gating on either."""
-    findings: list[Finding] = []
-    for result in results:
-        findings.append(
-            Finding(
-                "INFO",
-                f"fixture {result.key} "
-                f"{timing_series('wall clock', [run.wall_clock for run in result.runs])}",
-            )
-        )
-        findings.append(
-            Finding(
-                "INFO",
-                f"fixture {result.key} "
-                f"{timing_series('cpuTime', [run.cpu_time for run in result.runs])}",
-            )
-        )
-    return findings
+def timings(runs: Sequence[Run]) -> str:
+    """Render the advisory wall clock and cpuTime series of one fixture."""
+    parts: list[str] = []
+    for label, values in (
+        ("wall clock", [run.wall_clock for run in runs]),
+        ("cpuTime", [run.cpu_time for run in runs]),
+    ):
+        present = [value for value in values if value is not None]
+        if not present:
+            parts.append(f"{label} was not recorded")
+            continue
+        series = ", ".join(f"{value:.4f}s" for value in present)
+        parts.append(f"{label} per run: {series} (change {present[-1] - present[0]:+.4f}s)")
+    return "; ".join(parts)
 
 
 @dataclass(frozen=True)
@@ -496,8 +466,8 @@ class Report:
 
 def run_checks(results_dir: Path, budgets_path: Path) -> Report:
     """Run every check in order and return the whole report."""
-    budgets = cast(RawBudgets, json.loads(budgets_path.read_text(encoding="utf-8")))
-    fixtures = budgets.get("fixtures", {})
+    budgets = parse_budgets(budgets_path)
+    fixtures = budgets.fixtures
     asked = requested_fixtures(results_dir)
     results, findings = load_results(results_dir)
     if not fixtures:
@@ -506,14 +476,17 @@ def run_checks(results_dir: Path, budgets_path: Path) -> Report:
     mismatched, interpreter = check_interpreter(results, fixtures)
     unusable, provenance = check_provenance(results, fixtures)
     compared, ratchet = check_ratchet(results, budgets, unstable | mismatched | unusable)
-    covers = {figure for figure in gated_figures(fixtures) if asked is None or figure[0] in asked}
+    covers = covered_figures(fixtures, asked)
     findings.extend(reproducibility)
     findings.extend(interpreter)
     findings.extend(provenance)
     findings.extend(check_coverage(compared, fixtures, asked))
     findings.extend(ratchet)
     findings.extend(check_growth(results, budgets, unstable))
-    findings.extend(report_timings(results))
+    findings.extend(
+        Finding("INFO", f"fixture {result.key} {timings(result.runs)}, advisory, never gated")
+        for result in results
+    )
     return Report(findings=findings, compared=len(compared), gated=len(covers))
 
 

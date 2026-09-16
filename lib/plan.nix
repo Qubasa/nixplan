@@ -21,7 +21,6 @@ let
     isList
     isString
     length
-    listToAttrs
     mapAttrs
     tail
     ;
@@ -31,42 +30,52 @@ in
 rec {
   machineKey = record: util.shortHash (builtins.toJSON record);
 
+  # Every delivered read of the deployment, flat: the edge it came from, one
+  # provider entry it names, and the consuming entries that named it. Walked once
+  # because the two indexes below are two `groupBy` projections of it, and a walk
+  # of its own for each is a second traversal of the whole deployment per plan.
+  deliveredReads =
+    resolved:
+    util.eachMember resolved (
+      iname: mname: member:
+      let
+        consumers = entryKeysOf iname mname member;
+      in
+      util.concatMapAttrsToList (
+        slotName: edge:
+        if !edge.delivered then
+          [ ]
+        else
+          map (providerKey: {
+            inherit
+              slotName
+              edge
+              providerKey
+              consumers
+              ;
+          }) edge.entryKeys
+      ) member.edges
+    );
+
   # Every reader of every export, as a flat index, so a capability can record who
   # reads it without walking the deployment again.
   readerIndex =
-    resolved:
+    reads:
     let
-      rows = util.concatMapAttrsToList (
-        iname: inst:
-        util.concatMapAttrsToList (
-          mname: member:
-          let
-            consumers = entryKeysOf iname mname member;
-          in
-          util.concatMapAttrsToList (
-            _: edge:
-            if !edge.delivered then
-              [ ]
-            else
-              concatLists (
-                map (
-                  providerKey:
-                  let
-                    absent = edge.entryAbsences.${providerKey} or [ ];
-                  in
-                  map (ename: {
-                    key = "${providerKey}|${edge.capability}|${ename}";
-                    inherit consumers;
-                    rows = map (subject: {
-                      id = "set-entry-absent";
-                      inherit subject;
-                    }) (if elem ename absent then consumers else [ ]);
-                  }) edge.reads
-                ) edge.entryKeys
-              )
-          ) member.edges
-        ) inst.members
-      ) resolved.instances;
+      rows = concatMap (
+        r:
+        let
+          absent = r.edge.entryAbsences.${r.providerKey} or [ ];
+        in
+        map (ename: {
+          key = "${r.providerKey}|${r.edge.capability}|${ename}";
+          inherit (r) consumers;
+          rows = map (subject: {
+            id = "set-entry-absent";
+            inherit subject;
+          }) (if elem ename absent then r.consumers else [ ]);
+        }) r.edge.reads
+      ) reads;
     in
     mapAttrs (_: group: {
       readBy = util.uniqueStrings (concatLists (map (r: r.consumers) group));
@@ -158,38 +167,19 @@ rec {
   # this and from the owner's placements: a routable secret is bounded by nobody,
   # so who declared a read is the only thing that can narrow it.
   valueReaderIndex =
-    resolved:
+    reads:
     let
-      rows = util.concatMapAttrsToList (
-        iname: inst:
+      rows = concatMap (
+        r:
         util.concatMapAttrsToList (
-          mname: member:
-          let
-            consumers = entryKeysOf iname mname member;
-          in
-          util.concatMapAttrsToList (
-            slotName: edge:
-            if !edge.delivered then
-              [ ]
-            else
-              concatLists (
-                map (
-                  providerKey:
-                  concatLists (
-                    util.mapAttrsToList (
-                      ename: varsFile:
-                      map (consumer: {
-                        key = varsFile.entry;
-                        reason = "${consumer} named ${ename} in uses.${slotName}.reads";
-                        machine = machineOf consumer;
-                      }) consumers
-                    ) (edge.entryVarsFiles.${providerKey} or { })
-                  )
-                ) edge.entryKeys
-              )
-          ) member.edges
-        ) inst.members
-      ) resolved.instances;
+          ename: varsFile:
+          map (consumer: {
+            key = varsFile.entry;
+            reason = "${consumer} named ${ename} in uses.${r.slotName}.reads";
+            machine = machineOf consumer;
+          }) r.consumers
+        ) (r.edge.entryVarsFiles.${r.providerKey} or { })
+      ) reads;
     in
     mapAttrs (_: group: {
       machines = util.uniqueStrings (filter (m: m != null) (map (r: r.machine) group));
@@ -416,32 +406,30 @@ rec {
       # the value paths it names and each of the entry's own files is a lookup.
       namedBy = mapAttrs (_: unit: util.stringSet (util.varsPathsDeep unit)) units;
     in
-    concatLists (
-      util.mapAttrsToList (
-        gen: files:
-        util.concatMapAttrsToList (
-          fname: file:
-          if !file.deploy then
-            [ ]
-          else
-            util.concatMapAttrsToList (
-              unitName: unit:
-              if !(util.inStringSet namedBy.${unitName} file.path) || admits unit file then
-                [ ]
-              else
-                [
-                  (diag.error {
-                    inherit subject;
-                    id = "entry-value-unreadable-by-user";
-                    message = "unit ${util.quote unitName} of ${util.quote subject} runs as ${util.quote unit.user} and names ${util.quote file.path}, the file ${util.quote "${gen}/${fname}"} of its own generator, delivered as ${util.quote "${file.owner}:${file.group}"} at mode ${util.quote file.mode}";
-                    evidence = "the mode admits its owner, a member of its group where the unit declares that group, and nobody else, so the unit starts and fails with `EACCES` on ${util.quote file.path}";
-                    resolution = "declare `owner`, `group` or `mode` on that generated file so ${util.quote unit.user} may open it, or run the unit as ${util.quote file.owner}";
-                  })
-                ]
-            ) units
-        ) files
-      ) placement.vars
-    );
+    util.concatMapAttrsToList (
+      gen: files:
+      util.concatMapAttrsToList (
+        fname: file:
+        if !file.deploy then
+          [ ]
+        else
+          util.concatMapAttrsToList (
+            unitName: unit:
+            if !(util.inStringSet namedBy.${unitName} file.path) || admits unit file then
+              [ ]
+            else
+              [
+                (diag.error {
+                  inherit subject;
+                  id = "entry-value-unreadable-by-user";
+                  message = "unit ${util.quote unitName} of ${util.quote subject} runs as ${util.quote unit.user} and names ${util.quote file.path}, the file ${util.quote "${gen}/${fname}"} of its own generator, delivered as ${util.quote "${file.owner}:${file.group}"} at mode ${util.quote file.mode}";
+                  evidence = "the mode admits its owner, a member of its group where the unit declares that group, and nobody else, so the unit starts and fails with `EACCES` on ${util.quote file.path}";
+                  resolution = "declare `owner`, `group` or `mode` on that generated file so ${util.quote unit.user} may open it, or run the unit as ${util.quote file.owner}";
+                })
+              ]
+          ) units
+      ) files
+    ) placement.vars;
 
   # A configuration file names its bytes and never carries them. A digest covers
   # only material the plan itself holds, and a file rendered over a set with an
@@ -619,6 +607,19 @@ rec {
       }) record.exports
     ) placement.capabilities;
 
+  # Every path a scan finds in the strings of an entry's own sites, beside the
+  # site that named it. Two scans ask it, one for value paths and one for store
+  # paths, and both read the entry's own strings rather than the fleet's values.
+  pathsNamedIn =
+    scan: sites:
+    concatMap (
+      site:
+      map (path: {
+        inherit path;
+        inherit (site) where;
+      }) (scan site.value)
+    ) sites;
+
   # A path a machine does not hold. A value reaches a machine through the owner's
   # placements and the declared reads and through nothing else, so a site of a
   # placed entry that names the path of a value its machine does not receive
@@ -644,15 +645,7 @@ rec {
       # fleet. A per-placement value's path carries the instance and not the
       # machine, so one path names one value per machine and the question a
       # lookup answers is whether any value at that path reaches this one.
-      named = concatLists (
-        map (
-          site:
-          map (path: {
-            inherit path;
-            inherit (site) where;
-          }) (util.varsPathsDeep site.value)
-        ) sites
-      );
+      named = pathsNamedIn util.varsPathsDeep sites;
 
       opened = filter (
         m: values ? ${m.path} && !(any (v: elem machine v.delivery) values.${m.path})
@@ -696,15 +689,7 @@ rec {
     }:
     let
       scan = util.storePathsDeep storeDir;
-      mentioned = concatLists (
-        map (
-          site:
-          map (path: {
-            inherit path;
-            inherit (site) where;
-          }) (scan site.value)
-        ) sites
-      );
+      mentioned = pathsNamedIn scan sites;
 
       declaredSet = util.stringSet declared;
       mentionedSet = util.stringSet (map (m: m.path) mentioned);
@@ -830,10 +815,8 @@ rec {
   directoriesOf =
     unit:
     concatMap (claimedUnder unit) directoryFields
-    ++ concatLists (
-      util.mapAttrsToList (_: fields: concatMap (claimedUnder fields) directoryFields) (
-        unit.extends or { }
-      )
+    ++ util.concatMapAttrsToList (_: fields: concatMap (claimedUnder fields) directoryFields) (
+      unit.extends or { }
     );
 
   # How a port claim reads in a row. A field the claim leaves unstated is every
@@ -1053,28 +1036,24 @@ rec {
   # claims under two machines rather than against itself.
   collisionRows =
     claims:
-    concatLists (
-      util.mapAttrsToList (
-        machine: onMachine:
-        nestingRows machine onMachine
-        ++ concatLists (
-          util.mapAttrsToList (
-            _: claimants:
-            let
-              claimed = head claimants;
-            in
-            if claimed.kind == "ports" then
-              portCollisions machine claimants
-            else
-              collisionRow {
-                inherit machine;
-                inherit (claimed) kind claim;
-                claimants = map (c: c.key) claimants;
-              }
-          ) (builtins.groupBy (c: "${c.kind} ${c.group}") onMachine)
-        )
-      ) (builtins.groupBy (c: c.machine) claims)
-    );
+    util.concatMapAttrsToList (
+      machine: onMachine:
+      nestingRows machine onMachine
+      ++ util.concatMapAttrsToList (
+        _: claimants:
+        let
+          claimed = head claimants;
+        in
+        if claimed.kind == "ports" then
+          portCollisions machine claimants
+        else
+          collisionRow {
+            inherit machine;
+            inherit (claimed) kind claim;
+            claimants = map (c: c.key) claimants;
+          }
+      ) (builtins.groupBy (c: "${c.kind} ${c.group}") onMachine)
+    ) (builtins.groupBy (c: c.machine) claims);
 
   # The key hashes the instance, the service, the machine, the target, the pin, the
   # units, the store paths the entry declares, the values it was handed and the
@@ -1264,6 +1243,11 @@ rec {
       canonical =
         gen: machine: if generators.${gen}.per == "instance" then head member.placements else machine;
 
+      # One projection of a placement's values per machine rather than one per
+      # generated value: every generator of one placement indexes the same two.
+      varsRecords = mapAttrs (_: varsRecord) member.placed;
+      keyFiles = mapAttrs (_: varsKeyFiles) member.placed;
+
       # Terminates because a generator that transitively reads itself is refused
       # by `readVars`, which drops the reads it recorded.
       recordOf =
@@ -1280,7 +1264,7 @@ rec {
             };
           owners = if g.per == "instance" then member.placements else [ owner ];
           siblings = map (s: recordOf s owner) g.reads;
-          files = (varsRecord placement).${gen}.files;
+          files = varsRecords.${owner}.${gen}.files;
           dependsOn =
             map (r: "${r.name}#${r.value.key}") siblings
             ++ (if g.per == "instance" then [ ] else [ "machine:${owner}@${machineKeys.${owner}}" ]);
@@ -1292,7 +1276,7 @@ rec {
             instance = iname;
             generator = gen;
             inherit (g) per deploy;
-            files = (varsKeyFiles placement).${gen};
+            files = keyFiles.${owner}.${gen};
             inherit dependsOn;
             machine = if g.per == "instance" then null else owner;
           }
@@ -1351,84 +1335,69 @@ rec {
   entries =
     resolved:
     let
-      readers = readerIndex resolved;
-      valueReaders = valueReaderIndex resolved;
+      reads = deliveredReads resolved;
+      readers = readerIndex reads;
+      valueReaders = valueReaderIndex reads;
 
       machineKeys = mapAttrs (_: machineKey) resolved.machines;
 
-      varsEntries = concatLists (
-        util.mapAttrsToList (
-          iname: inst:
-          concatLists (
-            util.mapAttrsToList (
-              mname: member:
-              varsEntriesOf {
-                inherit
-                  valueReaders
-                  machineKeys
-                  iname
-                  mname
-                  member
-                  ;
-              }
-            ) inst.members
-          )
-        ) resolved.instances
+      varsEntries = util.eachMember resolved (
+        iname: mname: member:
+        varsEntriesOf {
+          inherit
+            valueReaders
+            machineKeys
+            iname
+            mname
+            member
+            ;
+        }
       );
 
       # Every file of every value the plan carries, with the delivery set it was
       # given: the one index the mention scan asks its machine question of.
       values = builtins.groupBy (v: v.path) (
-        concatLists (
-          map (
-            e:
-            util.mapAttrsToList (fname: file: {
-              inherit fname;
-              inherit (file) path;
-              inherit (e.owner) gen module;
-              valueKey = e.name;
-              inherit (e.value) delivery;
-            }) e.value.files
-          ) varsEntries
-        )
+        concatMap (
+          e:
+          util.mapAttrsToList (fname: file: {
+            inherit fname;
+            inherit (file) path;
+            inherit (e.owner) gen module;
+            valueKey = e.name;
+            inherit (e.value) delivery;
+          }) e.value.files
+        ) varsEntries
       );
 
-      serviceEntries = concatLists (
-        util.mapAttrsToList (
-          iname: inst:
-          concatLists (
-            util.mapAttrsToList (
-              mname: member:
-              if member.placements == [ ] then
-                [
-                  (unplacedEntry {
-                    inherit
-                      readers
-                      iname
-                      mname
-                      member
-                      ;
-                  })
-                ]
-              else
-                map (
-                  machine:
-                  placedEntry {
-                    inherit
-                      readers
-                      values
-                      resolved
-                      machineKeys
-                      iname
-                      mname
-                      member
-                      machine
-                      ;
-                  }
-                ) member.placements
-            ) inst.members
-          )
-        ) resolved.instances
+      serviceEntries = util.eachMember resolved (
+        iname: mname: member:
+        if member.placements == [ ] then
+          [
+            (unplacedEntry {
+              inherit
+                readers
+                iname
+                mname
+                member
+                ;
+            })
+          ]
+        else
+          map (
+            machine:
+            placedEntry {
+              inherit
+                readers
+                values
+                resolved
+                machineKeys
+                iname
+                mname
+                member
+                machine
+                ;
+            }
+          ) member.placements
       );
       usedMachines = resolved.usedMachines;
 
@@ -1469,28 +1438,26 @@ rec {
       # family already reports - two members claiming one generator name, two
       # members of one name - so the row owed here is the one nobody else can
       # make: two families claiming one key.
-      keyCollisionRows = concatLists (
-        util.mapAttrsToList (
-          key: claiming:
-          if length (util.uniqueStrings (map (c: c.family) claiming)) < 2 then
-            [ ]
-          else
-            [
-              (diag.error {
-                subject = key;
-                id = "plan-key-claimed-twice";
-                message = "the plan key ${util.quote key} is claimed by ${
-                  concatStringsSep " and " (map (c: c.claimant) claiming)
-                }";
-                evidence = "a plan key names one record, and a reader takes a key apart to recover what an entry is: ${(head claiming).claimant} is the record the key names and every other claimant of it is in no plan";
-                resolution = "rename one of them so each names a key of its own";
-              })
-            ]
-        ) byKey
-      );
+      keyCollisionRows = util.concatMapAttrsToList (
+        key: claiming:
+        if length (util.uniqueStrings (map (c: c.family) claiming)) < 2 then
+          [ ]
+        else
+          [
+            (diag.error {
+              subject = key;
+              id = "plan-key-claimed-twice";
+              message = "the plan key ${util.quote key} is claimed by ${
+                concatStringsSep " and " (map (c: c.claimant) claiming)
+              }";
+              evidence = "a plan key names one record, and a reader takes a key apart to recover what an entry is: ${(head claiming).claimant} is the record the key names and every other claimant of it is in no plan";
+              resolution = "rename one of them so each names a key of its own";
+            })
+          ]
+      ) byKey;
     in
     {
-      plan = listToAttrs (map (claiming: head claiming) (attrValues byKey));
+      plan = mapAttrs (_: claiming: (head claiming).value) byKey;
       rows =
         concatLists (map (e: e.rows) serviceEntries)
         ++ keyCollisionRows

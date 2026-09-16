@@ -15,26 +15,28 @@ let
     isString
     length
     split
-    tryEval
     ;
 
   inherit (support)
+    assemble
     hasInfix
     korora
+    laptopMachines
     planOf
+    raises
     soleRoot
     systemdService
     ;
 
   inherit (support.worked) openssh borgbackup;
 
-  # This layer realises nothing, so a configuration file the realiser assembles at
-  # build time stands in as a store path keyed by its own bytes: two readings of
-  # one recipe answer one path, and an edited recipe answers another, which is what
-  # a real `writeText` does.
-  assemble = name: text: "/nix/store/${planner.util.shortHash text}-${name}";
+  realiser = support.realiser {
+    inherit imageSource assemble;
+  };
 
-  reader = import (imageSource + "/read.nix") { inherit planner assemble; };
+  inherit (realiser) planned;
+
+  reader = realiser.imageReader;
 
   # The builder over that reading, so a suite can read the shell scripts it
   # renders. Every derivation is answered by the same keyed fake path
@@ -99,39 +101,21 @@ let
   # one, built, so what these tests read is the script text a machine runs.
   staged =
     let
-      result = planOf {
-        instances.svc = {
-          module = soleRoot {
-            module = _: {
-              vars.hostKey.files."key".secrecy = "secret";
-              impl =
-                { vars, ... }:
-                {
-                  closure = [ borgbackup ];
-                  units.only = {
-                    command = "${borgbackup}/bin/borg serve";
-                    reloadCommand = "${borgbackup}/bin/borg reload";
-                  };
-                  units.sweep = {
-                    command = "${borgbackup}/bin/borg prune";
-                    schedule = "daily";
-                  };
-                  configData."/etc/thing.conf" = {
-                    mode = "0400";
-                    reload = [ "only" ];
-                    render = [
-                      { text = "value = one\n"; }
-                      { ref = vars.hostKey."key".path; }
-                    ];
-                  };
-                };
-            };
-          };
-          placement.every.only.machines = [ "one" ];
+      result = support.valuePlan {
+        unitArgs.reloadCommand = "${borgbackup}/bin/borg reload";
+        extraUnits.sweep = {
+          command = "${borgbackup}/bin/borg prune";
+          schedule = "daily";
         };
-        varsState."svc:vars/hostKey@one"."key" = {
-          present = true;
-          content = "PRIVATE-KEY-BYTES";
+        extra = vars: {
+          configData."/etc/thing.conf" = {
+            mode = "0400";
+            reload = [ "only" ];
+            render = [
+              { text = "value = one\n"; }
+              { ref = vars.hostKey."key".path; }
+            ];
+          };
         };
       };
       built = builtFrom { } result;
@@ -143,53 +127,7 @@ let
       path = "/etc/thing.conf";
     };
 
-  laptopMachines = support.machines // {
-    laptop = support.laptop;
-  };
-
-  planned =
-    {
-      machines ? support.machines,
-      machine ? "one",
-    }:
-    implementation:
-    let
-      result = planOf {
-        inherit machines;
-        instances.svc = {
-          module = soleRoot {
-            module = _: {
-              impl = implementation;
-            };
-          };
-          placement.every.only.machines = [ machine ];
-        };
-      };
-    in
-    {
-      inherit result;
-      key = "svc:only@${machine}";
-      plan = result.plan;
-    };
-
-  readOf =
-    {
-      profile ? "trusted",
-      machines ? support.machines,
-      machine ? "one",
-    }:
-    implementation:
-    let
-      p = planned { inherit machines machine; } implementation;
-    in
-    reader.read {
-      inherit (p) plan key;
-      inherit profile;
-    };
-
-  # deepSeq, because a refusal guards fields a lazy read would never force. Without
-  # it every refusal test passes without testing anything.
-  raises = value: !(tryEval (builtins.deepSeq value value)).success;
+  readOf = args: realiser.readOf ({ profile = "trusted"; } // args);
 
   # A platform string no rule has reached: `image/read.nix` accepts
   # `target.system` on the sole condition that the record carries a `system`, so
@@ -222,7 +160,6 @@ let
 
   # The denial reads the record rather than the secrecy, so a value the
   # deployment opened to an account is not refused for having been generated.
-
   shownTo =
     {
       profile,
@@ -230,32 +167,10 @@ let
       unitArgs ? { },
     }:
     let
-      result = planOf {
-        instances.holder = {
-          module = soleRoot {
-            module = _: {
-              vars.hostKey.files."key" = {
-                secrecy = "secret";
-              }
-              // fileArgs;
-              impl =
-                { vars, ... }:
-                {
-                  closure = [ borgbackup ];
-                  units.only = {
-                    command = "${borgbackup}/bin/borg serve";
-                    env.KEYFILE = vars.hostKey."key".path;
-                  }
-                  // unitArgs;
-                };
-            };
-          };
-          placement.every.only.machines = [ "one" ];
-        };
-        varsState."holder:vars/hostKey@one"."key" = {
-          present = true;
-          content = "PRIVATE-KEY-BYTES";
-        };
+      result = support.valuePlan {
+        instance = "holder";
+        openIt = true;
+        inherit fileArgs unitArgs;
       };
     in
     reader.read {
@@ -274,10 +189,7 @@ let
     };
   };
 
-  simple = _: {
-    closure = [ borgbackup ];
-    units.only.command = "${borgbackup}/bin/borg serve";
-  };
+  simple = support.serving "only";
 
   # One configuration file whose record the store cannot carry, shown to a unit
   # the caller gives an account, a group, or neither: a confining profile puts a
@@ -343,50 +255,30 @@ let
     let
       deployment =
         { text, timeout }:
-        planOf {
-          instances = {
-            svc = {
-              module = soleRoot {
-                module = _: {
-                  vars.hostKey.files."key".secrecy = "secret";
-                  impl =
-                    { vars, ... }:
-                    {
-                      closure = [ borgbackup ];
-                      units.only = {
-                        command = "${borgbackup}/bin/borg serve";
-                        inherit timeout;
-                      };
-                      # A recipe naming a delivered path, so its bytes are
-                      # assembled on the machine and never enter the image.
-                      configData."/etc/thing.conf" = {
-                        mode = "0400";
-                        reload = [ "only" ];
-                        render = [
-                          { text = "value = ${text}\n"; }
-                          { ref = vars.hostKey."key".path; }
-                        ];
-                      };
-                    };
-                };
-              };
-              placement.every.only.machines = [ "one" ];
-            };
-            other = {
-              module = soleRoot {
-                module = _: {
-                  impl = _: {
-                    closure = [ openssh ];
-                    units.only.command = "${openssh}/bin/sshd";
-                  };
-                };
-              };
-              placement.every.only.machines = [ "two" ];
+        support.valuePlan {
+          unitArgs = { inherit timeout; };
+          # A recipe naming a delivered path, so its bytes are assembled on the
+          # machine and never enter the image.
+          extra = vars: {
+            configData."/etc/thing.conf" = {
+              mode = "0400";
+              reload = [ "only" ];
+              render = [
+                { text = "value = ${text}\n"; }
+                { ref = vars.hostKey."key".path; }
+              ];
             };
           };
-          varsState."svc:vars/hostKey@one"."key" = {
-            present = true;
-            content = "PRIVATE-KEY-BYTES";
+          instances.other = {
+            module = soleRoot {
+              module = _: {
+                impl = _: {
+                  closure = [ openssh ];
+                  units.only.command = "${openssh}/bin/sshd";
+                };
+              };
+            };
+            placement.every.only.machines = [ "two" ];
           };
         };
       imageOf =
@@ -519,7 +411,7 @@ in
   testAnImageMeetsADifferentServiceManager = {
     expr = raises (
       readOf {
-        machines = laptopMachines;
+        registry = laptopMachines;
         machine = "laptop";
       } simple
     );
@@ -1151,7 +1043,7 @@ in
       image =
         readOf
           {
-            machines = laptopMachines;
+            registry = laptopMachines;
             machine = "laptop";
           }
           (_: {
@@ -1224,28 +1116,10 @@ in
     let
       withSecret =
         closure:
-        planOf {
-          instances.holder = {
-            module = soleRoot {
-              module = _: {
-                vars.hostKey.files."key".secrecy = "secret";
-                impl =
-                  { vars, ... }:
-                  {
-                    inherit closure;
-                    units.only = {
-                      command = "${borgbackup}/bin/borg serve";
-                      env.KEYFILE = vars.hostKey."key".path;
-                    };
-                  };
-              };
-            };
-            placement.every.only.machines = [ "one" ];
-          };
-          varsState."holder:vars/hostKey@one"."key" = {
-            present = true;
-            content = "PRIVATE-KEY-BYTES";
-          };
+        support.valuePlan {
+          instance = "holder";
+          openIt = true;
+          extra = _: { inherit closure; };
         };
       result = withSecret [ borgbackup ];
       image = reader.read {
@@ -1347,32 +1221,17 @@ in
 
   testARenderRecipeIsAssembledOnTheHost =
     let
-      result = planOf {
-        instances.holder = {
-          module = soleRoot {
-            module = _: {
-              vars.hostKey.files."key".secrecy = "secret";
-              impl =
-                { vars, ... }:
-                {
-                  closure = [ borgbackup ];
-                  units.only.command = "${borgbackup}/bin/borg serve";
-                  configData."/etc/agent.conf" = {
-                    mode = "0400";
-                    reload = [ "only" ];
-                    render = [
-                      { text = "key_file = "; }
-                      { ref = vars.hostKey."key".path; }
-                    ];
-                  };
-                };
-            };
+      result = support.valuePlan {
+        instance = "holder";
+        extra = vars: {
+          configData."/etc/agent.conf" = {
+            mode = "0400";
+            reload = [ "only" ];
+            render = [
+              { text = "key_file = "; }
+              { ref = vars.hostKey."key".path; }
+            ];
           };
-          placement.every.only.machines = [ "one" ];
-        };
-        varsState."holder:vars/hostKey@one"."key" = {
-          present = true;
-          content = "PRIVATE-KEY-BYTES";
         };
       };
       image = reader.read {
@@ -1498,38 +1357,7 @@ in
 
   testAProfileDeniesAHostFileOnlyRootMayRead =
     let
-      withSecret =
-        profile:
-        let
-          result = planOf {
-            instances.holder = {
-              module = soleRoot {
-                module = _: {
-                  vars.hostKey.files."key".secrecy = "secret";
-                  impl =
-                    { vars, ... }:
-                    {
-                      closure = [ borgbackup ];
-                      units.only = {
-                        command = "${borgbackup}/bin/borg serve";
-                        env.KEYFILE = vars.hostKey."key".path;
-                      };
-                    };
-                };
-              };
-              placement.every.only.machines = [ "one" ];
-            };
-            varsState."holder:vars/hostKey@one"."key" = {
-              present = true;
-              content = "PRIVATE-KEY-BYTES";
-            };
-          };
-        in
-        reader.read {
-          plan = result.plan;
-          key = "holder:only@one";
-          inherit profile;
-        };
+      withSecret = profile: shownTo { inherit profile; };
     in
     {
       expr = {

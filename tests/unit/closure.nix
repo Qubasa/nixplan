@@ -11,7 +11,7 @@ let
     hasInfix
     messageById
     planOf
-    publicString
+    pub
     rowIds
     severityById
     soleRoot
@@ -26,26 +26,7 @@ let
 
   relocated = "${elsewhere}/1w9k3zc7yq2mb5xj8vdl4rns6fga0h1p-openssh-9.8p1";
 
-  pub = planner.interface {
-    name = "pub";
-    exports.publicKey = publicString;
-  };
-
-  placed =
-    args: implementation:
-    planOf (
-      {
-        instances.svc = {
-          module = soleRoot {
-            module = _: {
-              impl = implementation;
-            };
-          };
-          placement.every.only.machines = [ "one" ];
-        };
-      }
-      // args
-    );
+  placed = args: support.entryPlan { inherit args; };
 
   entryOf = result: result.plan."svc:only@one";
 
@@ -74,6 +55,37 @@ let
           };
         };
         placement.every.only.machines = [ "one" ];
+      };
+    };
+
+  # Two instances of one shape, each pinned on its own: the shortest deployment
+  # in which two resolutions can agree or differ.
+  pinnedPair =
+    first: second:
+    planOf {
+      instances = {
+        first = {
+          module = soleRoot {
+            module = _: {
+              pin = first;
+              impl = _: {
+                units.only.command = "/bin/first";
+              };
+            };
+          };
+          placement.every.only.machines = [ "one" ];
+        };
+        second = {
+          module = soleRoot {
+            module = _: {
+              pin = second;
+              impl = _: {
+                units.only.command = "/bin/second";
+              };
+            };
+          };
+          placement.every.only.machines = [ "two" ];
+        };
       };
     };
 
@@ -476,35 +488,7 @@ in
 
   testEveryServiceResolvedToOneSource =
     let
-      shared =
-        pin:
-        planOf {
-          instances = {
-            first = {
-              module = soleRoot {
-                module = _: {
-                  inherit pin;
-                  impl = _: {
-                    units.only.command = "/bin/first";
-                  };
-                };
-              };
-              placement.every.only.machines = [ "one" ];
-            };
-            second = {
-              module = soleRoot {
-                module = _: {
-                  inherit pin;
-                  impl = _: {
-                    units.only.command = "/bin/second";
-                  };
-                };
-              };
-              placement.every.only.machines = [ "two" ];
-            };
-          };
-        };
-      result = shared pinned;
+      result = pinnedPair pinned pinned;
     in
     {
       expr = {
@@ -527,34 +511,7 @@ in
 
   testServicesResolvedToDifferentSources =
     let
-      deployment =
-        secondPin:
-        planOf {
-          instances = {
-            first = {
-              module = soleRoot {
-                module = _: {
-                  pin = pinned;
-                  impl = _: {
-                    units.only.command = "/bin/first";
-                  };
-                };
-              };
-              placement.every.only.machines = [ "one" ];
-            };
-            second = {
-              module = soleRoot {
-                module = _: {
-                  pin = secondPin;
-                  impl = _: {
-                    units.only.command = "/bin/second";
-                  };
-                };
-              };
-              placement.every.only.machines = [ "two" ];
-            };
-          };
-        };
+      deployment = secondPin: pinnedPair pinned secondPin;
       other = {
         key = "/treefmt-nix/nixpkgs";
         locked = pinned.locked // {

@@ -3,15 +3,10 @@
 # placed entry, in one link farm. mkGeneration is the same plan read as a
 # configuration for the external secret generator.
 #
-# This is the first layer allowed to raise. `lib/` never does, the readings never
-# do, and the realisers do it for a condition a row already reported. What this
-# file raises for is a caller asking for the artifact of an entry of a deployment
-# the planner called inapplicable, and a generation whose table carries an error,
-# with the rendered table as the message either way.
-# A deployment tree is always produced: it holds the plan and both halves of the
-# diagnostics whatever the table says, and an artifact of no entry when the table
-# carries an error. A table carrying warnings and no error builds; a warning that
-# stopped a build would be an error.
+# This is the first layer allowed to raise, and what it raises for is a caller
+# asking for the artifact of an entry of an inapplicable deployment, or a
+# generation whose table carries an error, with the rendered table as the message
+# either way. The tree itself is always produced.
 #
 # korora is the pin the library was instantiated from, and it is here because
 # mkGeneration writes an expression that instantiates the same library again: a
@@ -114,14 +109,12 @@
     built;
 
   # The same deployment read as a configuration for the external secret
-  # generator, plus the two things that configuration cannot carry. The contract
-  # hands its deploy step a file list and no target, so the step is rendered
-  # here; and the plan of a generated value is a function of what the backend
-  # holds, so what is built is the expression the run evaluates.
+  # generator, plus the two things that configuration cannot carry: the deploy
+  # step, which the contract hands a file list and no target, and the plan of a
+  # generated value, which is a function of what the backend holds and is
+  # therefore built as the expression the run evaluates.
   #
-  # programs is the caller's store backend, one derivation per command of the
-  # contract. Where bytes live is a fact about disk, so it is never the plan's.
-  # source is the deployment's own directory, and the file a second evaluation
+  # `source` is the deployment's own directory, and the file a second evaluation
   # imports is its `args.nix`: a `default.nix` there takes `pkgs`, which no
   # evaluation outside a build can hand it. That file takes
   # { planner, packages, varsState } and returns { args }, and packages is what

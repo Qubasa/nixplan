@@ -47,10 +47,8 @@ def reaching(
 ) -> dict[str, tuple[str, ...]]:
     """Return the value entries a run must hold bytes for, and where each goes.
 
-    Args:
-        deployment: The deployment being applied.
-        machines: The machines of the entries the run applies.
-        named: The keys `--only` named, which may include a value entry.
+    `machines` are the machines of the entries the run applies, and `named` the
+    keys `--only` gave, which may include a value entry.
 
     Returns:
         Each delivered value key the run is answerable for, in key order, with
@@ -75,13 +73,9 @@ def reaching(
 def required(deployment: Deployment, keys: Iterable[str]) -> tuple[tuple[Value, ValueFile], ...]:
     """Return every file that will be written, by value entry then file name.
 
-    Args:
-        deployment: The deployment being applied.
-        keys: The value entries under consideration.
-
     Returns:
-        Each delivered value entry that records no `program`, paired with each
-        file it declares.
+        Each delivered value entry of ``keys`` that records no `program`,
+        paired with each file it declares.
     """
     return tuple(
         (value, file)
@@ -94,9 +88,6 @@ def required(deployment: Deployment, keys: Iterable[str]) -> tuple[tuple[Value, 
 
 def generated(deployment: Deployment) -> tuple[tuple[Value, ValueFile], ...]:
     """Return every file of a delivered value the external generator delivers.
-
-    Args:
-        deployment: The deployment being applied.
 
     Returns:
         Each delivered value entry recording a `program`, paired with each file
@@ -113,10 +104,6 @@ def generated(deployment: Deployment) -> tuple[tuple[Value, ValueFile], ...]:
 
 def held(root: Path, keys: Iterable[str]) -> tuple[str, ...]:
     """Return the files the source holds for ``keys``, relative to it, sorted.
-
-    Args:
-        root: The value source.
-        keys: The value entries the deployment delivers.
 
     Returns:
         Every file under one of those entries' own directories, at any depth. A
@@ -137,9 +124,6 @@ def _leaves(directory: Path) -> tuple[str, ...]:
     elsewhere included, and a directory already walked is not walked again, so
     a link back up the tree is a finite measurement rather than an endless one.
 
-    Args:
-        directory: The value entry's own directory in the source.
-
     Returns:
         The paths below ``directory``, empty where nothing is there.
     """
@@ -159,13 +143,16 @@ def _leaves(directory: Path) -> tuple[str, ...]:
     return tuple(found)
 
 
+def _index(pairs: Iterable[tuple[Value, ValueFile]]) -> dict[str, tuple[Value, ValueFile]]:
+    """Return each of ``pairs`` by the path a source addresses that file at."""
+    return {f"{value.key}/{file.name}": (value, file) for value, file in pairs}
+
+
 def check(deployment: Deployment, root: Path | None, keys: Iterable[str]) -> None:
     """Refuse a value source that does not match the plan, before anything is dialled.
 
-    Args:
-        deployment: The deployment being applied.
-        root: The value source, or ``None`` when the operator named none.
-        keys: The value entries this run is answerable for.
+    `keys` are the value entries this run is answerable for, and what the source
+    holds is measured against every value the deployment delivers.
 
     Raises:
         ApplyError: If the source is not a directory, if it holds no bytes for a
@@ -175,11 +162,13 @@ def check(deployment: Deployment, root: Path | None, keys: Iterable[str]) -> Non
     """
     if root is not None and not root.is_dir():
         raise ApplyError(f"the value source {root} is not a directory")
-    present = frozenset(held(root, delivered(deployment))) if root is not None else frozenset()
+    everywhere = delivered(deployment)
+    present = frozenset(held(root, everywhere)) if root is not None else frozenset()
+    declared = _index(required(deployment, everywhere))
+    answerable = frozenset(keys)
 
-    for value, file in required(deployment, keys):
-        relative = f"{value.key}/{file.name}"
-        if relative in present:
+    for relative, (value, file) in declared.items():
+        if value.key not in answerable or relative in present:
             continue
         if root is None:
             raise ApplyError(
@@ -190,20 +179,17 @@ def check(deployment: Deployment, root: Path | None, keys: Iterable[str]) -> Non
             f"{value.key} declares {file.name} and the value source holds no {relative}"
         )
 
-    mine = {f"{value.key}/{file.name}": value for value, file in generated(deployment)}
+    mine = _index(generated(deployment))
     theirs = sorted(present.intersection(mine))
     if theirs:
-        owner = mine[theirs[0]]
+        owner = mine[theirs[0]][0]
         raise ApplyError(
             f"the value source holds {theirs[0]}, and the bytes of {owner.key} are the "
             f"generator's: {owner.program} produces them and the generator's own deploy "
             f"step delivers them"
         )
 
-    everything = frozenset(
-        f"{value.key}/{file.name}" for value, file in required(deployment, delivered(deployment))
-    )
-    extra = sorted(present - everything)
+    extra = sorted(present - frozenset(declared))
     if extra:
         raise ApplyError(
             f"the value source holds {', '.join(extra)}, which no value this deployment "
@@ -212,15 +198,7 @@ def check(deployment: Deployment, root: Path | None, keys: Iterable[str]) -> Non
 
 
 def bytes_of(root: Path, value: Value, file: ValueFile) -> bytes:
-    """Return the bytes the source holds for one declared file.
-
-    Args:
-        root: The value source.
-        value: The value entry the file belongs to.
-        file: The declared file.
-
-    Returns:
-        The file's bytes, as they will be written.
+    """Return the bytes the source holds for one declared file, as they will be written.
 
     Raises:
         ApplyError: If the file cannot be read.

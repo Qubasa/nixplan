@@ -1,22 +1,12 @@
 # Reading one placed plan entry as an image. Everything here is a pure function of
 # the plan, and a fact the entry does not record is a refusal naming the entry and
-# the field, never a default.
-#
-# These refusals raise, unlike the planner's rows. The planner must produce a plan
-# for a deployment that has mistakes in it, while an image built from a fact nobody
-# wrote is worse than no image. Every refusal here is a condition an error row
-# already reported: one from `mkPlan` where the fact is the plan's, and one from
-# `operator/read.nix` where the fact is the realisation statement's, which no plan
-# field carries and this file is never handed whole. A raise here is therefore the
-# answer a caller reaching this file directly receives, and no path through the
-# deployment build reaches one without the row having been produced first.
+# the field, never a default. Those refusals raise, unlike the planner's rows, and
+# each is a condition an error row already reported.
 {
   planner,
-  # How the caller turns bytes the plan already holds into a store object. This
-  # reading realises nothing, so a configuration file assembled from literals is
-  # written by whoever is building: the image puts it in its own closure and
-  # flakelet puts it beside `units/`. A reading handed none answers about the
-  # dispositions and renders nothing.
+  # How the caller turns bytes the plan already holds into a store object: this
+  # reading realises nothing, so a file assembled from literals is written by
+  # whoever is building. A reading handed none renders nothing.
   assemble ? null,
 }:
 let
@@ -98,9 +88,7 @@ let
   };
 
   # How every unit field this realiser renders reaches a unit file. A field the
-  # plan can carry and this table does not name fails the build the way an
-  # unknown extension field does: a vocabulary that grew and a realiser that did
-  # not is the realiser's defect rather than the deployment's. `extends` is the
+  # plan can carry and this table does not name fails the build. `extends` is the
   # extension namespace and reaches a unit file through the table above.
   unitDirectives = {
     command = "ExecStart";
@@ -144,10 +132,7 @@ let
   backend = "systemd";
 
   # Every refusal this reading can make, and the row that reports the same
-  # condition first. A refusal carries its account rather than its account
-  # carrying a fragment of its message, so rewording one moves nothing.
-  # `tests/unit/diagnostics.nix` crosses these against the rows the producing
-  # layers build.
+  # condition first, paired by the account a refusal carries.
   accounts = {
     keyNotPlaced.id = "operator-plan-record-unclassified";
     digestMalformed = {
@@ -190,20 +175,32 @@ let
 
   fail = _account: message: throw "planner image: ${message}";
 
-  # <instance>:<service>@<machine>, split the way a plan key is read everywhere else.
-  parseKey =
+  # <instance>:<service>@<machine>, split the way a plan key is read everywhere
+  # else. The reading is total, so a layer that may not raise reads the same one
+  # grammar rather than a second copy of it.
+  keyParts =
     key:
     let
       m = match "([^:]+):([^@]+)@(.+)" key;
     in
     if m == null then
-      fail accounts.keyNotPlaced "${quote key} is not a placed entry key of the form `<instance>:<service>@<machine>`"
+      null
     else
       {
         instance = builtins.elemAt m 0;
         service = builtins.elemAt m 1;
         machine = builtins.elemAt m 2;
       };
+
+  parseKey =
+    key:
+    let
+      parts = keyParts key;
+    in
+    if parts == null then
+      fail accounts.keyNotPlaced "${quote key} is not a placed entry key of the form `<instance>:<service>@<machine>`"
+    else
+      parts;
 
   # The image's name, and so every unit file's prefix. Two entries of one instance
   # on one machine differ in their service, which makes the prefix collision-free
@@ -246,11 +243,17 @@ let
   unitFileName = name: unit: "${name}-${unit}.service";
   timerFileName = name: unit: "${name}-${unit}.timer";
 
+  # Every file one entry's units render to: a unit file each and a timer for every
+  # scheduled one. `read` refuses a name outside the realiser's rule off this list
+  # and `operator/read.nix` rows about the same names, so the two ask one
+  # derivation rather than deriving the names twice.
+  unitFilesOf =
+    name: units:
+    map (unitFileName name) (attrNames units)
+    ++ map (timerFileName name) (filter (u: units.${u} ? schedule) (attrNames units));
+
   # This builder's own name rule, written as the sentence its refusal prints so
-  # the rule and the message cannot drift apart. It is the intersection of three
-  # constraints the builder is already inside: nix's store name set, which every
-  # derivation here spends, systemd's unit name grammar, and one shell word of
-  # the scripts below.
+  # the rule and the message cannot drift apart.
   nameRule = "a derived name starts with an ASCII alphanumeric and carries only ASCII alphanumerics, `_`, `-` and `.` after it";
 
   acceptsName = name: match "[A-Za-z0-9][A-Za-z0-9_.-]*" name != null;
@@ -363,9 +366,7 @@ let
 
   # Every path a byte of one configuration file can be at, all three under the
   # entry's own staging directory, which detaching removes. `staged` is the path
-  # the unit is shown; a recipe is concatenated into `assembling` and the
-  # candidate is owned and chmodded at `installing` before it is moved onto
-  # `staged`, so a run that stopped part way left nothing the unit could open.
+  # the unit is shown, and the other two are what the move onto it comes from.
   configFilesOf =
     name: entry:
     map (
@@ -514,9 +515,11 @@ rec {
     storeRecord
     recordOf
     backend
+    keyParts
     nameOf
     unitFileName
     timerFileName
+    unitFilesOf
     stagingOf
     stagedPath
     nameRule
@@ -549,15 +552,10 @@ rec {
       };
 
   # The digest the endpoint stores for an artifact, over the artifact's own
-  # content and never over the plan key: a fact that moves a key without moving a
-  # byte leaves this where it was.
-  #
-  # A shown path enters the digest by what its bytes are rather than by where a
-  # builder put them: a file assembled from literals is described by the
-  # literals, so two readings of one entry - one handed an assembly and one not -
-  # answer the same digest, which is what lets `operator/read.nix` publish it. The
-  # stated confinement profile is in it because it decides directives the rendered
-  # unit files carry: two artifacts whose bytes differ may not publish one digest.
+  # content and never over the plan key. A shown path enters it by what its bytes
+  # are rather than by where a builder put them, so a reading handed an assembly
+  # and one handed none answer alike, which is what lets `operator/read.nix`
+  # publish it.
   versionFor =
     {
       key,
@@ -724,11 +722,7 @@ rec {
       # is built from one. A name outside its rule is refused here rather than
       # left to whatever the build system makes of it, which names neither the
       # entry nor the declaration.
-      unitFiles = concatLists (
-        map (
-          u: [ (unitFileName name u) ] ++ (if units.${u} ? schedule then [ (timerFileName name u) ] else [ ])
-        ) (attrNames units)
-      );
+      unitFiles = unitFilesOf name units;
 
       refusedUnits = filter (file: !(rules.acceptsUnit name file)) unitFiles;
     in
@@ -804,10 +798,9 @@ rec {
       environment = map (k: "Environment=\"${escaped k}=${escaped unit.env.${k}}\"") envNames;
 
       # The name is the left half of the assignment, written with no escape of
-      # its own, so it is held to the grammar the library states for one rather
-      # than to a scan of this renderer's own. The value's one uncarriable part
-      # is a line break: a unit file is line-oriented, so a break ends the
-      # directive and the rest is a directive line of its own.
+      # its own, so it is held to the grammar the library states for one. The
+      # value's one uncarriable part is a line break, a unit file being
+      # line-oriented.
       envRefused = filter unassignable envNames;
 
       uncarried = filter (p: carriesLineBreak p.value) (
@@ -897,6 +890,29 @@ rec {
       "Unit=${unitFileName image.name unitName}"
       ""
     ];
+
+  # Every file a realiser writes for one entry's units: one per unit and one per
+  # scheduled unit's timer, in the order the unit set is read. A realiser hands
+  # its own two renderers over, because flakelet wraps both of them.
+  renderedUnitsBy =
+    renderers: image:
+    concatLists (
+      mapAttrsToList (
+        unitName: u:
+        [
+          {
+            file = u.file;
+            text = renderers.renderUnit image unitName;
+          }
+        ]
+        ++ planner.util.optional (u.timer != null) {
+          file = u.timer;
+          text = renderers.renderTimer image unitName;
+        }
+      ) image.units
+    );
+
+  renderedUnits = renderedUnitsBy { inherit renderUnit renderTimer; };
 
   attachment = image: {
     entry = image.key;

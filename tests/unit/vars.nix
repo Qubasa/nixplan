@@ -153,7 +153,15 @@ let
       consumerMachines ? [ "beta" ],
       varsState ? null,
     }:
-    planOf {
+    support.edge {
+      registry = machines;
+      consumerName = "client";
+      providerName = "holder";
+      providerModule = owner ownerArgs;
+      providerMachines = ownerMachines;
+      consumerModule = consumer;
+      inherit consumerMachines;
+      interfaces."interfaces/default.nix" = { inherit identity public; };
       # A declared secret with no bytes is a row of its own, so the default is
       # generated: a test that is not about absence does not have to say so.
       varsState =
@@ -168,32 +176,6 @@ let
               value."key".present = true;
             }) ownerMachines
           );
-      interfaces."interfaces/default.nix" = { inherit identity public; };
-      instances = {
-        holder = {
-          module = soleRoot {
-            module = owner ownerArgs;
-            provides = [ "identity" ];
-          };
-          placement.every.only.machines = ownerMachines;
-          exposes = [ "identity" ];
-        };
-      }
-      // (
-        if consumer == null then
-          { }
-        else
-          {
-            client = {
-              module = soleRoot { module = consumer; };
-              placement.every.only.machines = consumerMachines;
-              wire.far = {
-                instance = "holder";
-                provides = "identity";
-              };
-            };
-          }
-      );
     };
 
   fleet =
@@ -667,20 +649,13 @@ in
 
   testASharedValueIsOneEntry =
     let
-      result = planOf {
-        interfaces."interfaces/default.nix" = { inherit identity public; };
-        instances.holder = {
-          module = soleRoot {
-            module = owner { per = "instance"; };
-            provides = [ "identity" ];
-          };
-          placement.every.only.machines = [
-            "alpha"
-            "beta"
-            "idle"
-          ];
-          exposes = [ "identity" ];
-        };
+      result = deployment {
+        ownerArgs.per = "instance";
+        ownerMachines = [
+          "alpha"
+          "beta"
+          "idle"
+        ];
       };
     in
     {
@@ -702,20 +677,13 @@ in
 
   testAMachineSpecificValueIsOneEntryPerMachine =
     let
-      result = planOf {
-        interfaces."interfaces/default.nix" = { inherit identity public; };
-        instances.holder = {
-          module = soleRoot {
-            module = owner { per = "placement"; };
-            provides = [ "identity" ];
-          };
-          placement.every.only.machines = [
-            "alpha"
-            "beta"
-            "idle"
-          ];
-          exposes = [ "identity" ];
-        };
+      result = deployment {
+        ownerArgs.per = "placement";
+        ownerMachines = [
+          "alpha"
+          "beta"
+          "idle"
+        ];
       };
       keysOf = key: result.plan.${key}.key;
       without =

@@ -19,7 +19,6 @@ let
     isFunction
     isList
     isString
-    listToAttrs
     mapAttrs
     ;
 
@@ -66,7 +65,7 @@ let
     cacheDirectory = "cacheDirectoryMode";
   };
 
-  directoryVocabulary = listToAttrs (
+  directoryVocabulary = builtins.listToAttrs (
     builtins.concatLists (
       util.mapAttrsToList (kind: mode: [
         {
@@ -230,6 +229,29 @@ rec {
         resolution = "delete or correct ${util.quote key} in ${subject}${also}";
       };
 
+  # Positional, because an attribute pattern allocates an environment slot per
+  # formal and a thunk per default it does not receive, and this is asked of
+  # every declaration record a reading touches. The answer is almost always no
+  # extra key, so nothing below the scan is built on that path.
+  unknownKeyRows =
+    args:
+    let
+      allowed = args.allowed;
+      keys = args.keys or (util.extraKeys allowed args.record);
+    in
+    if keys == [ ] then
+      [ ]
+    else
+      map (
+        key:
+        keyRow {
+          inherit (args) subject where;
+          inherit key allowed;
+          id = args.id or "declaration-unknown-key";
+          note = args.note or null;
+        }
+      ) keys;
+
   # Every value below is read for its kind before the reading indexes into it. A
   # guard is no substitute: the unknown-key scans call `removeAttrs` on the value
   # itself and the walks call `mapAttrs`, and a type error is not something
@@ -241,7 +263,7 @@ rec {
       where,
       value,
     }:
-    if isAttrs value then
+    if builtins.isAttrs value then
       {
         inherit value;
         rows = [ ];
@@ -302,14 +324,11 @@ rec {
           util.shownValue given.reads;
 
       slotRows =
-        map (
-          key:
-          keyRow {
-            inherit subject key;
-            where = where;
-            allowed = slotKeys;
-          }
-        ) (util.extraKeys slotKeys given)
+        unknownKeyRows {
+          inherit subject where;
+          allowed = slotKeys;
+          record = given;
+        }
         ++ util.optional (given ? severity) (severityRow {
           inherit subject where;
         })
@@ -391,14 +410,11 @@ rec {
       known = stated == null || elem stated atoms.domains.consumerCardinality;
 
       capabilityRows =
-        map (
-          key:
-          keyRow {
-            inherit subject key;
-            where = where;
-            allowed = capabilityKeys;
-          }
-        ) (util.extraKeys capabilityKeys given)
+        unknownKeyRows {
+          inherit subject where;
+          allowed = capabilityKeys;
+          record = given;
+        }
         ++ util.optional (given ? severity) (severityRow {
           inherit subject where;
         })
@@ -435,17 +451,19 @@ rec {
       claims,
     }:
     let
-      read = declaredRecord {
-        inherit subject module;
-        where = "claims of ${module}";
-        value = claims;
-      };
+      recordOf =
+        where: value:
+        declaredRecord {
+          inherit
+            subject
+            module
+            where
+            value
+            ;
+        };
+      read = recordOf "claims of ${module}" claims;
       given = read.value;
-      portsRead = declaredRecord {
-        inherit subject module;
-        where = "the port claims of ${module}";
-        value = given.ports or { };
-      };
+      portsRead = recordOf "the port claims of ${module}" (given.ports or { });
       ports = portsRead.value;
 
       # The three fields are refused one at a time, because the failure
@@ -459,14 +477,7 @@ rec {
         name: value:
         let
           where = "port claim ${util.quote name} of ${module}";
-          record = declaredRecord {
-            inherit
-              subject
-              module
-              where
-              value
-              ;
-          };
+          record = recordOf where value;
           claim = record.value;
           refuses = field: type: claim ? ${field} && type.verify claim.${field} != null;
           numberRefused = refuses "fixed" atoms.port;
@@ -487,13 +498,11 @@ rec {
             if record.rows != [ ] then
               record.rows
             else
-              map (
-                key:
-                keyRow {
-                  inherit subject key where;
-                  allowed = claimKeys;
-                }
-              ) (util.extraKeys claimKeys claim)
+              unknownKeyRows {
+                inherit subject where;
+                allowed = claimKeys;
+                record = claim;
+              }
               ++ util.optional (!(claim ? fixed)) (
                 diag.error {
                   inherit subject;
@@ -539,14 +548,12 @@ rec {
       rows =
         read.rows
         ++ portsRead.rows
-        ++ map (
-          key:
-          keyRow {
-            inherit subject key;
-            where = "claims of ${module}";
-            allowed = [ "ports" ];
-          }
-        ) (util.extraKeys [ "ports" ] given)
+        ++ unknownKeyRows {
+          inherit subject;
+          where = "claims of ${module}";
+          allowed = [ "ports" ];
+          record = given;
+        }
         ++ util.concatMapAttrsToList (_: p: p.rows) claimReads;
     };
 
@@ -575,19 +582,18 @@ rec {
         mode = atoms.fileMode;
       };
 
+      statedOf = file: filter (k: file ? ${k}) (attrNames fileTypes);
+
       fileRows =
         gen: name: file:
         let
           where = "generated file ${util.quote "${gen}/${name}"} of ${module}";
-          typed = filter (k: file ? ${k}) (attrNames fileTypes);
         in
-        map (
-          key:
-          keyRow {
-            inherit subject key where;
-            allowed = fileKeys;
-          }
-        ) (util.extraKeys fileKeys file)
+        unknownKeyRows {
+          inherit subject where;
+          allowed = fileKeys;
+          record = file;
+        }
         ++ util.optional (!elem (interface.secrecyOf file) interface.secrecies) (
           diag.error {
             inherit subject;
@@ -608,7 +614,7 @@ rec {
             }, and korora reports: ${toString (fileTypes.${key}.verify file.${key})}";
             resolution = "write a value of that type in ${subject}; the failing value is not recorded and the default is delivered";
           }
-        ) (filter (k: fileTypes.${k}.verify file.${k} != null) typed);
+        ) (filter (k: fileTypes.${k}.verify file.${k} != null) (statedOf file));
 
       # The record every reader sees, so one function decides the defaults and
       # nothing downstream writes `or "root"`. What enters the value's key is
@@ -617,7 +623,7 @@ rec {
       fileRecord =
         file:
         let
-          stated = filter (k: file ? ${k} && fileTypes.${k}.verify file.${k} == null) (attrNames fileTypes);
+          stated = filter (k: fileTypes.${k}.verify file.${k} == null) (statedOf file);
           valueOf = k: default: if elem k stated then file.${k} else default;
         in
         {
@@ -627,43 +633,33 @@ rec {
           mode = valueOf "mode" "0400";
         };
 
-      read = declaredRecord {
-        inherit subject module;
-        where = "the generators of ${module}";
-        value = vars;
-      };
-
-      genReads = mapAttrs (
-        gen: g:
+      recordOf =
+        where: value:
         declaredRecord {
-          inherit subject module;
-          where = "generator ${util.quote gen} of ${module}";
-          value = g;
-        }
-      ) read.value;
+          inherit
+            subject
+            module
+            where
+            value
+            ;
+        };
+
+      read = recordOf "the generators of ${module}" vars;
+
+      genReads = mapAttrs (gen: g: recordOf "generator ${util.quote gen} of ${module}" g) read.value;
 
       # A generator of the wrong kind declares no value: nothing builds a key from
       # it, and a sibling naming it reads a generator this module does not declare.
       given = util.filterAttrs (gen: _: genReads.${gen}.rows == [ ]) read.value;
 
       filesRead = mapAttrs (
-        gen: g:
-        declaredRecord {
-          inherit subject module;
-          where = "the files of generator ${util.quote gen} of ${module}";
-          value = g.files or { };
-        }
+        gen: g: recordOf "the files of generator ${util.quote gen} of ${module}" (g.files or { })
       ) given;
 
       fileReads = mapAttrs (
         gen: declaredFiles:
         mapAttrs (
-          name: file:
-          declaredRecord {
-            inherit subject module;
-            where = "generated file ${util.quote "${gen}/${name}"} of ${module}";
-            value = file;
-          }
+          name: file: recordOf "generated file ${util.quote "${gen}/${name}"} of ${module}" file
         ) declaredFiles.value
       ) filesRead;
 
@@ -716,14 +712,11 @@ rec {
           coarser = coarserThan.${per} or cardinalities;
           tooNarrow = filter (name: given ? ${name} && !elem (perOf given.${name}) coarser) (readsOf g);
         in
-        map (
-          key:
-          keyRow {
-            inherit subject key;
-            inherit where;
-            allowed = generatorKeys;
-          }
-        ) (util.extraKeys generatorKeys g)
+        unknownKeyRows {
+          inherit subject where;
+          allowed = generatorKeys;
+          record = g;
+        }
         ++ util.optional (!isString statedPer || !elem per cardinalities) (
           diag.error {
             inherit subject;
@@ -799,13 +792,20 @@ rec {
       # A generator's name enters the key of its own value entry, so a name
       # carrying a key separator is refused here and the generator declares no
       # value: nothing downstream builds a key from it.
-      generators = builtins.mapAttrs (gen: g: {
-        files = builtins.mapAttrs (_: fileRecord) (filesOf gen);
-        per = if elem (perOf g) cardinalities then perOf g else "placement";
-        deploy = if builtins.isBool (deployOf g) then deployOf g else true;
-        reads = if inCycle gen then [ ] else util.sortStrings (declaredReadsOf g);
-        program = programOf g;
-      }) (util.filterAttrs (gen: _: !(util.carriesKeySeparator gen)) given);
+      generators = builtins.mapAttrs (
+        gen: g:
+        let
+          per = perOf g;
+          deploy = deployOf g;
+        in
+        {
+          files = builtins.mapAttrs (_: fileRecord) (filesOf gen);
+          per = if elem per cardinalities then per else "placement";
+          deploy = if builtins.isBool deploy then deploy else true;
+          reads = if inCycle gen then [ ] else util.sortStrings (declaredReadsOf g);
+          program = programOf g;
+        }
+      ) (util.filterAttrs (gen: _: !(util.carriesKeySeparator gen)) given);
       rows =
         read.rows
         ++ util.concatMapAttrsToList (gen: _: genReads.${gen}.rows) read.value
@@ -849,22 +849,17 @@ rec {
       nonStrings = filter (n: locked ? ${n} && !isString locked.${n}) lockedKeys;
 
       pinRows =
-        map (
-          key:
-          keyRow {
-            inherit subject key;
-            inherit where;
-            allowed = pinKeys;
-          }
-        ) (util.extraKeys pinKeys given)
-        ++ map (
-          key:
-          keyRow {
-            inherit subject key;
-            where = "the locked record of ${module}";
-            allowed = lockedKeys;
-          }
-        ) (util.extraKeys lockedKeys locked)
+        unknownKeyRows {
+          inherit subject where;
+          allowed = pinKeys;
+          record = given;
+        }
+        ++ unknownKeyRows {
+          inherit subject;
+          where = "the locked record of ${module}";
+          allowed = lockedKeys;
+          record = locked;
+        }
         ++ util.optional (!(given ? key) || !isString given.key) (
           diag.error {
             inherit subject;
@@ -926,12 +921,7 @@ rec {
       where = "unit ${util.quote name} of ${module}";
       declared = filter (k: unitVocabulary ? ${k}) (attrNames unit);
 
-      errors = listToAttrs (
-        map (k: {
-          name = k;
-          value = unitVocabulary.${k}.verify unit.${k};
-        }) declared
-      );
+      errors = util.genAttrs declared (k: unitVocabulary.${k}.verify unit.${k});
       failures = filter (k: errors.${k} != null) declared;
       typed = filter (k: errors.${k} == null) declared;
 
@@ -957,11 +947,8 @@ rec {
 
       recorded = util.subtractList typed withheld;
 
-      partitioned = listToAttrs (
-        map (k: {
-          name = k;
-          value = builtins.partition (r: util.inStringSet unitSet r) unit.${k};
-        }) references
+      partitioned = util.genAttrs references (
+        k: builtins.partition (r: util.inStringSet unitSet r) unit.${k}
       );
       strangersIn = k: partitioned.${k}.wrong;
       ownedIn = k: partitioned.${k}.right;
@@ -1017,12 +1004,7 @@ rec {
       withheldDirectories =
         declaredTwice ++ map (kind: directoryKinds.${kind}) (declaredTwice ++ modeWithoutDirectory);
 
-      ordering = listToAttrs (
-        map (k: {
-          name = k;
-          value = ownedIn k;
-        }) references
-      );
+      ordering = util.genAttrs references ownedIn;
 
       # An environment name reaches the unit file as the left half of an
       # assignment with no escape of its own, so a name outside the grammar a
@@ -1064,14 +1046,12 @@ rec {
         );
 
       rows =
-        map (
-          key:
-          keyRow {
-            inherit subject key where;
-            allowed = unitKeys;
-            id = "implementation-unknown-key";
-          }
-        ) (util.extraKeys unitKeys unit)
+        unknownKeyRows {
+          inherit subject where;
+          allowed = unitKeys;
+          record = unit;
+          id = "implementation-unknown-key";
+        }
         ++ map (
           key:
           let
@@ -1099,21 +1079,19 @@ rec {
             resolution = "write a list in ${subject}";
           }
         )
-        ++ builtins.concatLists (
+        ++ builtins.concatMap (
+          k:
           map (
-            k:
-            map (
-              r:
-              diag.error {
-                inherit subject;
-                id = "unit-reference-unknown";
-                message = "${where} names ${util.quote r} in ${util.quote k}, and ${module} declares no such unit";
-                evidence = "a unit reference is producible only by the module that declared the unit it names, so no module can order itself against a unit a stranger may rename; ${module} declares ${util.quoteList unitNames}";
-                resolution = "name a unit ${subject} declares, or declare ${util.quote r} in it";
-              }
-            ) (strangersIn k)
-          ) references
-        )
+            r:
+            diag.error {
+              inherit subject;
+              id = "unit-reference-unknown";
+              message = "${where} names ${util.quote r} in ${util.quote k}, and ${module} declares no such unit";
+              evidence = "a unit reference is producible only by the module that declared the unit it names, so no module can order itself against a unit a stranger may rename; ${module} declares ${util.quoteList unitNames}";
+              resolution = "name a unit ${subject} declares, or declare ${util.quote r} in it";
+            }
+          ) (strangersIn k)
+        ) references
         ++ builtins.concatLists (map (e: e.rows) extends)
         ++ map (
           found:
@@ -1248,9 +1226,7 @@ rec {
       # The record every reader sees, so one function decides the defaults and
       # nothing downstream writes `or "root"`, the way `fileRecord` does for a
       # generated value's file.
-      statedOwnership = filter (k: file ? ${k} && configFileTypes.${k}.verify file.${k} == null) (
-        attrNames configFileTypes
-      );
+      statedOwnership = filter (k: configFileTypes.${k}.verify file.${k} == null) typedOwnership;
 
       # The path is held to the grammar every renderer of it can carry: one word
       # of a rendered shell step, and the value of a bind, which reads two more
@@ -1260,14 +1236,12 @@ rec {
       refused = util.unbindable path;
 
       rows =
-        map (
-          key:
-          keyRow {
-            inherit subject key where;
-            allowed = configFileKeys;
-            id = "implementation-unknown-key";
-          }
-        ) (util.extraKeys configFileKeys file)
+        unknownKeyRows {
+          inherit subject where;
+          allowed = configFileKeys;
+          record = file;
+          id = "implementation-unknown-key";
+        }
         ++ util.optional refused (
           diag.error {
             inherit subject;
@@ -1380,11 +1354,17 @@ rec {
       declaration,
     }:
     let
-      read = declaredRecord {
-        inherit subject module;
-        where = module;
-        value = declaration;
-      };
+      recordOf =
+        where: value:
+        declaredRecord {
+          inherit
+            subject
+            module
+            where
+            value
+            ;
+        };
+      read = recordOf module declaration;
       given = read.value;
       claims = readClaims {
         inherit subject module;
@@ -1394,11 +1374,7 @@ rec {
         inherit subject module storeDir;
         vars = given.vars or { };
       };
-      usesRead = declaredRecord {
-        inherit subject module;
-        where = "the slots of ${module}";
-        value = given.uses or { };
-      };
+      usesRead = recordOf "the slots of ${module}" (given.uses or { });
       slots = builtins.mapAttrs (
         name: slot:
         readSlot {
@@ -1411,11 +1387,7 @@ rec {
             ;
         }
       ) usesRead.value;
-      providesRead = declaredRecord {
-        inherit subject module;
-        where = "the capabilities of ${module}";
-        value = given.provides or { };
-      };
+      providesRead = recordOf "the capabilities of ${module}" (given.provides or { });
       capabilities = builtins.mapAttrs (
         name: capability:
         readCapability {
@@ -1450,14 +1422,12 @@ rec {
           };
 
       declarationRows =
-        map (
-          key:
-          keyRow {
-            inherit subject key;
-            where = module;
-            allowed = moduleKeys;
-          }
-        ) (util.extraKeys moduleKeys given)
+        unknownKeyRows {
+          inherit subject;
+          where = module;
+          allowed = moduleKeys;
+          record = given;
+        }
         ++ util.optional (given ? severity) (severityRow {
           inherit subject;
           where = module;

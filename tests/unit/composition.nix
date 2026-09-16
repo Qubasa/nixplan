@@ -334,6 +334,17 @@ let
     leaves.pair.backend = "pair/backend.nix";
   };
 
+  # The same two leaves reached as two instances rather than as two members of
+  # one, which is what a wire between them is attributed against.
+  wiredPairFiles = {
+    deployment = "deployment/instances.nix";
+    machines = "deployment/machines.nix";
+    modules.app = "pair/default.nix";
+    modules.store = "pair/default.nix";
+    leaves.app.only = "pair/app.nix";
+    leaves.store.only = "pair/backend.nix";
+  };
+
   interfaceFiles = {
     "interfaces/identity.nix".identity = identity;
     "interfaces/repository.nix".repository = repository;
@@ -359,6 +370,37 @@ let
     };
     exposes = [ "identity" ];
     placement.every.only.machines = [ machine ];
+  };
+
+  # One root whose capability set the deployment decides and one instance wired
+  # to a name that set added: two scenarios read this same deployment, one for
+  # the wire and one for the row a derived set does not earn.
+  exposedDatabases = planOf {
+    instances = {
+      pg = {
+        module = forwardingRoot {
+          module = perDatabaseLeaf;
+          defaults.databases = [ "billing" ];
+        };
+        settings.main.databases = [
+          "billing"
+          "analytics"
+        ];
+        exposes = [
+          "billing"
+          "analytics"
+        ];
+        placement.every.main.machines = [ "one" ];
+      };
+      app = {
+        module = soleRoot { module = databaseReader; };
+        wire.db = {
+          instance = "pg";
+          provides = "analytics";
+        };
+        placement.every.only.machines = [ "two" ];
+      };
+    };
   };
 
   keeperMember = _: {
@@ -522,28 +564,17 @@ in
 
   testAWireNamesACapabilityThatIsNotExposed =
     let
-      result = planOf {
-        instances = {
-          reader = {
-            module = soleRoot { module = consumer; };
-            placement.every.only.machines = [ "one" ];
-            wire.far = {
-              instance = "writer";
-              provides = "identity";
-            };
-          };
-          writer = {
-            module = soleRoot {
-              module = twoCapProvider;
-              provides = [
-                "identity"
-                "repo"
-              ];
-            };
-            placement.every.only.machines = [ "two" ];
-            exposes = [ "repo" ];
-          };
-        };
+      result = support.edge {
+        consumerName = "reader";
+        providerName = "writer";
+        consumerModule = consumer;
+        providerModule = twoCapProvider;
+        providerMachines = [ "two" ];
+        provides = [
+          "identity"
+          "repo"
+        ];
+        exposes = [ "repo" ];
       };
       row = builtins.head (rowsById "wire-capability-not-exposed" result);
     in
@@ -1245,33 +1276,7 @@ in
 
   testAWireNamesACapabilityTheDeploymentAdded =
     let
-      result = planOf {
-        instances = {
-          pg = {
-            module = forwardingRoot {
-              module = perDatabaseLeaf;
-              defaults.databases = [ "billing" ];
-            };
-            settings.main.databases = [
-              "billing"
-              "analytics"
-            ];
-            exposes = [
-              "billing"
-              "analytics"
-            ];
-            placement.every.main.machines = [ "one" ];
-          };
-          app = {
-            module = soleRoot { module = databaseReader; };
-            wire.db = {
-              instance = "pg";
-              provides = "analytics";
-            };
-            placement.every.only.machines = [ "two" ];
-          };
-        };
-      };
+      result = exposedDatabases;
       reader = result.plan."app:only@two";
     in
     {
@@ -1468,33 +1473,7 @@ in
 
   testACapabilitySetDerivedFromSettingsIsNotReportedHere =
     let
-      result = planOf {
-        instances = {
-          pg = {
-            module = forwardingRoot {
-              module = perDatabaseLeaf;
-              defaults.databases = [ "billing" ];
-            };
-            settings.main.databases = [
-              "billing"
-              "analytics"
-            ];
-            exposes = [
-              "billing"
-              "analytics"
-            ];
-            placement.every.main.machines = [ "one" ];
-          };
-          app = {
-            module = soleRoot { module = databaseReader; };
-            wire.db = {
-              instance = "pg";
-              provides = "analytics";
-            };
-            placement.every.only.machines = [ "two" ];
-          };
-        };
-      };
+      result = exposedDatabases;
     in
     {
       expr = {
@@ -1563,34 +1542,15 @@ in
           placement.every.app.machines = [ "two" ];
         };
       };
-      wired = planOf {
-        sources = {
-          deployment = "deployment/instances.nix";
-          machines = "deployment/machines.nix";
-          modules.app = "pair/default.nix";
-          modules.store = "pair/default.nix";
-          leaves.app.only = "pair/app.nix";
-          leaves.store.only = "pair/backend.nix";
-        };
+      wired = support.edge {
+        sources = wiredPairFiles;
         interfaces = interfaceFiles;
-        instances = {
-          store = {
-            module = soleRoot {
-              module = twoCapProvider;
-              provides = [ "repo" ];
-            };
-            exposes = [ "repo" ];
-            placement.every.only.machines = [ "one" ];
-          };
-          app = {
-            module = soleRoot { module = slotConsumer; };
-            wire.far = {
-              instance = "store";
-              provides = "repo";
-            };
-            placement.every.only.machines = [ "two" ];
-          };
-        };
+        consumerName = "app";
+        providerName = "store";
+        consumerModule = slotConsumer;
+        providerModule = twoCapProvider;
+        consumerMachines = [ "two" ];
+        capability = "repo";
       };
       names = result: {
         slotFile = hasInfix "interfaces/identity.nix" (messageById "interface-mismatch" result);
@@ -1921,41 +1881,22 @@ in
   testACapabilityWhoseConsumersAreNotACardinality =
     let
       id = "capability-consumers-malformed";
-      result = planOf {
-        sources = {
-          deployment = "deployment/instances.nix";
-          machines = "deployment/machines.nix";
-          modules.app = "pair/default.nix";
-          modules.store = "pair/default.nix";
-          leaves.app.only = "pair/app.nix";
-          leaves.store.only = "pair/backend.nix";
-        };
+      result = support.edge {
+        sources = wiredPairFiles;
         interfaces = interfaceFiles;
-        instances = {
-          store = {
-            module = soleRoot {
-              module = _: {
-                provides.thing = {
-                  interface = identity;
-                  consumers = { };
-                };
-                impl = _: {
-                  provides.thing.exports.publicKey = "ssh-ed25519 AAAA";
-                  units.main.command = "/bin/true";
-                };
-              };
-              provides = [ "thing" ];
-            };
-            exposes = [ "thing" ];
-            placement.every.only.machines = [ "one" ];
+        consumerName = "app";
+        providerName = "store";
+        consumerModule = slotConsumer;
+        consumerMachines = [ "two" ];
+        capability = "thing";
+        providerModule = _: {
+          provides.thing = {
+            interface = identity;
+            consumers = { };
           };
-          app = {
-            module = soleRoot { module = slotConsumer; };
-            wire.far = {
-              instance = "store";
-              provides = "thing";
-            };
-            placement.every.only.machines = [ "two" ];
+          impl = _: {
+            provides.thing.exports.publicKey = "ssh-ed25519 AAAA";
+            units.main.command = "/bin/true";
           };
         };
       };

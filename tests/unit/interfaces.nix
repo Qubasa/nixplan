@@ -8,8 +8,11 @@ let
     countById
     evidenceById
     hasInfix
+    identity
     messageById
     planOf
+    provider
+    providerOf
     publicInt
     publicString
     rowsById
@@ -18,19 +21,6 @@ let
     ;
 
   k = planner.korora;
-
-  identity = planner.interface {
-    name = "identity";
-    exports.publicKey = publicString;
-  };
-
-  provider = _: {
-    provides.identity.interface = identity;
-    impl = _: {
-      provides.identity.exports.publicKey = "ssh-ed25519 AAAA";
-      units.only.command = "/bin/true";
-    };
-  };
 
   # An interface's rows are reached from the modules that imported it, never from
   # the attribution, so a scenario about a declaration places a member declaring
@@ -72,40 +62,19 @@ let
       };
   };
 
-  providerOf = iface: _: {
-    provides.identity.interface = iface;
-    impl = _: {
-      provides.identity.exports.publicKey = "ssh-ed25519 AAAA";
-      units.only.command = "/bin/true";
-    };
-  };
-
   wired =
     {
       reads,
       publishes ? reads,
       interfaces,
     }:
-    planOf {
+    support.edge {
       inherit interfaces;
-      instances = {
-        reader = {
-          module = soleRoot { module = readerOf reads; };
-          placement.every.only.machines = [ "one" ];
-          wire.far = {
-            instance = "writer";
-            provides = "identity";
-          };
-        };
-        writer = {
-          module = soleRoot {
-            module = providerOf publishes;
-            provides = [ "identity" ];
-          };
-          placement.every.only.machines = [ "two" ];
-          exposes = [ "identity" ];
-        };
-      };
+      consumerName = "reader";
+      providerName = "writer";
+      consumerModule = readerOf reads;
+      providerModule = providerOf publishes;
+      providerMachines = [ "two" ];
     };
 
   # A module that imports an interface and resolves nothing from it. The conflict
@@ -478,29 +447,16 @@ in
           units.only.command = "/bin/true";
         };
       };
-      result = planOf {
+      result = support.edge {
         interfaces = {
           "interfaces/mine.nix".identity = mine;
           "interfaces/theirs.nix".identity = theirs;
         };
-        instances = {
-          reader = {
-            module = soleRoot { module = consumer; };
-            placement.every.only.machines = [ "one" ];
-            wire.far = {
-              instance = "writer";
-              provides = "identity";
-            };
-          };
-          writer = {
-            module = soleRoot {
-              module = farProvider;
-              provides = [ "identity" ];
-            };
-            placement.every.only.machines = [ "two" ];
-            exposes = [ "identity" ];
-          };
-        };
+        consumerName = "reader";
+        providerName = "writer";
+        consumerModule = consumer;
+        providerModule = farProvider;
+        providerMachines = [ "two" ];
       };
       row = builtins.head (rowsById "interface-mismatch" result);
     in
@@ -907,27 +863,20 @@ in
   # that moves is the file each row names.
   testAttributionChangesOnlyTheFileARowNames =
     let
-      instances = {
-        writer = {
-          module = soleRoot {
-            module = providerOf identity;
-            provides = [ "identity" ];
-          };
-          placement.every.only.machines = [ "one" ];
-          exposes = [ "identity" ];
+      # A slot nobody wired, so the table carries a row whose text names the
+      # interface's declaring file.
+      planned =
+        interfaces:
+        support.edge {
+          inherit interfaces;
+          consumerName = "reader";
+          providerName = "writer";
+          consumerModule = readerOf identity;
+          consumerMachines = [ "two" ];
+          wire = null;
         };
-        # A slot nobody wired, so the table carries a row whose text names the
-        # interface's declaring file.
-        reader = {
-          module = soleRoot { module = readerOf identity; };
-          placement.every.only.machines = [ "two" ];
-        };
-      };
-      listed = planOf {
-        inherit instances;
-        interfaces."interfaces/default.nix".identity = identity;
-      };
-      bare = planOf { inherit instances; };
+      listed = planned { "interfaces/default.nix".identity = identity; };
+      bare = planned { };
       labelled = "`identity` (interfaces/default.nix)";
       unlabelled = "`identity` (declaring file not recorded in the `interfaces` argument of mkPlan)";
       conditions = result: map (r: { inherit (r) id subject; }) result.diagnostics;
@@ -1021,29 +970,16 @@ in
             };
           };
       };
-      result = planOf {
+      result = support.edge {
         interfaces = {
           "interfaces/mine.nix".identity = mine;
           "interfaces/theirs.nix".identity = theirs;
         };
-        instances = {
-          reader = {
-            module = soleRoot { module = reader; };
-            placement.every.only.machines = [ "one" ];
-            wire.far = {
-              instance = "writer";
-              provides = "identity";
-            };
-          };
-          writer = {
-            module = soleRoot {
-              module = publisher;
-              provides = [ "identity" ];
-            };
-            placement.every.only.machines = [ "two" ];
-            exposes = [ "identity" ];
-          };
-        };
+        consumerName = "reader";
+        providerName = "writer";
+        consumerModule = reader;
+        providerModule = publisher;
+        providerMachines = [ "two" ];
       };
     in
     {

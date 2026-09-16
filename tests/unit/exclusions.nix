@@ -1,23 +1,7 @@
-# One test per excluded construct. Each trigger is quoted from the fixture README
-# rather than from lib/excluded.nix, so a row wired to the wrong trigger fails.
+# One test per excluded construct. Each trigger fragment is written out rather
+# than read off lib/excluded.nix, so a row wired to the wrong trigger fails.
 { planner, support }:
 let
-  inherit (builtins)
-    all
-    attrNames
-    filter
-    foldl'
-    genList
-    isString
-    length
-    match
-    readDir
-    readFile
-    split
-    stringLength
-    substring
-    ;
-
   inherit (support)
     evidenceById
     hasInfix
@@ -30,9 +14,7 @@ let
     subjectsById
     ;
 
-  inherit (planner.util) subtractList uniqueStrings;
-
-  excluded = planner.excluded;
+  inherit (planner.util) uniqueStrings;
 
   ids = result: uniqueStrings (rowIds result);
 
@@ -140,87 +122,6 @@ let
       inherit key trigger;
       subject = "modules/svc.nix";
     };
-
-  exclusionHeader = "| Out | Why not now | Trigger to add it |";
-
-  readmeLines = filter isString (split "\n" (builtins.readFile "${support.folder}/README.md"));
-
-  chars = s: genList (i: substring i 1 s) (stringLength s);
-  isTableLine = l: substring 0 1 l == "|";
-  isRule = l: all (c: c == "|" || c == "-" || c == " ") (chars l);
-
-  scanLine =
-    st: line:
-    if st.closed then
-      st
-    else if !st.open then
-      st // { open = line == exclusionHeader; }
-    else if !(isTableLine line) then
-      st // { closed = true; }
-    else if isRule line then
-      st
-    else
-      st // { rows = st.rows + 1; };
-
-  table = foldl' scanLine {
-    open = false;
-    closed = false;
-    rows = 0;
-  } readmeLines;
-
-  covered = [
-    "answers"
-    "collects"
-    "contributes"
-    "dynamicPort"
-    "externals"
-    "frontier"
-    "lifecycle"
-    "locality"
-    "orchestrator"
-    "pick"
-    "probes"
-    "register"
-    "strategy"
-  ];
-
-  coveredRows = uniqueStrings (map (c: excluded.constructs.${c}.row) covered);
-
-  # The README also counts the deployment it introduces. A count is a claim
-  # about the folder beside it, so it is read off the folder rather than
-  # maintained by hand.
-  linesIn = path: filter isString (split "\n" (readFile path));
-
-  lineCount = path: length (linesIn path) - 1;
-
-  isSubstantive = line: match "[[:space:]]*(#.*)?" line == null;
-
-  deploymentFiles = attrNames (readDir "${support.folder}/deployment");
-
-  deploymentCounts =
-    foldl'
-      (
-        acc: file:
-        let
-          path = "${support.folder}/deployment/${file}";
-        in
-        {
-          total = acc.total + lineCount path;
-          substantive = acc.substantive + length (filter isSubstantive (linesIn path));
-        }
-      )
-      {
-        total = 0;
-        substantive = 0;
-      }
-      deploymentFiles;
-
-  readmeFigure =
-    pattern:
-    let
-      hits = filter (m: m != null) (map (line: match pattern line) readmeLines);
-    in
-    if hits == [ ] then null else map (n: builtins.fromJSON n) (builtins.head hits);
 in
 {
   testLocalityIsRefused =
@@ -334,57 +235,4 @@ in
   testFrontierIsRefused = moduleKeyFacts "frontier" "not this change";
 
   testOrchestratorIsRefused = moduleKeyFacts "orchestrator" "not this change";
-
-  # The number is the README table's row count. Another table row, or a new key in
-  # excluded.constructs, has to be given a test above.
-  testEveryExclusionTableRowIsCovered = {
-    expr = {
-      headerFound = table.open;
-      readmeRowCount = table.rows;
-      coveredRowCount = length coveredRows;
-      inherit coveredRows;
-      libraryRows = uniqueStrings excluded.rows;
-      constructsWithoutATest = subtractList (attrNames excluded.constructs) covered;
-      testsWithoutAConstruct = subtractList covered (attrNames excluded.constructs);
-    };
-    expected = {
-      headerFound = true;
-      readmeRowCount = 6;
-      coveredRowCount = 6;
-      coveredRows = [
-        "collect family"
-        "externals"
-        "lifecycle"
-        "locality"
-        "placement.pick/strategy/allocation"
-        "runtime plane"
-      ];
-      libraryRows = [
-        "collect family"
-        "externals"
-        "lifecycle"
-        "locality"
-        "placement.pick/strategy/allocation"
-        "runtime plane"
-      ];
-      constructsWithoutATest = [ ];
-      testsWithoutAConstruct = [ ];
-    };
-  };
-
-  # A number in `fixtures/minimal-typed-edge/README.md` about the folder it
-  # documents, against the folder.
-  testAFixtureReadmeCountsItsOwnDeployment = {
-    expr = {
-      "README.md: instances.nix" = readmeFigure ".*[^0-9]([0-9]+) lines:.*";
-      "README.md: deployment/" = readmeFigure ".*at ([0-9]+) lines, of which ([0-9]+) are not comment.*";
-    };
-    expected = {
-      "README.md: instances.nix" = [ (lineCount "${support.folder}/deployment/instances.nix") ];
-      "README.md: deployment/" = [
-        deploymentCounts.total
-        deploymentCounts.substantive
-      ];
-    };
-  };
 }

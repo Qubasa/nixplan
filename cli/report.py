@@ -35,7 +35,6 @@ detach that would leave the machine running nothing.
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -48,7 +47,6 @@ from manifest import (
     Entry,
     ValueFile,
     address_of,
-    artifact_of,
     image_file,
     machine_address,
     service_name,
@@ -67,15 +65,8 @@ class Report:
     unasked: tuple[str, ...]
 
 
-def _ignore(line: str) -> None:
-    """Drop a line, for a caller that reads the returned report instead."""
-
-
 def describe(deployment: Deployment) -> tuple[str, ...]:
     """Return what a built deployment holds, one line per entry then per value.
-
-    Args:
-        deployment: The deployment that was built.
 
     Returns:
         A line per placed entry naming its realiser, machine, address, artifact
@@ -108,58 +99,39 @@ def status(
     ssh_key: Path | None = None,
     user: str = "root",
     base_env: Mapping[str, str] | None = None,
-    log: Callable[[str], None] = _ignore,
+    log: Callable[[str], None] = remote.ignore,
 ) -> Report:
     """Return what each machine reports about the entries it was given.
 
-    Args:
-        deployment: The deployment to ask about.
-        runner: The channel every remote step goes through.
-        only: The entry keys to ask about, empty for all of them.
-        ssh_key: The private key `--ssh-key` named, if any.
-        user: The login user on every machine.
-        base_env: The environment to run under, the process's own by default.
-        log: Called with each line as that line is known.
+    `only` restricts the report and asks about every entry where it names none.
 
     Returns:
-        One line per entry, in plan key order, and the machines the report
-        could not ask.
+        One line per entry, in plan key order, each handed to `log` as it is
+        known, and the machines the report could not ask.
 
     Raises:
         ApplyError: If a named key is not an entry of the deployment, or an
             endpoint answered something that is not its own status.
     """
-    environment = os.environ if base_env is None else base_env
-    opts = remote.ssh_opts(ssh_key, inherited=environment.get("NIX_SSHOPTS"))
-    env = remote.copy_env(environment, opts)
-    lines: list[str] = []
+    opts, env = remote.channel(base_env, ssh_key)
+    lines, record = remote.recording(log)
     unasked: set[str] = set()
     for entry in _selected(deployment, only):
         answer = _ask(runner, entry, opts=opts, user=user, env=env)
-        line = f"{entry.key} {entry.realiser} {_answered(entry, answer)}"
-        lines.append(line)
-        log(line)
+        record(f"{entry.key} {entry.realiser} {_answered(entry, answer)}")
         if answer.status != UNREALISED and not _the_endpoint_answered(answer):
             unasked.add(entry.machine)
     for machine, delivered in _values(deployment, only).items():
         address = machine_address(deployment, machine, of=f"the values of {machine}")
+        question = remote.values_script([file.path for _, file in delivered])
         answer = remote.asking(
-            runner,
-            remote.ssh_argv(
-                address,
-                remote.values_script([file.path for _, file in delivered]),
-                opts=opts,
-                user=user,
-            ),
-            env=env,
+            runner, remote.ssh_argv(address, question, opts=opts, user=user), env=env
         )
         if answer.status != 0:
             unasked.add(machine)
             continue
         for key in _absent(delivered, answer.said):
-            line = f"value {key} missing on {machine}"
-            lines.append(line)
-            log(line)
+            record(f"value {key} missing on {machine}")
     return Report(lines=tuple(lines), unasked=tuple(sorted(unasked)))
 
 
@@ -171,10 +143,6 @@ def _values(
     A machine declaring no address is asked nothing: its entries' own lines
     already say it was not dialled, and a value question would be a second copy
     of that refusal.
-
-    Args:
-        deployment: The deployment to report on.
-        only: The entry keys the report was restricted to, empty for all.
 
     Returns:
         The value entry key and file of every declared file delivered to that
@@ -206,10 +174,7 @@ def _absent(delivered: tuple[tuple[str, ValueFile], ...], reported: str) -> tupl
 
     Only the presence of each path is read. What a held file contains is never
     asked: reading a secret to report on it is not something this command does.
-
-    Args:
-        delivered: The value entry key and file of each declared file.
-        reported: What the machine printed, one `<path> present|absent` a line.
+    `reported` is what the machine printed, one `<path> present|absent` a line.
 
     Returns:
         The value entry keys with at least one path the machine does not hold,
@@ -230,7 +195,7 @@ def _ask(
         return remote.Answer(UNREALISED, "")
     if entry.address is None:
         return remote.Answer(UNDIALLED, "")
-    argv = remote.ssh_argv(entry.address, _status_script(entry), opts=opts, user=user)
+    argv = remote.ssh_argv(entry.address, remote.status_script(entry), opts=opts, user=user)
     return remote.asking(runner, argv, env=env)
 
 
@@ -261,21 +226,13 @@ def rollback(
     ssh_key: Path | None = None,
     user: str = "root",
     base_env: Mapping[str, str] | None = None,
-    log: Callable[[str], None] = _ignore,
+    log: Callable[[str], None] = remote.ignore,
 ) -> tuple[str, ...]:
     """Roll one entry back and return what its machine reported.
 
-    Args:
-        deployment: The deployment the entry belongs to.
-        runner: The channel every remote step goes through.
-        key: The entry to roll back.
-        ssh_key: The private key `--ssh-key` named, if any.
-        user: The login user on the machine.
-        base_env: The environment to run under, the process's own by default.
-        log: Called with each line as that line is known.
-
     Returns:
-        The step line and the endpoint's own report, line by line.
+        The step line and the endpoint's own report, line by line, each handed
+        to `log` as it is known.
 
     Raises:
         ApplyError: If the key is not an entry of the deployment, if the entry
@@ -290,31 +247,19 @@ def rollback(
             f"{entry.key} is realised as {entry.realiser}, which carries no generation to roll "
             f"back to"
         )
-    environment = os.environ if base_env is None else base_env
-    opts = remote.ssh_opts(ssh_key, inherited=environment.get("NIX_SSHOPTS"))
-    env = remote.copy_env(environment, opts)
+    opts, env = remote.channel(base_env, ssh_key)
     address = address_of(entry)
     script = remote.rollback_script(service_name(entry))
-    lines: list[str] = []
-
-    def record(line: str) -> None:
-        lines.append(line)
-        log(line)
-
-    with remote.taking(f"rollback {entry.key} on {user}@{address}", address, record):
-        reported = runner.output(remote.ssh_argv(address, script, opts=opts, user=user), env=env)
-    for line in reported.splitlines():
-        record(line)
+    lines, record = remote.recording(log)
+    remote.taken(
+        runner,
+        f"rollback {entry.key} on {user}@{address}",
+        address,
+        remote.ssh_argv(address, script, opts=opts, user=user),
+        env=env,
+        record=record,
+    )
     return tuple(lines)
-
-
-def _status_script(entry: Entry) -> str:
-    if entry.realiser == "flakelet":
-        return remote.flakelet_status_script(service_name(entry))
-    if entry.realiser == "image":
-        artifact = artifact_of(entry)
-        return remote.image_status_script(artifact / image_file(entry), artifact / "bin" / "check")
-    raise ApplyError(f"{entry.key} states realiser {entry.realiser}, which the command cannot ask")
 
 
 def _read_status(entry: Entry, reported: str) -> str:
@@ -343,10 +288,6 @@ def _registered(entry: Entry, reported: str) -> list[Any]:
     value of another kind, or one of a shape no entry can be read out of, is
     the command's own refusal naming the entry and what the machine said, and
     never a line saying the machine holds nothing.
-
-    Args:
-        entry: The entry the machine was asked about.
-        reported: What the machine printed.
 
     Returns:
         The registrations, empty for an endpoint that holds none.
@@ -431,10 +372,8 @@ def _beside(configuration: tuple[tuple[str, str], ...]) -> str:
 def _held(mine: str, name: str, listed: tuple[tuple[str, str], ...]) -> tuple[str, str] | None:
     """Return the identity and state of the image a machine holds for one entry.
 
-    Args:
-        mine: The image file name this build published for the entry.
-        name: The entry's own image name, which every build of it shares.
-        listed: Each image the machine listed, with the state it gave it.
+    `mine` is the image file name this build published for the entry and `name`
+    is the entry's own image name, which every build of it shares.
 
     Returns:
         This build's image where the machine holds it, another build's of the

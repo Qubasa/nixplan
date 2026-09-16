@@ -2,10 +2,8 @@
 # whole reading, and everything here is derivations over what that read returned.
 #
 # The image carries an operating-system identity file, one unit file per recorded
-# unit and the entry's declared closure roots. It never carries a configuration
-# file's bytes or a generated file's bytes: those reach the units from the host at
-# attach time, which is what keeps an image byte-identical across a configuration
-# edit.
+# unit and the entry's declared closure roots, and never a configuration file's or
+# a generated file's bytes: those reach the units from the host at attach time.
 {
   lib,
   pkgs,
@@ -21,6 +19,10 @@ let
   };
 
   inherit (builtins) attrNames concatStringsSep filter;
+
+  # One shell word, quoted whether or not this value happens to need it, and the
+  # library's own escape rather than a second copy of it.
+  inherit (planner.util) shellQuote;
 in
 {
   inherit reader;
@@ -38,23 +40,15 @@ in
     let
       image = reader.read { inherit plan key profile; };
 
-      unitNames = attrNames image.units;
+      rendered = reader.renderedUnits image;
 
       unitFiles = map (
-        unitName:
+        u:
         pkgs.writeTextFile {
-          name = image.units.${unitName}.file;
-          text = reader.renderUnit image unitName;
+          name = u.file;
+          text = u.text;
         }
-      ) unitNames;
-
-      timerFiles = map (
-        unitName:
-        pkgs.writeTextFile {
-          name = image.units.${unitName}.timer;
-          text = reader.renderTimer image unitName;
-        }
-      ) (filter (unitName: image.units.${unitName}.timer != null) unitNames);
+      ) rendered;
 
       # A plan naming another store directory names the same hashes under another
       # prefix, which is what a relocated store is. Rewriting the prefix keeps the
@@ -70,12 +64,9 @@ in
       }) (if relocated then image.closure else [ ]);
 
       # The image's own root: systemd's layout, the unit files, and an empty file at
-      # every host path the entry is shown.
-      #
-      # Those empty files are load-bearing rather than tidy. A unit's bind mount needs
-      # its destination to exist inside the image, and the image root is a read-only
-      # squashfs on the machine, so a missing one is not a missing file at run time but
-      # a unit that cannot start at all.
+      # every host path the entry is shown. Those empty files are the bind mounts'
+      # destinations, and the image root is a read-only squashfs on the machine, so a
+      # missing one is a unit that cannot start at all.
       osRelease = pkgs.writeText "${image.name}-os-release" ''
         PORTABLE_ID=${image.name}
         PORTABLE_PRETTY_NAME=${image.instance}:${image.service} on ${image.machine}
@@ -94,7 +85,7 @@ in
         + concatStringsSep "" (
           map (unit: ''
             cp ${unit} $out/etc/systemd/system/${unit.name}
-          '') (unitFiles ++ timerFiles)
+          '') unitFiles
         )
         + concatStringsSep "" (
           map (host: ''
@@ -137,19 +128,10 @@ in
 
       description = pkgs.writeText "${image.name}-attachment.json" (builtins.toJSON attachment);
 
-      # One shell word, quoted whether or not this value happens to need it.
-      # `lib.escapeShellArg`, which every argument below spends, leaves a word
-      # of safe-looking characters bare, and a rendering that quotes only what
-      # looks dangerous is one a reader cannot check by reading it.
-      quoted = value: "'${builtins.replaceStrings [ "'" ] [ "'\\''" ] value}'";
-
       # What a message says a value is. The double-quoted string the message is
       # written in is closed around the word, because a `$(…)` inside double
-      # quotes is a command substitution whatever the quoting within them. A
-      # grammar refuses such a value one layer above and this holds
-      # independently of it: the escape is what covers a value that reaches a
-      # script before its rule does.
-      escapedWord = value: "\"${quoted value}\"";
+      # quotes is a command substitution whatever the quoting within them.
+      escapedWord = value: "\"${shellQuote value}\"";
 
       # The literals and the references of one recipe, concatenated into a file the
       # caller created owner-only. Both the assembly and the staleness check go
@@ -175,25 +157,13 @@ in
       # store, a render list is concatenated from its literals and reference paths.
       # Neither needs an evaluator or the daemon, which is why it happens here.
       #
-      # A candidate is installed at `0600` beside the declared path, owned and then
-      # chmodded to the record, and moved into place, so the file is never readable by
-      # anyone the declaration excludes and a run that stopped part way left nothing at
-      # the path. A render is concatenated into an owner-only file first, because the
-      # declared mode may carry no write bit and appending to a `0444` file is a
-      # privilege rather than a right.
-      #
-      # Creating the file with `: >` and chmod-ing at the end, which is what this did,
-      # left a configuration file rendering a secret at the attaching login's umask for
-      # the length of the append and at that mode for good if the script stopped there.
-      #
-      # The candidate is compared against what the machine already holds and installed
-      # only where they differ, so a second run of this script writes nothing and the
-      # units a file names are reloaded exactly when its bytes moved. The record is
-      # re-applied either way: an unchanged file at a widened mode is still wrong.
-      #
-      # $root is PORTABLE_PLANNER_ROOT, empty on a machine attaching its own images and
-      # a directory when the assembly is staged elsewhere. It prefixes host state and
-      # never a store path.
+      # A candidate is installed at `0600`, owned and chmodded to the record, and moved
+      # into place, so the window in which the file is readable by anyone the
+      # declaration excludes is empty rather than narrow. A render is concatenated into
+      # an owner-only file first, because the declared mode may carry no write bit and
+      # appending to a `0444` file is a privilege rather than a right. The record is
+      # re-applied even where the bytes match: an unchanged file at a widened mode is
+      # still wrong.
       assemble =
         index: file:
         let
@@ -206,7 +176,7 @@ in
         (
           if file.source != null then
             ''
-              [ -e ${lib.escapeShellArg file.source} ] || fail "the source of ${escapedWord file.path} is not on this machine: "${quoted file.source}
+              [ -e ${lib.escapeShellArg file.source} ] || fail "the source of ${escapedWord file.path} is not on this machine: "${shellQuote file.source}
             ''
           else
             ''
@@ -223,7 +193,7 @@ in
             chown ${ownership} ${installing}
             chmod ${lib.escapeShellArg file.mode} ${installing}
             mv ${installing} ${staged}
-            echo "assembled "${quoted file.path}
+            echo "assembled "${shellQuote file.path}
             changed=1
             changed_${toString index}=1
           fi
@@ -249,11 +219,9 @@ in
       staged = filter (f: f.computed && f.install) image.configFiles;
 
       # Every directory the staging tree needs, each named rather than left to
-      # `install -d` to create along the way: a component install creates for
-      # itself is created at the umask and not at the mode, so a mode named for
-      # the leaf alone leaves the tree above it listable. The chain starts at
-      # the parent of the image's own directory, which holds one directory per
-      # attached entry, and stops there: `/run` is the machine's.
+      # `install -d` to create along the way, which would create a component at the
+      # umask and not at the mode. The chain stops at the parent of the image's own
+      # directory: `/run` is the machine's.
       stagingDirectories =
         let
           under =
@@ -312,7 +280,7 @@ in
       # The unit the replacement question is asked of. Every unit of one entry runs
       # from one image, and a timer has no `RootImage` of its own, so the first
       # service unit answers for the entry.
-      firstUnit = image.units.${builtins.head unitNames}.file;
+      firstUnit = image.units.${builtins.head (attrNames image.units)}.file;
 
       # One shell function rather than a line per pair: a unit two changed files name
       # is reloaded once, and a unit that is not running is left alone, which is what
@@ -356,7 +324,7 @@ in
       # string, so a name carrying a shell metacharacter is a word the command
       # refuses instead of a pattern the shell expands. `echo` joins its
       # arguments with a space, which is what the message below spends.
-      unitWords = concatStringsSep " " (map quoted attachment.units);
+      unitWords = concatStringsSep " " (map shellQuote attachment.units);
 
       attach = pkgs.writeShellScript "${image.name}-attach" (
         preamble
@@ -393,7 +361,7 @@ in
           # Which units run at all is decided here and never by the reload below.
           if [ "$(portablectl is-attached ${raw}/${attachment.image} 2> /dev/null || echo detached)" = detached ]; then
             portablectl attach --profile=${lib.escapeShellArg image.profile} ${raw}/${attachment.image} > /dev/null
-            echo "attached "${quoted attachment.image}
+            echo "attached "${shellQuote attachment.image}
             systemctl start ${unitWords}
             echo "started "${unitWords}
             changed=1
@@ -417,12 +385,9 @@ in
       );
 
       # What the machine holds at each assembled path, against the bytes this build
-      # would assemble there. An image's version digest excludes a configuration
-      # file's bytes on purpose, so an identity match is evidence about the image
-      # and about nothing beside it; this is the other half, and it reads the same
-      # recipe the attach step writes, so the two cannot disagree. A reference the
-      # machine does not hold yet is `unreadable` rather than a refusal: a report
-      # asks and never changes anything.
+      # would assemble there, read off the same recipe the attach step writes so the
+      # two cannot disagree. A reference the machine does not hold yet is
+      # `unreadable` rather than a refusal: a report asks and never changes anything.
       check = pkgs.writeShellScript "${image.name}-check" (
         preamble
         + concatStringsSep "" (
@@ -472,12 +437,7 @@ in
             detach
             check
             ;
-          units = builtins.listToAttrs (
-            map (unitName: {
-              name = image.units.${unitName}.file;
-              value = reader.renderUnit image unitName;
-            }) unitNames
-          );
+          units = planner.util.indexBy (u: u.file) (u: u.text) rendered;
         };
       }
       ''

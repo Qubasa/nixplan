@@ -1,23 +1,21 @@
 # The deploy step of the external secret generator, rendered from one plan.
 #
 # The contract hands that step a list of files on standard input and nothing
-# else: no machine, no address and no path. So this file renders it. For every
-# file the plan records, the script addresses exactly the machines the value's
-# delivery set names, at the addresses the plan recorded, and writes the file at
-# the path the plan fixed.
-#
-# It carries no bytes. Each file is fetched from the store backend's own `get`
-# program at run time, which is the only thing that ever reads them.
+# else: no machine, no address and no path. So this file renders it, addressing
+# exactly the machines a value's delivery set names, at the addresses the plan
+# recorded, and writing each file at the path the plan fixed.
 {
   planner,
   reader ? import ./read.nix { inherit planner; },
 }:
 let
-  inherit (builtins)
-    concatStringsSep
-    filter
-    replaceStrings
-    ;
+  inherit (builtins) concatStringsSep filter;
+
+  # Every value the local shell parses goes through the library's own escape, a
+  # word `wordOf` already admitted included: the rule and the escape hold
+  # independently, or the next character the rule gains closes the quoting it was
+  # relying on.
+  inherit (planner.util) shellQuote;
 
   # The words the step carries are the reading's, asked of it rather than
   # restated, so a word this renders is a word that plan was already refused
@@ -39,12 +37,7 @@ let
         inherit value;
       }
     else
-      quoted value;
-
-  # Every value the local shell parses goes through this, a word the rule above
-  # already admitted included: the rule and the escape hold independently, or the
-  # next character the rule gains closes the quoting it was relying on.
-  quoted = value: "'${replaceStrings [ "'" ] [ "'\\''" ] value}'";
+      shellQuote value;
 
   # One branch per file the tool may name on standard input, and one `deliver` per
   # machine of that file's delivery set. A pair no branch names is refused: it
@@ -52,7 +45,7 @@ let
   branch =
     user: delivery: file:
     [
-      "  ${quoted "${delivery.name} ${file.file}"})"
+      "  ${shellQuote "${delivery.name} ${file.file}"})"
     ]
     ++ map (
       target:
@@ -64,7 +57,7 @@ let
         // file
         // target;
       in
-      "    deliver ${quoted delivery.name} ${quoted file.file} ${concatStringsSep " " (map (wordOf ctx) renderedWords)}"
+      "    deliver ${shellQuote delivery.name} ${shellQuote file.file} ${concatStringsSep " " (map (wordOf ctx) renderedWords)}"
     ) delivery.machines
     ++ [ "    ;;" ];
 
@@ -79,7 +72,7 @@ let
     "# carries no bytes: every file is read from the store backend at run time."
     "set -eu"
     ""
-    "get=${quoted get}"
+    "get=${shellQuote get}"
     "ssh_options=\${${options}:-}"
     ""
     "# One temporary for the whole step, removed on every way out of it. The fetch"

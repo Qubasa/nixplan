@@ -136,7 +136,7 @@ watch:file@alpha   ->  entries/watch-file-alpha
 ```
 
 The key is not the directory name, and the caller does not choose the name either
-([design D3](../openspec/changes/apply-deployments-with-an-operator-command/design.md)):
+([design D3](../openspec/changes/archive/2026-09-16-apply-deployments-with-an-operator-command/design.md)):
 
 | Approach | Why not |
 | --- | --- |
@@ -644,7 +644,7 @@ of a secret.
 ## Two directories, one role
 
 `operator/` and `cli/` are one role and two kinds of thing
-([design D13](../openspec/changes/apply-deployments-with-an-operator-command/design.md)):
+([design D13](../openspec/changes/archive/2026-09-16-apply-deployments-with-an-operator-command/design.md)):
 
 | | `operator/` | `cli/` |
 | --- | --- | --- |

@@ -1,5 +1,4 @@
 {
-  planner,
   support,
   flakeletSource,
   imageSource,
@@ -10,29 +9,22 @@ let
     attrNames
     concatLists
     filter
-    tryEval
     ;
 
-  inherit (support) planOf soleRoot;
+  inherit (support) raises;
   inherit (support.worked) borgbackup;
 
-  # The reading is handed the same assembly the builder hands it, so a
-  # configuration file of nothing but literals is a store path here too. This
-  # layer realises nothing, so the stand-in is keyed by the bytes.
-  assemble = name: text: "/nix/store/${planner.util.shortHash text}-${name}";
-
-  imageReader = import (imageSource + "/read.nix") { inherit planner assemble; };
-
-  reader = import (flakeletSource + "/read.nix") {
-    inherit planner;
-    reader = imageReader;
+  realiser = support.realiser {
+    inherit (support) assemble;
+    inherit imageSource flakeletSource operatorSource;
   };
+
+  inherit (realiser) imageReader planned;
+
+  reader = realiser.flakeletReader;
 
   # The layer that reports each of this realiser's refusals as a row first.
-  build = import (operatorSource + "/read.nix") {
-    inherit planner imageReader;
-    flakeletReader = reader;
-  };
+  build = realiser.operatorReader;
 
   rowsAbove =
     args: implementation:
@@ -49,40 +41,9 @@ let
     in
     if rows == [ ] then "" else (builtins.head rows).message;
 
-  planned =
-    {
-      instance ? "svc",
-      machine ? "one",
-    }:
-    implementation: {
-      key = "${instance}:only@${machine}";
-      plan =
-        (planOf {
-          instances.${instance} = {
-            module = soleRoot {
-              module = _: {
-                impl = implementation;
-              };
-            };
-            placement.every.only.machines = [ machine ];
-          };
-        }).plan;
-    };
+  readOf = args: realiser.readOf ({ read = reader.read; } // args);
 
-  readOf =
-    args: implementation:
-    let
-      p = planned args implementation;
-    in
-    reader.read { inherit (p) plan key; };
-
-  # deepSeq, because a refusal guards fields a lazy read would never force.
-  raises = value: !(tryEval (builtins.deepSeq value value)).success;
-
-  simple = _: {
-    closure = [ borgbackup ];
-    units.web.command = "${borgbackup}/bin/borg serve";
-  };
+  simple = support.serving "web";
 
   reloads = _: {
     closure = [ borgbackup ];
@@ -119,58 +80,24 @@ let
     };
   };
 
-  shownAGeneratedFile = planOf {
-    instances.svc = {
-      module = soleRoot {
-        module = _: {
-          vars.hostKey.files."key".secrecy = "secret";
-          impl =
-            { vars, ... }:
-            {
-              closure = [ borgbackup ];
-              units.web = {
-                command = "${borgbackup}/bin/borg serve";
-                env.KEYFILE = vars.hostKey."key".path;
-              };
-            };
-        };
-      };
-      placement.every.only.machines = [ "one" ];
-    };
-    varsState."svc:vars/hostKey@one"."key" = {
-      present = true;
-      content = "PRIVATE-KEY-BYTES";
-    };
+  shownAGeneratedFile = support.valuePlan {
+    unit = "web";
+    openIt = true;
   };
 
   # A recipe naming a delivered path: its bytes exist on no machine until that
   # path is written, which is the one case this realiser still refuses.
-  shownARefBearingFile = planOf {
-    instances.svc = {
-      module = soleRoot {
-        module = _: {
-          vars.hostKey.files."key".secrecy = "secret";
-          impl =
-            { vars, ... }:
-            {
-              closure = [ borgbackup ];
-              units.web.command = "${borgbackup}/bin/borg serve";
-              configData."/etc/agent.conf" = {
-                mode = "0400";
-                reload = [ "web" ];
-                render = [
-                  { text = "key_file = "; }
-                  { ref = vars.hostKey."key".path; }
-                ];
-              };
-            };
-        };
+  shownARefBearingFile = support.valuePlan {
+    unit = "web";
+    extra = vars: {
+      configData."/etc/agent.conf" = {
+        mode = "0400";
+        reload = [ "web" ];
+        render = [
+          { text = "key_file = "; }
+          { ref = vars.hostKey."key".path; }
+        ];
       };
-      placement.every.only.machines = [ "one" ];
-    };
-    varsState."svc:vars/hostKey@one"."key" = {
-      present = true;
-      content = "PRIVATE-KEY-BYTES";
     };
   };
 
@@ -207,32 +134,13 @@ let
 
   # A delivered generated file whose record names an account other than the
   # superuser: the delivery installs it, not this realiser.
-  shownAnOwnedGeneratedFile = planOf {
-    instances.svc = {
-      module = soleRoot {
-        module = _: {
-          vars.hostKey.files."key" = {
-            secrecy = "secret";
-            owner = "postgres";
-            group = "postgres";
-            mode = "0440";
-          };
-          impl =
-            { vars, ... }:
-            {
-              closure = [ borgbackup ];
-              units.web = {
-                command = "${borgbackup}/bin/borg serve";
-                env.KEYFILE = vars.hostKey."key".path;
-              };
-            };
-        };
-      };
-      placement.every.only.machines = [ "one" ];
-    };
-    varsState."svc:vars/hostKey@one"."key" = {
-      present = true;
-      content = "PRIVATE-KEY-BYTES";
+  shownAnOwnedGeneratedFile = support.valuePlan {
+    unit = "web";
+    openIt = true;
+    fileArgs = {
+      owner = "postgres";
+      group = "postgres";
+      mode = "0440";
     };
   };
 

@@ -1,9 +1,8 @@
 # The flakelet service artifact of one placed plan entry.
 #
-# The second realiser over one unchanged plan. Where the image realiser wraps the
-# same unit files in a squashfs, this one hands the endpoint the directory layout
-# it already consumes: a units directory and a meta.json, and nothing else.
-# Activating it needs no evaluator, no source and no network on the machine.
+# Where the image realiser wraps the same unit files in a squashfs, this one hands
+# the endpoint the directory layout it already consumes: a units directory and a
+# meta.json, and nothing else.
 #
 # Deliberately absent: state.json, which needs a plan field this subset does not
 # have, and exports.json, which would resolve wires on the machine while this
@@ -24,12 +23,9 @@
   },
 }:
 let
-  inherit (builtins)
-    attrNames
-    concatLists
-    filter
-    listToAttrs
-    ;
+  inherit (builtins) filter;
+
+  inherit (planner.util) indexBy;
 in
 {
   inherit reader;
@@ -42,31 +38,7 @@ in
     let
       image = reader.read { inherit plan key; };
 
-      rendered = concatLists (
-        map (
-          unitName:
-          let
-            u = image.units.${unitName};
-          in
-          [
-            {
-              file = u.file;
-              text = reader.renderUnit image unitName;
-            }
-          ]
-          ++ (
-            if u.timer == null then
-              [ ]
-            else
-              [
-                {
-                  file = u.timer;
-                  text = reader.renderTimer image unitName;
-                }
-              ]
-          )
-        ) (attrNames image.units)
-      );
+      rendered = reader.renderedUnits image;
 
       # A configuration file the reading assembled at build time, carried beside
       # the units so the artifact holds every byte its units bind. A `source`
@@ -95,12 +67,7 @@ in
       (old: {
         passthru = (old.passthru or { }) // {
           inherit image meta;
-          units = listToAttrs (
-            map (u: {
-              name = u.file;
-              value = u.text;
-            }) rendered
-          );
+          units = indexBy (u: u.file) (u: u.text) rendered;
         };
       });
 }

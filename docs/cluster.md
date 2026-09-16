@@ -115,7 +115,7 @@ asking a machine what it holds and rolling one entry back are steps of the comma
 check. `../tests/e2e/guest.nix` is the guest every machine boots.
 
 What the command itself is held to lives in the
-[specification of applying a deployment](../openspec/changes/apply-deployments-with-an-operator-command/specs/operator/apply-command/spec.md),
+[specification of applying a deployment](../openspec/specs/operator/apply-command/spec.md),
 and the division is the same one: a scenario a recorder can observe is asserted in
 `../tests/e2e/test_harness.py`, and a scenario that needs a machine to answer is asserted in a
 folder.
@@ -132,9 +132,9 @@ generation 1; a scheduled entry is registered with its timer enabled and is not 
 it; and both machines reboot with the entries coming back without a second delivery.
 
 One test per scenario of
-[`delivery/real-cluster/spec.md`](../openspec/changes/prove-plan-on-real-machines/specs/delivery/real-cluster/spec.md),
+[`delivery/real-cluster/spec.md`](../openspec/specs/delivery/real-cluster/spec.md),
 named after it, plus one per scenario of
-[`tooling/machine-snapshots/spec.md`](../openspec/changes/resume-e2e-machines-from-snapshots/specs/tooling/machine-snapshots/spec.md),
+[`tooling/machine-snapshots/spec.md`](../openspec/specs/tooling/machine-snapshots/spec.md),
 which is about how the machines were obtained rather than what the plan claims.
 
 ### `secret-delivery` - three machines
@@ -149,7 +149,7 @@ value is declared `deploy = false`: its public half travels in the plan as an ex
 reads from its environment, and no machine holds a file of it.
 
 One test per scenario of
-[`delivery/real-cluster/spec.md`](../openspec/changes/deliver-secrets-across-machines/specs/delivery/real-cluster/spec.md).
+[`delivery/real-cluster/spec.md`](../openspec/specs/delivery/real-cluster/spec.md).
 
 ### `portable-image` - one machine, two images
 
@@ -174,11 +174,11 @@ script again. One phase stops the units and leaves the image attached, because t
 another word for that and only the word for a detached image reads as absence.
 
 One test per scenario of
-[`realiser/portable-service-image/spec.md`](../openspec/changes/emit-systemd-portable-service-images/specs/realiser/portable-service-image/spec.md)
+[`realiser/portable-service-image/spec.md`](../openspec/specs/realiser/portable-service-image/spec.md)
 that is about what a real machine does with a built image, plus the image scenarios of
 [`machine-report/spec.md`](../openspec/changes/answer-whether-a-machine-is-current/specs/operator/machine-report/spec.md)
 and the repeated-apply scenario of
-[`apply-command/spec.md`](../openspec/changes/make-an-apply-observable/specs/operator/apply-command/spec.md).
+[`apply-command/spec.md`](../openspec/specs/operator/apply-command/spec.md).
 
 ### `generated-secret` - three machines
 
@@ -211,9 +211,9 @@ What the whole composition is and what it inherits from the external tool is
 [secrets.md](secrets.md).
 
 One test per scenario of
-[`delivery/generated-values/spec.md`](../openspec/changes/generate-values-with-nixos-secrets/specs/delivery/generated-values/spec.md),
+[`delivery/generated-values/spec.md`](../openspec/specs/delivery/generated-values/spec.md),
 plus the one scenario
-[`delivery/real-cluster/spec.md`](../openspec/changes/generate-values-with-nixos-secrets/specs/delivery/real-cluster/spec.md)
+[`delivery/real-cluster/spec.md`](../openspec/specs/delivery/real-cluster/spec.md)
 adds: a value's bytes come from a real generator rather than from the test.
 
 ### `newcomer` - three machines, and a walk that runs on one of them
@@ -283,7 +283,7 @@ The data directory is state, so this folder's stage declares its own disk throug
 other folder's cut key.
 
 One test per scenario of
-[`delivery/real-cluster/spec.md`](../openspec/changes/run-a-shared-database-on-real-machines/specs/delivery/real-cluster/spec.md),
+[`delivery/real-cluster/spec.md`](../openspec/specs/delivery/real-cluster/spec.md),
 named after it.
 
 ## Where the machines come from
@@ -350,7 +350,7 @@ setup time (a two-slot resume is not dearer than a one-slot one) nor the isolati
 ## Building here and applying there
 
 A run drives the operator's command, and the two halves of it run in two places
-([design D8](../openspec/changes/apply-deployments-with-an-operator-command/design.md)):
+([design D8](../openspec/changes/archive/2026-09-16-apply-deployments-with-an-operator-command/design.md)):
 
 - `planner build <flake reference>` runs in the pytest process, with `subprocess.run`, before a
   machine is dialled. A build is `nix build` and a read of two files, and it needs no cluster. The

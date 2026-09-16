@@ -50,16 +50,46 @@ in
 rec {
   mapAttrsToList = f: set: map (n: f n set.${n}) (attrNames set);
 
-  concatMapAttrsToList = f: set: concatLists (mapAttrsToList f set);
+  # The walk written out rather than composed over mapAttrsToList, which would
+  # cost two applications per call on top of the one per attribute.
+  concatMapAttrsToList = f: set: concatLists (map (n: f n set.${n}) (attrNames set));
 
-  filterAttrs =
-    pred: set:
+  genAttrs =
+    names: f:
     listToAttrs (
       map (n: {
         name = n;
-        value = set.${n};
-      }) (filter (n: pred n set.${n}) (attrNames set))
+        value = f n;
+      }) names
     );
+
+  # A list keyed by a pair the caller writes. One application per element, which
+  # is what the walk written out costs, so a reading inside this library builds
+  # its index through this and pays for no projection it did not need.
+  mapToAttrs = f: xs: listToAttrs (map f xs);
+
+  # The same walk with the key and the value as two projections, which is what a
+  # realiser indexing a rendered list wants and what costs two applications per
+  # element.
+  indexBy =
+    key: value:
+    mapToAttrs (x: {
+      name = key x;
+      value = value x;
+    });
+
+  # removeAttrs is one primop over the whole set, where rebuilding it through
+  # listToAttrs allocates a thunk and an attribute per name that survives.
+  filterAttrs = pred: set: removeAttrs set (filter (n: !(pred n set.${n})) (attrNames set));
+
+  # The instances-by-members nesting, flat. Every reading over a resolved
+  # deployment walks it, so it has one spelling and a reading states what it does
+  # with a member rather than how the two levels are reached. The callback is
+  # applied one argument at a time, so a member costs the two applications the
+  # nesting itself costs and never a third.
+  eachMember =
+    resolved: f:
+    concatMapAttrsToList (iname: inst: concatMapAttrsToList (f iname) inst.members) resolved.instances;
 
   optional = cond: value: if cond then [ value ] else [ ];
 
@@ -146,6 +176,11 @@ rec {
 
   unassignable = name: !(isString name) || match envNameRule name == null;
 
+  # The escape the two rendered steps spend beside the grammar above. Always
+  # quoted, because a bare safe-looking word is what `lib.escapeShellArg` leaves
+  # behind and a value no rule has reached yet still has to survive one shell.
+  shellQuote = value: "'${replaceStrings [ "'" ] [ "'\\''" ] value}'";
+
   # Whether a function accepts the argument record a caller is about to hand it.
   # A closed attribute pattern refuses a key it does not name and a formal with
   # no default it is not given, and the interpreter lets a caller catch neither,
@@ -176,7 +211,9 @@ rec {
   subtractList = xs: ys: filter (x: !elem x ys) xs;
 
   # A membership index. Crossing two fleet-sized lists with elem is a scan per
-  # element, against this it is a lookup.
+  # element, against this it is a lookup. The walk is written out rather than
+  # taken through mapToAttrs, which would cost an application per call on a
+  # question asked once per unit of every entry.
   stringSet =
     xs:
     listToAttrs (
@@ -271,10 +308,11 @@ rec {
     else
       false;
 
-  storePathsDeep =
-    storeDir:
+  # One traversal per per-string scan: a list is its elements, a record is its
+  # values, and a value of any other kind names nothing.
+  deepScan =
+    scan:
     let
-      scan = storePathsIn storeDir;
       deep =
         value:
         if isString value then
@@ -287,6 +325,8 @@ rec {
           [ ];
     in
     deep;
+
+  storePathsDeep = storeDir: deepScan (storePathsIn storeDir);
 
   # Where a generated value lands on a machine. One home, because the reading
   # that builds the path and the scan that recognises one have to agree about
@@ -306,20 +346,7 @@ rec {
     value: if !isString value then [ ] else map head (filter isList (split pattern value));
 
   # The same traversal storePathsDeep does, for those paths.
-  varsPathsDeep =
-    let
-      deep =
-        value:
-        if isString value then
-          varsPathsIn value
-        else if isList value then
-          concatLists (map deep value)
-        else if isAttrs value then
-          concatLists (mapAttrsToList (_: deep) value)
-        else
-          [ ];
-    in
-    deep;
+  varsPathsDeep = deepScan varsPathsIn;
 
   # Every string a value carries at any depth, beside the field path it sits at.
   # storePathsDeep's traversal, keeping the path so a caller can name the field

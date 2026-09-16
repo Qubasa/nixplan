@@ -69,10 +69,6 @@ class WalkResult:
 def walk(plan: Mapping[str, Any], keys: Iterable[str]) -> WalkResult:
     """Return the order ``keys`` are applied in, provider before consumer.
 
-    Args:
-        plan: The plan artifact, as read from its JSON.
-        keys: The placed entry keys to apply.
-
     Returns:
         Every key once in application order, the provider-before-consumer edges
         that order had to contradict with the provider first, and the entries of
@@ -110,10 +106,7 @@ def sequence(
 ) -> tuple[tuple[str, ...], ...]:
     """Return ``components`` in application order, provider component first.
 
-    Args:
-        components: The strong components of the read graph, each in plan key
-            order.
-        forward: The provider-to-consumers adjacency they were computed from.
+    `forward` is the provider-to-consumers adjacency they were computed from.
 
     Returns:
         Every component once, each one before every component that reads into
@@ -177,10 +170,6 @@ def _components(
     interpreter's stack. The components come out in the reverse topological
     order of the condensation, which `sequence` does not rely on.
 
-    Args:
-        nodes: Every entry, in plan key order.
-        forward: The provider-to-consumers adjacency.
-
     Returns:
         The components, each holding its entries in plan key order.
     """
@@ -240,10 +229,6 @@ def edges(plan: Mapping[str, Any], keys: Iterable[str]) -> tuple[tuple[str, str]
     edge, and an edge onto a key outside ``keys`` is dropped: an entry this run
     does not apply cannot be applied before one it does.
 
-    Args:
-        plan: The plan artifact, as read from its JSON.
-        keys: The placed entry keys under consideration.
-
     Returns:
         The edges, sorted by consumer then provider.
 
@@ -254,8 +239,7 @@ def edges(plan: Mapping[str, Any], keys: Iterable[str]) -> tuple[tuple[str, str]
     placed = set(keys)
     found = {
         (provider, consumer)
-        for consumer in sorted(placed)
-        for provider in _named(plan, consumer)
+        for consumer, provider in _reading(plan, placed)
         if provider in placed and provider != consumer
     }
     return tuple(sorted(found, key=lambda edge: (edge[1], edge[0])))
@@ -265,11 +249,6 @@ def unsatisfied(
     plan: Mapping[str, Any], keys: Iterable[str], placed: Iterable[str]
 ) -> tuple[tuple[str, str], ...]:
     """Return the reads of ``keys`` whose provider this run is not applying.
-
-    Args:
-        plan: The plan artifact, as read from its JSON.
-        keys: The placed entry keys to apply.
-        placed: Every placed entry key of the deployment.
 
     Returns:
         One pair per read, consumer first, sorted, for a provider the
@@ -281,16 +260,7 @@ def unsatisfied(
     """
     applying = set(keys)
     withheld = set(placed) - applying
-    return tuple(
-        sorted(
-            {
-                (consumer, provider)
-                for consumer in sorted(applying)
-                for provider in _named(plan, consumer)
-                if provider in withheld
-            }
-        )
-    )
+    return tuple(sorted({read for read in _reading(plan, applying) if read[1] in withheld}))
 
 
 def reads(plan: Mapping[str, Any], consumer: str) -> tuple[Read, ...]:
@@ -299,10 +269,6 @@ def reads(plan: Mapping[str, Any], consumer: str) -> tuple[Read, ...]:
     This is the relation: the order reads its providers and the rotation reads
     its paths, so no question about a read is answered from one shape while
     another is answered from a second.
-
-    Args:
-        plan: The plan artifact, as read from its JSON.
-        consumer: The entry whose reads to read.
 
     Returns:
         One `Read` per slot, in slot order, empty for an entry that reads
@@ -319,30 +285,25 @@ def reads(plan: Mapping[str, Any], consumer: str) -> tuple[Read, ...]:
     return tuple(_read(recorded[name], consumer, name) for name in sorted(recorded))
 
 
-def _named(plan: Mapping[str, Any], consumer: str) -> tuple[str, ...]:
-    """Return every provider key the resolved reads of ``consumer`` name.
+def _reading(plan: Mapping[str, Any], consumers: Iterable[str]) -> tuple[tuple[str, str], ...]:
+    """Return the resolved reads among ``consumers`` as pairs, consumer first.
 
-    Args:
-        plan: The plan artifact, as read from its JSON.
-        consumer: The entry whose reads to read.
-
-    Returns:
-        The provider keys, in slot order, empty for an entry that reads nothing.
-
-    Raises:
-        ApplyError: If a read is recorded in a shape this walk does not
-            recognise, naming the consumer and the slot.
+    One pair per provider a read names, in consumer then slot order, and the
+    refusal `reads` makes for a shape the command does not recognise.
     """
-    return tuple(provider for read in reads(plan, consumer) for provider in read.providers)
+    return tuple(
+        (consumer, provider)
+        for consumer in sorted(set(consumers))
+        for read in reads(plan, consumer)
+        for provider in read.providers
+    )
 
 
 def _read(slot: Any, consumer: str, name: str) -> Read:
     """Return one resolved read, whichever of the two shapes recorded it.
 
-    Args:
-        slot: The read record, `plan.<consumer>.reads.<name>`.
-        consumer: The entry that declared the read, for the refusal.
-        name: The slot's name, for the refusal.
+    `slot` is the read record `plan.<consumer>.reads.<name>`, and the consumer
+    and the name are what its refusal names.
 
     Returns:
         The read, carrying no provider and no path for one the planner did not

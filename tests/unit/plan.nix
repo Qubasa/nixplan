@@ -1155,24 +1155,18 @@ in
     };
   };
 
-  testTheFoldersRowsAreProduced =
-    let
-      rendered = planner.render worked.diagnostics;
-    in
-    {
-      expr = {
-        produced = producedRows;
-        committed = committedRows;
-        count = length producedRows;
-        everyMessageIsRendered = all (row: hasInfix row.message rendered) producedRows;
-      };
-      expected = {
-        produced = producedRows;
-        committed = producedRows;
-        count = 2;
-        everyMessageIsRendered = true;
-      };
+  testTheFoldersRowsAreProduced = {
+    expr = {
+      committed = committedRows;
+      count = length producedRows;
+      table = planner.render worked.diagnostics;
     };
+    expected = {
+      committed = producedRows;
+      count = 2;
+      table = readFile (folder + "/plan/diagnostics.txt");
+    };
+  };
 
   # The value's own entry carries the program, so a reader of the plan alone can
   # run it. Nothing else in the plan mentions it: a service entry is what a

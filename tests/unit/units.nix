@@ -11,6 +11,7 @@ let
     evidenceById
     hasInfix
     korora
+    laptopMachines
     messageById
     planOf
     rowIds
@@ -21,10 +22,6 @@ let
     ;
 
   inherit (support.worked) openssh borgbackup;
-
-  laptopMachines = support.machines // {
-    laptop = support.laptop;
-  };
 
   otherSystemdService = planner.unitExtension {
     backend = "systemd";
@@ -46,18 +43,7 @@ let
     };
   };
 
-  placed =
-    machines: implementation:
-    planOf {
-      instances.svc = {
-        module = soleRoot {
-          module = _: {
-            impl = implementation;
-          };
-        };
-        placement.every.only = { inherit machines; };
-      };
-    };
+  placed = on: support.entryPlan { inherit on; };
 
   entryOf = result: machine: result.plan."svc:only@${machine}";
 
@@ -279,33 +265,20 @@ in
     let
       deployment =
         timeout:
-        planOf {
-          instances = {
-            tuned = {
-              module = soleRoot {
-                module = _: {
-                  impl = _: {
-                    units.only = {
-                      command = "/bin/true";
-                      inherit timeout;
-                    };
-                  };
-                };
-              };
-              placement.every.only.machines = [ "one" ];
-            };
-            other = {
-              module = soleRoot {
-                module = _: {
-                  impl = _: {
-                    units.only.command = "/bin/true";
-                  };
-                };
-              };
+        support.entryPlan
+          {
+            instance = "tuned";
+            instances.other = {
+              module = soleRoot { module = _: { impl = _: { units.only.command = "/bin/true"; }; }; };
               placement.every.only.machines = [ "two" ];
             };
-          };
-        };
+          }
+          (_: {
+            units.only = {
+              command = "/bin/true";
+              inherit timeout;
+            };
+          });
       before = deployment "30m";
       after = deployment "45m";
     in
@@ -1028,31 +1001,19 @@ in
   testARecipeThatReferencesASecretPath =
     let
       bytes = "PRIVATE-KEY-BYTES-b7f3c1d9";
-      result = planOf {
-        instances.holder = {
-          module = soleRoot {
-            module = _: {
-              vars.hostKey.files."key".secrecy = "secret";
-              impl =
-                { vars, ... }:
-                {
-                  units.web.command = "/bin/web";
-                  configData."/etc/agent.conf" = {
-                    mode = "0400";
-                    reload = [ "web" ];
-                    render = [
-                      { text = "key_file = "; }
-                      { ref = vars.hostKey."key".path; }
-                    ];
-                  };
-                };
-            };
+      result = support.valuePlan {
+        instance = "holder";
+        unit = "web";
+        content = bytes;
+        extra = vars: {
+          configData."/etc/agent.conf" = {
+            mode = "0400";
+            reload = [ "web" ];
+            render = [
+              { text = "key_file = "; }
+              { ref = vars.hostKey."key".path; }
+            ];
           };
-          placement.every.only.machines = [ "one" ];
-        };
-        varsState."holder:vars/hostKey@one"."key" = {
-          present = true;
-          content = bytes;
         };
       };
       file = result.plan."holder:only@one".configData."/etc/agent.conf";

@@ -361,9 +361,8 @@ appearing in the other's `dependsOn`. The worked example does exactly this, and
 eleven entries, real hashes, real store path strings, no ellipsis and no invented
 hash. `tests/unit/plan.nix` compares it to the evaluated plan field by field and
 reports the differing attribute paths rather than printing both documents. The
-fixture carries no prose keys of its own - every field participates in the
-comparison, and what the `note` and `why` keys used to hold is beside it in
-`fixtures/minimal-typed-edge/plan/README.md`.
+fixture carries no prose keys of its own: every field participates in the
+comparison.
 
 Regenerate it - never by hand - with:
 

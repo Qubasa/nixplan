@@ -25,6 +25,7 @@ caller who states one keeps it.
 from __future__ import annotations
 
 import contextlib
+import os
 import shlex
 import subprocess
 from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -33,7 +34,7 @@ from pathlib import Path, PurePosixPath
 from typing import Protocol
 
 from errors import ApplyError
-from manifest import ValueFile
+from manifest import Entry, ValueFile, artifact_of, image_file, service_name
 
 BOUNDS = (
     "-o",
@@ -131,11 +132,6 @@ class Answer:
 def asking(runner: Runner, argv: list[str], *, env: dict[str, str]) -> Answer:
     """Ask a machine one question and answer with what came back, however it exited.
 
-    Args:
-        runner: The channel every remote step goes through.
-        argv: The question, as argv.
-        env: The environment it runs under.
-
     Returns:
         The exit status and what the machine printed. A question is asked
         rather than taken as a step, so a machine that refuses it is an answer
@@ -151,56 +147,73 @@ def asking(runner: Runner, argv: list[str], *, env: dict[str, str]) -> Answer:
 
 
 @contextlib.contextmanager
-def refusing(subject: str, address: str) -> Iterator[None]:
-    """Report a machine's refusal of one step as the command's own refusal.
-
-    Args:
-        subject: The step being taken, as the log names it.
-        address: The machine it is taken against.
-
-    Yields:
-        Nothing. The step is taken inside the context.
-
-    Raises:
-        ApplyError: If the step failed, naming the subject, the machine and
-            what the machine printed. The argv is no part of the message: a
-            value write carries the bytes of a secret.
-    """
-    try:
-        yield
-    except subprocess.CalledProcessError as refused:
-        raise Refused(f"{subject}: {address}", refused.returncode, printed(refused)) from refused
-    except ApplyError as refused:
-        raise ApplyError(f"{subject}: {refused}") from refused
-
-
-@contextlib.contextmanager
 def taking(step: str, address: str, record: Callable[[str], None]) -> Iterator[None]:
     """Announce one step, take it, and name the failure if the machine refuses.
 
     Every subcommand that takes a step against a machine goes through this, so
     the last step line a run printed names the step that was running when the
-    run ended, whichever subcommand took it.
-
-    Args:
-        step: The line naming the step, printed before the step is attempted.
-        address: The machine it is taken against.
-        record: Where a line goes.
-
-    Yields:
-        Nothing. The step is taken inside the context.
+    run ended, whichever subcommand took it. The step is announced before it is
+    attempted.
 
     Raises:
-        ApplyError: If the machine refused, so that nothing after it is
-            attempted. The failure line follows the step line.
+        ApplyError: If the machine refused, naming the step, the machine and
+            what the machine printed, so that nothing after the step is
+            attempted. The failure line follows the step line, and the argv is
+            no part of either: a value write carries the bytes of a secret.
     """
     record(step)
     try:
-        with refusing(step, address):
-            yield
-    except ApplyError as refused:
+        yield
+    except subprocess.CalledProcessError as exited:
+        refused = Refused(f"{step}: {address}", exited.returncode, printed(exited))
         record(f"failed {refused}")
-        raise
+        raise refused from exited
+    except ApplyError as failed:
+        named = ApplyError(f"{step}: {failed}")
+        record(f"failed {named}")
+        raise named from failed
+
+
+def taken(
+    runner: Runner,
+    step: str,
+    address: str,
+    argv: list[str],
+    *,
+    env: dict[str, str],
+    record: Callable[[str], None],
+    stdin: bytes | None = None,
+) -> str:
+    """Announce one step, take it, and echo what the machine said underneath it.
+
+    Each line the machine printed is recorded under the step line and indented
+    by two spaces, which is what an operator reads under an activation, so
+    every subcommand echoes a machine the same way.
+
+    Raises:
+        ApplyError: If the machine refused, so that nothing after it is
+            attempted.
+    """
+    with taking(step, address, record):
+        answered = runner.output(argv, env=env, stdin=stdin)
+    for line in answered.splitlines():
+        record(f"  {line}")
+    return answered
+
+
+def ignore(line: str) -> None:
+    """Drop a step line, for a caller that reads the returned log instead."""
+
+
+def recording(log: Callable[[str], None]) -> tuple[list[str], Callable[[str], None]]:
+    """Return the lines one run collects, and the recorder that appends and logs one."""
+    lines: list[str] = []
+
+    def record(line: str) -> None:
+        lines.append(line)
+        log(line)
+
+    return lines, record
 
 
 def decoded(said: object) -> str:
@@ -233,12 +246,9 @@ def destination(cmd: Sequence[str]) -> str:
     anything, `-o Ciphers=aes256-gcm@openssh.com` being an ordinary one, so a
     scan reports whichever word happens to look like a destination.
 
-    Args:
-        cmd: The argv one of this module's builders produced.
-
     Returns:
-        The destination that builder addressed, and a name for the machine
-        where the vector is neither builder's.
+        The destination the builder of that argv addressed, and a name for the
+        machine where the vector is neither builder's.
     """
     words = list(cmd)
     if tuple(words[: len(COPY)]) == COPY and TO in words:
@@ -252,13 +262,10 @@ def destination(cmd: Sequence[str]) -> str:
 def ssh_opts(ssh_key: Path | None, *, inherited: str | None = None) -> str:
     """Return the ssh options every step of one invocation uses.
 
-    Args:
-        ssh_key: The private key `--ssh-key` named, if any.
-        inherited: The `NIX_SSHOPTS` the caller set, if any.
-
     Returns:
-        The inherited options, extended with `-i` for the key and with the
-        bound on silence, appended so the caller's own value wins.
+        The `NIX_SSHOPTS` the caller set, extended with `-i` for the key
+        `--ssh-key` named and with the bound on silence, appended so the
+        caller's own value wins.
     """
     opts = shlex.split(inherited) if inherited else []
     if ssh_key is not None:
@@ -266,7 +273,18 @@ def ssh_opts(ssh_key: Path | None, *, inherited: str | None = None) -> str:
     return shlex.join([*opts, *BOUNDS])
 
 
-def copy_env(base: Mapping[str, str], opts: str) -> dict[str, str]:
+def channel(base_env: Mapping[str, str] | None, ssh_key: Path | None) -> tuple[str, dict[str, str]]:
+    """Return the ssh options of one run and the environment its steps run under.
+
+    The environment is the caller's own, the process's own where it named none,
+    with those options in `NIX_SSHOPTS`.
+    """
+    base = os.environ if base_env is None else base_env
+    opts = ssh_opts(ssh_key, inherited=base.get("NIX_SSHOPTS"))
+    return opts, _copy_env(base, opts)
+
+
+def _copy_env(base: Mapping[str, str], opts: str) -> dict[str, str]:
     """Return the environment a `nix copy` runs under.
 
     `nix copy` reaches the machine over ssh and takes its options from the
@@ -280,11 +298,6 @@ def copy_env(base: Mapping[str, str], opts: str) -> dict[str, str]:
 
 def copy_argv(artifact: Path, address: str, *, user: str = "root") -> list[str]:
     """Return the store-to-store copy of one artifact, as argv.
-
-    Args:
-        artifact: The store path to copy.
-        address: The address of the receiving machine.
-        user: The login user on the receiving machine.
 
     Returns:
         The `nix copy` argv, with the destination in the position a refusal
@@ -302,12 +315,6 @@ def copy_argv(artifact: Path, address: str, *, user: str = "root") -> list[str]:
 
 def ssh_argv(address: str, script: str, *, opts: str, user: str = "root") -> list[str]:
     """Return one remote script, as argv.
-
-    Args:
-        address: The address of the machine.
-        script: The shell script to run there.
-        opts: The ssh options of this invocation.
-        user: The login user on the machine.
 
     Returns:
         The `ssh` argv: the destination is the word before the script, which is
@@ -348,9 +355,6 @@ def write_script(file: ValueFile) -> str:
     An account the machine does not have is named as such rather than left to
     `chown`'s own wording, and nothing is written under it.
 
-    Args:
-        file: The value file record the plan carries.
-
     Returns:
         The shell script, which writes nothing readable by anyone the record
         does not admit.
@@ -387,9 +391,6 @@ def restart_script(units: Sequence[str]) -> str:
     current without starting one an operator stopped: whether a unit runs at all
     is the activation's answer and never this step's.
 
-    Args:
-        units: The unit file names of the entry.
-
     Returns:
         The shell script the machine runs, empty of any value's bytes.
     """
@@ -404,9 +405,6 @@ def values_script(paths: Sequence[str]) -> str:
     own trigger limit. Nothing about the bytes of a file that is there is asked:
     a held value's contents are a secret, and reading one to report on it is not
     something this command does.
-
-    Args:
-        paths: The declared paths of the values delivered to that machine.
 
     Returns:
         The shell script, which prints `<path> present` or `<path> absent`.
@@ -425,13 +423,6 @@ def activate_script(name: str, artifact: Path) -> str:
     The two streams are merged because the endpoint reports what it did on
     stderr, and that report is the evidence that it used the prebuilt artifact
     and resolved nothing.
-
-    Args:
-        name: The service name the artifact declares.
-        artifact: The copied artifact path.
-
-    Returns:
-        The shell script the machine runs.
     """
     return f"flakelet activate {shlex.quote(name)} {shlex.quote(str(artifact))} 2>&1"
 
@@ -471,10 +462,6 @@ def image_status_script(image: Path, check: Path) -> str:
     report compares against is the recipe an attach writes. It may be absent on
     a machine that was never given the artifact, which is the same fact as the
     image being absent and is not a second refusal.
-
-    Args:
-        image: The image file inside the copied artifact.
-        check: The artifact's own staleness check.
     """
     return (
         f"portablectl is-attached {shlex.quote(str(image))} || true; "
@@ -494,9 +481,6 @@ class Attachment:
 
 def attachment_of(reported: str) -> Attachment:
     """Read one machine's answer to `image_status_script`.
-
-    Args:
-        reported: What the machine printed.
 
     Returns:
         The word the tool printed for the image it was asked about, empty
@@ -531,3 +515,56 @@ def attachment_of(reported: str) -> Attachment:
 def rollback_script(name: str) -> str:
     """Return the rollback of one entry through the machine's endpoint."""
     return f"flakelet rollback {shlex.quote(name)} 2>&1"
+
+
+@dataclass(frozen=True)
+class Realiser:
+    """What one realiser answers: how an entry of it is activated, and asked about."""
+
+    activate: Callable[[Entry], str]
+    ask: Callable[[Entry], str]
+
+
+def _image_status(entry: Entry) -> str:
+    artifact = artifact_of(entry)
+    return image_status_script(artifact / image_file(entry), artifact / "bin" / "check")
+
+
+REALISERS: Mapping[str, Realiser] = {
+    "flakelet": Realiser(
+        activate=lambda entry: activate_script(service_name(entry), artifact_of(entry)),
+        ask=lambda entry: flakelet_status_script(service_name(entry)),
+    ),
+    "image": Realiser(
+        activate=lambda entry: attach_script(artifact_of(entry)),
+        ask=_image_status,
+    ),
+}
+
+
+def activation(entry: Entry) -> str:
+    """Return the script that activates one entry on its machine.
+
+    Raises:
+        ApplyError: If the entry states a realiser this command cannot
+            activate.
+    """
+    return _realiser(entry, "and the command activates flakelet and image").activate(entry)
+
+
+def status_script(entry: Entry) -> str:
+    """Return the question one entry's machine is asked about it.
+
+    Raises:
+        ApplyError: If the entry states a realiser this command cannot ask
+            about.
+    """
+    return _realiser(entry, "which the command cannot ask").ask(entry)
+
+
+def _realiser(entry: Entry, cannot: str) -> Realiser:
+    """Return the realiser one entry states, or refuse in the caller's own words."""
+    stated = REALISERS.get(entry.realiser)
+    if stated is None:
+        raise ApplyError(f"{entry.key} states realiser {entry.realiser}, {cannot}")
+    return stated

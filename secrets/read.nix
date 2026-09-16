@@ -5,11 +5,9 @@
 # entry, and one program per entry. It carries no machine and no path at all,
 # which is what `backend.nix` renders beside this file.
 #
-# The reading has two halves and one statement per condition. `rows` answers what
-# a plan would be refused for and raises nothing, and `store`, `configuration`
-# and `deliveriesOf` refuse with the sentence that row states. `accounts` is what
-# pairs the two, and `tests/unit/diagnostics.nix` fails the suite for a refusal
-# whose account names no row a producing layer produces.
+# The reading has two halves and one statement per condition: `rows` raises
+# nothing, the rest refuse with the sentence that row states, and `accounts`
+# pairs the two.
 { planner }:
 let
   inherit (builtins)
@@ -58,11 +56,10 @@ let
   # The name the tool keeps for its own provenance record.
   reservedFile = ".nixos-secrets-metadata";
 
-  # Greedy on the instance: a plan key holds one colon before the marker, and a
-  # key holding two is a key two components could be read out of, which is what
-  # the collision check is here to catch rather than to read one way. A
-  # component may be empty, because a name the grammar refuses is a component
-  # the reading names rather than a key it cannot see.
+  # Greedy on the instance: a key holding two colons is a key two components
+  # could be read out of, which the collision check catches rather than reading
+  # it one way. A component may be empty, a name the grammar refuses being a
+  # component the reading names rather than a key it cannot see.
   keyRule = "(.*):vars/(.*)";
 
   carriesSeparator = value: match ".*${separator}.*" value != null;
@@ -155,10 +152,7 @@ let
     fileNameReserved = {
       id = "secrets-file-name-reserved";
       says =
-        {
-          key,
-          name,
-        }:
+        { key, name }:
         {
           subject = key;
           message = "generated file ${quote name} of ${quote key} carries the name the external generator keeps for its own provenance record";
@@ -170,10 +164,7 @@ let
     fileNameOutsideGrammar = {
       id = "secrets-file-name-outside-grammar";
       says =
-        {
-          key,
-          name,
-        }:
+        { key, name }:
         {
           subject = key;
           message = "generated file ${quote name} of ${quote key} is not a name the external generator admits, which carries ASCII letters, digits, ${separator}, ${admits} and nothing else";
@@ -185,10 +176,7 @@ let
     nameCollision = {
       id = "secrets-name-collision";
       says =
-        {
-          name,
-          keys,
-        }:
+        { name, keys }:
         {
           subject = head keys;
           message = "${quoteList keys} project onto one name, ${quote name}, and one would overwrite the other's stored bytes";
@@ -200,10 +188,7 @@ let
     machineUnknown = {
       id = "secrets-delivery-machine-unknown";
       says =
-        {
-          key,
-          machine,
-        }:
+        { key, machine }:
         {
           subject = key;
           message = "value ${quote key} is delivered to machine ${quote machine}, and the plan carries no ${quote "machine:${machine}"} entry to read an address out of";
@@ -215,10 +200,7 @@ let
     machineNoAddress = {
       id = "secrets-delivery-machine-no-address";
       says =
-        {
-          key,
-          machine,
-        }:
+        { key, machine }:
         {
           subject = key;
           message = "value ${quote key} is delivered to machine ${quote machine}, and that machine's entry records no address";
@@ -248,10 +230,7 @@ let
       id = null;
       because = "every path a plan records is `/run/vars/<instance>/<generator>/<file>`, fixed by the planner from the value's own key, so a recorded path always names a directory";
       says =
-        {
-          key,
-          path,
-        }:
+        { key, path }:
         {
           subject = key;
           message = "the path ${quote path} of ${quote key} names no directory, so there is nothing to create on the machine that receives it";
@@ -262,6 +241,8 @@ let
   };
 
   rowOf = account: args: planner.error ({ inherit (account) id; } // account.says args);
+
+  keyRowOf = key: optional (match keyRule key == null) (rowOf accounts.keyNotAValue key);
 
   fail =
     account: args:
@@ -290,13 +271,12 @@ let
     if m == null then null else head m;
 
   # Every value the rendered deploy step carries as one shell word, in the order
-  # it takes them, stated here once so the two halves cross rather than list the
-  # same words twice: `backend.nix` renders this list and the table-answering
-  # half derives its checks from it, so a word a field adds to the step is
-  # checked by existing. `scope` is what a word varies with, a file of the value
-  # or a machine of its delivery set. `needs` is what the record has to record
-  # for the word to exist at all, and `derivedFrom` names the word a word is
-  # computed out of, which is reported once rather than twice.
+  # it takes them: `backend.nix` renders this list and the table-answering half
+  # derives its checks from it, so a word a field adds to the step is checked by
+  # existing. `scope` is what a word varies with, a file of the value or a
+  # machine of its delivery set; `needs` is what the record has to record for the
+  # word to exist at all; `derivedFrom` names the word a word is computed out of,
+  # which is reported once rather than twice.
   renderedWords = [
     {
       field = "address";
@@ -388,70 +368,52 @@ let
       partsOf plan key;
 
   component =
-    role: parts: value:
+    role: key: value:
+    let
+      args = { inherit key role value; };
+    in
     if carriesSeparator value then
-      fail accounts.nameCarriesSeparator {
-        inherit (parts) key;
-        inherit role value;
-      }
+      fail accounts.nameCarriesSeparator args
     else if outsideComponentRule value then
-      fail accounts.nameOutsideGrammar {
-        inherit (parts) key;
-        inherit role value;
-      }
+      fail accounts.nameOutsideGrammar args
     else
       value;
 
   # <instance>:<generator>, or <instance>:<generator>:<machine> for a per-machine
-  # value, so two machines' values of one generator stay two stored values.
-  # Deliberately not a hash of the key: this name is what an operator reads in the
-  # tool's own listing and in a prompt about deleting something.
-  #
-  # The join runs before the components are checked, so two keys landing on one
-  # name are named as the pair they are rather than one at a time.
-  joined =
-    parts:
-    concatStringsSep separator (
-      [
-        parts.instance
-        parts.generator
-      ]
-      ++ (if parts.machine == null then [ ] else [ parts.machine ])
-    );
+  # value, so two machines' values of one generator stay two stored values. One
+  # list states the components it joins, in the order it joins them, and the role
+  # a row names each by; a value that is not per-machine carries `null` at the
+  # third. The join runs before the components are checked, so two keys landing
+  # on one name are named as the pair they are rather than one at a time.
+  componentRoles = [
+    "instance"
+    "generator"
+    "machine"
+  ];
+
+  rolesOf = parts: filter (role: parts.${role} != null) componentRoles;
+
+  joined = parts: concatStringsSep separator (map (role: parts.${role}) (rolesOf parts));
 
   projected =
     parts:
-    concatStringsSep separator (
-      [
-        (component "instance" parts parts.instance)
-        (component "generator" parts parts.generator)
-      ]
-      ++ (if parts.machine == null then [ ] else [ (component "machine" parts parts.machine) ])
-    );
+    concatStringsSep separator (map (role: component role parts.key parts.${role}) (rolesOf parts));
 
   fileName =
-    parts: name:
+    key: name:
+    let
+      args = { inherit key name; };
+    in
     if name == reservedFile then
-      fail accounts.fileNameReserved {
-        inherit (parts) key;
-        inherit name;
-      }
+      fail accounts.fileNameReserved args
     else if outsideFileRule name then
-      fail accounts.fileNameOutsideGrammar {
-        inherit (parts) key;
-        inherit name;
-      }
+      fail accounts.fileNameOutsideGrammar args
     else
       name;
 
-  # A plan record is classified by what it records and never by the text of the
-  # key it sits at: an instance may legitimately be called `machine` and a member
-  # after the prefix a value's key carries, so a key match answers wrongly for a
-  # plan the planner calls applicable. A record carrying a placement is a service
-  # entry, one carrying a delivery set is a generated value, and one carrying
-  # neither is a machine record. `files` is a field a value owes rather than one
-  # that recognises it, so a record recording none is a row and not a record this
-  # reading cannot see.
+  # A record is classified by what it records and never by the text of the key it
+  # sits at: `files` is a field a value owes rather than one that recognises it,
+  # so a record recording none is a row and not a record this reading cannot see.
   isValue = entry: !(entry ? placement) && entry ? delivery;
 
   keysOf = plan: sortStrings (filter (key: isValue plan.${key}) (attrNames plan));
@@ -506,7 +468,7 @@ let
       # what `deploy = false` on every one of its files says.
       files = listToAttrs (
         mapAttrsToList (fname: _: {
-          name = fileName value fname;
+          name = fileName value.key fname;
           value = {
             inherit deploy;
           };
@@ -523,21 +485,24 @@ let
       }) (valuesOf plan)
     );
 
+  # The record a delivery's machine sits at, and the one question the address
+  # asks of it: what the step renders is a string the record states, so a record
+  # stating none and a record stating something else are one condition. Both
+  # halves read these rather than stating the lookup and the test twice.
+  machineRecord = plan: machine: plan."machine:${machine}" or null;
+
+  statesNoAddress = record: !(record ? address) || !isString record.address;
+
   addressOf =
-    plan: value: machine:
+    plan: key: machine:
     let
-      record = plan."machine:${machine}" or null;
+      record = machineRecord plan machine;
+      args = { inherit key machine; };
     in
     if record == null then
-      fail accounts.machineUnknown {
-        inherit (value) key;
-        inherit machine;
-      }
-    else if !(record ? address) || !isString record.address then
-      fail accounts.machineNoAddress {
-        inherit (value) key;
-        inherit machine;
-      }
+      fail accounts.machineUnknown args
+    else if statesNoAddress record then
+      fail accounts.machineNoAddress args
     else
       record.address;
 
@@ -551,7 +516,7 @@ let
       files = mapAttrsToList (
         fname: file:
         {
-          file = fileName value fname;
+          file = fileName value.key fname;
         }
         // listToAttrs (
           map (field: {
@@ -562,7 +527,7 @@ let
       ) (required value.key value.entry "files");
       machines = map (machine: {
         inherit machine;
-        address = addressOf plan value machine;
+        address = addressOf plan value.key machine;
       }) (required value.key value.entry "delivery");
     }) (filter (value: required value.key value.entry "deploy") (valuesOf plan));
 
@@ -575,17 +540,17 @@ let
       parts = partsOf plan key;
       deployed = entry.deploy or false;
       delivery = if deployed then entry.delivery or [ ] else [ ];
+      keyRows = keyRowOf key;
 
       componentRows =
         role: value:
+        let
+          args = { inherit key role value; };
+        in
         if carriesSeparator value then
-          [
-            (rowOf accounts.nameCarriesSeparator { inherit key role value; })
-          ]
+          [ (rowOf accounts.nameCarriesSeparator args) ]
         else
-          optional (outsideComponentRule value) (
-            rowOf accounts.nameOutsideGrammar { inherit key role value; }
-          );
+          optional (outsideComponentRule value) (rowOf accounts.nameOutsideGrammar args);
 
       # Every word the rendered step carries, checked where the record answers
       # it. A word derived from another is named only where that one was
@@ -640,11 +605,11 @@ let
       machineRowsOf =
         machine:
         let
-          record = plan."machine:${machine}" or null;
+          record = machineRecord plan machine;
         in
         if record == null then
           [ (rowOf accounts.machineUnknown { inherit key machine; }) ]
-        else if !(record ? address) || !isString record.address then
+        else if statesNoAddress record then
           [ (rowOf accounts.machineNoAddress { inherit key machine; }) ]
         else
           wordRowsOf "machine" {
@@ -652,8 +617,8 @@ let
             inherit (record) address;
           };
     in
-    if match keyRule key == null then
-      [ (rowOf accounts.keyNotAValue key) ]
+    if keyRows != [ ] then
+      keyRows
     else
       map (field: rowOf accounts.fieldMissing { inherit key field; }) (
         filter (field: !(entry ? ${field})) (
@@ -666,16 +631,10 @@ let
         )
       )
       ++ optional (!(entry ? program)) (rowOf accounts.programMissing key)
-      ++ componentRows "instance" parts.instance
-      ++ componentRows "generator" parts.generator
-      ++ (if parts.machine == null then [ ] else componentRows "machine" parts.machine)
+      ++ concatLists (map (role: componentRows role parts.${role}) (rolesOf parts))
       ++ concatLists (mapAttrsToList fileRowsOf (entry.files or { }))
       ++ concatLists (map machineRowsOf delivery)
-      ++ concatLists (
-        map (read: optional (match keyRule read == null) (rowOf accounts.keyNotAValue read)) (
-          entry.reads or [ ]
-        )
-      );
+      ++ concatLists (map keyRowOf (entry.reads or [ ]));
 
   rowsOf =
     plan: user:
@@ -692,13 +651,9 @@ in
     ;
 
   # `backend.nix` renders what the contract's deploy step cannot carry, so the
-  # refusal it states is this file's. The rule itself is `planner.util`'s, read
-  # here rather than restated, because the image attach script renders a word by
-  # the same grammar: one condition, one description, one account.
-  #
-  # `renderedWords` is the set both halves read: the step renders one word per
-  # entry of it and the rows above check the same entries, so neither half holds
-  # a word the other does not.
+  # refusal it states is this file's, and `renderedWords` is the set both halves
+  # read: the step renders one word per entry of it and the rows above check the
+  # same entries, so neither half holds a word the other does not.
   inherit renderedWords unrenderable fail;
 
   # What this plan would be refused for, as rows and without raising. `user` is
@@ -737,10 +692,7 @@ in
   # One store entry per generated value, keyed by its projected name. An entry of
   # the plan that is not a generated value contributes none.
   store =
-    {
-      plan,
-      backend,
-    }:
+    { plan, backend }:
     storeOf plan backend;
 
   # `backends` is the caller's and not the plan's: where bytes live is a fact

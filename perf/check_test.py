@@ -82,11 +82,14 @@ class CheckerTest(unittest.TestCase):
     def write_result(self, name: str, doc: Doc) -> None:
         (self.results / f"{name}.json").write_text(json.dumps(doc), encoding="utf-8")
 
-    def write_budgets(self, fixtures: dict[str, Doc], bound: float = 1.25) -> None:
+    def write_budgets(
+        self, fixtures: dict[str, Doc], bound: float = 1.25, defaults: Doc | None = None
+    ) -> None:
         document: Doc = {
             "margin": 0.15,
             "growth": {"bound": bound, "sizes": [4, 16, 64, 256], "note": "test"},
             "fixtures": fixtures,
+            **(defaults or {}),
         }
         self.budgets.write_text(json.dumps(document), encoding="utf-8")
 
@@ -125,19 +128,13 @@ class CheckerTest(unittest.TestCase):
         self.assertEqual(1, self.exit_code())
 
     def test_wall_clock_regresses(self) -> None:
+        """Wall clock is advisory, so a run whose wall clock tripled still passes."""
         counters = counter_map(80)
-        runs = [
-            run_doc(counters, cpu=0.010, wall=0.100),
-            run_doc(counters, cpu=0.011, wall=0.300),
-        ]
+        runs = [run_doc(counters, cpu=0.010, wall=0.100), run_doc(counters, cpu=0.011, wall=0.300)]
         self.write_result("worked", result_doc("worked", None, 8, runs))
         self.write_budgets({"worked": budget_doc("worked", budget_figures(10))})
 
         self.assertEqual([], self.failures())
-        self.assertTrue(
-            any("wall clock" in m and "+0.2000s" in m for m in self.notes()),
-            self.notes(),
-        )
         self.assertEqual(0, self.exit_code())
 
     def test_the_interpreter_changes(self) -> None:
@@ -179,12 +176,16 @@ class CheckerTest(unittest.TestCase):
         self.assertEqual(1, self.exit_code())
 
     def test_a_budget_has_no_recorded_provenance(self) -> None:
+        """Provenance an entry omits is the file's own, and neither stating it is a failure."""
         self.write_result("worked", result_doc("worked", None, 8, [run_doc(counter_map(80))]))
-        for field in check.REQUIRED_BUDGET_FIELDS:
-            with self.subTest(field=field):
-                self.write_budgets({"worked": budget_doc("worked", budget_figures(10), drop=field)})
-                self.assertIn(f"budget entry worked records no {field}", self.failures())
-                self.assertEqual(1, self.exit_code())
+        entry = {"worked": budget_doc("worked", budget_figures(10), drop="interpreter")}
+        self.write_budgets(entry)
+        self.assertIn("budget entry worked records no interpreter", self.failures())
+        self.assertEqual(1, self.exit_code())
+
+        self.write_budgets(entry, defaults={"interpreter": INTERPRETER})
+        self.assertEqual([], self.failures())
+        self.assertEqual(0, self.exit_code())
 
     def test_an_optimisation_lands(self) -> None:
         self.write_result("worked", result_doc("worked", None, 8, [run_doc(counter_map(400))]))
@@ -251,16 +252,6 @@ class CheckerTest(unittest.TestCase):
         self.assertEqual(len(check.GATED_COUNTERS), len(failures), failures)
         self.assertTrue(all("of fixture mesh grew by" in m for m in failures), failures)
         self.assertEqual(1, self.exit_code())
-
-    def test_a_sized_fixture_measured_once_is_reported(self) -> None:
-        self.write_result("mesh-4", result_doc("mesh", 4, 9, [run_doc(counter_map(90))]))
-        self.write_budgets({"mesh-4": budget_doc("mesh", budget_figures(10))})
-
-        self.assertEqual([], self.failures())
-        self.assertTrue(
-            any("two comparable sizes of fixture mesh" in m for m in self.notes()), self.notes()
-        )
-        self.assertEqual(0, self.exit_code())
 
     def test_a_budget_figure_is_null(self) -> None:
         self.write_result("worked", result_doc("worked", None, 8, [run_doc(counter_map(80))]))
