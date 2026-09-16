@@ -94,14 +94,40 @@ let
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "changes/deliver-a-secret-without-exposing-it/specs/operator/apply-command/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
-    "changes/deliver-a-secret-without-exposing-it/specs/operator/machine-identity/spec.md" =
-      "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "changes/deliver-a-secret-without-exposing-it/specs/planner/diagnostics/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "changes/deliver-a-secret-without-exposing-it/specs/planner/plan-artifact/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "changes/deliver-a-secret-without-exposing-it/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
+    "changes/name-the-machine-a-run-dials/specs/operator/apply-command/spec.md" =
+      "an unimplemented change: no task of name-the-machine-a-run-dials has been done, so nothing in this package claims to satisfy it yet";
+    "changes/name-the-machine-a-run-dials/specs/planner/machine-platform/spec.md" =
+      "an unimplemented change: no task of name-the-machine-a-run-dials has been done, so nothing in this package claims to satisfy it yet";
+    "changes/name-the-machine-a-run-dials/specs/planner/secret-delivery/spec.md" =
+      "an unimplemented change: no task of name-the-machine-a-run-dials has been done, so nothing in this package claims to satisfy it yet";
+    "changes/probe-a-service-before-it-counts-as-live/specs/planner/unit-vocabulary/spec.md" =
+      "an unimplemented change: no task of probe-a-service-before-it-counts-as-live has been done, so nothing in this package claims to satisfy it yet";
+    "changes/probe-a-service-before-it-counts-as-live/specs/realiser/flakelet-artifact/spec.md" =
+      "an unimplemented change: no task of probe-a-service-before-it-counts-as-live has been done, so nothing in this package claims to satisfy it yet";
+    "changes/probe-a-service-before-it-counts-as-live/specs/realiser/portable-service-image/spec.md" =
+      "an unimplemented change: no task of probe-a-service-before-it-counts-as-live has been done, so nothing in this package claims to satisfy it yet";
+    "changes/retire-an-entry-a-build-no-longer-names/specs/operator/apply-command/spec.md" =
+      "an unimplemented change: no task of retire-an-entry-a-build-no-longer-names has been done, so nothing in this package claims to satisfy it yet";
+    "changes/retire-an-entry-a-build-no-longer-names/specs/operator/deployment-build/spec.md" =
+      "an unimplemented change: no task of retire-an-entry-a-build-no-longer-names has been done, so nothing in this package claims to satisfy it yet";
+    "changes/retire-an-entry-a-build-no-longer-names/specs/operator/machine-report/spec.md" =
+      "an unimplemented change: no task of retire-an-entry-a-build-no-longer-names has been done, so nothing in this package claims to satisfy it yet";
+    "changes/unseal-a-value-after-a-reboot/specs/delivery/generated-values/spec.md" =
+      "an unimplemented change: no task of unseal-a-value-after-a-reboot has been done, so nothing in this package claims to satisfy it yet";
+    "changes/unseal-a-value-after-a-reboot/specs/operator/apply-command/spec.md" =
+      "an unimplemented change: no task of unseal-a-value-after-a-reboot has been done, so nothing in this package claims to satisfy it yet";
+    "changes/unseal-a-value-after-a-reboot/specs/operator/deployment-build/spec.md" =
+      "an unimplemented change: no task of unseal-a-value-after-a-reboot has been done, so nothing in this package claims to satisfy it yet";
+    "changes/unseal-a-value-after-a-reboot/specs/operator/machine-report/spec.md" =
+      "an unimplemented change: no task of unseal-a-value-after-a-reboot has been done, so nothing in this package claims to satisfy it yet";
+    "changes/unseal-a-value-after-a-reboot/specs/planner/secret-delivery/spec.md" =
+      "an unimplemented change: no task of unseal-a-value-after-a-reboot has been done, so nothing in this package claims to satisfy it yet";
   };
 
   isSpecFile = path: match ".*/spec\\.md" path != null;
@@ -377,12 +403,15 @@ let
     in
     if m == null then null else head m;
 
+  # A marker is read at the start of a line, so a tasks file may name `- [x]` in
+  # prose without reading as a change that has started landing.
   changeHasLanded =
     name:
     let
       file = openspecRoot + "/changes/${name}/tasks.md";
+      ticked = line: match "[[:space:]]*- [[]x[]].*" line != null;
     in
-    pathExists file && filter (line: hasInfix "- [x]" line) (lines (readFile file)) != [ ];
+    pathExists file && filter ticked (lines (readFile file)) != [ ];
 
   staleExcuses = sort (a: b: a < b) (
     map (path: "excused: ${path} rests on ${excuseNamesChange excused.${path}} being unimplemented") (

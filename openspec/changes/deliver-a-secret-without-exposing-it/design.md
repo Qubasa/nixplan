@@ -29,6 +29,28 @@ by nobody, so a signature check has nothing to check; what was missing is the au
 machine receiving it, and that is D2. The copy travels the same verified channel as every other step
 of the run, and the report names the options it used.
 
+## D2, D3 - superseded
+
+Both sections are superseded by `name-the-machine-a-run-dials`. They are kept below as the record of
+what was argued, because that change reached the same conclusion on D3 and the opposite one twice on
+D2, and the reasons are worth reading together.
+
+D3 stands and was adopted: the identity is outside the hashed machine record, for the reason written
+here. That change reads it in the third projection of the machine reading, beside the reservation
+statement, and holds the same observable claim - rotate an identity and no key in the plan moves.
+
+D2 is overturned on two points. The field is one `hostKey` rather than a `hostKeys` list: ssh orders
+the host key algorithms it will accept by the keys it already knows for a host, so a file naming
+several makes a machine answering with any one of them acceptable, which reaches this change's own
+hole more slowly rather than closing it, and the rotation overlap a list looks like it buys is
+better served by the operator applying twice. And a machine stating no identity is a warning row
+from the planner plus today's behaviour, not a refusal: every deployment in this repository and
+every folder under `tests/e2e/` states none, and `tests/e2e/newcomer/template/` is byte-compared
+against `docs/README.md` and cannot reach the guest image's exports to state one, so the refusal
+would make a documented example unbuildable in order to report a fact about it. The two arguments
+D2 needs to stay usable, `--known-hosts` and `--accept-new-host-key`, are themselves the admission
+that the deployment's statement has to be optional.
+
 ## D2 - What a host identity looks like in the registry, and a run with none
 
 | Where an identity lives | Against |

@@ -133,9 +133,15 @@ Not in this change, deliberately:
 
 ### New Capabilities
 
-- `operator/machine-identity` (`lib/resolve.nix`, `lib/plan.nix`, and `cli/`): what a deployment
-  states about the machine it dials, what the command verifies before it writes a secret there,
-  which options a run connects with, and how a test guest's accommodation stays visible.
+None. `operator/machine-identity` was proposed here and is superseded by
+`name-the-machine-a-run-dials`, which places the same three facts in the three capabilities that
+already own them: the registry field in `planner/machine-platform`, whose current spec says the
+reading "SHALL refuse any other key" and therefore has to be the one amended; the delivery-set
+warning in `planner/secret-delivery`; and the connection in `operator/apply-command`, whose current
+spec says "An option the caller stated for the connection SHALL win over the command's own value
+for the same option" and is the sentence this gap rests on. A fourth capability would contradict
+the first two rather than add to them. The delta file that stood here is deleted and sections 3
+and 5 below are struck.
 
 ### Modified Capabilities
 

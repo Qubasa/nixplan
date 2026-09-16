@@ -11,9 +11,10 @@ the sentence about writing a file "readable only by the user the units run as" i
 the bytes travel on was never stated at all. Two requirements are added: what a failure on a machine
 may print, and what the command checks about the operator's own store of bytes before it reads it.
 
-`operator/machine-identity` in this same change owns who the machine at the other end is and which
-options the connection uses; a requirement here that says "the machine" means the machine that
-capability's verification identified.
+Who the machine at the other end is, and which options the connection uses, is
+`name-the-machine-a-run-dials`. A requirement here that says "the machine" means the machine that
+change's connection requirement reached. `operator/machine-identity` was this change's own proposal
+for that and is superseded; its delta file is deleted.
 -->
 
 ## Purpose

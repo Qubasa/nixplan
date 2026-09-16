@@ -62,22 +62,19 @@ a booted machine or a real ssh.
 
 ## 3. The machine registry states an identity
 
-- [ ] 3.1 `lib/resolve.nix:42-48` and `:184-193`: `machineRegistryKeys` gains `hostKeys`, a list of
-  the public keys a machine presents, defaulting to the empty list, with a row for a malformed
-  shape. It enters neither `machineTargetKeys` nor `targetOf`, because no unit renders from it.
-  Verify a registry stating it produces the field and a registry stating none produces an empty list
-  rather than an absent key.
-- [ ] 3.2 `lib/plan.nix:25` and `:774-788`: the `machine:<name>` entry records `hostKeys`, and
-  `machineKey` hashes the machine record without it (D3). Verify that adding, changing, or removing
-  a machine's `hostKeys` leaves every key in the plan equal and changes only that machine's own
-  entry.
-- [ ] 3.3 `tests/unit/plan.nix`, one test per evaluation scenario of
-  `specs/operator/machine-identity/spec.md`: `testARegistryStatesAMachinesHostIdentity` and
-  `testRotatingAHostIdentityMovesNoKey`. Verify the second fails when `hostKeys` is folded back into
-  the hashed record.
-- [ ] 3.4 Regenerate the golden plan and record the difference: one field per machine entry, and no
-  key moved. Verify `tests/unit/plan.nix` is green and the diff against the phase 1 golden touches
-  the machine entries alone.
+Struck. Superseded whole by `name-the-machine-a-run-dials`, which states the field as one
+`hostKey` rather than a `hostKeys` list: ssh orders the algorithms it offers by the keys it
+already knows for a host, so a file naming several keys makes a machine answering with any one of
+them acceptable, which is the same hole this section exists to close reached more slowly. That
+change reads the field in the third projection of the machine reading beside the reservation
+statement, for the key-stability reason 3.2 below had right.
+
+- [ ] 3.1 Superseded by `name-the-machine-a-run-dials` tasks 2.x and 3.x
+- [ ] 3.2 Superseded by `name-the-machine-a-run-dials` task 3.3, which holds the same claim: adding,
+  changing or removing a machine's host identity leaves every key in the plan equal
+- [ ] 3.3 Superseded, and the scenarios moved with the capability
+- [ ] 3.4 Superseded. That change records no golden regeneration, because the field is `null` on
+  every machine entry of a fixture that states none
 
 ## 4. The delivery channel and the operator's own store
 
@@ -109,22 +106,19 @@ a booted machine or a real ssh.
 
 ## 5. Machine identity in the command
 
-- [ ] 5.1 `cli/remote.py:60-85`: the connection options come from the plan and from the invocation.
-  `NIX_SSHOPTS` is no longer read for them, the known-hosts file of the run is written from the
-  plan's `hostKeys`, and verification is demanded. `--known-hosts` names identities held elsewhere
-  and `--accept-new-host-key` accepts an unverified machine, both explicit and both reported (D2).
-  Verify a run whose environment disables verification still verifies, and that a machine presenting
-  an unstated identity is refused for that machine.
-- [ ] 5.2 `cli/apply.py:156-230` and `cli/planner.py:100-136`: an apply, a status, and a rollback
-  report the options they connected with as their first line, and an invocation that accepted an
-  unverified machine says so. A machine with no stated identity and no such argument is refused
-  before the first dial, naming the machine and the field. Verify the refusal reaches no machine,
-  including the machines that do state an identity.
-- [ ] 5.3 `tests/e2e/test_harness.py`, one test per machine-free scenario of
-  `specs/operator/machine-identity/spec.md`: `test_a_machine_states_no_host_identity`,
-  `test_an_inherited_option_set_does_not_reach_the_connection`, and
-  `test_the_report_names_the_options_the_run_used`. Verify each fails against the command as it
-  stands before this phase.
+Struck. Superseded by `name-the-machine-a-run-dials`, which keeps `NIX_SSHOPTS` as the input it is
+and refuses the two options that would defeat pinning instead of ceasing to read the variable.
+5.1 as written deletes every operator's `ProxyJump`, `User` and `-i` and the harness's own
+`-F /dev/null`, and it needs a `--known-hosts` and an `--accept-new-host-key` flag to be usable at
+all, which makes the deployment's statement optional by another route. The refusal is the honest
+answer available, because the command's options are appended so that the caller wins, and an
+appended option cannot undo one already given.
+
+- [ ] 5.1 Superseded by `name-the-machine-a-run-dials` tasks 4.x
+- [ ] 5.2 Superseded. Reporting what a run connected with is kept there; refusing a machine that
+  states no identity is not, because `tests/e2e/newcomer/template/` is byte-compared against
+  `docs/README.md` and cannot reach the guest image's exports to state one
+- [ ] 5.3 Superseded, and the scenarios moved with the capability
 
 ## 6. The image carries what its units name
 
@@ -148,10 +142,10 @@ a booted machine or a real ssh.
 
 ## 7. The machine layer
 
-- [ ] 7.1 `tests/e2e/secret-delivery/deployment/default.nix`: state `hostKeys` for the three
-  machines where the run can know them, and declare a `mode` and an `owner` on the delivered token
-  so the folder exercises a value a unit reads as its own user rather than as the privileged one.
-  Verify the deployment builds and the plan records both fields.
+- [ ] 7.1 `tests/e2e/secret-delivery/deployment/default.nix`: declare a `mode` and an `owner` on the
+  delivered token so the folder exercises a value a unit reads as its own user rather than as the
+  privileged one. Verify the deployment builds and the plan records both fields. The identity half
+  of this task is `name-the-machine-a-run-dials`'s, not this change's
 - [ ] 7.2 `tests/e2e/secret-delivery/`: a sampler unit on each machine, started before the deliver
   phase and stopped after it, recording each observed process as its command name and the digest of
   its argument vector (D8). Verify the sampler runs during the apply, carries no needle of its own,
@@ -169,10 +163,10 @@ a booted machine or a real ssh.
   the file's mode and owner becomes an assertion against the plan's own record rather than against
   `400` and the login user. Verify `nix run .#planner-e2e secret-delivery` is green and record the
   count against the count before this change.
-- [ ] 7.5 `tests/e2e/delivery.py:185-206`: the throwaway guest's accommodation moves out of
-  `NIX_SSHOPTS` and into the arguments the harness passes. `LOCKED_URL_PREFIX` and the rest stay as
-  they are. Verify no folder's run relies on an inherited option and that the other folders are
-  green.
+- [ ] 7.5 Superseded by `name-the-machine-a-run-dials`, which keeps the guest's accommodation in
+  `NIX_SSHOPTS` and gives the guest image a known `ssh-ed25519` host key instead, the way
+  `tests/e2e/guest.nix` already defines both halves of the client credential. Note there that
+  editing that file re-keys every snapshot cut and needs `rookery snapshot gc --all`
 
 ## 8. Documentation and invariants
 
@@ -185,28 +179,28 @@ a booted machine or a real ssh.
   the identifier list matches the library's.
 - [ ] 8.4 `CLAUDE.md`: the invariants this change creates - a value's bytes travel on the remote
   command's input and never in an argument vector; a delivered file's mode and owner are the plan's
-  and an owner naming a unit resolves through that unit's own `user`; `hostKeys` is a registry field
-  outside the hashed machine record; a row states two type names and no value; an image's host paths
+  and an owner naming a unit resolves through that unit's own `user`; a row states two type names
+  and no value; an image's host paths
   come from the paths its units name rather than from the generators it declares; a confinement
   denial is per unit. Verify the file passes vale under `nix build .#checks.x86_64-linux.treefmt`.
-- [ ] 8.5 Register the six spec files of this change under `accountable` in
-  `tests/unit/coverage.nix`, with the new files staged so the flake can read them. Verify the
-  coverage cross-walk reports an empty difference.
+- [ ] 8.5 Register the five remaining spec files of this change under `accountable` in
+  `tests/unit/coverage.nix`, with the new files staged so the flake can read them. The sixth,
+  `specs/operator/machine-identity/spec.md`, is deleted as superseded and its `excused` line goes
+  with it. Verify the coverage cross-walk reports an empty difference.
 
 ## 9. Verification
 
 - [ ] 9.1 `nix build .#checks.x86_64-linux.planner-tests -L`: green, with the coverage cross-walk
-  empty over the six new spec files.
+  empty over the five new spec files.
 - [ ] 9.2 `nix build .#checks.x86_64-linux.treefmt -L` and `nix fmt`: no change to any file this
   change touched.
 - [ ] 9.3 `nix run .#planner-e2e`: green for every folder, with the count recorded here against the
   count before the change.
 - [ ] 9.4 Prove the new assertions can fail: restore the encoded content to the remote script and
-  confirm the process-table tests fail and nothing else does; fold `hostKeys` into the hashed
-  machine record and confirm the rotation test fails alone; return the entry-level denial and
+  confirm the process-table tests fail and nothing else does; return the entry-level denial and
   confirm the per-unit image test fails alone; make the value source group-readable and confirm the
   run refuses before dialling. Revert each and confirm the tree is byte-identical to before the
   mutation.
 - [ ] 9.5 Confirm the obsolescence is total: no file under `cli/` encodes a value into a script or a
-  argument vector, `values.check` reads `secrecy`, `NIX_SSHOPTS` is read nowhere for a connection
-  option, and no realiser derives a generated host path from `entry.vars`.
+  argument vector, `values.check` reads `secrecy`, and no realiser derives a generated host path
+  from `entry.vars`.

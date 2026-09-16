@@ -435,11 +435,23 @@ silently unobserved.
   `changes/<open-change>/specs/<capability>/spec.md` for a change still open. The suite is handed
   `openspecRoot = ./openspec` rather than the changes directory, and it deliberately does not read
   `changes/archive/`, an archived delta being a record whose content is in the current spec.
-- Three changes are open: `declare-service-state`, `deliver-a-secret-without-exposing-it` and
-  `answer-whether-a-machine-is-current`. The last one stays open because its tasks 1.1 and 1.2
-  record themselves as not doable and superseded by `tests/e2e/test_harness.py`, so marking them
-  done would falsify the record, and its 21 landed tasks are what the synthetic half of
+  An excuse names the change it rests on and expires the moment that change starts landing, so a
+  tasks file states `- [x]` at the start of a line and may name the marker in prose: the reading
+  anchors it, and every one of the four production changes documents the trap in prose and would
+  have read as landed under an unanchored match.
+- Seven changes are open. `answer-whether-a-machine-is-current` stays open because its tasks 1.1
+  and 1.2 record themselves as not doable and superseded by `tests/e2e/test_harness.py`, so marking
+  them done would falsify the record, and its 21 landed tasks are what the synthetic half of
   `testAnExcuseOutlivesTheStateItDescribes` reads: archiving it moves that probe.
+  `declare-service-state` is untouched. `deliver-a-secret-without-exposing-it` is narrowed: its
+  `operator/machine-identity` capability, its sections 3 and 5 and its task 7.5 are superseded by
+  `name-the-machine-a-run-dials`, and the delta file is deleted, because a capability that never
+  landed cannot be the home of a rule the current `planner/machine-platform` spec refuses and the
+  current `operator/apply-command` spec licenses. The four that make the tree operable with
+  flakelet as the stated realiser are `retire-an-entry-a-build-no-longer-names`,
+  `name-the-machine-a-run-dials`, `unseal-a-value-after-a-reboot` and
+  `probe-a-service-before-it-counts-as-live`; none has a box ticked, so all fourteen of their delta
+  specs are `excused`.
 - A directory kind goes in `directoryKinds` in `lib/module.nix`, which is what `unitVocabulary`,
   the two rows about a directory, `directoriesOf` in `lib/plan.nix` and the claim index all read.
   `unitVocabulary` reads it by deriving the kind's own field and its mode field from it rather than
