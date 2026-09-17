@@ -75,7 +75,9 @@ realiser, for every realiser the reading is handed. `cli/manifest.py` reads the 
 The fields differ because the answers differ: flakelet's carries an identity the realiser wrote, so
 one prefix decides both attribution and the plan key behind it; an image's carries a file name, so
 attribution is the shape of that name and there is no key behind it. There is one switch on the
-realiser and it is the one `cli/remote.py` already has.
+realiser and it is the one `cli/remote.py` already has. The table is keyed by realiser and is one
+table: `run-an-entry-without-root` publishes each realiser's `scopes` beside these fields, and the
+question of D2 and the verb of D3 spend it.
 
 Alternatives rejected:
 
@@ -103,6 +105,13 @@ socket-activated and a burst of short logins is answered by the socket's own tri
 same reason `cli/remote.py:400-417` asks about every value of a machine in one question and
 `cli/remote.py:449-470` folds three questions into one.
 
+The question is scope-aware. A realiser's half joins the script only where the `scopes` the record
+publishes for it admit the machine's scope, and on a machine whose scope is `user` the image half
+asks `portablectl --user list --no-legend`, addressing the account's own daemon rather than the
+system's. A record publishing no `scopes` for a realiser admits every machine and a machine stating
+no scope is a system-scope one, so the question degrades to the shape above where either fact is
+unstated.
+
 How each `<status>` reads:
 
 - `0` - the answer is read for holdings.
@@ -118,9 +127,11 @@ How each `<status>` reads:
 - flakelet: `flakelet remove <name>`, never `--purge`. `remove` is exactly the shape wanted - it
   stops, unlinks, deletes its own bookkeeping, and keeps and lists the state folders - and its
   listing of what it kept is what the step line echoes.
-- image: `portablectl detach --now <name>`, the name being what the listing printed. `--now` stops
-  the units before the unlink, so the step needs no separate unit list and cannot stop the wrong
-  ones.
+- image: `portablectl detach --now <name>`, the name being what the listing printed, with `--user`
+  where the machine's scope is `user` - the flag the question carried, because an attachment of the
+  account's own daemon is invisible to the system's and a detach addressed to the wrong one resolves
+  nothing. `--now` stops the units before the unlink, so the step needs no separate unit list and
+  cannot stop the wrong ones.
 
 Neither is `bin/detach`. The artifact of a holding this build does not name is not in this build, so
 the run cannot name its path; nothing on the machine roots it, so nix can have collected it; and
@@ -201,8 +212,7 @@ because the holding lines are absent rather than invented.
 
 A build carries an address only for a machine it places an entry on, so a machine whose every entry
 was deleted is unreachable from the new build. The command invents nothing for it: no `--address`
-option, no machine-identity field (`hostKey` is `name-the-machine-a-run-dials`'s, by contract C1,
-and this change adds no field of its own), no reading of the previous build.
+option, no machine-identity field, no reading of the previous build.
 
 `docs/operator.md` states the order of work instead: empty a machine while the build still names an
 entry on it, and empty a machine the build has already stopped naming with the endpoint's own tool -

@@ -45,6 +45,71 @@ vocabulary, and so a known hazard is not re-derived.
 - An entry key is input-addressed hashing, which is what a derivation already is. Written by hand
   because `mkPlan` realises nothing.
 
+## Deployment scope
+
+User-scope deployments are the project's explicit goal. The end state: an operator manages
+infrastructure with client roles and can hand a third party a self-installing package that spawns
+user services without root - a mesh node and the operator's own application, authenticating
+against the operator's IdP and reaching the operator's services over the mesh. The open change
+`run-an-entry-without-root` lands the substrate; a later change, named there as a non-goal, owns
+the exported bundle for a machine no run can dial.
+
+- A deployment is made as an account, never as a mode. Root is the account every check admits, so
+  there is one model and no second code path, and nothing may branch on "root or not" where it can
+  ask "can this account do it".
+- `scope` is a machine registry key with two values, `system` unstated. Stating the default
+  re-keys nothing; `user` enters the hashed machine record and the target, because rendered
+  units, attach argv and profiles all differ under it.
+- A declared fact a user scope cannot honor is an error row, never a silent drop or a collapsed
+  default: a unit's account, its supplementary groups, a fixed port below 1024, a delivered
+  file's stated ownership. Confinement that needs no privilege - seccomp filters, the
+  namespace-based sandboxing - is not in that set and is not degraded.
+- The fixed roots do not move with scope: `/run/vars`, the sealed root and the image staging root
+  are the same paths on every machine, so no uid enters a plan and a scope flip re-keys entries
+  and not values. Provisioning makes the roots account-writable on a user-scope machine. Root at
+  provision time, never at deploy time, and the apply's preflight verifies rather than assumes.
+- A realiser publishes the scopes it can realise beside its name and unit rules, and the reading
+  crosses the stated realiser against the machine: a mismatch is `operator-entry-scope-unsupported`.
+  flakelet is system-only - its core writes `/run/systemd/system` and `/var/lib/flakelet`
+  (`systemd.rs:13` at the locked revision) - until upstream grows a user mode.
+- The portable image is the user-scope realiser. systemd 260 added the per-user portabled and the
+  pinned nixpkgs resolves systemd 261.1. A user attach needs `systemd-mountfsd` and
+  `systemd-nsresourced`, unprivileged user namespaces, and a **signed dm-verity** image: an
+  unsigned image outside the system trusted directories escalates to an interactive polkit
+  action, which a non-interactive run reads as a hard failure. The verity public key is installed
+  at provision time and the signing key is an operator argument to the build, never a plan fact.
+- A user-scope image places its unit files under the user unit directory - user-mode extraction
+  reads only that path and a system-unit image yields no matching units - and states
+  `PORTABLE_SCOPE=` in its os-release, which gates attachment. Upstream's user profiles drop
+  `DynamicUser=yes` and `ProtectHome=yes` and keep `PrivateUsers=yes`; `trusted` is identical, and
+  the reading's denial table is per scope.
+- Persistent user attach copies an out-of-tree image to `~/.config/portables`, which the user
+  image search path never scans (systemd 261). The attach flow places the image into the
+  account's state pool and attaches by name rather than relying on that move.
+- The seal recipient is an age key the registry declares (`sealRecipient`), never the machine's
+  ssh host key: an account cannot read `/etc/ssh` host keys, sshd refuses looser modes, and age
+  supports no agent. The identity file is minted at provision time and its public line pasted
+  into the registry; nothing in this repository holds or moves the private half.
+
+## Enrollment and the mesh
+
+How a machine becomes a member is `openspec/changes/enroll-a-friend-machine`, ordered behind the
+four production changes. The decentralized alternative was designed, red-teamed and parked: it is
+in `openspec/changes/PARKED.md` with the trigger that revives it.
+
+- Enrollment is centralized on purpose: a coordination server the operator runs is the membership
+  authority. The registry declares, the server admits and expels, and the sync is one-way,
+  registry to server - the server's database is never a source the planner reads.
+- Runtime facts never enter evaluation: a machine's current endpoint, presence and last-seen are
+  the mesh's facts, `mkPlan` sees none of them, and the only gate from the mesh back into
+  evaluation is an operator-reviewed registry edit.
+- An export binds to a name, never an address: a friend machine's registry `address` is its mesh
+  name, so a URL built from `target.address` carries the name and whatever answers it is the
+  mesh's business.
+- The join credential is a generated secret value like any other: minted by the hub entry's
+  generator, single-use and expiring, delivered to no machine, handed over outside the tree, and
+  its bytes enter no plan field and no argv.
+
 ## No solver, no Datalog, no Prolog
 
 Recorded so the question is answered once.
@@ -439,7 +504,7 @@ silently unobserved.
   tasks file states `- [x]` at the start of a line and may name the marker in prose: the reading
   anchors it, and every one of the four production changes documents the trap in prose and would
   have read as landed under an unanchored match.
-- Seven changes are open. `answer-whether-a-machine-is-current` stays open because its tasks 1.1
+- Nine changes are open. `answer-whether-a-machine-is-current` stays open because its tasks 1.1
   and 1.2 record themselves as not doable and superseded by `tests/e2e/test_harness.py`, so marking
   them done would falsify the record, and its 21 landed tasks are what the synthetic half of
   `testAnExcuseOutlivesTheStateItDescribes` reads: archiving it moves that probe.
@@ -447,11 +512,16 @@ silently unobserved.
   `operator/machine-identity` capability, its sections 3 and 5 and its task 7.5 are superseded by
   `name-the-machine-a-run-dials`, and the delta file is deleted, because a capability that never
   landed cannot be the home of a rule the current `planner/machine-platform` spec refuses and the
-  current `operator/apply-command` spec licenses. The four that make the tree operable with
-  flakelet as the stated realiser are `retire-an-entry-a-build-no-longer-names`,
-  `name-the-machine-a-run-dials`, `unseal-a-value-after-a-reboot` and
-  `probe-a-service-before-it-counts-as-live`; none has a box ticked, so all fourteen of their delta
-  specs are `excused`.
+  current `operator/apply-command` spec licenses. `name-the-machine-a-run-dials` is itself parked:
+  user scope moved the seal recipient to an age key, so nothing consumes `hostKey` any more, and
+  connection pinning is unowned until an operator decision revives or deletes the change. The four
+  that make the tree operable are `run-an-entry-without-root`,
+  `retire-an-entry-a-build-no-longer-names`, `unseal-a-value-after-a-reboot` and
+  `probe-a-service-before-it-counts-as-live`; none has a box ticked, so all seventeen of their
+  delta specs are `excused`, beside the parked change's three.
+  `enroll-a-friend-machine` is planned and ordered behind those four; its one delta spec is
+  `excused` too, and the designs it deliberately does not build are parked with their triggers in
+  `openspec/changes/PARKED.md`.
 - A directory kind goes in `directoryKinds` in `lib/module.nix`, which is what `unitVocabulary`,
   the two rows about a directory, `directoriesOf` in `lib/plan.nix` and the claim index all read.
   `unitVocabulary` reads it by deriving the kind's own field and its mode field from it rather than

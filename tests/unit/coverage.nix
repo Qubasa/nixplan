@@ -100,6 +100,8 @@ let
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "changes/deliver-a-secret-without-exposing-it/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
+    "changes/enroll-a-friend-machine/specs/operator/machine-enrollment/spec.md" =
+      "an unimplemented change: no task of enroll-a-friend-machine has been done, so nothing in this package claims to satisfy it yet";
     "changes/name-the-machine-a-run-dials/specs/operator/apply-command/spec.md" =
       "an unimplemented change: no task of name-the-machine-a-run-dials has been done, so nothing in this package claims to satisfy it yet";
     "changes/name-the-machine-a-run-dials/specs/planner/machine-platform/spec.md" =
@@ -118,6 +120,16 @@ let
       "an unimplemented change: no task of retire-an-entry-a-build-no-longer-names has been done, so nothing in this package claims to satisfy it yet";
     "changes/retire-an-entry-a-build-no-longer-names/specs/operator/machine-report/spec.md" =
       "an unimplemented change: no task of retire-an-entry-a-build-no-longer-names has been done, so nothing in this package claims to satisfy it yet";
+    "changes/run-an-entry-without-root/specs/operator/apply-command/spec.md" =
+      "an unimplemented change: no task of run-an-entry-without-root has been done, so nothing in this package claims to satisfy it yet";
+    "changes/run-an-entry-without-root/specs/operator/deployment-build/spec.md" =
+      "an unimplemented change: no task of run-an-entry-without-root has been done, so nothing in this package claims to satisfy it yet";
+    "changes/run-an-entry-without-root/specs/planner/machine-platform/spec.md" =
+      "an unimplemented change: no task of run-an-entry-without-root has been done, so nothing in this package claims to satisfy it yet";
+    "changes/run-an-entry-without-root/specs/realiser/flakelet-artifact/spec.md" =
+      "an unimplemented change: no task of run-an-entry-without-root has been done, so nothing in this package claims to satisfy it yet";
+    "changes/run-an-entry-without-root/specs/realiser/portable-service-image/spec.md" =
+      "an unimplemented change: no task of run-an-entry-without-root has been done, so nothing in this package claims to satisfy it yet";
     "changes/unseal-a-value-after-a-reboot/specs/delivery/generated-values/spec.md" =
       "an unimplemented change: no task of unseal-a-value-after-a-reboot has been done, so nothing in this package claims to satisfy it yet";
     "changes/unseal-a-value-after-a-reboot/specs/operator/apply-command/spec.md" =
@@ -125,6 +137,8 @@ let
     "changes/unseal-a-value-after-a-reboot/specs/operator/deployment-build/spec.md" =
       "an unimplemented change: no task of unseal-a-value-after-a-reboot has been done, so nothing in this package claims to satisfy it yet";
     "changes/unseal-a-value-after-a-reboot/specs/operator/machine-report/spec.md" =
+      "an unimplemented change: no task of unseal-a-value-after-a-reboot has been done, so nothing in this package claims to satisfy it yet";
+    "changes/unseal-a-value-after-a-reboot/specs/planner/machine-platform/spec.md" =
       "an unimplemented change: no task of unseal-a-value-after-a-reboot has been done, so nothing in this package claims to satisfy it yet";
     "changes/unseal-a-value-after-a-reboot/specs/planner/secret-delivery/spec.md" =
       "an unimplemented change: no task of unseal-a-value-after-a-reboot has been done, so nothing in this package claims to satisfy it yet";

@@ -88,10 +88,15 @@
 - [ ] 4.1 In `cli/remote.py`, add the one question per machine: a script built from the published
   table that prints, per realiser, a marker line carrying the realiser and the exit status of its own
   tool, then that tool's answer - `flakelet status --json` with no names for one, `portablectl list
-  --no-legend` for the other. One question per machine and not one per realiser or per holding,
-  because a socket-activated sshd answers a burst of short logins with its own trigger limit, which
-  is why `values_script` and `image_status_script` already fold their questions. Verify with a
-  `tests/e2e/test_harness.py` case asserting one argv per machine carries both halves.
+  --no-legend` for the other. A realiser joins the script only where the `scopes` the record
+  publishes for it admit the machine's scope, and the image half carries `--user` where the
+  machine's scope is `user`; a record publishing no `scopes` for a realiser admits every machine, so
+  a system-scope machine is asked as stated above. One question per machine and not one per realiser
+  or per holding, because a socket-activated sshd answers a burst of short logins with its own
+  trigger limit, which is why `values_script` and `image_status_script` already fold their
+  questions. Verify with `tests/e2e/test_harness.py` cases asserting one argv per machine carries
+  both halves on a system-scope machine, and on a user-scope one only the halves whose published
+  scopes admit it, with `--user` in the image half.
 - [ ] 4.2 In `cli/remote.py`, read each half into holdings: a frozen dataclass carrying the realiser,
   the identity or name the machine gave it, and the state where the answer has one. A flakelet answer
   is a holding of this planner where its `locked_url` starts with the published prefix, and what
@@ -103,11 +108,12 @@
   for each of the four readings.
 - [ ] 4.3 In `cli/remote.py`, add the retirement step per realiser through the existing `REALISERS`
   table (`cli/remote.py:533-542`): `flakelet remove <name>` without `--purge`, and `portablectl
-  detach --now <name>` over the name the listing printed. Do not call `bin/detach`: the artifact of a
+  detach --now <name>` over the name the listing printed, with `--user` where the machine's scope is
+  `user` - the flag the holdings question carried. Do not call `bin/detach`: the artifact of a
   holding this build does not name is not in this build and nothing on the machine roots it, and
   `image/default.nix:348-356` is the precedent for a step over what the machine answered. Every step
-  goes through the channel and the options `name-the-machine-a-run-dials` owns; add no second channel
-  here. Verify with the harness cases of 6.3.
+  goes through the channel `cli/remote.py` already dials; add no second channel here. Verify with
+  the harness cases of 6.3.
 
 ## 5. The report
 

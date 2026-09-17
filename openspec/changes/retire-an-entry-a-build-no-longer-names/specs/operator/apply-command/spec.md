@@ -1,10 +1,11 @@
 <!--
 A delta against `operator/apply-command`, whose current text is
-`openspec/specs/operator/apply-command/spec.md`. Every block below is ADDED. No existing
-requirement is modified, so this file cannot contradict the other change that deltas this
-capability: `name-the-machine-a-run-dials` owns the channel every remote step goes through and the
-options it connects with, and the steps stated here are steps of that channel rather than a second
-one.
+`openspec/specs/operator/apply-command/spec.md`. Every block below is ADDED; no existing
+requirement is modified. The channel every remote step goes through is the one `cli/remote.py`
+already dials, and the steps stated here are steps of that channel rather than a second one - this
+change adds no channel and no connection option. Other open changes delta this capability with
+steps of their own; the on-machine order across changes is written out once in
+`openspec/changes/INTEGRATION.md`.
 
 Three existing requirements are preconditions and are deliberately not restated. `What the command
 does on a machine` says the command uses what is already there, which is what makes a retirement
@@ -48,6 +49,11 @@ names no entry for. The announcement SHALL be in the shape the report's own line
 machine and the identity or name the machine gave the holding, and SHALL be printed where the run's
 other announcements are printed - before the first step it takes.
 
+A realiser SHALL join the question only where the scopes the record publishes for it admit the
+machine's scope, and the question SHALL address the account's own daemon on a machine whose scope
+is `user`. A record publishing no scopes for a realiser admits every machine, so the question loses
+nothing where the fact is not yet published.
+
 Asking every machine before the first write SHALL be the order, so that a run which cannot read a
 machine's answer has changed nothing anywhere when it refuses.
 
@@ -87,7 +93,8 @@ Where a run is asked to retire, it SHALL retire every holding it announced on th
 selection, and each retirement SHALL be the removal verb of the endpoint that holds it: the verb
 that stops an entry's units, unlinks them and leaves the entry unregistered. The step SHALL be
 addressed by what the machine answered and what the deployment record publishes, and by nothing
-else.
+else. On a machine whose scope is `user` the step SHALL address the account's own daemon, the way
+the question did: the verb does not move, the daemon it is addressed to does.
 
 A retirement SHALL NOT run a script out of the retired holding's own artifact. That artifact belongs
 to a build this run is not applying, so this run cannot name it, and nothing on the machine keeps it

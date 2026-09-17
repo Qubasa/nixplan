@@ -13,12 +13,13 @@ restated:
   requirement below is the same rule for the machine table, stated separately because it is a new
   table and not a change to that one.
 
-`retire-an-entry-a-build-no-longer-names` owns the retire step of the walk and
-`name-the-machine-a-run-dials` owns the channel every remote step goes through and the options it
-connects with (contract C4). This change adds steps to the walk and a payload to one of them, and
-takes no decision about the channel, the options, the order the walk visits entries in, or what a
-report says about an entry the build does not name. Where it needs the channel to be host-key pinned
-it cites that change as a precondition rather than stating it.
+`retire-an-entry-a-build-no-longer-names` owns the retire step of the walk, and the per-machine
+order across the open changes - preflight, retirement, unsealer install, value writes, copy,
+activation, value-driven restarts - is written out once in INTEGRATION.md; this change states only
+its own step. It takes no decision about the channel a remote step goes through, the order the walk
+visits entries in, or what a report says about an entry the build does not name. The preflight
+question of a user-scope machine, lingering included, is `run-an-entry-without-root`'s and is cited
+as a seam rather than restated.
 
 The conditions:
 
@@ -29,9 +30,8 @@ The conditions:
 - `cli/remote.py:326-384` builds the write script from the record alone and the bytes arrive on the
   step's input stream (`cli/apply.py:266-276`, `cli/remote.py:88-111`).
 - `cli/manifest.py:180-217` reads the record, `:41-56` is the file record it reads, and `:241-258` is
-  where a value's machine address is read off the plan. `name-the-machine-a-run-dials` adds the
-  python-side reader for that machine record's host key, which this change consumes rather than
-  writing a second one.
+  where a value's machine address is read off the plan. The recipient is read there too, with a
+  reader of this change's own, because a value's machine need run no entry.
 - `cli/values.py:151-197` is every refusal about the source, all of them made before the first dial
   (`cli/apply.py:236-238`), which is where the refusal about a missing sealing program belongs too.
 -->
@@ -42,9 +42,10 @@ The conditions:
 
 Before the first value of a machine is written, a run SHALL put that machine's unsealer on it and
 install the unit that runs it: the artifact SHALL be copied with the same store-to-store copy the run
-already uses for an entry's artifact, and the unit SHALL be installed so that the machine's own
-service manager runs it on the next boot. The step SHALL be idempotent and SHALL say whether it
-changed anything, the way the value write and the activation do.
+already uses for an entry's artifact, and the unit SHALL be installed into the manager the machine's
+scope names - the system manager, or the account's own for a user-scope machine - so that it runs on
+the next boot. The step SHALL be idempotent and SHALL say whether it changed anything, the way the
+value write and the activation do.
 
 A run SHALL take the step for exactly the machines it writes a value to and whose record says their
 values are sealed, so that a restricted run contacts no machine it would not otherwise contact, and a
@@ -76,9 +77,9 @@ prints every other step, because the mode replaces the channel and nothing else.
 
 The bytes a run seals SHALL be sealed where the plaintext already is, in the process that read the
 value source, and the sealed bytes SHALL travel to the machine on the step's own input stream. No
-argument vector on either host SHALL carry a byte of a value, sealed or not, and none SHALL carry the
-identity the seal was made to, which is read from the plan's machine record rather than restated in
-the build record.
+argument vector on either host SHALL carry a byte of a value, sealed or plain. The recipient is not
+a value: it is one public word, read from the plan's machine record, and it MAY stand in an
+argument vector the way a path or an address does.
 
 A step's argument vector SHALL stay a function of the plan, the deployment record and the
 invocation's own options, so that two runs over one deployment address the machine identically
@@ -93,7 +94,7 @@ seal.
 
 - **WHEN** two values of equal length and different bytes are delivered to one machine
 - **THEN** the argument vectors of the two steps SHALL be equal
-- **AND** no element of either SHALL hold a byte of a value or the identity it was sealed to
+- **AND** no element of either SHALL hold a byte of a value, sealed or plain
 
 #### Scenario: A value whose bytes did not move restarts nothing
 

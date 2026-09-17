@@ -83,10 +83,10 @@ Both lines are about one thing an operator cannot see any other way: that machin
 value after its next reboot.
 
 The verdict SHALL be the machine's own answer, obtained by asking the machine's own unsealer whether
-the copy opens, and never by reading the copy back or by comparing an identity the report holds: the
-identity a copy was sealed to is recoverable from the copy, and the tool that would answer from it is
-the same tool the trial runs. Nothing about the bytes of a value, sealed or plain, SHALL be printed
-or transferred.
+the copy opens, and never by reading the copy back or by comparing an identity the report holds: a
+native seal names no recipient, so opening it with the machine's own identity file is the only
+question that can be asked, and the tool that answers it is the one the trial runs. Nothing about
+the bytes of a value, sealed or plain, SHALL be printed or transferred.
 
 A machine the record says seals and which holds no unsealer SHALL be reported as one whose sealed
 copies were not checked, naming the machine, rather than as one holding copies that open or copies

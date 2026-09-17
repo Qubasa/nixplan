@@ -2,6 +2,15 @@
 
 **WIP**: This is in heavy LLM assisted prototyping phase, not for general use.
 
+A prototype to make Spaces OS reality.
+Making someone join a space is then equivalent to building a set of user services and handing them over.
+
+We achieve this by allowing services to be deployed anywhere, Android / embedded devices,
+even where there is no root and the machine is not part of the space.
+
+
+---
+
 A Nix library to define multi machine service deployment that
 outputs a JSON deployment plan akin to [disnix](https://github.com/svanderburg/disnix).
 

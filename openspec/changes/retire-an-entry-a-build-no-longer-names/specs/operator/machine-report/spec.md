@@ -43,6 +43,10 @@ reported against names no entry for. Each holding SHALL cost its own line, namin
 the identity or the name the machine itself gave the holding, and the lines SHALL be printed as they
 are known, beside the other facts that machine answers.
 
+A realiser's holdings SHALL be asked about only where the scopes the record publishes for that
+realiser admit the machine's scope; a record publishing no scopes for a realiser admits every
+machine.
+
 The identity a line carries SHALL be the machine's own answer. Where that answer carries the plan
 key of the entry the holding came from, the line SHALL name that key. Where it carries only a name
 the build's own naming is not recoverable from, the line SHALL name what the machine listed and

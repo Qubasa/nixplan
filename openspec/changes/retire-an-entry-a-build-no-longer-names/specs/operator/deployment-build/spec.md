@@ -27,6 +27,10 @@ everything it holds, including services no deployment of this planner put there,
 to be able to tell them apart, and which answers are a realiser's is a fact only that realiser
 holds. A command that restated it would carry a rule whose one home is a realiser, and a widened
 rule in one place and not the other retires something nobody asked to retire.
+
+The table this fact lands in is the per-realiser home of the record: `run-an-entry-without-root`
+publishes each realiser's `scopes` in the same table, beside this fact, so a per-realiser fact of
+the record has one table and not two.
 -->
 
 ## ADDED Requirements
