@@ -33,9 +33,15 @@ PLAN = "plan.json"
 TABLE = "diagnostics.txt"
 ROWS = "diagnostics.json"
 MACHINE_PREFIX = "machine:"
-VERSION = 1
+VERSION = 3
 STORE_VARIABLE = "NIX_STORE_DIR"
 DEFAULT_STORE = "/nix/store"
+SYSTEM = "system"
+USER = "user"
+SCOPES = (SYSTEM, USER)
+HOLDINGS = "holdings"
+MACHINES = "machines"
+SEAL_RECIPIENT = "sealRecipient"
 
 
 @dataclass(frozen=True)
@@ -45,10 +51,15 @@ class ValueFile:
     `owner`, `group` and `mode` are the plan's, never this command's: the
     deployment's statement and the bytes on every machine cannot disagree if
     only one of them decides.
+
+    ``sealed`` is where the machine keeps the copy it can open by itself. It is
+    read off the record rather than derived from ``path``: the derivation is
+    the library's, and this command imports nothing of it.
     """
 
     name: str
     path: str
+    sealed: str
     secrecy: str
     owner: str
     group: str
@@ -93,6 +104,23 @@ class Entry:
 
 
 @dataclass(frozen=True)
+class Machine:
+    """One machine a delivered value reaches, as the build recorded it.
+
+    ``sealed`` is whether that machine's values are sealed to a recipient it
+    declared, and ``path`` is the store path of the unsealer that opens them,
+    absent for a machine that seals nothing. The recipient is not here: the
+    plan's own machine record carries it, and a second copy in the build record
+    would be a second answer a stale build could disagree with.
+    """
+
+    name: str
+    sealed: bool
+    scope: str
+    path: Path | None
+
+
+@dataclass(frozen=True)
 class Diagnostic:
     """One row of a deployment's diagnostics."""
 
@@ -103,13 +131,70 @@ class Diagnostic:
 
 
 @dataclass(frozen=True)
+class Realiser:
+    """What the reading published about one realiser it was handed.
+
+    ``scopes`` is what the realiser realises, which an entry's own scope is
+    crossed against. ``holdings`` is what a machine's own answer names the
+    things that realiser put there by, published as data: a nix pattern and a
+    python pattern are two dialects, so one published pattern would be one rule
+    with two readings.
+    """
+
+    name: str
+    scopes: tuple[str, ...]
+    holdings: Mapping[str, Any]
+
+    def text(self, field: str) -> str:
+        """Return one published holdings field that is a word.
+
+        Raises:
+            ApplyError: If the realiser publishes no such field, naming the
+                realiser, the field and what it published.
+        """
+        stated = self.holdings.get(field)
+        if not isinstance(stated, str) or not stated:
+            raise self._unpublished(field, stated)
+        return stated
+
+    def number(self, field: str) -> int:
+        """Return one published holdings field that is a count.
+
+        Raises:
+            ApplyError: If the realiser publishes no such field, naming the
+                realiser, the field and what it published.
+        """
+        stated = self.holdings.get(field)
+        if not isinstance(stated, int) or isinstance(stated, bool) or stated <= 0:
+            raise self._unpublished(field, stated)
+        return stated
+
+    def _unpublished(self, field: str, stated: Any) -> ApplyError:
+        return ApplyError(
+            f"{MANIFEST} publishes realiser {self.name} with {HOLDINGS} {field} {stated!r}, and "
+            f"the command reads what a machine's own answer names a holding by out of that field"
+        )
+
+
+@dataclass(frozen=True)
 class Deployment:
-    """A built deployment, as this command reads it."""
+    """A built deployment, as this command reads it.
+
+    ``realisers`` is what the reading published about each realiser it knows:
+    the scopes it realises, which the command crosses an entry's own scope
+    against rather than deciding by the realiser's name, and what a machine's
+    own answer names its holdings by.
+
+    ``machines`` is the machines a delivered value reaches, which is not the
+    machines the entries are placed on: a value's machine need run no entry.
+    """
 
     root: Path
     plan: Mapping[str, Any]
     entries: Mapping[str, Entry]
     values: Mapping[str, Value]
+    machines: Mapping[str, Machine]
+    realisers: Mapping[str, Realiser]
     diagnostics: tuple[Diagnostic, ...]
     table: str
 
@@ -181,19 +266,21 @@ def read(root: Path) -> Deployment:
     """Read the built deployment at ``root``, holding `manifest.json` and `plan.json`.
 
     Returns:
-        The deployment: its plan, its value entries, its diagnostics, and its
-        placed entries with the store path each artifact resolves to. Resolving
-        is load-bearing rather than tidy: the manifest addresses an artifact
-        inside the build, the build is a farm of symlinks, and the path an
-        activation names on the machine has to be the path the copy put there. A
-        deployment carrying no diagnostics file carries no row.
+        The deployment: its plan, its value entries, the machines a value
+        reaches, its diagnostics, and its placed entries with the store path
+        each artifact resolves to. Resolving is load-bearing rather than tidy:
+        the manifest addresses an artifact inside the build, the build is a
+        farm of symlinks, and the path an activation names on the machine has
+        to be the path the copy put there. A deployment carrying no diagnostics
+        file carries no row.
 
     Raises:
         ApplyError: If a file is absent or unreadable, if the record states a
             version this command does not implement or a store it does not run
-            against, if the manifest states an entry without a field the
-            command needs, naming both, or if it states an artifact path that
-            lands outside the build, naming the entry and the path.
+            against, if it carries no realisers table or a realiser of it publishes no scope
+            or no holdings, if it carries no machines table, if the manifest states an
+            entry without a field the command needs, naming both, or if it states an
+            artifact path that lands outside the build, naming the entry and the path.
     """
     interface = _load(root / MANIFEST)
     _shape(root / MANIFEST, interface)
@@ -206,11 +293,21 @@ def read(root: Path) -> Deployment:
         key: _value(key, _mapping(record, of=f"manifest value {key}"))
         for key, record in sorted(_mapping(interface.get("values", {}), of=MANIFEST).items())
     }
+    machines = {
+        name: _machine(root, name, _mapping(record, of=f"manifest machine {name}"))
+        for name, record in sorted(_mapping(interface[MACHINES], of=MANIFEST).items())
+    }
+    realisers = {
+        name: _published(name, _mapping(record, of=f"manifest realiser {name}"))
+        for name, record in sorted(_mapping(interface["realisers"], of=MANIFEST).items())
+    }
     return Deployment(
         root=root,
         plan=plan,
         entries=entries,
         values=values,
+        machines=machines,
+        realisers=realisers,
         diagnostics=_rows(root / ROWS),
         table=_read(root / TABLE),
     )
@@ -255,6 +352,94 @@ def machine_address(deployment: Deployment, machine: str, *, of: str) -> str:
     if not isinstance(address, str) or not address:
         raise ApplyError(f"machine {machine} declares no address, so {of} cannot be delivered")
     return address
+
+
+def machine_recipient(deployment: Deployment, machine: str, *, of: str) -> str:
+    """Return the public line the plan says that machine's copies are sealed to.
+
+    A reader of its own beside `machine_address`, and for the same reason: a
+    value's machine need run no entry, so the recipient is the plan's own
+    `machine:<name>` record and never an entry's target. The field is present
+    and null where no recipient is declared, so a record carrying neither is a
+    record written before the field existed rather than a machine that seals
+    nothing.
+
+    Raises:
+        ApplyError: If the plan carries no record for that machine, or the
+            record states no recipient while the build record says that
+            machine's values are sealed.
+    """
+    record = deployment.plan.get(f"{MACHINE_PREFIX}{machine}")
+    if not isinstance(record, dict):
+        raise ApplyError(f"the plan carries no {MACHINE_PREFIX}{machine} record for {of}")
+    recipient = record.get(SEAL_RECIPIENT)
+    if not isinstance(recipient, str) or not recipient:
+        raise ApplyError(
+            f"{MANIFEST} says the values of {machine} are sealed and the plan records "
+            f"{SEAL_RECIPIENT} {recipient!r} for it, so {of} cannot be sealed"
+        )
+    return recipient
+
+
+def machine_of(deployment: Deployment, machine: str, *, of: str) -> Machine:
+    """Return what the build recorded about one machine a value reaches.
+
+    Raises:
+        ApplyError: If the record's table of the machines a value reaches does
+            not name it, which is a record that cannot say whether that
+            machine's copies are sealed.
+    """
+    stated = deployment.machines.get(machine)
+    if stated is None:
+        raise ApplyError(
+            f"{MANIFEST} carries no {MACHINES} record for {machine}, which {of} is delivered to"
+        )
+    return stated
+
+
+def machine_scope(deployment: Deployment, machine: str) -> str:
+    """Return the scope the plan records for one machine.
+
+    The planner writes `scope` into a machine record only where it is `user`,
+    so a record stating none is a system-scope machine and reads as one.
+
+    Raises:
+        ApplyError: If the record states a scope outside the domain.
+    """
+    record = deployment.plan.get(f"{MACHINE_PREFIX}{machine}")
+    stated = record.get("scope", SYSTEM) if isinstance(record, dict) else SYSTEM
+    return _scope(stated, of=f"machine {machine}")
+
+
+def entry_scope(deployment: Deployment, entry: Entry) -> str:
+    """Return the scope one placed entry's steps on its machine are addressed in.
+
+    The scope is the entry's own target's, which is what the artifact was built
+    for, and it is crossed against the scopes the record publishes for the
+    realiser that entry states rather than against the realiser's name.
+
+    Raises:
+        ApplyError: If the target states a scope outside the domain, if the
+            record publishes no realiser of that name, or if the realiser
+            publishes no such scope, naming the entry, the scope and what the
+            realiser publishes.
+    """
+    record = deployment.plan.get(entry.key)
+    target = record.get("target") if isinstance(record, dict) else None
+    stated = target.get("scope", SYSTEM) if isinstance(target, dict) else SYSTEM
+    scope = _scope(stated, of=f"the target of {entry.key}")
+    published = deployment.realisers.get(entry.realiser)
+    if published is None:
+        raise ApplyError(
+            f"{entry.key} states realiser {entry.realiser}, and the record publishes "
+            f"{', '.join(sorted(deployment.realisers)) or 'no realiser at all'}"
+        )
+    if scope not in published.scopes:
+        raise ApplyError(
+            f"{entry.key} is placed on {entry.machine} in {scope} scope, and {entry.realiser} "
+            f"realises {', '.join(published.scopes)}"
+        )
+    return scope
 
 
 def artifact_of(entry: Entry) -> Path:
@@ -337,6 +522,47 @@ def _shape(path: Path, interface: Mapping[str, Any]) -> None:
             f"{path} carries no entries table, and an absent table is not an empty one: this is "
             f"not a record the command can read"
         )
+    if "realisers" not in interface:
+        raise ApplyError(
+            f"{path} carries no realisers table, and the command reads the scopes a realiser "
+            f"realises out of it rather than assuming them"
+        )
+    if MACHINES not in interface:
+        raise ApplyError(
+            f"{path} carries no {MACHINES} table, and an absent table is not a fleet whose "
+            f"machines seal nothing: this is not a record the command can read"
+        )
+
+
+def _published(name: str, record: Mapping[str, Any]) -> Realiser:
+    """Return what one realiser published: the scopes it realises and its holdings.
+
+    Raises:
+        ApplyError: If it publishes no scope, or no holdings table. A realiser
+            publishing none could attribute nothing a machine answered, and a
+            holding nothing attributes reads as nothing to retire.
+    """
+    scopes = _texts(record, "scopes", of=f"realiser {name}")
+    if not scopes:
+        raise ApplyError(
+            f"{MANIFEST} publishes realiser {name} with no scope, and a realiser that realises "
+            f"nothing is not one an entry can state"
+        )
+    holdings = record.get(HOLDINGS)
+    if not isinstance(holdings, dict) or not holdings:
+        raise ApplyError(
+            f"{MANIFEST} publishes realiser {name} with {HOLDINGS} {holdings!r}, and the command "
+            f"reads what a machine's own answer names a holding of it by out of that table"
+        )
+    return Realiser(name=name, scopes=scopes, holdings=holdings)
+
+
+def _scope(stated: Any, *, of: str) -> str:
+    """Return one stated scope, or refuse naming what was stated and the domain."""
+    for scope in SCOPES:
+        if stated == scope:
+            return scope
+    raise ApplyError(f"{of} records scope {stated!r}, and a scope is {' or '.join(SCOPES)}")
 
 
 def _entry(root: Path, key: str, record: Mapping[str, Any]) -> Entry:
@@ -358,6 +584,26 @@ def _entry(root: Path, key: str, record: Mapping[str, Any]) -> Entry:
         address=address or None,
         units=_texts(record, "units", of=key),
         digest=_text(record, "key", of=key),
+    )
+
+
+def _machine(root: Path, name: str, record: Mapping[str, Any]) -> Machine:
+    sealed = record.get("sealed")
+    if not isinstance(sealed, bool):
+        raise ApplyError(
+            f"machine {name} records sealed as {sealed!r}, and the command reads whether that "
+            f"machine's values are sealed out of it"
+        )
+    stated = record.get("path")
+    if stated is not None and not (isinstance(stated, str) and stated):
+        raise ApplyError(f"machine {name} records path as {stated!r}, which is not a path")
+    if sealed and stated is None:
+        raise ApplyError(f"machine {name} records sealed values and no unsealer to open them with")
+    return Machine(
+        name=name,
+        sealed=sealed,
+        scope=_scope(record.get("scope", SYSTEM), of=f"machine {name}"),
+        path=None if stated is None else _artifact(root, f"machine {name}", stated),
     )
 
 
@@ -407,6 +653,7 @@ def _file(key: str, name: str, file: Any) -> ValueFile:
     return ValueFile(
         name=name,
         path=_text(record, "path", of=at),
+        sealed=_text(record, "sealed", of=at),
         secrecy=_text(record, "secrecy", of=at),
         owner=_text(record, "owner", of=at),
         group=_text(record, "group", of=at),
