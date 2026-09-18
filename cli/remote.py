@@ -25,16 +25,26 @@ caller who states one keeps it.
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import shlex
 import subprocess
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Protocol
+from typing import Any, Protocol
 
 from errors import ApplyError
-from manifest import Entry, ValueFile, artifact_of, image_file, service_name
+from manifest import (
+    SYSTEM,
+    USER,
+    Entry,
+    Realiser,
+    ValueFile,
+    artifact_of,
+    image_file,
+    service_name,
+)
 
 BOUNDS = (
     "-o",
@@ -50,6 +60,17 @@ UNREACHABLE = 255
 MISSING = (126, 127)
 LISTING = "images"
 CONFIGURATION = "config"
+# The marker the question of what a machine holds prints per realiser, and the
+# fields each realiser publishes what its own holdings are named by under.
+HELD = "holdings"
+FLAKELET = "flakelet"
+IMAGE = "image"
+URL_PREFIX = "urlPrefix"
+SEPARATOR = "separator"
+ALPHABET = "digestAlphabet"
+LENGTH = "digestLength"
+DETACHED = "detached"
+RAW = ".raw"
 # The two shapes every remote step is addressed in, stated once: a builder
 # writes the destination into the position `destination` reads it back out of.
 COPY = ("nix", "copy")
@@ -57,6 +78,61 @@ SSH = "ssh"
 TO = "--to"
 REMOTE = "ssh://"
 UNNAMED = "the machine"
+# The fixed roots, which do not move with the scope: the values root is
+# `lib/util.nix`'s `varsRoot`, the staging root is the one `image/read.nix`
+# stages an entry's files under, and the sealed root is where a machine keeps a
+# value across a reboot. A user-scope machine is provisioned once, as root, so
+# that the deploying account can write all three.
+VALUES_ROOT = "/run/vars"
+SEALED_ROOT = "/var/lib/planner/sealed"
+STAGING_ROOT = "/run/portable-planner"
+MOUNTFSD = "systemd-mountfsd.socket"
+NSRESOURCED = "systemd-nsresourced.socket"
+NAMESPACES = "/proc/sys/user/max_user_namespaces"
+CLONE = "/proc/sys/kernel/unprivileged_userns_clone"
+OK = "ok"
+# The machine-scoped unit the deployment build publishes per sealing machine,
+# and where each scope's manager reads a unit file it was given. The name is
+# one hyphen wide, which is outside the namespace a realiser can derive a unit
+# file name in, so installing it can never replace an entry's own unit.
+#
+# Each directory is its root and the segments below it, so every component can
+# be created at its mode rather than at the umask of whatever login the run
+# made, which is the rule the image realiser's attach script states for the
+# same reason. One spelling per scope and never a path chosen by testing what a
+# machine currently permits: this deploys as an account and never as a mode.
+#
+# `/usr/local/lib/systemd/system` and not `/etc/systemd/system`, which is where
+# `systemctl enable` writes: on a machine whose `/etc` its own image manages
+# that path is a link into a read-only store, and a guest answered
+# `ln: failed to create symbolic link '/etc/systemd/system/planner-unseal.service':
+# Read-only file system`. `/run/systemd/system` is writable everywhere and
+# disqualified by the very thing this unit exists for: a reboot empties it, so
+# the unsealer would be gone exactly when a machine needs it. The FHS directory
+# for a locally installed unit is in systemd's own system unit search path, on
+# a stock system as much as on that guest.
+UNSEAL_UNIT = "planner-unseal.service"
+SYSTEM_UNITS = ("'/usr'", ("local", "lib", "systemd", "system"))
+# Already shell words, and deliberately so: the account's own unit directory is
+# under a home only the machine knows, so `$HOME` is what names it and a quoted
+# whole would name a directory called `$HOME`.
+USER_UNITS = ('"$HOME"', (".config", "systemd", "user"))
+# The target whose `.wants` directory is what starts the unit at boot, per
+# scope, matching the `[Install]` section the build wrote into the unit file.
+SYSTEM_WANTED = "multi-user.target"
+USER_WANTED = "default.target"
+# The marker the per-machine value question prints before the machine's own
+# trial of its sealed copies, and what it prints instead where the machine
+# holds no unsealer to ask. The words a trial answers with are the artifact's:
+# a copy that opens, one that is not there, and one the machine cannot open.
+SEALS = "seals"
+UNCHECKED = "unchecked"
+OPENS = "opens"
+MISSING_COPY = "absent"
+# A non-interactive login has no session, so every step that addresses the
+# account's own manager states where its bus is rather than hoping a login
+# shell set it.
+BUS = "export XDG_RUNTIME_DIR=/run/user/$(id -u); "
 
 
 class Runner(Protocol):
@@ -323,7 +399,7 @@ def ssh_argv(address: str, script: str, *, opts: str, user: str = "root") -> lis
     return [SSH, *shlex.split(opts), f"{user}@{address}", script]
 
 
-def write_script(file: ValueFile) -> str:
+def write_script(file: ValueFile, *, scope: str = SYSTEM) -> str:
     """Return the script that writes one generated file on a machine.
 
     Not `nix copy`: a store object is readable by every process on the machine,
@@ -353,7 +429,12 @@ def write_script(file: ValueFile) -> str:
     the next one.
 
     An account the machine does not have is named as such rather than left to
-    `chown`'s own wording, and nothing is written under it.
+    `chown`'s own wording, and nothing is written under it. In user scope there
+    is no `chown` at all: the account owns what it writes, a record delivered
+    there states no ownership of its own - one that did is
+    `value-ownership-in-user-scope` and the deployment never reaches a machine -
+    and an account chowning a file to the owner it already has is refused by the
+    kernel. The mode is the account's to set, so it is set in both scopes.
 
     Returns:
         The shell script, which writes nothing readable by anyone the record
@@ -375,16 +456,28 @@ def write_script(file: ValueFile) -> str:
         f"tmp={path}.planner; trap 'rm -f \"$tmp\"' EXIT; "
         f'install -m 0600 /dev/null "$tmp"; '
         f'cat > "$tmp"; '
-        f'chown {owned} "$tmp" 2>/dev/null || {{ echo {missing} >&2; exit 1; }}; '
+        f"{_owning(owned, missing, scope)}"
         f'chmod {mode} "$tmp"; '
         f'if cmp -s "$tmp" {path}; then moved=unchanged; rm -f "$tmp"; '
         f'else mv -f "$tmp" {path}; moved=changed; fi; trap - EXIT; '
-        f"chmod {mode} {path}; chown {owned} {path}; "
+        f"chmod {mode} {path}; {_own(owned, path, scope)}"
         f'printf "%s\\n" "$moved"'
     )
 
 
-def restart_script(units: Sequence[str]) -> str:
+def _owning(owned: str, missing: str, scope: str) -> str:
+    """Return the ownership of the temporary, which is root's step and not the account's."""
+    if scope == USER:
+        return ""
+    return f'chown {owned} "$tmp" 2>/dev/null || {{ echo {missing} >&2; exit 1; }}; '
+
+
+def _own(owned: str, path: str, scope: str) -> str:
+    """Return the ownership restated on the file itself, in the scope that can state it."""
+    return "" if scope == USER else f"chown {owned} {path}; "
+
+
+def restart_script(units: Sequence[str], *, scope: str = SYSTEM) -> str:
     """Return the restart of one entry's units, for units that are running.
 
     `try-restart` is what replaces a process holding bytes that are no longer
@@ -392,12 +485,108 @@ def restart_script(units: Sequence[str]) -> str:
     is the activation's answer and never this step's.
 
     Returns:
-        The shell script the machine runs, empty of any value's bytes.
+        The shell script the machine runs, empty of any value's bytes,
+        addressing the account's own manager in user scope.
     """
-    return f"systemctl try-restart {' '.join(shlex.quote(unit) for unit in units)} 2>&1"
+    units_of = " ".join(shlex.quote(unit) for unit in units)
+    return _addressed(f"{_manager(scope)} try-restart {units_of} 2>&1", scope)
 
 
-def values_script(paths: Sequence[str]) -> str:
+def seal_script(file: ValueFile, *, scope: str = SYSTEM) -> str:
+    """Return the script that writes one value's sealed copy on a machine.
+
+    The ciphertext arrives on the step's own input, exactly as the plaintext
+    does, so this script is a function of the record alone and the argv it goes
+    out in carries the sealed path and nothing read out of a value source. The
+    bytes were sealed where the plaintext already was, by the process that read
+    the source.
+
+    The copy is `0400` under a `0700` chain whatever the record says about the
+    plaintext: it is ciphertext, its one reader is the unsealing step, which
+    runs as the account that owns the machine's identity file, and a
+    traversable chain here would publish the value file names of every entry on
+    the machine for no gain. In user scope there is no `chown`, the account
+    owning what it writes.
+
+    Nothing is compared and no `changed` is printed: two sealings of one file
+    differ, so a comparison of seals says nothing and the copy is written on
+    every apply. Whether a value's bytes moved stays the plaintext's answer.
+
+    Returns:
+        The shell script, which prints `sealed` when the copy is in place.
+    """
+    path = shlex.quote(file.sealed)
+    parent = shlex.quote(str(PurePosixPath(file.sealed).parent))
+    owned = shlex.quote("root:root")
+    missing = shlex.quote(f"this machine has no account root for {file.sealed}")
+    return (
+        f"set -eu; umask 077; "
+        f"mkdir -p {parent}; chmod 0700 {parent}; "
+        f"tmp={path}.planner; trap 'rm -f \"$tmp\"' EXIT; "
+        f'install -m 0600 /dev/null "$tmp"; '
+        f'cat > "$tmp"; '
+        f"{_owning(owned, missing, scope)}"
+        f'chmod 0400 "$tmp"; mv -f "$tmp" {path}; trap - EXIT; '
+        f'printf "%s\\n" sealed'
+    )
+
+
+def _unit_components(scope: str) -> tuple[str, ...]:
+    """Return the manager's unit directory and every component above its root.
+
+    Returns:
+        One shell word per component, outermost first, the last of which is the
+        directory itself. Each is named so the install creates it at its mode
+        rather than leaving a component it made for itself at the run's umask.
+    """
+    root, segments = USER_UNITS if scope == USER else SYSTEM_UNITS
+    components: list[str] = []
+    at = root
+    for segment in segments:
+        at = f"{at}/{segment}"
+        components.append(at)
+    return tuple(components)
+
+
+def unsealer_script(artifact: Path, *, scope: str = SYSTEM) -> str:
+    """Return the install of one machine's unsealing unit, in the manager its scope names.
+
+    The unit is linked out of the artifact the copy already put on the machine,
+    so the file the manager reads is the file the build published and nothing
+    is assembled here. What makes the manager run it at boot is a link in the
+    `.wants` directory of the target the unit's own `[Install]` names, written
+    beside it in the same directory rather than through `systemctl enable`,
+    which writes into `/etc` - a directory that is a link into a read-only
+    store on a machine whose image manages it.
+
+    Both links are compared before anything is written, so a machine that
+    already holds this build's unit is told nothing and says `unchanged`. The
+    comparison is the links themselves and not `systemctl is-enabled`, whose
+    answer is about the configuration directories this deliberately does not
+    write; the link is the fact that starts the unit.
+
+    Returns:
+        The shell script, which prints `changed` or `unchanged`.
+    """
+    manager = _manager(scope)
+    components = _unit_components(scope)
+    wanted = USER_WANTED if scope == USER else SYSTEM_WANTED
+    wants = f"{components[-1]}/{wanted}.wants"
+    published = shlex.quote(str(artifact / UNSEAL_UNIT))
+    made = "".join(f"install -d -m 0755 {each}; " for each in (*components, wants))
+    return _addressed(
+        f"set -eu; at={components[-1]}/{shlex.quote(UNSEAL_UNIT)}; "
+        f"want={wants}/{shlex.quote(UNSEAL_UNIT)}; "
+        f'if [ "$(readlink "$at" 2>/dev/null || true)" = {published} ] && '
+        f'[ "$(readlink "$want" 2>/dev/null || true)" = {published} ]; '
+        f'then printf "%s\\n" unchanged; '
+        f'else {made}ln -sfn {published} "$at"; ln -sfn {published} "$want"; '
+        f'{manager} daemon-reload; printf "%s\\n" changed; fi',
+        scope,
+    )
+
+
+def values_script(paths: Sequence[str], *, check: Path | None = None) -> str:
     """Return the question of which delivered paths one machine holds.
 
     One question per machine rather than per file, because a machine's sshd may
@@ -406,15 +595,195 @@ def values_script(paths: Sequence[str]) -> str:
     a held value's contents are a secret, and reading one to report on it is not
     something this command does.
 
+    `check` is the machine's own unsealer's trial, asked in the same login for
+    the same reason and answering for every sealed copy of that machine at
+    once. A machine that holds no unsealer has nothing to ask, which is its own
+    answer and not an absence of copies.
+
     Returns:
-        The shell script, which prints `<path> present` or `<path> absent`.
+        The shell script, which prints `<path> present` or `<path> absent` per
+        delivered path and, where a trial was named, the `SEALS` marker and
+        then either that trial's own lines or `UNCHECKED`.
     """
-    return "; ".join(
+    asked = "; ".join(
         f"if [ -e {shlex.quote(path)} ]; "
         f'then printf "%s present\\n" {shlex.quote(path)}; '
         f'else printf "%s absent\\n" {shlex.quote(path)}; fi'
         for path in paths
     )
+    if check is None:
+        return asked
+    trial = shlex.quote(str(check))
+    return (
+        f'{asked}; printf "%s\\n" {SEALS}; '
+        # `|| true`, because the trial is a question and the presence of a
+        # value is the answer this question's own exit status is about: a
+        # trial that broke must not read as a machine that could not be asked.
+        f"if [ -x {trial} ]; then {trial} 2> /dev/null || true; "
+        f'else printf "%s\\n" {UNCHECKED}; fi'
+    )
+
+
+@dataclass(frozen=True)
+class Requirement:
+    """One fact a user-scope run rests on: how it is asked, and what it states."""
+
+    key: str
+    statement: str
+    question: str
+    missing: str
+
+
+PORTABLED = Requirement(
+    key="user-portabled",
+    statement="the account's own portabled answers, which an image entry attaches through",
+    question="portablectl --user list > /dev/null 2>&1",
+    missing="the account's portabled answered nothing",
+)
+
+# The other fact only an attach needs, and the one whose absence is otherwise
+# unreadable: portabled extracts an image's metadata in a child that has joined
+# the user namespace systemd-nsresourced delegated, in which the account's own
+# uid is not mapped, so that child holds a foreign uid and owns none of the
+# account's directories. It opens the image's own path `O_PATH|O_DIRECTORY`
+# while asking whether it is the root directory (portable.c's
+# `chaseat_prefix_root` -> `path_is_root_at`), and a home that uid cannot
+# traverse answers EACCES, which portabled reports as `AttachImage failed:
+# Access denied` naming nothing. The question is about traversal by another uid
+# and not about a mode, so every mode that grants it answers `ok`, and it walks
+# to the root because one closed directory anywhere above the pool is the same
+# refusal. The pool itself is the attach script's to create traversable.
+TRAVERSABLE = Requirement(
+    key="home-traversable",
+    statement=(
+        "the account's home and every directory above it are traversable by a uid that owns "
+        "none of them, which the extraction of an image the account attaches is done as"
+    ),
+    question=(
+        '(d="$HOME"; while :; do m="$(stat -Lc %a "$d" 2>/dev/null)" || exit 1; '
+        '[ $((0$m & 1)) -eq 1 ] || exit 1; [ "$d" = / ] && exit 0; d="$(dirname "$d")"; done)'
+    ),
+    missing="a directory at or above the account's home is traversable by its owner alone",
+)
+
+
+def preflight(*, portabled: bool) -> tuple[Requirement, ...]:
+    """Return the facts one user-scope machine is verified to hold before it is written to.
+
+    Provisioning is root's work done once per machine, so each of these is
+    verified rather than assumed, and each stays a question a local installer
+    could ask of the machine it is running on. `portabled` states whether an
+    image entry is placed on the machine, which is what makes the account's own
+    portabled and a traversable home facts this run rests on: a value write
+    needs neither.
+
+    Returns:
+        The requirements, in the order they are asked and reported.
+    """
+    roots = (
+        (VALUES_ROOT, "values-root", "the values root"),
+        (SEALED_ROOT, "sealed-root", "the sealed root"),
+        (STAGING_ROOT, "staging-root", "the image staging root"),
+    )
+    return (
+        *(
+            Requirement(
+                key=key,
+                statement=f"{what} {root} is writable by the account",
+                question=f"[ -d {shlex.quote(root)} ] && [ -w {shlex.quote(root)} ]",
+                missing="it is not a directory the account can write",
+            )
+            for root, key, what in roots
+        ),
+        Requirement(
+            key="lingering",
+            statement="lingering keeps the account's manager alive across logins",
+            question='[ "$(loginctl show-user "$(id -u)" --value -p Linger 2>/dev/null)" = yes ]',
+            missing="loginctl reports no lingering for the account",
+        ),
+        Requirement(
+            key="user-manager",
+            statement="the account's own service manager answers",
+            question="systemctl --user show -p Version --value > /dev/null 2>&1",
+            missing="the account's manager answered nothing",
+        ),
+        *((PORTABLED, TRAVERSABLE) if portabled else ()),
+        *(
+            Requirement(
+                key=unit.removeprefix("systemd-").removesuffix(".socket"),
+                statement=f"{unit} is live, which an unprivileged mount delegates to",
+                question=f"systemctl is-active --quiet {shlex.quote(unit)} 2>/dev/null",
+                missing="the machine's manager reports it is not active",
+            )
+            for unit in (MOUNTFSD, NSRESOURCED)
+        ),
+        Requirement(
+            key="user-namespaces",
+            statement="the kernel permits an unprivileged user namespace",
+            question=(
+                f'[ "$(cat {shlex.quote(NAMESPACES)} 2>/dev/null || echo 0)" -gt 0 ] && '
+                f'[ "$(cat {shlex.quote(CLONE)} 2>/dev/null || echo 1)" = 1 ]'
+            ),
+            missing="the kernel's own knobs refuse one",
+        ),
+    )
+
+
+def preflight_script(requirements: Sequence[Requirement]) -> str:
+    """Return the one question a user-scope machine is asked before it is written to.
+
+    One question per machine rather than one per fact, for the reason the values
+    question is one: a machine's sshd may be socket activated and a burst of
+    short logins is answered by the socket's own trigger limit. The account's
+    bus is stated once, ahead of every fact, because a non-interactive login
+    has no session and the user-bus facts are asked in the same shell.
+
+    Returns:
+        The shell script, which prints `<key>=ok` or `<key>=<what it found>`
+        for each requirement, whatever any of them answers.
+    """
+    return BUS + "; ".join(
+        f"if {requirement.question}; "
+        f"then printf '%s=%s\\n' {shlex.quote(requirement.key)} {shlex.quote(OK)}; "
+        f"else printf '%s=%s\\n' {shlex.quote(requirement.key)} {shlex.quote(requirement.missing)}"
+        f"; fi"
+        for requirement in requirements
+    )
+
+
+def preflight_answer(reported: str) -> dict[str, str]:
+    """Return what one machine answered the preflight question, by requirement key."""
+    return {
+        key: said.strip()
+        for key, _, said in (line.partition("=") for line in reported.splitlines())
+        if key and said
+    }
+
+
+def verify(machine: str, requirements: Sequence[Requirement], reported: str) -> None:
+    """Refuse a machine that answered that a verified fact does not hold.
+
+    The refusal is the command's own and not a diagnostics row: the plan holds
+    no fact about what a machine currently permits, so the answer is read where
+    it was asked. Every fact that failed is named, because an operator
+    provisioning a machine wants the list rather than the first line of it.
+
+    Raises:
+        ApplyError: Naming the machine, each requirement that does not hold
+            and what the machine answered about it, so that nothing after the
+            question is attempted there.
+    """
+    said = preflight_answer(reported)
+    failed = [
+        f"{requirement.statement}, and the machine answered "
+        f"{said.get(requirement.key) or 'nothing'}"
+        for requirement in requirements
+        if said.get(requirement.key) != OK
+    ]
+    if failed:
+        raise ApplyError(
+            f"{machine} is a user-scope machine this run cannot write to: {'; '.join(failed)}"
+        )
 
 
 def activate_script(name: str, artifact: Path) -> str:
@@ -427,9 +796,13 @@ def activate_script(name: str, artifact: Path) -> str:
     return f"flakelet activate {shlex.quote(name)} {shlex.quote(str(artifact))} 2>&1"
 
 
-def attach_script(artifact: Path) -> str:
-    """Return the attachment of one image, which is the artifact's own script."""
-    return f"{shlex.quote(str(artifact / 'bin' / 'attach'))} 2>&1"
+def attach_script(artifact: Path, *, scope: str = SYSTEM) -> str:
+    """Return the attachment of one image, which is the artifact's own script.
+
+    The script takes no decision from the operator - its own scope is the
+    artifact's - so what a user-scope step adds is where the account's bus is.
+    """
+    return _addressed(f"{shlex.quote(str(artifact / 'bin' / 'attach'))} 2>&1", scope)
 
 
 def flakelet_status_script(name: str) -> str:
@@ -446,7 +819,7 @@ def flakelet_status_script(name: str) -> str:
     return f"flakelet status --json {shlex.quote(name)}"
 
 
-def image_status_script(image: Path, check: Path) -> str:
+def image_status_script(image: Path, check: Path, *, scope: str = SYSTEM) -> str:
     """Return what the machine's own tool says about one image and what it holds.
 
     Three facts, one question: the state of the image the caller names, the
@@ -462,11 +835,16 @@ def image_status_script(image: Path, check: Path) -> str:
     report compares against is the recipe an attach writes. It may be absent on
     a machine that was never given the artifact, which is the same fact as the
     image being absent and is not a second refusal.
+
+    In user scope the tool asked is the account's own portabled, which holds
+    what that account attached and nothing the system holds.
     """
-    return (
-        f"portablectl is-attached {shlex.quote(str(image))} || true; "
+    portable = _portable(scope)
+    return _addressed(
+        f"{portable} is-attached {shlex.quote(str(image))} || true; "
         f"{shlex.quote(str(check))} 2> /dev/null || true; "
-        f"printf '%s\\n' {LISTING}; portablectl list --no-legend"
+        f"printf '%s\\n' {LISTING}; {portable} list --no-legend",
+        scope,
     )
 
 
@@ -517,54 +895,347 @@ def rollback_script(name: str) -> str:
     return f"flakelet rollback {shlex.quote(name)} 2>&1"
 
 
+def flakelet_remove_script(name: str) -> str:
+    """Return the endpoint's own removal of one entry it registers.
+
+    Never `--purge`: `remove` stops the units, unlinks them, deletes the
+    endpoint's own bookkeeping and keeps and lists the state folders, and what
+    it lists is what the step line echoes. Emptying those folders is a decision
+    this command does not take.
+    """
+    return f"flakelet remove {shlex.quote(name)} 2>&1"
+
+
+def image_detach_script(name: str, *, scope: str = SYSTEM) -> str:
+    """Return the detachment of one image a machine listed, by the name it listed.
+
+    `--now` stops the units before the unlink, so the step needs no unit list of
+    its own and cannot stop the wrong ones, and the name resolves in the search
+    paths the attachment put the image in. In user scope the daemon addressed is
+    the account's own, because an attachment of it is invisible to the system's.
+    """
+    return _addressed(f"{_portable(scope)} detach --now {shlex.quote(name)} 2>&1", scope)
+
+
 @dataclass(frozen=True)
-class Realiser:
-    """What one realiser answers: how an entry of it is activated, and asked about."""
+class Holding:
+    """One thing a machine answered that it holds, attributed to this planner.
 
-    activate: Callable[[Entry], str]
-    ask: Callable[[Entry], str]
+    ``identity`` is the machine's own answer about what it is, and is what a
+    line naming it carries: the plan key for a flakelet holding, whose endpoint
+    reports back the identity the realiser wrote, and the listed image name for
+    an image one, which the build's own projection is not invertible from.
+    ``name`` is what the endpoint's own removal verb resolves, which for
+    flakelet is the name it registered rather than the identity. ``state`` is
+    the word the answer carries about it, empty where it carries none.
+    """
+
+    realiser: str
+    identity: str
+    name: str
+    state: str
+
+    def sentence(self, machine: str) -> str:
+        """Return the line a report and an apply both name this holding with."""
+        return f"{machine} holds {self.identity}, which this build does not name"
 
 
-def _image_status(entry: Entry) -> str:
+def holdings_script(realisers: Sequence[Realiser], *, scope: str = SYSTEM) -> str:
+    """Return the one question of what a machine holds, over the published table.
+
+    A realiser joins the question only where the scopes published for it admit
+    the machine's scope, and the image half is addressed to the account's own
+    daemon where that scope is the account's. One question per machine and not
+    one per realiser or per holding, for the reason `values_script` and
+    `image_status_script` fold theirs: a socket-activated sshd answers a burst
+    of short logins with the socket's own trigger limit.
+
+    Returns:
+        The shell script, which prints `holdings <realiser> <status>` and then
+        that realiser's own answer, per realiser. Empty where no published
+        realiser reaches the machine, which is a machine to ask nothing.
+    """
+    asked = [
+        f"held=$({REALISERS[realiser.name].asks(scope)} 2>/dev/null); "
+        f"printf '%s %s %s\\n' {HELD} {shlex.quote(realiser.name)} \"$?\"; "
+        f"printf '%s\\n' \"$held\""
+        for realiser in realisers
+        if realiser.name in REALISERS and scope in realiser.scopes
+    ]
+    return _addressed("; ".join(asked), scope) if asked else ""
+
+
+def holdings_of(machine: str, realisers: Sequence[Realiser], reported: str) -> tuple[Holding, ...]:
+    """Read one machine's answer to `holdings_script` into what it holds.
+
+    A section whose status says the realiser's own tool is not on the machine
+    carries no holding and is no refusal: a machine with no `portablectl` holds
+    no attached image. Any other non-zero status is an answer the command
+    cannot read.
+
+    Returns:
+        Every holding the answer carries that the published table attributes to
+        this planner, in the order the machine answered them. An answer of
+        nothing - a machine that was not asked, or a channel that took no step
+        - carries none.
+
+    Raises:
+        ApplyError: If the answer is not the one the question printed, or a
+            section exited non-zero for a reason other than a missing tool,
+            naming the machine and what it said.
+    """
+    published = {realiser.name: realiser for realiser in realisers}
+    held: list[Holding] = []
+    for name, status, said in _sections(machine, reported, published):
+        if status in MISSING:
+            continue
+        if status != 0:
+            raise ApplyError(
+                f"{machine} answered the question of what it holds with {name} exiting "
+                f"{status}: {said.strip() or 'nothing'}"
+            )
+        held.extend(REALISERS[name].holds(machine, published[name], said))
+    return tuple(held)
+
+
+def unnamed(
+    held: Sequence[Holding], realisers: Sequence[Realiser], entries: Mapping[str, Entry]
+) -> tuple[Holding, ...]:
+    """Return the holdings the build names no entry for.
+
+    A holding is named where the deployment places an entry that owns it at all,
+    whichever entries a run was restricted to: a restriction bounds the machines
+    asked and decides nothing about what counts as unnamed.
+    """
+    published = {realiser.name: realiser for realiser in realisers}
+    return tuple(
+        holding
+        for holding in held
+        if not REALISERS[holding.realiser].claims(
+            published[holding.realiser], entries, holding.identity
+        )
+    )
+
+
+def retirement(holding: Holding, *, scope: str = SYSTEM) -> str:
+    """Return the step that retires one holding: its endpoint's own removal verb.
+
+    Never a script out of the holding's own artifact: that artifact belongs to a
+    build this run is not applying, so the run cannot name its path and nothing
+    on the machine roots it.
+    """
+    return REALISERS[holding.realiser].retire(holding, scope)
+
+
+def _sections(
+    machine: str, reported: str, published: Mapping[str, Realiser]
+) -> tuple[tuple[str, int, str], ...]:
+    """Return each section of one holdings answer: its realiser, status and answer."""
+    sections: list[tuple[str, int, list[str]]] = []
+    for line in reported.splitlines():
+        columns = line.split()
+        if columns[:1] == [HELD]:
+            sections.append((*_marker(machine, reported, columns, published), []))
+        elif sections:
+            sections[-1][2].append(line)
+        elif line.strip():
+            raise _unreadable(machine, reported)
+    return tuple((name, status, "\n".join(lines)) for name, status, lines in sections)
+
+
+def _marker(
+    machine: str, reported: str, columns: Sequence[str], published: Mapping[str, Realiser]
+) -> tuple[str, int]:
+    """Return the realiser and the status one marker line carries."""
+    if len(columns) != 3 or columns[1] not in published or columns[1] not in REALISERS:
+        raise _unreadable(machine, reported)
+    try:
+        return columns[1], int(columns[2])
+    except ValueError as malformed:
+        raise _unreadable(machine, reported) from malformed
+
+
+def _unreadable(machine: str, reported: str) -> ApplyError:
+    return ApplyError(
+        f"{machine} answered the question of what it holds with {reported.strip()!r}, which is "
+        f"not the answer the question prints"
+    )
+
+
+def _registrations(machine: str, said: str) -> list[Mapping[str, Any]]:
+    """Return the entries a flakelet endpoint's own status answered with."""
+    if not said.strip():
+        return []
+    try:
+        answered = json.loads(said)
+    except json.JSONDecodeError as malformed:
+        raise ApplyError(
+            f"{machine} answered the question of what it holds with {said.strip()!r}, which is "
+            f"not its endpoint's JSON status"
+        ) from malformed
+    if not isinstance(answered, list):
+        raise ApplyError(
+            f"{machine} answered the question of what it holds with {said.strip()!r}, which is "
+            f"not the list of registered entries its status is"
+        )
+    return [record for record in answered if isinstance(record, dict)]
+
+
+def _flakelet_holdings(machine: str, realiser: Realiser, said: str) -> tuple[Holding, ...]:
+    """Return the entries a flakelet endpoint registers that this planner put there.
+
+    The identity the realiser wrote into the artifact is what the endpoint
+    reports back, so a registration whose identity carries the published prefix
+    came from a deployment this command applies and what follows the prefix is
+    the plan key of the entry it was built for. Anything else the endpoint holds
+    is the machine's own business and is read as nothing.
+    """
+    prefix = realiser.text(URL_PREFIX)
+    held = []
+    for record in _registrations(machine, said):
+        url = record.get("locked_url")
+        name = record.get("name")
+        if not isinstance(url, str) or not url.startswith(prefix):
+            continue
+        state = record.get("state")
+        if url[len(prefix) :] and isinstance(name, str) and name:
+            held.append(
+                Holding(
+                    realiser=FLAKELET,
+                    identity=url[len(prefix) :],
+                    name=name,
+                    state=state if isinstance(state, str) else "",
+                )
+            )
+    return tuple(held)
+
+
+def _image_holdings(machine: str, realiser: Realiser, said: str) -> tuple[Holding, ...]:
+    """Return the images a machine lists whose names this planner composes.
+
+    An image's own answer is a file name, so attribution is the shape of that
+    name: it splits at the published separator into a name and a digest of the
+    published length over the published alphabet. No plan key is derived from
+    it, the projection a name is built by not being injective, and a detached
+    row is an image the machine does not hold.
+    """
+    separator = realiser.text(SEPARATOR)
+    alphabet = set(realiser.text(ALPHABET))
+    length = realiser.number(LENGTH)
+    held = []
+    for columns in (line.split() for line in said.splitlines()):
+        if len(columns) < 2 or columns[-1] == DETACHED:
+            continue
+        name, found, digest = columns[0].rpartition(separator)
+        if name and found and len(digest) == length and set(digest) <= alphabet:
+            held.append(
+                Holding(realiser=IMAGE, identity=columns[0], name=columns[0], state=columns[-1])
+            )
+    return tuple(held)
+
+
+def _flakelet_claims(realiser: Realiser, entries: Mapping[str, Entry], identity: str) -> bool:
+    """Whether the build places the flakelet entry one identity is the plan key of."""
+    entry = entries.get(identity)
+    return entry is not None and entry.realiser == FLAKELET
+
+
+def _image_claims(realiser: Realiser, entries: Mapping[str, Entry], identity: str) -> bool:
+    """Whether the build places an image entry whose own image carries this name.
+
+    The digest is deliberately not compared: an image of an earlier build of an
+    entry the build still names is a machine holding another build's identity,
+    which the report already answers, and one fact earns one line.
+    """
+    separator = realiser.text(SEPARATOR)
+    held = identity.rpartition(separator)[0]
+    return any(
+        entry.realiser == IMAGE
+        and entry.path is not None
+        and image_file(entry).removesuffix(RAW).rpartition(separator)[0] == held
+        for entry in entries.values()
+    )
+
+
+@dataclass(frozen=True)
+class Steps:
+    """What one realiser answers: how an entry of it is activated and asked about, how a
+    machine's own answer about what it holds of that realiser is read, and how one is retired.
+    """
+
+    activate: Callable[[Entry, str], str]
+    ask: Callable[[Entry, str], str]
+    asks: Callable[[str], str]
+    holds: Callable[[str, Realiser, str], tuple[Holding, ...]]
+    claims: Callable[[Realiser, Mapping[str, Entry], str], bool]
+    retire: Callable[[Holding, str], str]
+
+
+def _image_status(entry: Entry, scope: str) -> str:
     artifact = artifact_of(entry)
-    return image_status_script(artifact / image_file(entry), artifact / "bin" / "check")
+    return image_status_script(
+        artifact / image_file(entry), artifact / "bin" / "check", scope=scope
+    )
 
 
-REALISERS: Mapping[str, Realiser] = {
-    "flakelet": Realiser(
-        activate=lambda entry: activate_script(service_name(entry), artifact_of(entry)),
-        ask=lambda entry: flakelet_status_script(service_name(entry)),
+REALISERS: Mapping[str, Steps] = {
+    FLAKELET: Steps(
+        activate=lambda entry, scope: activate_script(service_name(entry), artifact_of(entry)),
+        ask=lambda entry, scope: flakelet_status_script(service_name(entry)),
+        asks=lambda scope: "flakelet status --json",
+        holds=_flakelet_holdings,
+        claims=_flakelet_claims,
+        retire=lambda holding, scope: flakelet_remove_script(holding.name),
     ),
-    "image": Realiser(
-        activate=lambda entry: attach_script(artifact_of(entry)),
+    IMAGE: Steps(
+        activate=lambda entry, scope: attach_script(artifact_of(entry), scope=scope),
         ask=_image_status,
+        asks=lambda scope: f"{_portable(scope)} list --no-legend",
+        holds=_image_holdings,
+        claims=_image_claims,
+        retire=lambda holding, scope: image_detach_script(holding.name, scope=scope),
     ),
 }
 
 
-def activation(entry: Entry) -> str:
-    """Return the script that activates one entry on its machine.
+def activation(entry: Entry, *, scope: str = SYSTEM) -> str:
+    """Return the script that activates one entry on its machine, in its own scope.
 
     Raises:
         ApplyError: If the entry states a realiser this command cannot
             activate.
     """
-    return _realiser(entry, "and the command activates flakelet and image").activate(entry)
+    return _realiser(entry, "and the command activates flakelet and image").activate(entry, scope)
 
 
-def status_script(entry: Entry) -> str:
-    """Return the question one entry's machine is asked about it.
+def status_script(entry: Entry, *, scope: str = SYSTEM) -> str:
+    """Return the question one entry's machine is asked about it, in the entry's own scope.
 
     Raises:
         ApplyError: If the entry states a realiser this command cannot ask
             about.
     """
-    return _realiser(entry, "which the command cannot ask").ask(entry)
+    return _realiser(entry, "which the command cannot ask").ask(entry, scope)
 
 
-def _realiser(entry: Entry, cannot: str) -> Realiser:
+def _realiser(entry: Entry, cannot: str) -> Steps:
     """Return the realiser one entry states, or refuse in the caller's own words."""
     stated = REALISERS.get(entry.realiser)
     if stated is None:
         raise ApplyError(f"{entry.key} states realiser {entry.realiser}, {cannot}")
     return stated
+
+
+def _manager(scope: str) -> str:
+    """Return the service manager one scope's steps address."""
+    return "systemctl --user" if scope == USER else "systemctl"
+
+
+def _portable(scope: str) -> str:
+    """Return the portable-image tool one scope's steps address."""
+    return "portablectl --user" if scope == USER else "portablectl"
+
+
+def _addressed(script: str, scope: str) -> str:
+    """Return one script with the account's own bus stated, where the scope is the account's."""
+    return f"{BUS}{script}" if scope == USER else script
