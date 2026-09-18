@@ -31,6 +31,7 @@ let
     optional
     quote
     quoteList
+    sealedPathOf
     sortStrings
     uniqueStrings
     unrenderable
@@ -274,13 +275,18 @@ let
   # it takes them: `backend.nix` renders this list and the table-answering half
   # derives its checks from it, so a word a field adds to the step is checked by
   # existing. `scope` is what a word varies with, a file of the value or a
-  # machine of its delivery set; `needs` is what the record has to record for the
-  # word to exist at all; `derivedFrom` names the word a word is computed out of,
-  # which is reported once rather than twice.
+  # machine of its delivery set; `steps` names the calls the word is a position
+  # of; `needs` is what the record has to record for the word to exist at all;
+  # `derivedFrom` names the word a word is computed out of, which is reported
+  # once rather than twice.
   renderedWords = [
     {
       field = "address";
       scope = "machine";
+      steps = [
+        "seal_copy"
+        "deliver"
+      ];
       needs = [ "address" ];
       what = "the address";
       named = ctx: ctx.machine;
@@ -289,6 +295,7 @@ let
     {
       field = "parent";
       scope = "file";
+      steps = [ "deliver" ];
       needs = [ "path" ];
       derivedFrom = "path";
       what = "the parent directory of the path";
@@ -299,6 +306,7 @@ let
     {
       field = "path";
       scope = "file";
+      steps = [ "deliver" ];
       needs = [ "path" ];
       what = "the path";
       named = ctx: ctx.key;
@@ -307,6 +315,7 @@ let
     {
       field = "mode";
       scope = "file";
+      steps = [ "deliver" ];
       needs = [ "mode" ];
       what = "the mode";
       named = ctx: ctx.key;
@@ -315,6 +324,7 @@ let
     {
       field = "ownership";
       scope = "file";
+      steps = [ "deliver" ];
       needs = [
         "owner"
         "group"
@@ -323,7 +333,63 @@ let
       named = ctx: ctx.key;
       word = ctx: "${ctx.owner}:${ctx.group}";
     }
+    # The sealed copy's two words are the file's own path put through
+    # `sealedPathOf`, so the root is stated in the library and not here and a
+    # path this reading refuses is one row rather than three.
+    {
+      field = "sealedParent";
+      scope = "file";
+      steps = [ "seal_copy" ];
+      needs = [ "path" ];
+      derivedFrom = "path";
+      what = "the parent directory of the sealed path";
+      named = ctx: ctx.key;
+      word = ctx: parentOf (sealedPathOf ctx.path);
+      absent =
+        ctx:
+        fail accounts.pathNamesNoDirectory {
+          inherit (ctx) key;
+          path = sealedPathOf ctx.path;
+        };
+    }
+    {
+      field = "sealed";
+      scope = "file";
+      steps = [ "seal_copy" ];
+      needs = [ "path" ];
+      derivedFrom = "path";
+      what = "the sealed path";
+      named = ctx: ctx.key;
+      word = ctx: sealedPathOf ctx.path;
+    }
+    # One public word off the machine's own plan record, and the one word of the
+    # table a record is allowed to answer with nothing: a machine stating no
+    # recipient carries no such word and therefore no sealed call.
+    {
+      field = "recipient";
+      scope = "machine";
+      steps = [ "seal_copy" ];
+      needs = [ "sealRecipient" ];
+      what = "the seal recipient";
+      named = ctx: ctx.machine;
+      word = ctx: ctx.sealRecipient;
+    }
   ];
+
+  # The calls the step makes for one file on one machine, in the order it makes
+  # them: the sealed copy before the plaintext, so a run interrupted between the
+  # two leaves no sealed copy older than the plaintext beside it. A call a word
+  # of which no record answers is not rendered at all, which is what a machine
+  # stating no recipient does to the sealed one.
+  renderedSteps = [
+    "seal_copy"
+    "deliver"
+  ];
+
+  # Whether the records a context was built from answer every field a word
+  # needs. Both halves ask it: the table-answering one checks the words it is
+  # answered for, the rendering one renders the calls it is answered for.
+  carries = ctx: word: all (field: ctx ? ${field}) word.needs;
 
   # What a file record has to answer for the words of a file to exist, read off
   # the set above rather than listed again: it is what `deliveriesOf` requires
@@ -493,6 +559,18 @@ let
 
   statesNoAddress = record: !(record ? address) || !isString record.address;
 
+  # The recipient a machine's own record states, as the field the sealed call's
+  # word needs or as no field at all. The plan records it present and null on a
+  # machine that seals nothing, and a value of another kind reads as the same
+  # absence: the planner refuses a malformed line before the plan carries it,
+  # and the half that answers a table reads no kind it was not handed.
+  sealFields =
+    record:
+    let
+      recipient = if record == null then null else record.sealRecipient or null;
+    in
+    if isString recipient then { sealRecipient = recipient; } else { };
+
   addressOf =
     plan: key: machine:
     let
@@ -525,10 +603,14 @@ let
           }) fileWordFields
         )
       ) (required value.key value.entry "files");
-      machines = map (machine: {
-        inherit machine;
-        address = addressOf plan value.key machine;
-      }) (required value.key value.entry "delivery");
+      machines = map (
+        machine:
+        {
+          inherit machine;
+          address = addressOf plan value.key machine;
+        }
+        // sealFields (machineRecord plan machine)
+      ) (required value.key value.entry "delivery");
     }) (filter (value: required value.key value.entry "deploy") (valuesOf plan));
 
   # The other half, over the same predicates and the same descriptions: what a
@@ -558,9 +640,7 @@ let
       wordRowsOf =
         scope: ctx:
         let
-          carried = filter (
-            word: word.scope == scope && all (field: ctx ? ${field}) word.needs
-          ) renderedWords;
+          carried = filter (word: word.scope == scope && carries ctx word) renderedWords;
           refused = filter (
             word:
             let
@@ -612,10 +692,13 @@ let
         else if statesNoAddress record then
           [ (rowOf accounts.machineNoAddress { inherit key machine; }) ]
         else
-          wordRowsOf "machine" {
-            inherit key user machine;
-            inherit (record) address;
-          };
+          wordRowsOf "machine" (
+            {
+              inherit key user machine;
+              inherit (record) address;
+            }
+            // sealFields record
+          );
     in
     if keyRows != [ ] then
       keyRows
@@ -652,9 +735,17 @@ in
 
   # `backend.nix` renders what the contract's deploy step cannot carry, so the
   # refusal it states is this file's, and `renderedWords` is the set both halves
-  # read: the step renders one word per entry of it and the rows above check the
-  # same entries, so neither half holds a word the other does not.
-  inherit renderedWords unrenderable fail;
+  # read: the step renders one word per entry of it, in the calls the entry
+  # names, and the rows above check the same entries, so neither half holds a
+  # word the other does not. `carries` is the one rule about a word a record
+  # answers with no field, which decides a row here and a rendered call there.
+  inherit
+    renderedWords
+    renderedSteps
+    carries
+    unrenderable
+    fail
+    ;
 
   # What this plan would be refused for, as rows and without raising. `user` is
   # the account the rendered step dials with, because the word it renders is
