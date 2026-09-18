@@ -531,6 +531,14 @@ The image realiser has no document of its own, so its rules are here in full.
   exactly that holding unfindable.
 - Both realisers are handed the same `assemble` argument, so a configuration file whose bytes the
   plan holds is one store object written once.
+- An artifact references every root its entry declares, under both realisers: the image carries
+  them in its own closure and the flakelet farm carries one `closure/<name>` link each, deduped
+  through `util.uniqueStrings`. Without it the farm referenced `meta.json`, the unit files and the
+  assembled configuration files alone, so a declared root that no unit mentions never reached the
+  machine and `operator/read.nix`'s own sentence about a verb running a program out of the entry's
+  closure was false for that realiser - observed as a coordination server answering `error loading
+  config file <store path>: no such file or directory` after a clean apply. A root a unit mentions
+  arrived anyway, by mention, which is why only an operator's own object could catch it.
 - `flakelet/read.nix` restates `validate_name` and `validate_units` from flakelet's own
   `manager.rs`, and binds the `plan:` prefix once so `meta.json`'s `flake_url` and the published
   `holdings.urlPrefix` are the one string. `tests/e2e/delivery.py` keeps no copy of it any more: it

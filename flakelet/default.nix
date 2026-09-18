@@ -23,9 +23,9 @@
   },
 }:
 let
-  inherit (builtins) filter;
+  inherit (builtins) filter unsafeDiscardStringContext;
 
-  inherit (planner.util) indexBy;
+  inherit (planner.util) indexBy uniqueStrings;
 in
 {
   inherit reader;
@@ -50,6 +50,25 @@ in
       }) (filter (p: p.kind == "configuration-file" && p.disposition == "literal") image.hostPaths);
 
       meta = reader.meta image;
+
+      # The roots the entry declares, linked so the artifact references them
+      # and `nix copy` of it puts them on the machine. Without this an
+      # unmentioned root is dropped: a path a unit names is copied because the
+      # unit file names it, and a path nothing names is carried by nothing -
+      # which makes a program the operator's own verbs run, and no unit does,
+      # unreachable on the machine the entry is on. The image realiser roots
+      # the same list into its own image root.
+      #
+      # The name is the base name with its context discarded and the link is
+      # the path with its context kept, which is the split `util.shortHash`
+      # already makes: a farm entry's name is a string the derivation writes,
+      # and a string that roots a store path is a string no build can write.
+      # The list is deduplicated first, two declarations of one path being one
+      # link name rather than a collision `linkFarm` refuses.
+      declared = map (root: {
+        name = "closure/${unsafeDiscardStringContext (baseNameOf root)}";
+        path = root;
+      }) (uniqueStrings image.closure);
     in
     (pkgs.linkFarm "flakelet-${image.name}" (
       [
@@ -63,6 +82,7 @@ in
         path = pkgs.writeText u.file u.text;
       }) rendered
       ++ assembled
+      ++ declared
     )).overrideAttrs
       (old: {
         passthru = (old.passthru or { }) // {
