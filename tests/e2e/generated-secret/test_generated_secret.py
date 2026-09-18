@@ -385,9 +385,10 @@ def delivered(generated: Run) -> Run:
 def test_a_generation_build_carries_both_halves_of_its_table() -> None:
     """The generation farm holds its diagnostics as rows and as a rendered table.
 
-    A tool reads `diagnostics.json` and a person reads `diagnostics.txt`, and the
-    plan of this folder carries no row at all, which is what makes their presence
-    an observation rather than a side effect of something having gone wrong.
+    A tool reads `diagnostics.json` and a person reads `diagnostics.txt`, and this
+    folder's own rows are the two warnings its machines earn by declaring no seal
+    recipient, which is what makes both halves an observation of one table rather
+    than two renderings that agree.
     """
     held = sorted(path.name for path in GENERATION.iterdir())
     assert held == [
@@ -399,8 +400,14 @@ def test_a_generation_build_carries_both_halves_of_its_table() -> None:
     ], held
 
     rows = json.loads((GENERATION / "diagnostics.json").read_text())
-    assert rows == []
-    assert (GENERATION / "diagnostics.txt").read_text() == "\n"
+    assert [(row["id"], row["subject"], row["severity"]) for row in rows] == [
+        ("machine-receives-a-value-unsealed", "machine:alpha", "warning"),
+        ("machine-receives-a-value-unsealed", "machine:beta", "warning"),
+    ], rows
+
+    rendered = (GENERATION / "diagnostics.txt").read_text()
+    for row in rows:
+        assert row["message"] in rendered, rendered
 
 
 def test_an_ungenerated_value_is_absent_not_empty(generated: Run) -> None:
@@ -414,8 +421,13 @@ def test_an_ungenerated_value_is_absent_not_empty(generated: Run) -> None:
     plan = run.ungenerated_result["plan"]
     assert plan[TOKEN_VALUE]["files"]["secret"]["bytes"] == "absent"
     assert plan[TOKEN_VALUE]["files"]["fingerprint"]["bytes"] == "absent"
-    # The planner's own absence, reported against the entry that reads it.
-    assert [row["id"] for row in run.ungenerated_result["diagnostics"]] == ["set-entry-absent"]
+    # The planner's own absence, reported against the entry that reads it, beside
+    # the seal warning every machine of this folder earns whatever it holds.
+    assert [row["id"] for row in run.ungenerated_result["diagnostics"]] == [
+        "machine-receives-a-value-unsealed",
+        "machine-receives-a-value-unsealed",
+        "set-entry-absent",
+    ]
     assert run.ungenerated_result["applicable"] is False
 
 
@@ -437,8 +449,14 @@ def test_a_held_file_becomes_a_present_value(generated: Run) -> None:
         f"{PROBE_KEY} named secret in uses.api.reads",
     ]
     assert run.plan[ROOT_VALUE]["deploy"] is False
-    # Every absence the ungenerated plan reported is gone, and nothing replaced it.
-    assert run.result["diagnostics"] == []
+    # Every absence the ungenerated plan reported is gone, and what is left is the
+    # warning about the recipient these machines do not declare - an error would
+    # have made the deployment inapplicable, and none is left.
+    assert [row["severity"] for row in run.result["diagnostics"]] == ["warning", "warning"]
+    assert [row["id"] for row in run.result["diagnostics"]] == [
+        "machine-receives-a-value-unsealed",
+        "machine-receives-a-value-unsealed",
+    ]
     assert run.result["applicable"] is True
 
 

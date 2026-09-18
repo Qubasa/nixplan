@@ -1130,6 +1130,13 @@ machines come from and a manual `pytest` run. What follows is what that document
 - The fallback in `cli/report.py` for a listing the command cannot read has no test: no real
   `portablectl` prints one and the command runs only inside a cluster, so a rewrite of
   `remote.attachment_of` is unguarded against that branch.
+- `generated-secret` declares no `sealRecipient` on either machine, deliberately: its subject is
+  the external generator's contract and sealing is `secret-delivery`'s. Its table therefore carries
+  the two `machine-receives-a-value-unsealed` warnings whatever the backend holds, and the folder
+  asserts them by identifier, subject and severity rather than asserting an empty table - which is
+  how it went red unnoticed when `unseal-a-value-after-a-reboot` landed that warning. A folder
+  asserting `diagnostics == []` is a folder that breaks the next time a warning is added anywhere
+  above it.
 - `tests/e2e/runner.py` puts the roots the app names **before** any inherited `PYTHONPATH`, or a
   checkout shadows the store copies the app had just built; `import_path` is the one place that
   order is decided and
