@@ -74,6 +74,69 @@ let
     }
     // extra;
   };
+
+  # Two grammar-valid age native recipients, so a rotation is another line on
+  # one machine rather than another machine.
+  recipient = "age18qwr8shvp904mw6l3e5ywldyaqcml8393kzq64q086r8jxw4fpc8x768yp";
+
+  # One machine, one entry and one generated value delivered to it: the whole
+  # deployment a crossing between a registry key and every key the plan derives
+  # needs, because a registry fact no key may reach has to be read against the
+  # machine's key, the placed entry's and the value entry's at once.
+  valued =
+    extra:
+    planOf {
+      machines = machinesWith (
+        {
+          system = "x86_64-linux";
+          serviceManager = "systemd";
+        }
+        // extra
+      );
+      instances.svc = {
+        module = soleRoot {
+          module = _: {
+            vars.hostKey.files."key".secrecy = "secret";
+            impl =
+              { vars, ... }:
+              {
+                units.only = {
+                  command = "/bin/true";
+                  env.KEYFILE = vars.hostKey."key".path;
+                };
+              };
+          };
+        };
+        placement.every.only.machines = [ "host" ];
+      };
+      varsState."svc:vars/hostKey@host"."key".present = true;
+    };
+
+  # One machine whose scope the case states and one member on it: the whole
+  # deployment a crossing between a placement and the privilege its machine
+  # offers needs.
+  onAccount =
+    scope: module:
+    planOf {
+      machines = machinesWith {
+        system = "x86_64-linux";
+        serviceManager = "systemd";
+        inherit scope;
+        sealRecipient = recipient;
+      };
+      instances.svc = {
+        module = soleRoot { inherit module; };
+        placement.every.only.machines = [ "host" ];
+      };
+    };
+
+  groupedUnit = planner.unitExtension {
+    backend = "systemd";
+    name = "systemd-service";
+    fields.supplementaryGroups = {
+      type = planner.korora.listOf planner.korora.string;
+    };
+  };
 in
 {
   testAFullyDeclaredMachine =
@@ -94,6 +157,7 @@ in
         entry = {
           address = "host.example:22";
           key = "<hash>";
+          sealRecipient = null;
           serviceManager = "systemd";
           system = "x86_64-linux";
           tags = [ "everywhere" ];
@@ -960,6 +1024,426 @@ in
           "/bin/serve laptop.example:22"
           "/bin/serve one.example:22"
           "/bin/serve two.example:22"
+        ];
+      };
+    };
+
+  testTheScopeDomainHasOneHome =
+    let
+      admits = value: builtins.elem value planner.atoms.domains.scope;
+    in
+    {
+      expr = {
+        domain = planner.atoms.domains.scope;
+        system = admits "system";
+        user = admits "user";
+        global = admits "global";
+        notAName = admits 22;
+        theBoundaryHasOneHome = planner.atoms.portRange.privilegedBelow;
+      };
+      expected = {
+        domain = [
+          "system"
+          "user"
+        ];
+        system = true;
+        user = true;
+        global = false;
+        notAName = false;
+        theBoundaryHasOneHome = 1024;
+      };
+    };
+
+  testAMachineDeclaresAScopeOutsideTheDomain =
+    let
+      result = on (machinesWith {
+        system = "x86_64-linux";
+        serviceManager = "systemd";
+        scope = "global";
+      }) { machines = [ "host" ]; };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        namesTheMachine = hasInfix "`host`" (messageById "machine-scope-unknown" result);
+        namesTheDomain = hasInfix "`system`, `user`" (support.evidenceById "machine-scope-unknown" result);
+        subjects = support.subjectsById "machine-scope-unknown" result;
+        planKeys = attrNames result.plan;
+        theEntryOnTheMachine = result.plan ? "svc:only@host";
+      };
+      expected = {
+        rows = [ "machine-scope-unknown" ];
+        namesTheMachine = true;
+        namesTheDomain = true;
+        subjects = [ "deployment/machines.nix" ];
+        planKeys = [
+          "machine:host"
+          "svc:only"
+        ];
+        theEntryOnTheMachine = false;
+      };
+    };
+
+  testAMachineStatingTheDefaultScopeKeysAsItDid =
+    let
+      deployment =
+        extra:
+        on (machinesWith (
+          {
+            system = "x86_64-linux";
+            serviceManager = "systemd";
+          }
+          // extra
+        )) { machines = [ "host" ]; };
+      unstated = deployment { };
+      stated = deployment { scope = "system"; };
+    in
+    {
+      expr = {
+        rows = unstated.diagnostics ++ stated.diagnostics;
+        machineRecord = unstated.plan."machine:host" == stated.plan."machine:host";
+        entry = unstated.plan."svc:only@host" == stated.plan."svc:only@host";
+      };
+      expected = {
+        rows = [ ];
+        machineRecord = true;
+        entry = true;
+      };
+    };
+
+  testAMachineChangesScope =
+    let
+      deployment =
+        extra:
+        on (machinesWith (
+          {
+            system = "x86_64-linux";
+            serviceManager = "systemd";
+          }
+          // extra
+        )) { machines = [ "host" ]; };
+      before = deployment { };
+      after = deployment { scope = "user"; };
+    in
+    {
+      expr = {
+        rows = before.diagnostics ++ after.diagnostics;
+        machineKeyChanged = before.plan."machine:host".key != after.plan."machine:host".key;
+        entryKeyChanged = before.plan."svc:only@host".key != after.plan."svc:only@host".key;
+        theMachineRecords = after.plan."machine:host".scope or null;
+      };
+      expected = {
+        rows = [ ];
+        machineKeyChanged = true;
+        entryKeyChanged = true;
+        theMachineRecords = "user";
+      };
+    };
+
+  testAUserScopeTargetRecordsItsScope =
+    let
+      result = planOf {
+        machines = {
+          account = {
+            address = "account.example:22";
+            tags = [ "everywhere" ];
+            system = "x86_64-linux";
+            serviceManager = "systemd";
+            scope = "user";
+          };
+          root = {
+            address = "root.example:22";
+            tags = [ "everywhere" ];
+            system = "x86_64-linux";
+            serviceManager = "systemd";
+          };
+        };
+        instances.svc = {
+          module = soleRoot {
+            module = quiet;
+          };
+          placement.every.only.tags = [ "everywhere" ];
+        };
+      };
+      targetOf = machine: result.plan."svc:only@${machine}".target;
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        onTheAccount = targetOf "account" ? scope;
+        itsScope = (targetOf "account").scope or null;
+        onRoot = targetOf "root" ? scope;
+        keysDiffer = result.plan."svc:only@account".key != result.plan."svc:only@root".key;
+      };
+      expected = {
+        rows = [ ];
+        onTheAccount = true;
+        itsScope = "user";
+        onRoot = false;
+        keysDiffer = true;
+      };
+    };
+
+  testASystemScopeTargetCarriesNoScopeField =
+    let
+      deployment =
+        extra:
+        on (machinesWith (
+          {
+            system = "x86_64-linux";
+            serviceManager = "systemd";
+          }
+          // extra
+        )) { machines = [ "host" ]; };
+      stated = deployment { scope = "system"; };
+      unstated = deployment { };
+    in
+    {
+      expr = {
+        rows = stated.diagnostics;
+        target = stated.plan."svc:only@host".target ? scope;
+        keyIsTheOneItHasUnstated = stated.plan."svc:only@host".key == unstated.plan."svc:only@host".key;
+      };
+      expected = {
+        rows = [ ];
+        target = false;
+        keyIsTheOneItHasUnstated = true;
+      };
+    };
+
+  testAUnitDeclaringAnAccountMeetsAUserScopeMachine =
+    let
+      deployment =
+        scope:
+        onAccount scope (_: {
+          impl = _: {
+            units.only = {
+              command = "/bin/true";
+              user = "postgres";
+            };
+          };
+        });
+      user = deployment "user";
+      system = deployment "system";
+    in
+    {
+      expr = {
+        rows = rowIds user;
+        namesTheUnit = hasInfix "`only`" (messageById "unit-account-in-user-scope" user);
+        namesTheAccount = hasInfix "`postgres`" (messageById "unit-account-in-user-scope" user);
+        subjects = support.subjectsById "unit-account-in-user-scope" user;
+        theEntryIsStillPlanned = user.plan ? "svc:only@host";
+        theDeploymentIsApplicable = user.applicable;
+        onASystemScopeMachine = rowIds system;
+      };
+      expected = {
+        rows = [ "unit-account-in-user-scope" ];
+        namesTheUnit = true;
+        namesTheAccount = true;
+        subjects = [ "svc:only@host" ];
+        theEntryIsStillPlanned = true;
+        theDeploymentIsApplicable = false;
+        onASystemScopeMachine = [ ];
+      };
+    };
+
+  testAUnitDeclaringGroupsMeetsAUserScopeMachine =
+    let
+      deployment =
+        scope:
+        onAccount scope (_: {
+          impl = _: {
+            units.only = {
+              command = "/bin/true";
+              extends = [
+                {
+                  extension = groupedUnit;
+                  values.supplementaryGroups = [ "postgres" ];
+                }
+              ];
+            };
+          };
+        });
+      user = deployment "user";
+      system = deployment "system";
+    in
+    {
+      expr = {
+        rows = rowIds user;
+        namesTheUnit = hasInfix "`only`" (messageById "unit-groups-in-user-scope" user);
+        namesTheGroup = hasInfix "`postgres`" (messageById "unit-groups-in-user-scope" user);
+        subjects = support.subjectsById "unit-groups-in-user-scope" user;
+        theEntryIsStillPlanned = user.plan ? "svc:only@host";
+        theDeploymentIsApplicable = user.applicable;
+        onASystemScopeMachine = rowIds system;
+      };
+      expected = {
+        rows = [ "unit-groups-in-user-scope" ];
+        namesTheUnit = true;
+        namesTheGroup = true;
+        subjects = [ "svc:only@host" ];
+        theEntryIsStillPlanned = true;
+        theDeploymentIsApplicable = false;
+        onASystemScopeMachine = [ ];
+      };
+    };
+
+  testAPrivilegedPortClaimMeetsAUserScopeMachine =
+    let
+      deployment =
+        scope: number:
+        onAccount scope (_: {
+          claims.ports.listen.fixed = number;
+          impl = _: {
+            units.only.command = "/bin/true";
+          };
+        });
+      privileged = deployment "user" 443;
+      unprivileged = deployment "user" 8443;
+      asRoot = deployment "system" 443;
+    in
+    {
+      expr = {
+        rows = rowIds privileged;
+        namesThePort = hasInfix "443" (messageById "port-privileged-in-user-scope" privileged);
+        namesTheClaim = hasInfix "`listen`" (messageById "port-privileged-in-user-scope" privileged);
+        subjects = support.subjectsById "port-privileged-in-user-scope" privileged;
+        theClaimIsStillRecorded = privileged.plan."svc:only@host".alloc.ports.listen;
+        aboveTheBoundary = rowIds unprivileged;
+        theDeploymentIsApplicable = privileged.applicable;
+        onASystemScopeMachine = rowIds asRoot;
+      };
+      expected = {
+        rows = [ "port-privileged-in-user-scope" ];
+        namesThePort = true;
+        namesTheClaim = true;
+        subjects = [ "svc:only@host" ];
+        theClaimIsStillRecorded = 443;
+        aboveTheBoundary = [ ];
+        theDeploymentIsApplicable = false;
+        onASystemScopeMachine = [ ];
+      };
+    };
+
+  testAValueStatingAnOwnershipIsDeliveredToAUserScopeMachine =
+    let
+      deployment =
+        scope: record:
+        onAccount scope (_: {
+          vars.hostKey.files.key = {
+            secrecy = "public";
+          }
+          // record;
+          impl = _: {
+            units.only.command = "/bin/true";
+          };
+        });
+      owned = deployment "user" { owner = "postgres"; };
+      grouped = deployment "user" { group = "postgres"; };
+      moded = deployment "user" { mode = "0440"; };
+      asRoot = deployment "system" { owner = "postgres"; };
+    in
+    {
+      expr = {
+        owner = rowIds owned;
+        subjects = support.subjectsById "value-ownership-in-user-scope" owned;
+        namesTheMachine = hasInfix "`host`" (messageById "value-ownership-in-user-scope" owned);
+        group = rowIds grouped;
+        modeAlone = rowIds moded;
+        theDeploymentIsApplicable = owned.applicable;
+        onASystemScopeMachine = rowIds asRoot;
+      };
+      expected = {
+        owner = [ "value-ownership-in-user-scope" ];
+        subjects = [ "svc:vars/hostKey@host" ];
+        namesTheMachine = true;
+        group = [ "value-ownership-in-user-scope" ];
+        modeAlone = [ ];
+        theDeploymentIsApplicable = false;
+        onASystemScopeMachine = [ ];
+      };
+    };
+
+  testAMachineStatesASealRecipientAndKeysAsItDid =
+    let
+      unstated = valued { };
+      stated = valued { sealRecipient = recipient; };
+      keysOf = result: builtins.mapAttrs (_: entry: entry.key) result.plan;
+    in
+    {
+      expr = {
+        rows = rowIds stated;
+        # The registry this suite states declares none, so the same deployment
+        # without the line is the machine the warning is about.
+        withoutARecipient = rowIds unstated;
+        everyKey = keysOf stated == keysOf unstated;
+        theMachineKey = stated.plan."machine:host".key == unstated.plan."machine:host".key;
+        thePlacedEntryKey = stated.plan."svc:only@host".key == unstated.plan."svc:only@host".key;
+        theValueEntryKey =
+          stated.plan."svc:vars/hostKey@host".key == unstated.plan."svc:vars/hostKey@host".key;
+        theTarget = stated.plan."svc:only@host".target == unstated.plan."svc:only@host".target;
+        theRecordCarriesIt = stated.plan."machine:host".sealRecipient or "missing";
+        andTheAbsenceIsExplicit = unstated.plan."machine:host".sealRecipient or "missing";
+      };
+      expected = {
+        rows = [ ];
+        withoutARecipient = [ "machine-receives-a-value-unsealed" ];
+        everyKey = true;
+        theMachineKey = true;
+        thePlacedEntryKey = true;
+        theValueEntryKey = true;
+        theTarget = true;
+        theRecordCarriesIt = recipient;
+        andTheAbsenceIsExplicit = null;
+      };
+    };
+
+  testASealRecipientTheGrammarRefuses =
+    let
+      id = "machine-seal-recipient-malformed";
+      result = valued { sealRecipient = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5"; };
+      keyed = valued { sealRecipient = recipient; };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        severity = severityById id result;
+        subjects = support.subjectsById id result;
+        namesTheMachine = hasInfix "`host`" (messageById id result);
+        namesTheGrammar = hasInfix "`age1`" (messageById id result);
+        # Left out of every projection, so the record answers the absence and no
+        # plan field carries the line.
+        inNoProjection = result.plan."machine:host".sealRecipient or "missing";
+        theLineReachesNoPlanRecord = hasInfix "ssh-ed25519" (toJSON result.plan);
+        # It sits in no target, so nothing is dropped for it: every entry the
+        # machine carries is planned and keyed as it is for an accepted line.
+        planned = attrNames result.plan;
+        theTargetIsWhole = result.plan."svc:only@host" ? target;
+        theEntryKeysAreTheKeyedOnes = [
+          (result.plan."svc:only@host".key == keyed.plan."svc:only@host".key)
+          (result.plan."svc:vars/hostKey@host".key == keyed.plan."svc:vars/hostKey@host".key)
+        ];
+      };
+      expected = {
+        rows = [
+          "machine-receives-a-value-unsealed"
+          id
+        ];
+        severity = "error";
+        subjects = [ "deployment/machines.nix" ];
+        namesTheMachine = true;
+        namesTheGrammar = true;
+        inNoProjection = null;
+        theLineReachesNoPlanRecord = false;
+        planned = [
+          "machine:host"
+          "svc:only@host"
+          "svc:vars/hostKey@host"
+        ];
+        theTargetIsWhole = true;
+        theEntryKeysAreTheKeyedOnes = [
+          true
+          true
         ];
       };
     };
