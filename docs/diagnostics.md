@@ -48,6 +48,12 @@ build, which is the only layer handed the statement. A realiser refuses only
 conditions one of those two already reported as an error row, so no path through
 a deployment build reaches a raise without a row having been produced first.
 
+A fact a machine holds at run time is in none of those three columns, so it is in no table here. A
+user-scope machine whose roots are not writable, whose account has no lingering or whose portabled
+does not answer is refused by the command itself, naming the machine, the requirement and what the
+machine answered, because nothing the plan records could have said it:
+[operator.md](operator.md) states that question and what provisioning it verifies.
+
 The realisers keep their raises, and a raise is the answer a caller that imported `image/read.nix`,
 `flakelet/read.nix` or `secrets/read.nix` and called it directly receives. Every refusal of every
 realiser carries the identifier of the row that reports the same condition, or a recorded reason
@@ -58,10 +64,11 @@ rather than written out, so a realiser is accounted for by existing, and the pai
 rather than a fragment of a message, so rewording a refusal changes nothing.
 
 A reading asks each realiser for the rules only it knows - `acceptsName`, `acceptsUnit`,
-`acceptsHostPath`, `confinement` and `backend` of `flakelet/read.nix`, `acceptsName`,
-`acceptsUnit`, `profileNames`, `denials`, `hostPaths` and `versionFor` of `image/read.nix`,
-`unrenderable` and `fail` of `secrets/read.nix` - and one rule therefore has one home, with the row
-and the raise saying the same thing.
+`acceptsHostPath`, `confinement`, `backend` and `scopes` of `flakelet/read.nix`, `acceptsName`,
+`acceptsUnit`, `profileNames`, `denials`, `hostPaths`, `versionFor` and `scopes` of
+`image/read.nix`, `unrenderable` and `fail` of `secrets/read.nix` - and one rule therefore has one
+home, with the row and the raise saying the same thing. `scopes` is the list of deployment scopes
+the realiser realises, which is what `operator-entry-scope-unsupported` is read from.
 
 `row`, `error` and `warning` are exported from the library, and every producer
 of a row uses them: they are what applies `util.oneLine` to a message, an
@@ -141,7 +148,12 @@ discipline and deduplication applied).
 | id | Raised when |
 | --- | --- |
 | `machine-target-incomplete` | a machine a placement selects declares no `address`, no `system` or no `serviceManager`, so a placement on it has no derivable target and is not planned |
+| `machine-scope-unknown` | a machine declares a `scope` outside `system` and `user`; a refused value is as incomplete as none, so the machine has no derivable target and every placement on it is dropped rather than planned |
+| `machine-seal-recipient-malformed` | a machine declares a `sealRecipient` outside the grammar one age native recipient carries, which is `age1` and 58 characters of the bech32 alphabet as one word. The row names the machine and the registry file, and the refused line is left out of every projection. The recipient is in no target, so refusing it drops no placement: every entry on the machine is still planned, and the machine has no recipient a delivery can seal to |
 | `placement-platform-mismatch` | the machine's `system` is outside the module's `platforms` |
+| `unit-account-in-user-scope` | a unit declares `user` and the machine its placement selected declares `scope = "user"`, so the account is a fact the scope cannot honor: a user service manager runs every unit as the account that owns it and can switch to no other. A refusal and not a filter, as `placement-platform-mismatch` is, so the entry stays in the plan |
+| `unit-groups-in-user-scope` | a unit's extension application records `supplementaryGroups`, under any backend, on a machine whose scope is `user`; a group is granted by a system service manager and an account cannot grant one to itself |
+| `port-privileged-in-user-scope` | a fixed port claim below 1024 on a machine whose scope is `user`; binding one needs a capability the account does not hold. The claim is read after normalisation, so this row and the allocation index name one number |
 
 ### Composition and placement
 
@@ -185,6 +197,12 @@ discipline and deduplication applied).
 | `unit-restart-delay-without-policy` | a unit declares `restartSec` and no `restart`, so the delay changes nothing; the delay is not recorded |
 | `unit-restart-contradicts-one-shot` | a `oneShot` unit declares `restart = "always"`, which restarts it for as long as it keeps succeeding; the policy is not recorded |
 | `unit-restart-on-scheduled` | a unit declares a `schedule` and a restart policy other than `no`, which is a second schedule nobody declared; the policy is not recorded |
+| `unit-probe-without-timeout` | a unit declares a `probe` and no `probeTimeout`, so the only bound on the probe would be a service manager's default, which is a fact the plan does not record; neither field is recorded |
+| `unit-probe-timeout-without-probe` | a unit declares a `probeTimeout` and no `probe`, so the bound bounds nothing; the bound is not recorded |
+| `unit-probe-timeout-unbounded` | a unit declares a `probeTimeout` spelling zero, which a service manager reads as no bound at all, so the value that looks like the tightest bound is the absence of the one the field exists for; neither field is recorded. The check covers every spelling of zero the duration type admits, not the literal `0` |
+| `unit-probe-on-one-shot` | a `oneShot` unit declares a `probe`, and a job that applies and exits reports whether it worked in its own exit status, so a probe ordered after it answers a question already answered; neither field is recorded |
+| `unit-probe-on-scheduled` | a unit declares a `schedule` and a `probe`, and a scheduled unit is not running between elapses, so the probe would report the schedule rather than the service; neither field is recorded |
+| `unit-probe-declared-twice` | two units of one entry declare a `probe`. An entry is activated and rolled back as one, so whether it is serving is one question with one answer, and a realiser derives one file for it; the row names both units and neither statement is recorded |
 | `unit-directory-mode-without-directory` | a unit declares a directory mode for a kind it declares no directory of, and a mode alone creates nothing; the mode is not recorded |
 | `unit-directory-declared-twice` | a unit declares one directory kind in the vocabulary and again in a backend extension application, and a renderer handed two statements about one directory has no way to choose; neither is recorded |
 | `unit-condition-contradicts-itself` | a unit states one path as both `startIfPathPresent` and `startIfPathAbsent`, so it is skipped whether the path is there or not; neither condition is recorded |
@@ -244,6 +262,8 @@ discipline and deduplication applied).
 | `vars-not-deployed-opened` | a unit or configuration file of the owning module names the path of a `deploy = false` generator's file |
 | `vars-path-off-delivery-set` | a unit or a configuration file of a placed entry names the path of a generated value the entry's own machine does not receive. A delivery set is what the owner's placements and the declared reads make it, so the mention resolves to nothing rather than widening it, and the row names the machines that do receive the value. `vars-not-deployed-opened` is the same rule where that set is empty |
 | `vars-generator-claimed-twice` | two members of one instance declare the same generator name, which is one address for two values |
+| `value-ownership-in-user-scope` | a generated file record states an `owner` or a `group` and the value's delivery set names a machine whose scope is `user`, which the delivery cannot chown; the subject is the value entry and the row names the machine and the field. A stated `mode` is honoured, an account being able to chmod what it owns |
+| `machine-receives-a-value-unsealed` (warning) | a generated value's delivery set names a machine whose registry record states no `sealRecipient`, so that machine receives the bytes under `/run` and no copy it can open after a reboot. The subject is the machine and the row names the values delivered there, one row per machine however many values reach it. A warning and not an error: the delivery works and the deployment is realisable, and what the machine lacks is a recovery no deployment had before the field existed |
 | `diagnostic-subject-invalid` | a row carried a subject that is not a plan key, a deployment-relative path or an issue identifier |
 | `diagnostic-severity-invalid` | a row was built with a severity outside `error` and `warning`. The row that carried it is replaced by this one, so nothing in the table carries a severity no producer may state, and the resolution names `error` and `warning` as the two constructors a producer has |
 | `declaration-field-missing` | a field of the deployment's own half - a machine, an instance, a member's placement or a wire - is absent where the reading needs one. A key the reading cannot default is reported rather than read as an empty value |
@@ -296,6 +316,7 @@ caller reads them in the same table as the planner's own.
 | `operator-entry-path-not-installable` | the stated realiser binds a store object rather than installing a file on the machine, and a configuration file the entry is shown states a record a store object does not carry. The resolution names both ways out: state the store's record, or state the realiser that installs |
 | `operator-entry-extension-field-unrendered` | a unit records an extension field the stated realiser's own directive table has no rendering for |
 | `operator-entry-service-manager-mismatch` | the entry's machine runs one service manager and the stated realiser emits for another |
+| `operator-entry-scope-unsupported` | the entry's machine declares a scope the `scopes` list the stated realiser publishes does not carry, so the realiser emits for a privilege that machine does not offer. flakelet realises the system scope alone, its core writing `/run/systemd/system` and `/var/lib/flakelet`, and the realiser's own refusal carries this identifier |
 | `operator-entry-name-refused` | the endpoint of the stated realiser refuses the service name or a unit file name the entry derives |
 | `operator-entry-access-denied` | a unit needs an access the confinement profile the statement produced denies |
 | `operator-entry-name-collision` | two plan keys project onto one artifact name |
@@ -303,6 +324,7 @@ caller reads them in the same table as the planner's own.
 | `operator-plan-key-unreadable` | a plan record is a placed entry whose key does not split into an instance, a member and a machine, so no artifact of it can be named and no realiser chosen for it. A name the key grammar refuses is recorded rather than dropped, so every placed entry of the plan is read or is the subject of a row |
 | `operator-plan-field-malformed` | a plan record carries a configuration file's `owner`, `group` or `mode` as a value of another kind, and every comparison this reading makes against the record interpolates the three. The planner's own row about that file is what the resolution names, and neither comparison is made |
 | `operator-entry-unit-file-collision` | two entries placed on one machine derive one unit file name. A realiser derives that name from the instance, the member and the unit name, so the second entry's file replaces the first on the machine and one entry runs the other's unit |
+| `operator-entry-probe-unit-file-taken` | one entry declares a unit whose file is the one its own probe derives, so the entry claims one unit file name twice and the file that decides the activation is a unit's own. The row names the entry, the declared unit and the file, and renaming either the unit or the service removes it |
 
 ### Every row the secrets reading can produce
 
