@@ -126,6 +126,39 @@ let
     };
   };
 
+  # One machine declaring no seal recipient and every generated value of the
+  # case delivered to it. Every other registry of this suite declares one, so a
+  # row about a machine that seals nothing is earned here and nowhere else, and
+  # the generators are the argument because one row per machine however many
+  # values is the claim.
+  unsealedDelivery =
+    generators:
+    planOf {
+      machines.plain = {
+        address = "plain.example:22";
+        tags = [ "everywhere" ];
+        system = "x86_64-linux";
+        serviceManager = "systemd";
+      };
+      instances.svc = {
+        module = soleRoot {
+          module = _: {
+            vars = generators;
+            impl = _: {
+              units.only.command = "/bin/true";
+            };
+          };
+        };
+        placement.every.only.machines = [ "plain" ];
+      };
+      varsState = builtins.listToAttrs (
+        map (gen: {
+          name = "svc:vars/${gen}@plain";
+          value."key".present = true;
+        }) (builtins.attrNames generators)
+      );
+    };
+
   declaredShapeRows =
     result:
     builtins.sort (a: b: a < b) (
@@ -1020,6 +1053,48 @@ in
         subjects = [ "deployment/machines.nix" ];
         theEntryOnIt = false;
         theOtherEntryIsWhole = "/bin/serve one.example:22";
+      };
+    };
+
+  # A machine an operator's network cannot route to is reached by the name its
+  # mesh answers for, so the registry declares that name where every other
+  # machine declares a host and a port. The reading is the one every machine
+  # gets: a name is a string, the entry's target carries it, and whatever
+  # answers it is the mesh's business rather than the planner's.
+  testAMachineIsDeclaredByItsMeshName =
+    let
+      meshName = "friend.planner-mesh.internal";
+      result = planOf {
+        machines = support.machines // {
+          friend = {
+            address = meshName;
+            tags = [ "friends" ];
+            system = "x86_64-linux";
+            serviceManager = "systemd";
+            scope = "user";
+          };
+        };
+        instances.svc = {
+          module = soleRoot { module = readsTheAddress; };
+          placement.every.only.tags = [ "friends" ];
+        };
+      };
+      entry = result.plan."svc:only@friend";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        address = entry.target.address;
+        scope = entry.target.scope or null;
+        command = entry.units.only.command;
+        recorded = result.plan."machine:friend".address;
+      };
+      expected = {
+        rows = [ ];
+        address = "friend.planner-mesh.internal";
+        scope = "user";
+        command = "/bin/serve friend.planner-mesh.internal";
+        recorded = "friend.planner-mesh.internal";
       };
     };
 
@@ -3101,6 +3176,7 @@ in
         machineFields = [
           "address"
           "key"
+          "sealRecipient"
           "serviceManager"
           "system"
           "tags"
@@ -3300,6 +3376,62 @@ in
         ];
         samePlan = true;
         sameTable = true;
+      };
+    };
+
+  testAMachineInADeliverySetStatesNoRecipient =
+    let
+      id = "machine-receives-a-value-unsealed";
+      result = unsealedDelivery { token.files."key".secrecy = "secret"; };
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        severity = severityById id result;
+        subjects = subjectsById id result;
+        namesTheValue = hasInfix "`svc:vars/token@plain`" (messageById id result);
+        namesTheMachine = hasInfix "`plain`" (messageById id result);
+        theValueIsStillDelivered = result.plan."svc:vars/token@plain".delivery;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ id ];
+        severity = "warning";
+        subjects = [ "machine:plain" ];
+        namesTheValue = true;
+        namesTheMachine = true;
+        theValueIsStillDelivered = [ "plain" ];
+        applicable = true;
+      };
+    };
+
+  testOneMachineWithTwoValuesEarnsOneRow =
+    let
+      id = "machine-receives-a-value-unsealed";
+      result = unsealedDelivery {
+        token.files."key".secrecy = "secret";
+        ticket.files."key".secrecy = "secret";
+      };
+      message = messageById id result;
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        howMany = countById id result;
+        subjects = subjectsById id result;
+        namesBoth = [
+          (hasInfix "`svc:vars/ticket@plain`" message)
+          (hasInfix "`svc:vars/token@plain`" message)
+        ];
+      };
+      expected = {
+        rows = [ id ];
+        howMany = 1;
+        subjects = [ "machine:plain" ];
+        namesBoth = [
+          true
+          true
+        ];
       };
     };
 }
