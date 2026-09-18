@@ -30,11 +30,19 @@ deployment that delivers no value takes an empty source and nothing else.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import os
+import subprocess
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
 from errors import ApplyError
-from manifest import Deployment, Value, ValueFile
+from manifest import Deployment, Value, ValueFile, machine_of
+
+# The sealing program the command's own wrapper names. A run seals with the
+# build's answer and never with whatever the caller's `PATH` resolves, so the
+# variable is read off the invocation's environment and a run that must seal
+# and finds nothing there refuses before it dials.
+SEALING = "PLANNER_AGE"
 
 
 def delivered(deployment: Deployment) -> tuple[str, ...]:
@@ -84,6 +92,87 @@ def required(deployment: Deployment, keys: Iterable[str]) -> tuple[tuple[Value, 
         if value.delivery and value.program is None
         for file in value.files
     )
+
+
+def sealing(deployment: Deployment, reaching: Mapping[str, tuple[str, ...]]) -> tuple[str, ...]:
+    """Return the machines this run writes a value to whose copies are sealed.
+
+    The delivery set decides this and never the placement: a value's machine
+    need run no entry, and a machine that receives no value of this run seals
+    nothing for it.
+
+    Returns:
+        The machines, sorted, empty for a run that writes no value.
+
+    Raises:
+        ApplyError: If the record's table of the machines a value reaches does
+            not name one this run writes to.
+    """
+    return tuple(
+        sorted(
+            {
+                machine
+                for value, _ in required(deployment, reaching)
+                for machine in reaching[value.key]
+                if machine_of(deployment, machine, of=value.key).sealed
+            }
+        )
+    )
+
+
+def sealer(machines: Sequence[str], program: str | None) -> str | None:
+    """Return the program this run seals with, refusing before anything is dialled.
+
+    Returns:
+        The program, and nothing for a run with nothing to seal.
+
+    Raises:
+        ApplyError: If a machine of the run holds sealed values and the
+            invocation names no program that can seal them, naming the program
+            it could not run and the machines it would have sealed for.
+    """
+    if not machines:
+        return None
+    if program and Path(program).is_file() and os.access(program, os.X_OK):
+        return program
+    raise ApplyError(
+        f"the values of {', '.join(machines)} are sealed and {SEALING} names "
+        f"{program or 'no program'}: a run seals with the program the command's own wrapper "
+        f"names, so nothing was dialled"
+    )
+
+
+def sealed(program: str, recipient: str, content: bytes) -> bytes:
+    """Return one file's bytes, sealed to one machine's declared recipient.
+
+    The seal is made where the plaintext already is, by the process that read
+    the value source: the bytes go in on the program's own input and the
+    ciphertext comes back on its output, so neither ever stands in an argument
+    vector. The recipient does, because it is one public word.
+
+    Raises:
+        ApplyError: If the program cannot be run, if it refuses, or if it
+            produces nothing. What it printed on its standard error is carried
+            and its output is not: the output is the value.
+    """
+    try:
+        done = subprocess.run(
+            [program, "--recipient", recipient],
+            input=content,
+            capture_output=True,
+            check=True,
+        )
+    except OSError as broke:
+        raise ApplyError(f"{program} cannot seal for {recipient}: {broke}") from broke
+    except subprocess.CalledProcessError as refused:
+        said = refused.stderr.decode(errors="replace").strip()
+        raise ApplyError(
+            f"{program} refused to seal for {recipient}, exiting {refused.returncode}: "
+            f"{said or 'nothing'}"
+        ) from refused
+    if not done.stdout:
+        raise ApplyError(f"{program} sealed nothing for {recipient}")
+    return done.stdout
 
 
 def generated(deployment: Deployment) -> tuple[tuple[Value, ValueFile], ...]:
