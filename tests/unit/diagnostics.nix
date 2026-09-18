@@ -2094,7 +2094,7 @@ in
         readsTheDeploymentAgain = hasInfix "fixtures/minimal-typed-edge" rendered;
       };
       expected = {
-        rowCount = 2;
+        rowCount = 5;
         oneBlockPerRow = true;
         everyRowRendered = true;
         readsTheDeploymentAgain = false;
@@ -2413,7 +2413,7 @@ in
         unaccounted = [ ];
         namedByNoProducer = [ ];
         unexamined = [ ];
-        readSomeRefusals = 41;
+        readSomeRefusals = 49;
         readSomeProducers = true;
         theReadingProducesThem = [ ];
       };
