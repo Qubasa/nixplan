@@ -1150,7 +1150,10 @@ in
     };
     expected = {
       undeclared = [ ];
-      stateful = [ "shared-postgres" ];
+      stateful = [
+        "friend-enrollment"
+        "shared-postgres"
+      ];
       perFolder = true;
       forwarded = true;
     };
@@ -1163,9 +1166,15 @@ in
       covered = map declaresSpace statefulFolders;
     };
     expected = {
-      recognised = [ "shared-postgres" ];
+      recognised = [
+        "friend-enrollment"
+        "shared-postgres"
+      ];
       byADeletedKnob = [ ];
-      covered = [ true ];
+      covered = [
+        true
+        true
+      ];
     };
   };
 
