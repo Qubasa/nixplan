@@ -7,6 +7,7 @@
 }:
 let
   inherit (builtins)
+    all
     attrNames
     filter
     isString
@@ -35,6 +36,21 @@ let
   sorted = builtins.sort (a: b: a < b);
 
   simple = support.serving "only";
+
+  # A machine deployed as an account rather than as root. `scope` enters the
+  # machine record only where it is `user`, so this registry is the whole fact
+  # the crossing reads.
+  userScoped = {
+    registry = support.machines // {
+      account = support.machines.one // {
+        address = "account.example:22";
+        scope = "user";
+      };
+    };
+    machine = "account";
+  };
+
+  onAnAccount = realiser.planned userScoped simple;
 
   scheduled = _: {
     closure = [ borgbackup ];
@@ -170,6 +186,34 @@ let
     units.${unit}.command = "${borgbackup}/bin/borg serve";
   };
 
+  # One unit that says how it is probed, named by the caller so a test can have
+  # the declared unit spell the entry's own derived probe file or not.
+  probedUnit = unit: _: {
+    closure = [ borgbackup ];
+    units.${unit} = {
+      command = "${borgbackup}/bin/borg serve";
+      probe = "${borgbackup}/bin/borg check";
+      probeTimeout = "30s";
+    };
+  };
+
+  # Two instances whose service names both flatten to `a-b-c`, each probed and
+  # each declaring a unit of its own name: the declared unit files differ and the
+  # two derived probe files are one file on one machine, which is the namespace
+  # question the existing index owns.
+  sharingAProbeFile = planOf {
+    instances = {
+      "a-b" = {
+        module = root { members.c.module = _: { impl = probedUnit "first"; }; };
+        placement.every.c.machines = [ "one" ];
+      };
+      a = {
+        module = root { members."b-c".module = _: { impl = probedUnit "second"; }; };
+        placement.every."b-c".machines = [ "one" ];
+      };
+    };
+  };
+
   # Two members of one instance whose artifact names differ and whose derived
   # unit file names do not: `a:b` declaring `c-main` and `a:b-c` declaring
   # `main` both spell `a-b-c-main.service` on `one`.
@@ -277,6 +321,142 @@ let
     plan: key: field:
     plan // { ${key} = builtins.removeAttrs plan.${key} [ field ]; };
 
+  # Two well-formed age native recipients, which is all the reading ever sees:
+  # a line the atom refused is left out of every projection, so no malformed one
+  # can reach here.
+  recipient = "age1qpzry9x8gf2tvdw0s3jn54khce6mua7lqpzry9x8gf2tvdw0s3jn54khce";
+  rotated = "age1xv4fk5knx0prhznxn4v9z5lm672mesxe2hunguwymdam8u34xyyq67ekjr";
+
+  tokenFile = {
+    path = "/run/vars/issuer/session/token";
+    secrecy = "secret";
+    owner = "nobody";
+    group = "nogroup";
+    mode = "0440";
+  };
+
+  # The per-machine reading is a function of the plan, so the conditions it
+  # answers are written out as one: `alpha` seals and receives, `beta` receives
+  # and declares no recipient, `delta` seals and receives a value of its own,
+  # and `gamma` seals, runs an entry and is in no delivery set. The recipient
+  # and one file's mode are arguments so that a rotation and a change to one
+  # machine's values can each be read against the same baseline.
+  deliveredPlan =
+    { seal, mode }:
+    {
+      "machine:alpha" = {
+        address = "alpha.example";
+        tags = [ ];
+        sealRecipient = seal;
+      };
+      "machine:beta" = {
+        address = "beta.example";
+        tags = [ ];
+        sealRecipient = null;
+      };
+      "machine:delta" = {
+        address = "delta.example";
+        tags = [ ];
+        sealRecipient = seal;
+      };
+      "machine:gamma" = {
+        address = "gamma.example";
+        tags = [ ];
+        sealRecipient = seal;
+      };
+      "issuer:vars/session@alpha" = {
+        delivery = [
+          "alpha"
+          "beta"
+        ];
+        deliveryDerivedFrom = [ ];
+        files.token = tokenFile;
+      };
+      "keeper:vars/store@delta" = {
+        delivery = [ "delta" ];
+        deliveryDerivedFrom = [ ];
+        files.blob = {
+          path = "/run/vars/keeper/store/blob";
+          secrecy = "secret";
+          owner = "root";
+          group = "root";
+          inherit mode;
+        };
+      };
+      "issuer:api@gamma" = {
+        key = "sha256-0000000000000000";
+        placement.reason = "every";
+        units.only.command = "/bin/true";
+      };
+    };
+
+  delivered = reader.read {
+    plan = deliveredPlan {
+      seal = recipient;
+      mode = "0400";
+    };
+  };
+
+  # One machine, one value, and three entries on it: one whose unit names the
+  # value's path, one whose own configuration file's recipe names it, and one
+  # that names no value at all.
+  orderedPlan = {
+    "machine:alpha" = {
+      address = "alpha.example";
+      tags = [ ];
+      sealRecipient = recipient;
+    };
+    "issuer:vars/session@alpha" = {
+      delivery = [ "alpha" ];
+      deliveryDerivedFrom = [ ];
+      files.token = tokenFile;
+    };
+    "watch:reader@alpha" = {
+      key = "sha256-0000000000000001";
+      placement.reason = "every";
+      units.fetch = {
+        command = "/bin/true";
+        env.TOKEN = tokenFile.path;
+      };
+    };
+    "watch:owner@alpha" = {
+      key = "sha256-0000000000000002";
+      placement.reason = "every";
+      units.load.command = "/bin/true";
+      configData."/etc/agent.conf" = {
+        owner = "root";
+        group = "root";
+        mode = "0400";
+        render = [ { ref = tokenFile.path; } ];
+      };
+    };
+    "watch:idle@alpha" = {
+      key = "sha256-0000000000000003";
+      placement.reason = "every";
+      units.tick.command = "/bin/true";
+    };
+  };
+
+  # A machine deployed as an account: `scope` enters the machine record only
+  # where it is `user`, so this record is the whole fact the reading crosses.
+  onAccountPlan = {
+    "machine:account" = {
+      address = "account.example";
+      tags = [ ];
+      scope = "user";
+      sealRecipient = recipient;
+    };
+    "issuer:vars/session@account" = {
+      delivery = [ "account" ];
+      deliveryDerivedFrom = [ ];
+      files.token = tokenFile;
+    };
+  };
+
+  # The separators of one derived unit file name, counted: `split` answers the
+  # pieces and the matches alternately, so one hyphen is two extra elements.
+  hyphens = name: (builtins.length (builtins.split "-" name) - 1) / 2;
+
   inherit (realiser) idsOf rowsById;
 in
 {
@@ -362,6 +542,7 @@ in
         table = 4;
         recorded = {
           path = "/run/vars/issuer/session/token";
+          sealed = "/var/lib/planner/sealed/issuer/session/token.age";
           secrecy = "";
           owner = "";
           group = "";
@@ -832,14 +1013,207 @@ in
         stated = elsewhere.manifest.storeDir;
       };
       expected = {
-        version = 1;
+        version = 3;
         storeDir = builtins.storeDir;
         placingNothing = {
           entries = [ ];
-          version = 1;
+          version = 3;
           storeDir = builtins.storeDir;
         };
         stated = "/elsewhere/store";
+      };
+    };
+
+  testTheRecordPublishesEachRealisersScopes =
+    let
+      empty = reader.read { plan = { }; };
+    in
+    {
+      expr = {
+        realisers = builtins.mapAttrs (_: r: { inherit (r) scopes; }) workedRead.manifest.realisers;
+        # The lists the record carries are the realisers' own statements rather
+        # than a table this reading keeps beside them.
+        eachIsTheRealisersOwn = {
+          image = workedRead.manifest.realisers.image.scopes == imageReader.scopes;
+          flakelet = workedRead.manifest.realisers.flakelet.scopes == flakeletReader.scopes;
+        };
+        # A reading that places nothing publishes the table too: it is a fact of
+        # the realisers the reading was handed and not of the entries.
+        placingNothing = builtins.mapAttrs (_: r: { inherit (r) scopes; }) empty.manifest.realisers;
+        everyRealiserTheReadingKnows = attrNames workedRead.manifest.realisers == reader.realisers;
+      };
+      expected = {
+        realisers = {
+          flakelet.scopes = [ "system" ];
+          image.scopes = [
+            "system"
+            "user"
+          ];
+        };
+        eachIsTheRealisersOwn = {
+          image = true;
+          flakelet = true;
+        };
+        placingNothing = {
+          flakelet.scopes = [ "system" ];
+          image.scopes = [
+            "system"
+            "user"
+          ];
+        };
+        everyRealiserTheReadingKnows = true;
+      };
+    };
+
+  # What a machine's own answer names a realiser's holdings by. The record is
+  # the whole interface to a build, so a command that cannot evaluate a realiser
+  # reads this out of the record rather than restating a rule whose one home is
+  # the realiser.
+  testTheRecordPublishesWhatAMachineNamesAFlakeletHoldingBy =
+    let
+      # Every entry of this deployment states the default realiser, which is the
+      # endpoint one.
+      p = realiser.planned { } simple;
+      reading = reader.read { plan = p.plan; };
+      published = reading.manifest.realisers.flakelet.holdings;
+      prefix = published.urlPrefix;
+      url = (flakeletReader.meta (flakeletReader.read { inherit (p) plan key; })).flake_url;
+    in
+    {
+      expr = {
+        inherit published;
+        stated = map (e: e.realiser) (builtins.attrValues reading.manifest.entries);
+        # Read off the realiser rather than restated by the reading, which is
+        # what lets a third realiser be published by existing.
+        theRealisersOwn = published == flakeletReader.holdings;
+        # The published value is the one the realiser writes into the artifact
+        # it builds: the url the endpoint answers with is that string and the
+        # plan key, so a reader of the record alone reads the key back out.
+        theArtifactsUrl = url;
+        theUrlBeginsWithIt = builtins.substring 0 (builtins.stringLength prefix) url == prefix;
+        whatFollowsIt = builtins.substring (builtins.stringLength prefix) (builtins.stringLength url) url;
+        # It says how an answer is recognised and never which entries exist.
+        namesNoEntry = filter (k: hasInfix k (toJSON published)) (attrNames reading.manifest.entries);
+      };
+      expected = {
+        published = {
+          urlPrefix = "plan:";
+        };
+        stated = [ "flakelet" ];
+        theRealisersOwn = true;
+        theArtifactsUrl = "plan:svc:only@one";
+        theUrlBeginsWithIt = true;
+        whatFollowsIt = "svc:only@one";
+        namesNoEntry = [ ];
+      };
+    };
+
+  # A machine may hold an entry of a realiser this build no longer states - the
+  # entry that was dropped may have been the last one of its realiser - so the
+  # table is a fact of the realisers the reading was handed and not of the
+  # entries.
+  testARecordPublishesTheFactForARealiserItsEntriesDoNotState =
+    let
+      reading = reader.read { plan = (realiser.planned { } simple).plan; };
+    in
+    {
+      expr = {
+        stated = planner.util.uniqueStrings (
+          map (e: e.realiser) (builtins.attrValues reading.manifest.entries)
+        );
+        forTheStatedOne = reading.manifest.realisers.flakelet.holdings;
+        forTheOneNoEntryStates = reading.manifest.realisers.image.holdings;
+        forEveryRealiserTheReadingKnows = attrNames reading.manifest.realisers == reader.realisers;
+        # And for a deployment that places nothing at all, which states no
+        # realiser either.
+        placingNothing =
+          builtins.mapAttrs (_: r: r.holdings)
+            (reader.read { plan = { }; }).manifest.realisers;
+        # One table per realiser and not two: the holding sits in the record the
+        # scopes are published in.
+        besideTheScopes = reading.manifest.realisers;
+      };
+      expected = {
+        stated = [ "flakelet" ];
+        forTheStatedOne = {
+          urlPrefix = "plan:";
+        };
+        forTheOneNoEntryStates = {
+          separator = "_";
+          digestAlphabet = "0123456789abcdef";
+          digestLength = 16;
+        };
+        forEveryRealiserTheReadingKnows = true;
+        placingNothing = {
+          flakelet = {
+            urlPrefix = "plan:";
+          };
+          image = {
+            separator = "_";
+            digestAlphabet = "0123456789abcdef";
+            digestLength = 16;
+          };
+        };
+        besideTheScopes = {
+          flakelet = {
+            holdings = {
+              urlPrefix = "plan:";
+            };
+            scopes = [ "system" ];
+          };
+          image = {
+            holdings = {
+              separator = "_";
+              digestAlphabet = "0123456789abcdef";
+              digestLength = 16;
+            };
+            scopes = [
+              "system"
+              "user"
+            ];
+          };
+        };
+      };
+    };
+
+  # The crossing itself: the realiser records this suite is handed against the
+  # table the reading published, so a realiser publishing none fails here rather
+  # than reaching a deployment.
+  testEveryRealiserTheReadingIsHandedPublishesTheFact =
+    let
+      handed = {
+        flakelet = flakeletReader;
+        image = imageReader;
+      };
+      publishes = endpoint: endpoint ? holdings && endpoint.holdings != { };
+      published = workedRead.manifest.realisers;
+    in
+    {
+      expr = {
+        # The names crossed are the reading's own, so a third realiser the
+        # reading grows fails this until it is handed here too.
+        theNamesAreTheReadings = attrNames handed == reader.realisers;
+        eachPublishes = builtins.mapAttrs (_: publishes) handed;
+        asPublished = builtins.mapAttrs (
+          name: endpoint: published.${name}.holdings == endpoint.holdings
+        ) handed;
+        # The same predicate over a realiser publishing none, which is what
+        # fails the crossing.
+        oneThatPublishesNone = publishes { nameRule = "anything"; };
+        anEmptyRecordIsNoPublication = publishes { holdings = { }; };
+      };
+      expected = {
+        theNamesAreTheReadings = true;
+        eachPublishes = {
+          flakelet = true;
+          image = true;
+        };
+        asPublished = {
+          flakelet = true;
+          image = true;
+        };
+        oneThatPublishesNone = false;
+        anEmptyRecordIsNoPublication = false;
       };
     };
 
@@ -871,6 +1245,7 @@ in
           files = {
             "ssh_host_ed25519_key" = {
               path = "/run/vars/nightly/hostKey/ssh_host_ed25519_key";
+              sealed = "/var/lib/planner/sealed/nightly/hostKey/ssh_host_ed25519_key.age";
               secrecy = "secret";
               owner = "root";
               group = "root";
@@ -878,6 +1253,7 @@ in
             };
             "ssh_host_ed25519_key.pub" = {
               path = "/run/vars/nightly/hostKey/ssh_host_ed25519_key.pub";
+              sealed = "/var/lib/planner/sealed/nightly/hostKey/ssh_host_ed25519_key.pub.age";
               secrecy = "public";
               owner = "root";
               group = "root";
@@ -890,6 +1266,7 @@ in
           delivery = [ ];
           files."ca.pub" = {
             path = "/run/vars/holder/app/ca.pub";
+            sealed = "/var/lib/planner/sealed/holder/app/ca.pub.age";
             secrecy = "public";
             owner = "root";
             group = "root";
@@ -933,6 +1310,7 @@ in
           program = "/nix/store/9dm4x2vqk7z1n5bpr3jlfg8ys6cwh0az-mint.drv";
           files."token" = {
             path = "/run/vars/holder/minted/token";
+            sealed = "/var/lib/planner/sealed/holder/minted/token.age";
             secrecy = "secret";
             owner = "root";
             group = "root";
@@ -1519,6 +1897,66 @@ in
       };
     };
 
+  testAnEntryWhoseStatedRealiserExcludesItsMachinesScopeIsRefused =
+    let
+      reading = readOf { } onAnAccount.result;
+      row = builtins.head (rowsById "operator-entry-scope-unsupported" reading);
+    in
+    {
+      expr = {
+        rows = idsOf reading;
+        subject = row.subject;
+        namesTheEntry = hasInfix "`svc:only@account`" row.message;
+        namesTheMachinesScope = hasInfix "in the `user` scope" row.message;
+        namesThePublishedScopes = hasInfix "realises `system`" row.message;
+        refused = reading.refused;
+        # The image realiser publishes both scopes, so the same placement stated
+        # for it is no row: what is crossed is the realiser's own statement and
+        # never a rule of this reading.
+        underTheImage = idsOf (underImage "trusted" onAnAccount.result);
+      };
+      expected = {
+        rows = [ "operator-entry-scope-unsupported" ];
+        subject = "svc:only@account";
+        namesTheEntry = true;
+        namesTheMachinesScope = true;
+        namesThePublishedScopes = true;
+        refused = true;
+        underTheImage = [ ];
+      };
+    };
+
+  testTheRealisersOwnRefusalCarriesTheRowsIdentifier =
+    let
+      reading = readOf { } onAnAccount.result;
+      row = builtins.head (rowsById "operator-entry-scope-unsupported" reading);
+      raised = forced flakeletReader.read { inherit (onAnAccount) plan key; };
+    in
+    {
+      expr = {
+        theRealiserRefusesToo = raised.success;
+        # The pairing is the account the refusal carries, not the wording of
+        # either sentence.
+        theAccountNamesTheRow = flakeletReader.accounts.scopeUnsupported.id;
+        theRowAboveIsTheSame = row.id;
+        # The sentence the realiser prints is its own published rule, and the
+        # row above states the scopes rather than restating that sentence.
+        theRealiserStatesTheUpstreamFacts = map (needle: hasInfix needle flakeletReader.scopeRule) [
+          "/run/systemd/system"
+          "/var/lib/flakelet"
+        ];
+      };
+      expected = {
+        theRealiserRefusesToo = false;
+        theAccountNamesTheRow = "operator-entry-scope-unsupported";
+        theRowAboveIsTheSame = "operator-entry-scope-unsupported";
+        theRealiserStatesTheUpstreamFacts = [
+          true
+          true
+        ];
+      };
+    };
+
   testANameTheEndpointRefusesIsARowBeforeItIsARaise =
     let
       result = planOf {
@@ -1877,6 +2315,407 @@ in
         namesTheRecord = true;
         namesTheAccount = true;
         theRealiserRefuses = true;
+      };
+    };
+
+  # One entry claiming one name twice. The existing collision row's sentence is
+  # about two entries, so the same-entry case earns a sentence of its own, and
+  # the two-entry case is still the per-machine index's.
+  testADeclaredUnitSpellingTheDerivedProbeFile =
+    let
+      taken = readOf { } (deployment (probedUnit "health"));
+      renamedUnit = readOf { } (deployment (probedUnit "serve"));
+      unprobed = readOf { } (deployment (unitNamed "health"));
+      row = builtins.head (rowsById "operator-entry-probe-unit-file-taken" taken);
+      colliding = readOf { } sharingAProbeFile;
+      collision = builtins.head (rowsById "operator-entry-unit-file-collision" colliding);
+    in
+    {
+      expr = {
+        ids = idsOf taken;
+        subject = row.subject;
+        severity = row.severity;
+        names = map (needle: hasInfix needle row.message) [
+          "svc:only@one"
+          "`health`"
+          "`svc-only-health.service`"
+        ];
+        resolutionNamesBothWaysOut = map (needle: hasInfix needle row.resolution) [
+          "rename unit `health`"
+          "move the probe off"
+        ];
+        # Renaming either the unit or the probe removes the row, and the file the
+        # entry derives is still published among its units.
+        renamingTheUnit = rowsById "operator-entry-probe-unit-file-taken" renamedUnit;
+        movingTheProbe = rowsById "operator-entry-probe-unit-file-taken" unprobed;
+        unitsOfTheRenamedEntry = renamedUnit.manifest.entries."svc:only@one".units;
+        unitsOfTheUnprobedEntry = unprobed.manifest.entries."svc:only@one".units;
+        # Two entries on one machine deriving one probe file is the existing
+        # per-machine namespace row, with no edit to that check.
+        twoEntriesDerivingOne = rowsById "operator-entry-probe-unit-file-taken" colliding;
+        theNamespaceRow = collision.subject;
+        theNamespaceRowNamesTheFile = hasInfix "`a-b-c-health.service`" collision.message;
+        theNamespaceRowNamesBoth = hasInfix "`a-b:c@one`, `a:b-c@one`" collision.message;
+      };
+      expected = {
+        ids = [ "operator-entry-probe-unit-file-taken" ];
+        subject = "svc:only@one";
+        severity = "error";
+        names = [
+          true
+          true
+          true
+        ];
+        resolutionNamesBothWaysOut = [
+          true
+          true
+        ];
+        renamingTheUnit = [ ];
+        movingTheProbe = [ ];
+        unitsOfTheRenamedEntry = [
+          "svc-only-health.service"
+          "svc-only-serve.service"
+        ];
+        unitsOfTheUnprobedEntry = [ "svc-only-health.service" ];
+        twoEntriesDerivingOne = [ ];
+        theNamespaceRow = "a-b:c@one";
+        theNamespaceRowNamesTheFile = true;
+        theNamespaceRowNamesBoth = true;
+      };
+    };
+
+  testAMachineThatReceivesAValueHasAnUnsealer =
+    let
+      record = delivered.machines.alpha;
+    in
+    {
+      expr = {
+        machines = attrNames delivered.machines;
+        sealed = record.sealed;
+        # Addressed by the machine's own name, with no projection: a name
+        # carrying a key separator is refused before any key exists and machine
+        # names are unique by construction.
+        artifact = record.artifact;
+        published = delivered.manifest.machines.alpha;
+        # The unit the artifact carries, whose name the entries' own namespace
+        # cannot reach.
+        unit = record.unit;
+        # The file records the restore is a function of: the runtime path, the
+        # sealed path derived from it, and the ownership and mode the record
+        # states for the plaintext.
+        files = record.files;
+        # The reading stays total and says nothing of its own about a machine
+        # that seals nothing: the planner's own warning is the row.
+        rows = delivered.rows;
+      };
+      expected = {
+        machines = [
+          "alpha"
+          "beta"
+          "delta"
+        ];
+        sealed = true;
+        artifact = "machines/alpha";
+        published = {
+          sealed = true;
+          scope = "system";
+          path = "machines/alpha";
+        };
+        unit = "planner-unseal.service";
+        files = [
+          {
+            path = "/run/vars/issuer/session/token";
+            sealed = "/var/lib/planner/sealed/issuer/session/token.age";
+            secrecy = "secret";
+            owner = "nobody";
+            group = "nogroup";
+            mode = "0440";
+          }
+        ];
+        rows = [ ];
+      };
+    };
+
+  testAMachineThatReceivesNoValueHasNone = {
+    expr = {
+      # `gamma` runs an entry, declares a recipient, and is in no delivery
+      # set: it is the delivery set and never the placement that decides who
+      # holds a value.
+      runsAnEntry = delivered.manifest.entries."issuer:api@gamma".machine;
+      declaresARecipient =
+        (deliveredPlan {
+          seal = recipient;
+          mode = "0400";
+        })."machine:gamma".sealRecipient == recipient;
+      read = delivered.machines ? gamma;
+      published = delivered.manifest.machines ? gamma;
+    };
+    expected = {
+      runsAnEntry = "gamma";
+      declaresARecipient = true;
+      read = false;
+      published = false;
+    };
+  };
+
+  testTwoBuildsOfOneDeploymentProduceOneUnsealer =
+    let
+      # The reading rather than a derivation: this suite evaluates without
+      # `pkgs`, and the artifact is a function of exactly this record.
+      again = reader.read {
+        plan = deliveredPlan {
+          seal = recipient;
+          mode = "0400";
+        };
+      };
+      rotatedRead = reader.read {
+        plan = deliveredPlan {
+          seal = rotated;
+          mode = "0400";
+        };
+      };
+      movedValue = reader.read {
+        plan = deliveredPlan {
+          seal = recipient;
+          mode = "0440";
+        };
+      };
+    in
+    {
+      expr = {
+        twoReadings = again.machines == delivered.machines;
+        # A rotation changes no field of any record, so it rebuilds nothing.
+        aRotation = rotatedRead.machines == delivered.machines;
+        rotationIsVisibleInThePlanAlone =
+          (deliveredPlan {
+            seal = rotated;
+            mode = "0400";
+          })."machine:alpha".sealRecipient;
+        # Changing the values delivered to `delta` leaves the others' records
+        # equal and moves `delta`'s own.
+        oneMachinesValues = {
+          alpha = movedValue.machines.alpha == delivered.machines.alpha;
+          beta = movedValue.machines.beta == delivered.machines.beta;
+          delta = movedValue.machines.delta == delivered.machines.delta;
+        };
+      };
+      expected = {
+        twoReadings = true;
+        aRotation = true;
+        rotationIsVisibleInThePlanAlone = rotated;
+        oneMachinesValues = {
+          alpha = true;
+          beta = true;
+          delta = false;
+        };
+      };
+    };
+
+  testAUserScopeMachineReceivesAUserUnit =
+    let
+      reading = reader.read { plan = onAccountPlan; };
+    in
+    {
+      expr = {
+        # The scope is what decides the manager, the wanting target and the
+        # account, and it is the only thing about the machine the artifact is a
+        # function of beside its value file records.
+        scope = reading.machines.account.scope;
+        published = reading.manifest.machines.account;
+        # A machine that records none is system scope, which is the other answer
+        # the same field gives.
+        systemScope = delivered.machines.alpha.scope;
+        rows = reading.rows;
+      };
+      expected = {
+        scope = "user";
+        published = {
+          sealed = true;
+          scope = "user";
+          path = "machines/account";
+        };
+        systemScope = "system";
+        rows = [ ];
+      };
+    };
+
+  testTheUnitIsOrderedBeforeAnEntryThatReadsAValue =
+    let
+      # Stated as images, which is the realiser that runs a step on the machine:
+      # the owner's own configuration file reads a delivered path, and the
+      # refusal a step-less realiser makes about that is another test's.
+      reading = reader.read {
+        plan = orderedPlan;
+        realise.default = {
+          realiser = "image";
+          profile = "trusted";
+        };
+      };
+    in
+    {
+      expr = {
+        # One rule covers both ways an entry's record can name a value's path:
+        # a declared read landing the provider's path in the consumer's own unit,
+        # and an entry's own configuration file naming it. An entry that names
+        # none is not in the list.
+        before = reading.machines.alpha.before;
+        everyUnitOnTheMachine = sorted (
+          builtins.concatLists (
+            map (key: reading.manifest.entries.${key}.units) (attrNames reading.manifest.entries)
+          )
+        );
+        rows = reading.rows;
+      };
+      expected = {
+        before = [
+          "watch-owner-load.service"
+          "watch-reader-fetch.service"
+        ];
+        everyUnitOnTheMachine = [
+          "watch-idle-tick.service"
+          "watch-owner-load.service"
+          "watch-reader-fetch.service"
+        ];
+        rows = [ ];
+      };
+    };
+
+  testNoEntryCanDeriveTheUnsealingUnitsFileName =
+    let
+      # Every shape of the derivation, including the two components that spell
+      # the machine unit's own words and one that carries a hyphen of its own.
+      parts = [
+        {
+          instance = "i";
+          service = "s";
+          unit = "u";
+        }
+        {
+          instance = "planner";
+          service = "unseal";
+          unit = "x";
+        }
+        {
+          instance = "planner";
+          service = "u";
+          unit = "nseal";
+        }
+        {
+          instance = "pl-anner";
+          service = "unseal";
+          unit = "x";
+        }
+      ];
+
+      derivable = builtins.concatLists (
+        map (
+          p:
+          imageReader.unitFilesOf (imageReader.nameOf { inherit (p) instance service; }) {
+            ${p.unit} = {
+              command = "/bin/true";
+              probe = "/bin/true";
+            };
+          }
+        ) parts
+      );
+
+      machineUnit = delivered.machines.alpha.unit;
+    in
+    {
+      expr = {
+        # `<instance>-<service>-<unit>` and the probe file derived from the same
+        # two words each carry two hyphens outside their components, and the
+        # machine-scoped unit carries one, so the two namespaces are disjoint by
+        # construction rather than by a row.
+        derivable = sorted derivable;
+        everyDerivableNamesTwoOrMore = all (name: hyphens name >= 2) derivable;
+        theMachineUnitNamesOne = hyphens machineUnit;
+        noDerivableNameEqualsIt = filter (name: name == machineUnit) derivable;
+      };
+      expected = {
+        derivable = [
+          "i-s-health.service"
+          "i-s-u.service"
+          "pl-anner-unseal-health.service"
+          "pl-anner-unseal-x.service"
+          "planner-u-health.service"
+          "planner-u-nseal.service"
+          "planner-unseal-health.service"
+          "planner-unseal-x.service"
+        ];
+        everyDerivableNamesTwoOrMore = true;
+        theMachineUnitNamesOne = 1;
+        noDerivableNameEqualsIt = [ ];
+      };
+    };
+
+  testTheRecordNamesTheMachinesAValueReaches = {
+    expr = {
+      # Two of the three machines a value could have reached, and each record
+      # says whether that machine's values are sealed.
+      machines = attrNames delivered.manifest.machines;
+      sealing = delivered.manifest.machines.alpha;
+      # A machine in a delivery set that declares no recipient is in the table
+      # and carries no path at all, the way an entry realised into nothing
+      # does: an absent key is the absence it means, and a null is a value the
+      # reading side would have to refuse.
+      unsealed = delivered.manifest.machines.beta;
+      noPath = delivered.manifest.machines.beta ? path;
+      # The recipient is restated nowhere in the record: the plan's own
+      # machine record carries it, and a second copy is a second answer.
+      recordCarriesNoRecipient = hasInfix "age1" (toJSON delivered.manifest);
+      planCarriesIt =
+        (deliveredPlan {
+          seal = recipient;
+          mode = "0400";
+        })."machine:alpha".sealRecipient;
+    };
+    expected = {
+      machines = [
+        "alpha"
+        "beta"
+        "delta"
+      ];
+      sealing = {
+        sealed = true;
+        scope = "system";
+        path = "machines/alpha";
+      };
+      unsealed = {
+        sealed = false;
+        scope = "system";
+      };
+      noPath = false;
+      recordCarriesNoRecipient = false;
+      planCarriesIt = recipient;
+    };
+  };
+
+  testADeploymentThatDeliversNothingCarriesTheTableAnyway =
+    let
+      empty = reader.read { plan = { }; };
+      # A value entry whose delivery set is empty reaches no machine, so the
+      # table is empty for the same reason and not for a different one.
+      undelivered = reader.read { plan = unreceived; };
+    in
+    {
+      expr = {
+        carriesIt = empty.manifest ? machines;
+        table = empty.manifest.machines;
+        reading = empty.machines;
+        emptyDeliverySet = {
+          carriesIt = undelivered.manifest ? machines;
+          table = undelivered.manifest.machines;
+        };
+      };
+      expected = {
+        carriesIt = true;
+        table = { };
+        reading = { };
+        emptyDeliverySet = {
+          carriesIt = true;
+          table = { };
+        };
       };
     };
 }
