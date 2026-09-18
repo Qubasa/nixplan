@@ -71,3 +71,23 @@ policy and pools of interchangeable slots claimed by whoever boots next from a s
 - **Note:** `enroll-a-friend-machine` covers the single-machine case with one registry row and
   one single-use credential; a pool is that row and credential multiplied, and earns machinery
   only when the multiplication hurts.
+
+## Declared state beyond a unit's own directories
+
+A path-keyed `state` under `implKeys`, carrying `folders` with an `owner` and a
+`durable`/`derived` disposition beside `dump` and `restore` hooks named as unit references, so a
+reader can ask what a service writes and what to snapshot without evaluating the deployment.
+
+- **Struck rather than designed away:** the change `declare-service-state` was struck, not
+  archived. Its premise - that the only portable way a module can say it writes a folder is a
+  service-manager-tagged extension field - stopped holding when `directoryKinds` in
+  `lib/module.nix` made `stateDirectory`, `runtimeDirectory` and `cacheDirectory` first-class
+  vocabulary with a mode each, which is what `tests/e2e/shared-postgres/` declares its cluster
+  with, and every reader the change named to justify itself is outside this repository.
+- **Trigger:** a service whose state the vocabulary cannot express - an absolute path outside the
+  service manager's own state root, an account other than the unit's, or a folder something else
+  has to back up - or the first consumer that needs the folder set as data rather than as a
+  rendered directive.
+- **Recorded hazard:** it is the third site one directory could be stated and
+  `unit-directory-declared-twice` refuses only two, so whichever shape lands has to decide which
+  site owns the fact rather than growing a rule per pair of sites.
