@@ -1685,4 +1685,460 @@ in
         found = 4;
       };
     };
+
+  # The spelling and not the literal: the duration type admits any
+  # concatenation, so zero has as many spellings as there are unit suffixes to
+  # write it with, and a list of literals is what the next one is left out of.
+  testTheZeroDurationPredicateReadsEverySpelling = {
+    expr = map korora.domains.isZeroDuration [
+      "0"
+      "0s"
+      "00min"
+      "0s0min"
+      "1s"
+      "0s1s"
+    ];
+    expected = [
+      true
+      true
+      true
+      true
+      false
+      false
+    ];
+  };
+
+  # `domains` is looked up by korora type name to say what a value outside an
+  # enumeration may take, and the field-type row hands what it finds to
+  # `quoteList`. The zero-duration predicate rides that table because a
+  # top-level key of its own costs one copied value per plan, so an entry of it
+  # that is not a list has to be keyed by a name no atom carries: naming a
+  # future atom `isZeroDuration` would make the row quote a function, which is
+  # a type error no `tryEval` catches and no row reports.
+  testEveryDomainThatIsNotAListIsKeyedByNoAtom = {
+    expr = filter (name: !builtins.isList korora.domains.${name} && korora ? ${name}) (
+      attrNames korora.domains
+    );
+    expected = [ ];
+  };
+
+  testAUnitThatSaysHowItIsProbed =
+    let
+      result = placed [ "one" ] (_: {
+        units.web = {
+          command = "/bin/web";
+          probe = "/bin/web-ready";
+          probeTimeout = "30s";
+        };
+        units.plain.command = "/bin/plain";
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        probed = entry.units.web;
+        silent = attrNames entry.units.plain;
+      };
+      expected = {
+        rows = [ ];
+        probed = {
+          command = "/bin/web";
+          probe = "/bin/web-ready";
+          probeTimeout = "30s";
+        };
+        silent = [ "command" ];
+      };
+    };
+
+  # Half a pair the reading refused is a missing half, so the type row is joined
+  # by the pair row and the record keeps neither field: a bound with no command
+  # is the one state a realiser cannot render.
+  testAProbeWhoseValueIsNotACommand =
+    let
+      command = placed [ "one" ] (_: {
+        units.web = {
+          command = "/bin/web";
+          probe = 5;
+          probeTimeout = "30s";
+        };
+      });
+      bound = placed [ "one" ] (_: {
+        units.web = {
+          command = "/bin/web";
+          probe = "/bin/web-ready";
+          probeTimeout = "soon";
+        };
+      });
+    in
+    {
+      expr = {
+        commandRows = rowIds command;
+        namesProbe = hasInfix "`probe`" (messageById "unit-field-type-mismatch" command);
+        namesString = hasInfix "string" (evidenceById "unit-field-type-mismatch" command);
+        commandRecorded = attrNames (entryOf command "one").units.web;
+        boundRows = rowIds bound;
+        namesTheBound = hasInfix "`probeTimeout`" (messageById "unit-field-type-mismatch" bound);
+        namesDuration = hasInfix "duration" (evidenceById "unit-field-type-mismatch" bound);
+        boundRecorded = attrNames (entryOf bound "one").units.web;
+      };
+      expected = {
+        commandRows = [
+          "unit-field-type-mismatch"
+          "unit-probe-timeout-without-probe"
+        ];
+        namesProbe = true;
+        namesString = true;
+        commandRecorded = [ "command" ];
+        boundRows = [
+          "unit-field-type-mismatch"
+          "unit-probe-without-timeout"
+        ];
+        namesTheBound = true;
+        namesDuration = true;
+        boundRecorded = [ "command" ];
+      };
+    };
+
+  testAProbeWithNoBound =
+    let
+      id = "unit-probe-without-timeout";
+      result = placed [ "one" ] (_: {
+        units.web = {
+          command = "/bin/web";
+          probe = "/bin/web-ready";
+        };
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        severity = severityById id result;
+        subjects = subjectsById id result;
+        names = map (needle: hasInfix needle (messageById id result)) [
+          "the module of `only`"
+          "unit `web`"
+        ];
+        saysWhatTheBoundIsFor = hasInfix "holding the activation open" (evidenceById id result);
+        fields = attrNames entry.units.web;
+      };
+      expected = {
+        rows = [ id ];
+        severity = "error";
+        subjects = [ "svc:only@one" ];
+        names = [
+          true
+          true
+        ];
+        saysWhatTheBoundIsFor = true;
+        fields = [ "command" ];
+      };
+    };
+
+  testABoundWithNoProbe =
+    let
+      id = "unit-probe-timeout-without-probe";
+      result = placed [ "one" ] (_: {
+        units.web = {
+          command = "/bin/web";
+          probeTimeout = "30s";
+        };
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        severity = severityById id result;
+        names = map (needle: hasInfix needle (messageById id result)) [
+          "the module of `only`"
+          "unit `web`"
+        ];
+        fields = attrNames entry.units.web;
+      };
+      expected = {
+        rows = [ id ];
+        severity = "error";
+        names = [
+          true
+          true
+        ];
+        fields = [ "command" ];
+      };
+    };
+
+  testABoundThatSpellsNoBound =
+    let
+      id = "unit-probe-timeout-unbounded";
+      probed =
+        bound:
+        placed [ "one" ] (_: {
+          units.web = {
+            command = "/bin/web";
+            probe = "/bin/web-ready";
+            probeTimeout = bound;
+          };
+        });
+      zero = probed "0min";
+      second = probed "1s";
+    in
+    {
+      expr = {
+        rows = rowIds zero;
+        names = map (needle: hasInfix needle (messageById id zero)) [
+          "the module of `only`"
+          "unit `web`"
+          "`0min`"
+        ];
+        fields = attrNames (entryOf zero "one").units.web;
+        aSecondIsNoRow = rowIds second;
+        aSecondIsRecorded = (entryOf second "one").units.web.probeTimeout;
+      };
+      expected = {
+        rows = [ id ];
+        names = [
+          true
+          true
+          true
+        ];
+        fields = [ "command" ];
+        aSecondIsNoRow = [ ];
+        aSecondIsRecorded = "1s";
+      };
+    };
+
+  testAOneShotUnitAskingToBeProbed =
+    let
+      id = "unit-probe-on-one-shot";
+      result = placed [ "one" ] (_: {
+        units.job = {
+          command = "/bin/job";
+          oneShot = true;
+          probe = "/bin/job-ready";
+          probeTimeout = "30s";
+        };
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        names = map (needle: hasInfix needle (messageById id result)) [
+          "the module of `only`"
+          "unit `job`"
+        ];
+        fields = attrNames entry.units.job;
+      };
+      expected = {
+        rows = [ id ];
+        names = [
+          true
+          true
+        ];
+        fields = [
+          "command"
+          "oneShot"
+        ];
+      };
+    };
+
+  testAScheduledUnitAskingToBeProbed =
+    let
+      id = "unit-probe-on-scheduled";
+      result = placed [ "one" ] (_: {
+        units.nightly = {
+          command = "/bin/nightly";
+          schedule = "daily";
+          probe = "/bin/nightly-ready";
+          probeTimeout = "30s";
+        };
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        names = map (needle: hasInfix needle (messageById id result)) [
+          "the module of `only`"
+          "unit `nightly`"
+        ];
+        fields = attrNames entry.units.nightly;
+      };
+      expected = {
+        rows = [ id ];
+        names = [
+          true
+          true
+        ];
+        fields = [
+          "command"
+          "schedule"
+        ];
+      };
+    };
+
+  # One row for the entry and not one per unit: the file a realiser derives to
+  # ask whether the entry is serving is the entry's, so the question is asked
+  # once over the unit set and the row names both statements.
+  testTwoUnitsOfOneEntryDeclaringAProbe =
+    let
+      id = "unit-probe-declared-twice";
+      result = placed [ "one" ] (_: {
+        units.web = {
+          command = "/bin/web";
+          probe = "/bin/web-ready";
+          probeTimeout = "30s";
+        };
+        units.api = {
+          command = "/bin/api";
+          probe = "/bin/api-ready";
+          probeTimeout = "30s";
+        };
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        count = countById id result;
+        subjects = subjectsById id result;
+        names = map (needle: hasInfix needle (messageById id result)) [
+          "the module of `only`"
+          "`api`"
+          "`web`"
+        ];
+        units = attrNames entry.units;
+        api = attrNames entry.units.api;
+        web = attrNames entry.units.web;
+      };
+      expected = {
+        rows = [ id ];
+        count = 1;
+        subjects = [ "svc:only@one" ];
+        names = [
+          true
+          true
+          true
+        ];
+        units = [
+          "api"
+          "web"
+        ];
+        api = [ "command" ];
+        web = [ "command" ];
+      };
+    };
+
+  # The pair this change adds is a probe and a restart policy: one says whether
+  # the service is serving while it runs and the other what happens after it
+  # stops, so the four fields together are no row at all.
+  testAProbedUnitThatIsAlsoRestartedOnFailure =
+    let
+      result = placed [ "one" ] (_: {
+        units.web = {
+          command = "/bin/web";
+          restart = "on-failure";
+          restartSec = "5s";
+          probe = "/bin/web-ready";
+          probeTimeout = "30s";
+        };
+      });
+      entry = entryOf result "one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        recorded = entry.units.web;
+      };
+      expected = {
+        rows = [ ];
+        recorded = {
+          command = "/bin/web";
+          probe = "/bin/web-ready";
+          probeTimeout = "30s";
+          restart = "on-failure";
+          restartSec = "5s";
+        };
+      };
+    };
+
+  # A repeat is a watchdog or a second schedule and a threshold is a retry
+  # policy for a check, and the vocabulary carries neither, so each is the rule
+  # about an unrecognised key rather than an exclusion of its own.
+  testAProbeIntervalIsNotAVocabularyField =
+    let
+      id = "implementation-unknown-key";
+      result = placed [ "one" ] (_: {
+        units.web = {
+          command = "/bin/web";
+          probe = "/bin/web-ready";
+          probeTimeout = "30s";
+          probeInterval = "10s";
+          probeFailures = 3;
+        };
+      });
+      messages = map (r: r.message) (support.rowsById id result);
+      names = needle: builtins.any (message: hasInfix needle message) messages;
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        namesBothKeys = [
+          (names "`probeInterval`")
+          (names "`probeFailures`")
+        ];
+        namesTheVocabulary = names "`probeTimeout`";
+        recorded = attrNames (entryOf result "one").units.web;
+      };
+      expected = {
+        rows = [
+          id
+          id
+        ];
+        namesBothKeys = [
+          true
+          true
+        ];
+        namesTheVocabulary = true;
+        recorded = [
+          "command"
+          "probe"
+          "probeTimeout"
+        ];
+      };
+    };
+
+  # The walk reads every string of the record at any depth, so a probe is
+  # scanned by existing and the row names the field it sits at.
+  testAProbeCarryingALineBreak =
+    let
+      id = "unit-value-newline";
+      result = placed [ "one" ] (_: {
+        units.web = {
+          command = "/bin/web";
+          probe = "/bin/web-ready\nExecStartPost=/bin/sh -c evil";
+          probeTimeout = "30s";
+        };
+      });
+      table = planner.render result.diagnostics;
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        subjects = subjectsById id result;
+        namesTheFieldPath = hasInfix "`probe`" (messageById id result);
+        entryIsInThePlan = result.plan ? "svc:only@one";
+        theTableCarriesNoDirectiveLine = hasInfix "\nExecStartPost" table;
+        applicable = result.applicable;
+      };
+      expected = {
+        rows = [ id ];
+        subjects = [ "svc:only@one" ];
+        namesTheFieldPath = true;
+        entryIsInThePlan = true;
+        theTableCarriesNoDirectiveLine = false;
+        applicable = false;
+      };
+    };
 }
