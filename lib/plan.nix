@@ -1219,6 +1219,84 @@ rec {
       };
     };
 
+  # A delivered ownership a user scope cannot honor. Read off the record rather
+  # than off the declaration, which is the same comparison the value's key
+  # already makes: a field sitting at the default it resolves to unstated states
+  # nothing, and a field off it is what the delivery would have to chown. A
+  # stated `mode` earns nothing, the account being free to chmod what it owns.
+  ownershipInUserScopeRows =
+    {
+      scopeOf,
+      varsEntries,
+    }:
+    concatMap (
+      e:
+      concatMap (
+        machine:
+        if scopeOf machine != "user" then
+          [ ]
+        else
+          util.concatMapAttrsToList (
+            fname: file:
+            map (
+              field:
+              diag.error {
+                subject = e.name;
+                id = "value-ownership-in-user-scope";
+                message = "the generated file ${util.quote fname} of ${util.quote e.name} states ${field} ${util.quote file.${field}}, and it is delivered to ${util.quote machine}, which is deployed as an account rather than as root";
+                evidence = "a delivery writes the file as the account it connects as and cannot chown it to another, so a stated ownership is a fact the scope cannot honor; a stated `mode` is honoured, the account being free to chmod what it owns";
+                resolution = "drop ${util.quote field} from that generated file in ${e.owner.module}, or deliver the value to machines whose scope is ${util.quote "system"}";
+              }
+            ) (filter (field: file.${field} != ownershipDefaults.${field}) ownedFields)
+          ) e.value.files
+      ) e.value.delivery
+    ) varsEntries;
+
+  ownedFields = [
+    "owner"
+    "group"
+  ];
+
+  # A machine a delivered value reaches whose registry record states no seal
+  # recipient. Produced here because the delivery set is the fact the row is
+  # about - the machines the owning member is placed on plus the machine of
+  # every entry that declares a read - and one row per machine however many
+  # values reach it, the same fact produced twice being one row.
+  #
+  # A warning and not an error: the deployment is realisable, the delivery
+  # works, and what that machine lacks is only the ability to put its own values
+  # back after a reboot, which is a property no deployment had before the
+  # recipient existed. It is delivered to exactly as it was: plaintext only.
+  unsealedDeliveryRows =
+    {
+      sealRecipientOf,
+      varsEntries,
+    }:
+    util.mapAttrsToList
+      (
+        machine: delivered:
+        diag.warning {
+          subject = "machine:${machine}";
+          id = "machine-receives-a-value-unsealed";
+          message = "machine ${util.quote machine} receives ${
+            util.quoteList (util.sortStrings (util.uniqueStrings (map (d: d.valueKey) delivered)))
+          } and declares no `sealRecipient`";
+          evidence = "a delivered value lands under a root a reboot empties, and a machine declaring no recipient is handed no sealed copy to put it back from, so every value it holds is gone until an operator applies again";
+          resolution = "mint an identity on ${util.quote machine} and paste the public line at `sealRecipient` in its registry record, or accept that its values are restored by an apply";
+        }
+      )
+      (
+        builtins.groupBy (d: d.machine) (
+          concatMap (
+            e:
+            map (machine: {
+              inherit machine;
+              valueKey = e.name;
+            }) (filter (machine: sealRecipientOf machine == null) e.value.delivery)
+          ) varsEntries
+        )
+      );
+
   # One entry per generated value. A value delivered to a machine that runs none
   # of the services reading it has no unit entry to live in, and a value that
   # exists once for an instance has no single placement to live in either, so it
@@ -1409,11 +1487,21 @@ rec {
           {
             key = machineKeys.${machine};
             inherit (resolved.machines.${machine}) address tags;
+            # An explicit absence, beside the address and outside the key: the
+            # recipient is read in the projection no key hashes, and `pruned`
+            # keeps a null the way it keeps a placed entry's `closure`, because
+            # an absent field means the plan does not know. A reader has to be
+            # able to tell a machine that seals nothing from a record written
+            # before the field existed. It rides the literal rather than an
+            # update of its own, one `//` per machine record being a counter the
+            # gate measures.
+            sealRecipient = resolved.sealRecipients.${machine} or null;
           }
           // util.pickAttrs [
             "system"
             "serviceManager"
             "microarchitecture"
+            "scope"
           ] (util.filterAttrs (_: v: v != null) resolved.machines.${machine})
         );
       }) usedMachines;
@@ -1461,6 +1549,14 @@ rec {
       rows =
         concatLists (map (e: e.rows) serviceEntries)
         ++ keyCollisionRows
+        ++ ownershipInUserScopeRows {
+          inherit varsEntries;
+          scopeOf = machine: (resolved.machines.${machine} or { }).scope or "system";
+        }
+        ++ unsealedDeliveryRows {
+          inherit varsEntries;
+          sealRecipientOf = machine: resolved.sealRecipients.${machine} or null;
+        }
         ++ collisionRows (
           concatMap claimsOf serviceEntries
           ++ concatMap (machine: reservedBy machine resolved.reservations.${machine}) usedMachines
