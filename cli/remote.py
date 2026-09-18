@@ -927,17 +927,15 @@ class Holding:
     an image one, which the build's own projection is not invertible from.
     ``name`` is what the endpoint's own removal verb resolves, which for
     flakelet is the name it registered rather than the identity. ``state`` is
-    the word the answer carries about it, empty where it carries none.
+    the word the answer carries about it, empty where it carries none. The
+    record carries no sentence of its own: the line a report and an applying
+    run both print is made in the one renderer both of them call.
     """
 
     realiser: str
     identity: str
     name: str
     state: str
-
-    def sentence(self, machine: str) -> str:
-        """Return the line a report and an apply both name this holding with."""
-        return f"{machine} holds {self.identity}, which this build does not name"
 
 
 def holdings_script(realisers: Sequence[Realiser], *, scope: str = SYSTEM) -> str:

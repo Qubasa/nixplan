@@ -35,6 +35,7 @@ from typing import Any
 
 import order
 import remote
+import report
 import values
 from errors import ApplyError
 from manifest import (
@@ -206,12 +207,16 @@ def holding_lines(asked: Sequence[Held], *, retire: bool) -> tuple[str, ...]:
     """Return what a run announces about what its machines hold that the build does not.
 
     Returns:
-        One line per holding, in the shape the report's own line has, with what
-        a run that was not asked to retire did about it appended.
+        One line per holding, rendered by the one function a report's own line
+        comes out of, with what a run that was not asked to retire did about it
+        appended to that one string.
     """
     kept = "" if retire else "; not retired"
     return tuple(
-        f"{holding.sentence(held.machine)}{kept}" for held in asked for holding in held.holdings
+        f"{line}{kept}"
+        for held in asked
+        for holding in held.holdings
+        for line in report.lines_of(report.HoldingAnswer(machine=held.machine, holding=holding))
     )
 
 

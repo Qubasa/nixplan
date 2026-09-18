@@ -726,7 +726,9 @@ def test_an_entry_the_endpoint_does_not_register_is_reported_as_absent(delivered
     assert asked.returncode != 0, asked
     assert asked.returncode not in (*remote.MISSING, remote.UNREACHABLE), asked
     answer = remote.Answer(asked.returncode, asked.stderr.strip())
-    assert report._answered(producer, answer) == "absent", asked
+    answered = report._answered(producer, answer)
+    assert answered.reached == report.ABSENT, asked
+    assert report.lines_of(answered) == (f"{producer.key} {producer.realiser} absent",), asked
 
 
 def test_the_identity_a_machine_holds_is_in_its_report_line(delivered: Run) -> None:

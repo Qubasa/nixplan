@@ -17,6 +17,11 @@ the machine said, because a machine whose answer cannot be read is a machine
 that was not asked. Each line is printed as it is known, because one machine's
 silence says nothing about another's answer.
 
+Each question is answered as a record carrying the fields the verdict is made
+of, and each line is the rendering of exactly one of them, made in `lines_of`
+and nowhere else: a program reads a field and never matches a word out of a
+sentence, and a reworded line moves in one place.
+
 Each answered line then carries the verdict of comparing what the machine holds
 with what the build published. An image names the identity it holds in the name
 of the image the machine has attached, so that comparison is identity equality
@@ -77,6 +82,92 @@ from manifest import (
 UNDIALLED = -1
 UNREALISED = -2
 
+# How a machine was reached, which is what a consumer reads to tell the answers
+# apart. Absence is one of them and rests on the one fact it always rested on:
+# an endpoint that answered and registered no entry. An answer the command
+# cannot read is not in this set at all, because it stays the command's own
+# refusal.
+REALISES_NOTHING = "realises-nothing"
+NOT_DIALLED = "not-dialled"
+UNREACHED = "unreachable"
+NO_ENDPOINT = "no-endpoint"
+ABSENT = "absent"
+ANSWERED = "answered"
+
+# What comparing the units a flakelet endpoint reports against the ones the
+# build produced answers. The endpoint publishes no identity of the artifact it
+# activated, so this is the narrower question and none of its answers is
+# `current`.
+RUNS_THIS_BUILD = "runs-this-build"
+RUNS_ANOTHER_BUILD = "runs-another-build"
+NOTHING_TO_COMPARE = "nothing-to-compare"
+
+# The machine's own verdict on a sealed copy, over the words its unsealer
+# prints: `remote.OPENS`, `remote.MISSING_COPY`, `remote.UNCHECKED` for a
+# machine that holds no unsealer to ask, and this one for a copy the machine
+# cannot open, which a trial reports by naming the failure rather than a word.
+CLOSED = "closed"
+
+
+@dataclass(frozen=True)
+class EntryAnswer:
+    """What one machine answered about one entry, before it is a sentence.
+
+    A field the reading did not compute is `None` and never an empty value, so
+    a consumer cannot read an absence as a fact: an unreachable machine says
+    nothing about an identity. `state` is the word the machine's own tool
+    printed for the image it was asked about and `listed` the state its listing
+    gives the image it holds for this entry, which are two answers for a
+    machine holding an earlier build.
+    """
+
+    key: str
+    machine: str
+    realiser: str
+    reached: str
+    address: str | None = None
+    said: str | None = None
+    generation: int | None = None
+    locked_url: str | None = None
+    units: str | None = None
+    held: str | None = None
+    built: str | None = None
+    state: str | None = None
+    listed: str | None = None
+    configuration: tuple[tuple[str, str], ...] | None = None
+    last_error: str | None = None
+
+
+@dataclass(frozen=True)
+class ValueAnswer:
+    """What one machine answered about one value delivered to it.
+
+    One record per value and not per file, the way the line always was: a value
+    one of whose files is gone is one answer about that value. `seal` is `None`
+    for a machine whose record does not say its copies are sealed, so a machine
+    that was asked nothing about a copy is not a machine that answered.
+    """
+
+    key: str
+    machine: str
+    present: bool
+    seal: str | None = None
+
+
+@dataclass(frozen=True)
+class HoldingAnswer:
+    """One holding a machine answered that the build names no entry for.
+
+    The holding is the record `remote` already read, beside the machine it was
+    asked of, which is the only thing rendering it ever needed.
+    """
+
+    machine: str
+    holding: remote.Holding
+
+
+Verdict = EntryAnswer | ValueAnswer | HoldingAnswer
+
 
 @dataclass(frozen=True)
 class Report:
@@ -84,6 +175,7 @@ class Report:
 
     lines: tuple[str, ...]
     unasked: tuple[str, ...]
+    answers: tuple[Verdict, ...] = ()
 
 
 def describe(deployment: Deployment) -> tuple[str, ...]:
@@ -127,8 +219,10 @@ def status(
     `only` restricts the report and asks about every entry where it names none.
 
     Returns:
-        One line per entry, in plan key order, each handed to `log` as it is
-        known, and the machines the report could not ask.
+        One record per question asked - one per entry, one per value delivered
+        to a machine and one per holding the build names no entry for - the
+        lines they render into, each handed to `log` as it is known, and the
+        machines the report could not ask.
 
     Raises:
         ApplyError: If a named key is not an entry of the deployment, if an
@@ -138,10 +232,23 @@ def status(
     """
     opts, env = remote.channel(base_env, ssh_key)
     lines, record = remote.recording(log)
+    answers: list[Verdict] = []
+    said: set[str] = set()
     unasked: set[str] = set()
+
+    def told(answer: Verdict, *, once: bool = False) -> None:
+        answers.append(answer)
+        for line in lines_of(answer):
+            # `once` is the machine's own verdict about its unsealer: one fact
+            # however many values of that machine carry it, and one line.
+            if once and line in said:
+                continue
+            said.add(line)
+            record(line)
+
     for entry in _selected(deployment, only):
         answer = _ask(runner, deployment, entry, opts=opts, user=user, env=env)
-        record(f"{entry.key} {entry.realiser} {_answered(entry, answer)}")
+        told(_answered(entry, answer))
         if answer.status != UNREALISED and not _the_endpoint_answered(answer):
             unasked.add(entry.machine)
     for machine, delivered in _values(deployment, only).items():
@@ -154,18 +261,16 @@ def status(
         if answer.status != 0:
             unasked.add(machine)
             continue
-        for key in _absent(delivered, answer.said):
-            record(f"value {key} missing on {machine}")
-        for line in _seals(delivered, machine, answer.said, asked=trial is not None):
-            record(line)
+        for value in _values_answered(delivered, machine, answer.said, asked=trial is not None):
+            told(value, once=True)
     for machine in _machines(deployment, only):
         held = _holdings(deployment, runner, machine, opts=opts, user=user, env=env)
         if held is None:
             unasked.add(machine)
             continue
         for holding in held:
-            record(holding.sentence(machine))
-    return Report(lines=tuple(lines), unasked=tuple(sorted(unasked)))
+            told(HoldingAnswer(machine=machine, holding=holding))
+    return Report(lines=tuple(lines), unasked=tuple(sorted(unasked)), answers=tuple(answers))
 
 
 def _machines(deployment: Deployment, only: Sequence[str]) -> tuple[str, ...]:
@@ -295,46 +400,83 @@ def _trial(deployment: Deployment, machine: str) -> Path | None:
     return stated.path / "bin" / "check"
 
 
-def _seals(
+def _values_answered(
     delivered: tuple[tuple[str, ValueFile], ...],
     machine: str,
     reported: str,
     *,
     asked: bool,
-) -> tuple[str, ...]:
-    """Return what one machine answered about the copies it can open by itself.
+) -> tuple[ValueAnswer, ...]:
+    """Return one record per value that machine is delivered, in key order.
+
+    Returns:
+        The value key, whether the machine holds every declared path of it, and
+        the machine's own verdict on its sealed copy where its copies are
+        sealed at all.
+    """
+    missing = set(_absent(delivered, reported))
+    sealed = _seals(delivered, reported, asked=asked)
+    return tuple(
+        ValueAnswer(
+            key=key,
+            machine=machine,
+            present=key not in missing,
+            seal=sealed.get(key),
+        )
+        for key in sorted({key for key, _ in delivered})
+    )
+
+
+def _seals(
+    delivered: tuple[tuple[str, ValueFile], ...],
+    reported: str,
+    *,
+    asked: bool,
+) -> dict[str, str]:
+    """Return one machine's verdict on each sealed copy it holds, by value key.
 
     The verdict is the machine's own, obtained by asking its own unsealer, and
     nothing about the bytes of a copy is printed or transferred: a native seal
     names no recipient, so whether it opens is the only question there is and
     the tool that owns the format is the only thing that can answer it. A copy
     sealed to a rotated identity and a copy whose bytes were damaged are one
-    line, because they are one answer.
+    verdict, because they are one answer.
 
     Returns:
-        One line per value of that machine whose copy is not there or does not
-        open, and the one line a machine holding no unsealer earns instead.
+        One verdict per value the machine answered about, empty for a machine
+        whose copies are not sealed or whose trial answered nothing, and
+        `remote.UNCHECKED` for every value of a machine holding no unsealer.
         None of them changes the exit status.
     """
     if not asked:
-        return ()
+        return {}
     trial = _halves(reported)[1]
     if not trial:
-        return ()
+        return {}
     if remote.UNCHECKED in trial:
-        return (f"{machine} holds no unsealer, so its sealed copies were not checked",)
+        return {key: remote.UNCHECKED for key, _ in delivered}
     said = {
         columns[0]: columns[1] for columns in (line.split() for line in trial) if len(columns) == 2
     }
-    answered = tuple((key, said[file.sealed]) for key, file in delivered if file.sealed in said)
-    missing = sorted({key for key, word in answered if word == remote.MISSING_COPY})
-    closed = sorted(
-        {key for key, word in answered if word not in (remote.OPENS, remote.MISSING_COPY)}
-    )
-    return (
-        *(f"value {key} has no sealed copy on {machine}" for key in missing),
-        *(f"value {key} sealed copy does not open on {machine}" for key in closed),
-    )
+    answered: dict[str, list[str]] = {}
+    for key, file in delivered:
+        if file.sealed in said:
+            answered.setdefault(key, []).append(said[file.sealed])
+    return {key: _verdict(words) for key, words in answered.items()}
+
+
+def _verdict(words: list[str]) -> str:
+    """Return one value's verdict over the words its own copies earned.
+
+    A value is one answer however many files it declares, the way its presence
+    already is, and a copy that is not there is the plainer fact: a machine
+    cannot open what it does not hold.
+    """
+    if remote.MISSING_COPY in words:
+        return remote.MISSING_COPY
+    if any(word != remote.OPENS for word in words):
+        return CLOSED
+    return remote.OPENS
 
 
 def _ask(
@@ -361,17 +503,30 @@ def _the_endpoint_answered(answer: remote.Answer) -> bool:
     return answer.status not in (UNDIALLED, UNREALISED, remote.UNREACHABLE, *remote.MISSING)
 
 
-def _answered(entry: Entry, answer: remote.Answer) -> str:
+def _reached(entry: Entry, reached: str, **fields: Any) -> EntryAnswer:
+    """Return the record of one entry, with the fields that way of reaching it has."""
+    return EntryAnswer(
+        key=entry.key,
+        machine=entry.machine,
+        realiser=entry.realiser,
+        address=entry.address,
+        reached=reached,
+        **fields,
+    )
+
+
+def _answered(entry: Entry, answer: remote.Answer) -> EntryAnswer:
+    """Return the record of how one machine was reached and what it answered."""
     if answer.status == UNREALISED:
-        return "realises nothing: the entry declares no unit, so no machine holds anything for it"
+        return _reached(entry, REALISES_NOTHING)
     if answer.status == UNDIALLED:
-        return f"not dialled: machine {entry.machine} declares no address"
+        return _reached(entry, NOT_DIALLED)
     if answer.status == remote.UNREACHABLE:
-        return f"unreachable: {entry.machine} at {entry.address} answered nothing"
+        return _reached(entry, UNREACHED)
     if answer.status in remote.MISSING:
-        return f"no endpoint on {entry.machine}: {answer.said}"
+        return _reached(entry, NO_ENDPOINT, said=answer.said)
     if answer.status != 0:
-        return "absent"
+        return _reached(entry, ABSENT)
     return _read_status(entry, answer.said)
 
 
@@ -419,21 +574,29 @@ def rollback(
     return tuple(lines)
 
 
-def _read_status(entry: Entry, reported: str) -> str:
+def _read_status(entry: Entry, reported: str) -> EntryAnswer:
+    """Return the record one endpoint's own answer about one entry is.
+
+    Raises:
+        ApplyError: If the answer is not the endpoint's own status.
+    """
     if entry.realiser == "image":
         return _read_attachment(entry, reported)
     registered = _registered(entry, reported)
     if not registered:
-        return "absent"
+        return _reached(entry, ABSENT)
     first = registered[0]
     if not isinstance(first, dict):
         raise ApplyError(f"{entry.key}: the endpoint reported {first!r}, which is not an entry")
-    held = (
-        f"generation {first.get('generation')} of {first.get('locked_url')} "
-        f"{_running(entry, first.get('units'))}"
-    )
     failed = first.get("last_error")
-    return held if failed in (None, "") else f"{held}, last error {failed}"
+    return _reached(
+        entry,
+        ANSWERED,
+        generation=first.get("generation"),
+        locked_url=first.get("locked_url"),
+        units=_running(entry, first.get("units")),
+        last_error=None if failed in (None, "") else failed,
+    )
 
 
 def _registered(entry: Entry, reported: str) -> list[Any]:
@@ -469,61 +632,131 @@ def _registered(entry: Entry, reported: str) -> list[Any]:
 
 
 def _running(entry: Entry, reported: object) -> str:
-    """Say whether the units a machine runs are the units this build produced.
+    """Return which of the three answers the unit comparison makes.
 
     The endpoint publishes no identity of the artifact it activated, so this is
-    the narrower question, and the words are the narrower ones: what it reports
-    for the generation it runs is the store path of each unit file, and those
-    are the files the build's own artifact holds. An entry whose closure, host
-    paths, service manager or platform moved without moving a unit's text runs
-    this build's units and carries another identity, which is why no line here
-    says current.
+    the narrower question: what it reports for the generation it runs is the
+    store path of each unit file, and those are the files the build's own
+    artifact holds. An entry whose closure, host paths, service manager or
+    platform moved without moving a unit's text runs this build's units and
+    carries another identity, which is why none of the three says current.
     """
     if not isinstance(reported, dict) or not reported:
-        return "reports nothing to compare"
+        return NOTHING_TO_COMPARE
     if reported == unit_files(entry):
-        return "runs this build's units"
-    return "runs units this build did not produce"
+        return RUNS_THIS_BUILD
+    return RUNS_ANOTHER_BUILD
 
 
-def _read_attachment(entry: Entry, reported: str) -> str:
-    """Say what the machine holds attached for one image entry, and whose build it is.
+def _read_attachment(entry: Entry, reported: str) -> EntryAnswer:
+    """Return what the machine holds attached for one image entry, and whose build it is.
 
     An image carries its identity in its own file name, so the machine names
-    the identity it holds and the comparison is identity equality. The image
-    the build published and the image the machine holds are two questions: a
-    machine holding an earlier build's image answers that one is attached and
-    that it is not this one, and a listing this cannot read leaves the line the
-    machine's own answer rather than a verdict over a guess.
+    the identity it holds and the record carries it beside the one the build
+    published: the comparison is identity equality and the word is the
+    renderer's. A listing this cannot read leaves the record the machine's own
+    state and no identity at all, so nothing is compared against a guess.
 
-    The identity compared is the entry's own: a machine may hold an earlier
-    build's image of the same entry beside this one, and whichever of them the
-    listing prints first decides nothing. This build's image is looked for by
-    name, and a listing holding only another build's is what names both
-    identities.
+    The identity read is the entry's own: a machine may hold an earlier build's
+    image of the same entry beside this one, and whichever of them the listing
+    prints first decides nothing. This build's image is looked for by name, and
+    a listing holding only another build's is what names both identities.
 
     An identity match is evidence about the image and about nothing beside it:
-    the version digest excludes a configuration file's bytes on purpose, so an
-    entry shown a file the machine no longer holds the current bytes of is
-    never `current`, and the line says which path disagrees.
+    the version digest excludes a configuration file's bytes on purpose, so the
+    record carries every configuration path whose bytes disagree and an entry
+    shown one of them is never reported current.
     """
     answer = remote.attachment_of(reported)
     mine = image_file(entry).removesuffix(".raw")
     held = _held(mine, mine.rpartition("_")[0], answer.listed)
     if held is None:
-        return "absent" if answer.state in ("", "detached") else answer.state
+        if answer.state in ("", "detached"):
+            return _reached(entry, ABSENT)
+        return _reached(entry, ANSWERED, state=answer.state)
     identity, attachment = held
-    beside = _beside(answer.configuration)
-    if identity != entry.digest:
-        return f"{attachment} holds {identity}, built {entry.digest}"
+    return _reached(
+        entry,
+        ANSWERED,
+        held=identity,
+        built=entry.digest,
+        state=answer.state,
+        listed=attachment,
+        configuration=tuple(sorted(pair for pair in answer.configuration if pair[1] != "current")),
+    )
+
+
+def lines_of(answer: Verdict) -> tuple[str, ...]:
+    """Return the lines one record is printed as, which is where every line is made.
+
+    Every sentence the command prints about a machine comes from here, so a
+    record and a line cannot disagree and a reworded line moves in one place.
+
+    Returns:
+        One line for an entry and for a holding, and for a value the lines its
+        answer earns: none for a value the machine holds whose copy opens, one
+        for a value it does not hold, one for a copy that is not there or does
+        not open, and both where both are true of it.
+    """
+    if isinstance(answer, EntryAnswer):
+        return (f"{answer.key} {answer.realiser} {_verdict_of(answer)}",)
+    if isinstance(answer, ValueAnswer):
+        return _value_lines(answer)
+    return (f"{answer.machine} holds {answer.holding.identity}, which this build does not name",)
+
+
+def _verdict_of(answer: EntryAnswer) -> str:
+    """Return what one entry's record says, in the words an operator reads."""
+    if answer.reached == REALISES_NOTHING:
+        return "realises nothing: the entry declares no unit, so no machine holds anything for it"
+    if answer.reached == NOT_DIALLED:
+        return f"not dialled: machine {answer.machine} declares no address"
+    if answer.reached == UNREACHED:
+        return f"unreachable: {answer.machine} at {answer.address} answered nothing"
+    if answer.reached == NO_ENDPOINT:
+        return f"no endpoint on {answer.machine}: {answer.said}"
+    if answer.reached == ABSENT:
+        return "absent"
+    if answer.realiser == "image":
+        return _image_verdict(answer)
+    return _endpoint_verdict(answer)
+
+
+def _endpoint_verdict(answer: EntryAnswer) -> str:
+    """Return the generation a flakelet endpoint holds and what it runs."""
+    ran = {
+        RUNS_THIS_BUILD: "runs this build's units",
+        RUNS_ANOTHER_BUILD: "runs units this build did not produce",
+        NOTHING_TO_COMPARE: "reports nothing to compare",
+    }[answer.units or NOTHING_TO_COMPARE]
+    held = f"generation {answer.generation} of {answer.locked_url} {ran}"
+    return held if answer.last_error is None else f"{held}, last error {answer.last_error}"
+
+
+def _image_verdict(answer: EntryAnswer) -> str:
+    """Return what the machine holds for one image entry, against what the build built."""
+    if answer.held is None:
+        return answer.state or ""
+    if answer.held != answer.built:
+        return f"{answer.listed} holds {answer.held}, built {answer.built}"
+    beside = ", ".join(f"{path} {word}" for path, word in answer.configuration or ())
     if beside:
-        return f"{answer.state or attachment} holds this build's image, {beside}"
-    return f"{answer.state or attachment} current"
+        return f"{answer.state or answer.listed} holds this build's image, {beside}"
+    return f"{answer.state or answer.listed} current"
 
 
-def _beside(configuration: tuple[tuple[str, str], ...]) -> str:
-    """Return what the machine holds beside the image that the build does not."""
-    return ", ".join(f"{path} {word}" for path, word in sorted(configuration) if word != "current")
+def _value_lines(answer: ValueAnswer) -> tuple[str, ...]:
+    """Return the lines one value's record earns, the missing one first."""
+    seal = {
+        remote.UNCHECKED: f"{answer.machine} holds no unsealer, so its sealed copies were "
+        "not checked",
+        remote.MISSING_COPY: f"value {answer.key} has no sealed copy on {answer.machine}",
+        CLOSED: f"value {answer.key} sealed copy does not open on {answer.machine}",
+    }.get(answer.seal or remote.OPENS)
+    return (
+        *([] if answer.present else [f"value {answer.key} missing on {answer.machine}"]),
+        *([] if seal is None else [seal]),
+    )
 
 
 def _held(mine: str, name: str, listed: tuple[tuple[str, str], ...]) -> tuple[str, str] | None:

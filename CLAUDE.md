@@ -606,6 +606,25 @@ The image realiser has no document of its own, so its rules are here in full.
 Prose: `docs/operator.md`, under "The command", "Where the bytes of a generated value come from",
 "The order `apply` walks", "When a run breaks" and "Reaching a machine".
 
+- A machine question is answered as a record and never as a sentence: `report.status` returns one
+  per question it asked - one per entry, one per value delivered to a machine, one per holding the
+  build names no entry for - and `report.lines_of` is the one function every line comes out of, the
+  applying run's holding line included, so `remote.Holding` carries no `sentence` of its own. A
+  reading composes no line, a field the reading did not compute is absent rather than empty, and
+  the field set is what the readings already produced rather than a verdict invented beside them:
+  an image's two identities are carried and the word comparing them is the renderer's. The four
+  answers a report keeps apart - absent, no endpoint, unreachable, not dialled - are four values of
+  the one `reached` field rather than four spellings, absence still rests on the one fact that an
+  endpoint answered and registered nothing, and an answer the command cannot read stays a refusal
+  rather than becoming a sixth value. The operator's sentences are byte-identical, which is what
+  the harness case rendering every record shape against the lines `docs/operator.md` states holds,
+  beside the five folders asserting those strings on real machines. Staleness is a field and still
+  never an exit status: `unasked` is the one thing `planner status` exits non-zero on.
+- The command's one decode of `diagnostics.json` carries all six fields a producer builds a row
+  with, `evidence` and `resolution` included: `cli/manifest.py`'s `_rows` is the only reader of
+  that file, every consumer of a build's rows goes through it - the fallback `Deployment.rendered`
+  composes where a build wrote no table included - and a second reader for the two fields would
+  leave the one every command imports the lossy one.
 - `apply` orders by every resolved read of `plan.<consumer>.reads.<slot>`, never by `dependsOn`.
   A single-valued read records `entry` and a `reach = "all"` read records `entries` keyed by
   provider, and both are edges. A delivered read recorded in neither shape is the command's own

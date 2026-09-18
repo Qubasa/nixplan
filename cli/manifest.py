@@ -42,6 +42,7 @@ SCOPES = (SYSTEM, USER)
 HOLDINGS = "holdings"
 MACHINES = "machines"
 SEAL_RECIPIENT = "sealRecipient"
+COORDINATION = "coordination"
 
 
 @dataclass(frozen=True)
@@ -121,13 +122,40 @@ class Machine:
 
 
 @dataclass(frozen=True)
+class Coordination:
+    """What the build published about the entry that coordinates a mesh.
+
+    Every field is the deployment's own statement, resolved: ``entry`` is the
+    placed entry that runs the membership authority, ``credential`` is the
+    generated value that is its join credential, and ``program`` and
+    ``configuration`` are store paths of that entry's own closure. The command
+    derives none of them - a verb runs the program the record names and hands
+    it the configuration the record names, so no rule of a module's is
+    reproduced here.
+    """
+
+    entry: str
+    credential: str
+    program: str
+    configuration: str
+
+
+@dataclass(frozen=True)
 class Diagnostic:
-    """One row of a deployment's diagnostics."""
+    """One row of a deployment's diagnostics, with every field a producer builds.
+
+    All six, because the row is the shape in a build designed for a program to
+    read: the evidence is what was observed and the resolution names the
+    declaration to edit, and a reader handed neither can say less about a
+    refusal than the rendered table beside it does.
+    """
 
     id: str
     subject: str
     severity: str
     message: str
+    evidence: str
+    resolution: str
 
 
 @dataclass(frozen=True)
@@ -187,6 +215,10 @@ class Deployment:
 
     ``machines`` is the machines a delivered value reaches, which is not the
     machines the entries are placed on: a value's machine need run no entry.
+
+    ``coordination`` is what the deployment stated about the entry that
+    coordinates a mesh, or nothing where it stated none: an absent statement is
+    no statement, and the enrollment verbs refuse on that absence naming it.
     """
 
     root: Path
@@ -197,6 +229,7 @@ class Deployment:
     realisers: Mapping[str, Realiser]
     diagnostics: tuple[Diagnostic, ...]
     table: str
+    coordination: Coordination | None = None
 
     @property
     def errors(self) -> tuple[Diagnostic, ...]:
@@ -310,6 +343,7 @@ def read(root: Path) -> Deployment:
         realisers=realisers,
         diagnostics=_rows(root / ROWS),
         table=_read(root / TABLE),
+        coordination=_coordination(interface.get(COORDINATION)),
     )
 
 
@@ -557,6 +591,34 @@ def _published(name: str, record: Mapping[str, Any]) -> Realiser:
     return Realiser(name=name, scopes=scopes, holdings=holdings)
 
 
+def _coordination(stated: Any) -> Coordination | None:
+    """Return what the build published about the coordination entry, or nothing.
+
+    Args:
+        stated: The record's own `coordination` key, absent where the
+            deployment stated no coordination entry.
+
+    Returns:
+        The record, or ``None`` where the deployment stated none.
+
+    Raises:
+        ApplyError: If the key is there and is not a record of the four fields
+            a verb reads, naming the field. A record written by hand is an
+            interface like any other, and a verb that read a field as absent
+            would dial a machine with an empty word in its argv.
+    """
+    if stated is None:
+        return None
+    record = _mapping(stated, of=f"the {COORDINATION} record of {MANIFEST}")
+    of = f"the {COORDINATION} record"
+    return Coordination(
+        entry=_text(record, "entry", of=of),
+        credential=_text(record, "credential", of=of),
+        program=_text(record, "program", of=of),
+        configuration=_text(record, "configuration", of=of),
+    )
+
+
 def _scope(stated: Any, *, of: str) -> str:
     """Return one stated scope, or refuse naming what was stated and the domain."""
     for scope in SCOPES:
@@ -662,6 +724,11 @@ def _file(key: str, name: str, file: Any) -> ValueFile:
 
 
 def _rows(path: Path) -> tuple[Diagnostic, ...]:
+    """Return the rows a build published, with every field the producer built them with.
+
+    The one decode of that file: every reader of a build's rows goes through
+    here, so a field restored here is restored for all of them.
+    """
     if not path.is_file():
         return ()
     rows = _decoded(path)
@@ -673,6 +740,8 @@ def _rows(path: Path) -> tuple[Diagnostic, ...]:
             subject=str(row.get("subject", "")),
             severity=str(row.get("severity", "")),
             message=str(row.get("message", "")),
+            evidence=str(row.get("evidence", "")),
+            resolution=str(row.get("resolution", "")),
         )
         for row in rows
         if isinstance(row, dict)

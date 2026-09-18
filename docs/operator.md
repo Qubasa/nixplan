@@ -548,12 +548,32 @@ watch:file@alpha image running current
 
 Four answers are kept apart, because each one needs something different done about it:
 
-| The line | What happened |
-| --- | --- |
-| the generation and the identity the endpoint stores | the endpoint answered, and the entry is there |
-| `absent` | the endpoint answered and holds no entry under that name |
-| `no endpoint on <machine>: <what it printed>` | the endpoint could not be run there |
-| `unreachable: <machine> at <address> answered nothing` | the machine answered no connection |
+| The line | The `reached` field | What happened |
+| --- | --- | --- |
+| the generation and the identity the endpoint stores | `answered` | the endpoint answered, and the entry is there |
+| `absent` | `absent` | the endpoint answered and holds no entry under that name |
+| `no endpoint on <machine>: <what it printed>` | `no-endpoint` | the endpoint could not be run there |
+| `unreachable: <machine> at <address> answered nothing` | `unreachable` | the machine answered no connection |
+
+Every one of those lines is the rendering of one record, and the record is what the library
+function returns. `report.status` answers one record per question it asked - one per entry, one per
+value delivered to a machine, one per holding the build names no entry for - beside the lines and
+the machines it could not ask, and `report.lines_of` is the one function every line comes out of,
+the applying run's holding line included. A program reads a field; it never matches a word of a
+sentence. The entry record carries the plan key, the machine, the realiser and the address, how the
+machine was reached, what it printed where an answer carries that, the generation and the locked url
+a flakelet endpoint reports, which of the three answers the unit comparison made, the identity the
+machine holds beside the one the build published, the word the machine's own tool printed and the
+one its listing gave that image, each configuration path whose bytes disagree, and the error the
+endpoint recorded. A field the reading did not compute is absent rather than empty, so an
+unreachable machine says nothing about an identity. The value record carries the value key, the
+machine, whether every declared path is there and the machine's own verdict on the sealed copy; the
+holding record carries the holding the machine answered and the machine it was asked of.
+
+Staleness is a field of the record and still never an exit status. A report whose machines all
+answered exits zero however stale their answers are - an identity the build did not publish, a
+value a machine lost, a holding the build names no entry for - because changing what a machine
+holds is `apply`'s work.
 
 `absent` is an endpoint's own answer and nothing else gives it: a machine that was never asked has
 said nothing about the deployment, and printing absence on its behalf would tell an operator the

@@ -92,6 +92,16 @@ deployment again — and produces the format the example folders commit:
 `planner.mkTable <rows>` builds a table from raw rows (ordering, subject
 discipline and deduplication applied).
 
+A row reaches a program with all six fields. The build writes them into
+`diagnostics.json` beside the rendered `diagnostics.txt`, and the command's one
+decode of that file keeps every one of them, so a tool holds the evidence and
+the resolution rather than the two of the four a rendered line carries: what was
+observed and which declaration to edit are the fields an author acts on. That
+decode is the only reader of the file - every consumer of a build's rows goes
+through it, the fallback the reading composes where a build wrote no table
+included - because two decodes of one file diverge and the one every command
+already imports would stay the lossy one.
+
 ## Every row the planner can produce
 
 ### Interfaces and atoms

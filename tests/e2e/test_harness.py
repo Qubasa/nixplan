@@ -2672,6 +2672,31 @@ def test_a_build_of_a_deployment_carrying_an_error_prints_the_table_and_refuses(
     assert TABLE in capsys.readouterr().out
 
 
+# The rows of one deployment in the order the planner's table put them: by
+# identifier first, so the warning precedes the error whatever order a producer
+# built them in, and each carrying all six fields a producer builds.
+ORDERED = [
+    {
+        "id": "closure-root-unmentioned",
+        "subject": SERVER_KEY,
+        "severity": "warning",
+        "message": "site:server@alpha declares a closure root it mentions nowhere",
+        "evidence": "a declared root the entry mentions nowhere is dead weight or run-time",
+        "resolution": "delete the root, or leave it and read this row as the note it is",
+    },
+    {
+        "id": "slot-unwired",
+        "subject": CLIENT_KEY,
+        "severity": "error",
+        "message": "no wire reaches site",
+        "evidence": "the deployment wires nothing to that slot",
+        "resolution": "wire the slot in the deployment",
+    },
+]
+
+ROW_FIELDS = ["evidence", "id", "message", "resolution", "severity", "subject"]
+
+
 def _written(script: str, *, umask: int, content: bytes = b"s3cret") -> int:
     """Run one write script under a stated umask, with its bytes on its own input."""
     return subprocess.run(
@@ -3643,3 +3668,337 @@ def test_no_argv_of_a_run_carries_the_credential(tmp_path: Path) -> None:
         said = word.encode(errors="surrogateescape")
         for what, needle in _leaks(CREDENTIAL).items():
             assert needle not in said, f"{what} of the credential is in {word}"
+
+
+IMAGE_KEY = "watch:file@alpha"
+HELD_IMAGE = "3940b0d4db9c8fa6"
+BUILT_IMAGE = "5c1e77a9b2d40e31"
+
+
+def _entry_answer(**fields: Any) -> report.EntryAnswer:
+    """One entry's record, carrying the fields one way of answering leaves meaningful."""
+    return report.EntryAnswer(key=SERVER_KEY, machine="alpha", realiser="flakelet", **fields)
+
+
+def _image_answer(**fields: Any) -> report.EntryAnswer:
+    """One image entry's record, which is the shape that names two identities."""
+    return report.EntryAnswer(key=IMAGE_KEY, machine="alpha", realiser="image", **fields)
+
+
+def test_a_record_carries_the_fields_the_verdict_is_made_of(tmp_path: Path) -> None:
+    """What the endpoint said is in the record, not only in the sentence it renders to."""
+    deployment = _built(
+        tmp_path,
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+    )
+    entry = deployment.entries[SERVER_KEY]
+    failed = "unit site-server-serve.service failed to start"
+    answering = Answering(
+        "flakelet status", _endpoint(entry, _ran(entry), generation=4, last_error=failed)
+    )
+
+    reported = report.status(deployment, answering, base_env={})
+
+    answered = [answer for answer in reported.answers if isinstance(answer, report.EntryAnswer)]
+    assert answered == [
+        report.EntryAnswer(
+            key=SERVER_KEY,
+            machine="alpha",
+            realiser="flakelet",
+            address="10.0.0.10",
+            reached=report.ANSWERED,
+            generation=4,
+            locked_url=f"plan:{SERVER_KEY}",
+            units=report.RUNS_THIS_BUILD,
+            last_error=failed,
+        )
+    ]
+    # The sentence is still there, and nothing had to be read out of it.
+    assert reported.lines == tuple(report.lines_of(answered[0]))
+
+
+def test_a_record_names_no_field_a_reading_does_not_compute(tmp_path: Path) -> None:
+    """A machine that answered nothing says nothing about an identity."""
+    reported = _asked(tmp_path, Silent("10.0.0.11", 255, "ssh: connect to host: timed out\n"))
+
+    silent = [
+        answer
+        for answer in reported.answers
+        if isinstance(answer, report.EntryAnswer) and answer.key == CLIENT_KEY
+    ]
+    assert [answer.reached for answer in silent] == [report.UNREACHED]
+    unknown = ("generation", "locked_url", "units", "held", "built", "state", "listed")
+    assert [field for field in unknown if getattr(silent[0], field) is not None] == []
+    assert (silent[0].configuration, silent[0].last_error, silent[0].said) == (None, None, None)
+
+
+def test_the_four_answers_are_four_values_of_one_field(tmp_path: Path) -> None:
+    """One report over four machines, told apart without reading a rendered line."""
+    absent = _asked(tmp_path / "absent", Recorder())
+    without = _asked(tmp_path / "without", Silent("10.0.0.11", 127, "not found\n"))
+    silent = _asked(tmp_path / "silent", Silent("10.0.0.11", 255, "timed out\n"))
+    unaddressed = _asked(tmp_path / "unaddressed", Recorder(), address=None)
+
+    def reached(reported: report.Report) -> str:
+        answered = [
+            answer
+            for answer in reported.answers
+            if isinstance(answer, report.EntryAnswer) and answer.key == CLIENT_KEY
+        ]
+        return answered[0].reached
+
+    four = (reached(absent), reached(without), reached(silent), reached(unaddressed))
+    assert four == (report.ABSENT, report.NO_ENDPOINT, report.UNREACHED, report.NOT_DIALLED)
+    assert len(set(four)) == 4
+
+
+def test_the_line_is_a_rendering_of_the_record_it_came_from(tmp_path: Path) -> None:
+    """Every line of a report is what the renderer makes of one of its records."""
+    deployment = _built(
+        tmp_path,
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+        values={SESSION_VALUE: {"delivery": ["alpha"], "files": TWO_FILES}},
+    )
+    printed: list[str] = []
+
+    reported = report.status(deployment, Holding({OWNED_PATH}), base_env={}, log=printed.append)
+
+    assert printed == list(reported.lines)
+    assert reported.lines == tuple(
+        line for answer in reported.answers for line in report.lines_of(answer)
+    )
+    # One record per question asked: one entry, and one value delivered there.
+    assert [type(answer).__name__ for answer in reported.answers] == [
+        "EntryAnswer",
+        "ValueAnswer",
+    ]
+
+
+def test_an_operators_sentences_do_not_move() -> None:
+    """Every condition of every record, against the lines the operator's document states.
+
+    The contract of this change in one place: the records are built here rather
+    than answered by a machine, so a reworded sentence fails in this file and
+    not in a folder that needs a cluster. The lines are the literal ones
+    `docs/operator.md` documents under `status`.
+    """
+    failed = "unit site-server-serve.service failed to start"
+    held = f"{SERVER_KEY} flakelet generation 1 of plan:{SERVER_KEY}"
+    ran = {"generation": 1, "locked_url": f"plan:{SERVER_KEY}", "reached": report.ANSWERED}
+    rendered: dict[report.Verdict, tuple[str, ...]] = {
+        _entry_answer(**ran, units=report.RUNS_THIS_BUILD): (f"{held} runs this build's units",),
+        _entry_answer(**ran, units=report.RUNS_ANOTHER_BUILD): (
+            f"{held} runs units this build did not produce",
+        ),
+        _entry_answer(**ran, units=report.NOTHING_TO_COMPARE): (
+            f"{held} reports nothing to compare",
+        ),
+        _entry_answer(**ran, units=report.RUNS_THIS_BUILD, last_error=failed): (
+            f"{held} runs this build's units, last error {failed}",
+        ),
+        _entry_answer(reached=report.ABSENT): (f"{SERVER_KEY} flakelet absent",),
+        _entry_answer(reached=report.NO_ENDPOINT, said="flakelet: command not found"): (
+            f"{SERVER_KEY} flakelet no endpoint on alpha: flakelet: command not found",
+        ),
+        _entry_answer(reached=report.UNREACHED, address="10.0.0.10"): (
+            f"{SERVER_KEY} flakelet unreachable: alpha at 10.0.0.10 answered nothing",
+        ),
+        _entry_answer(reached=report.NOT_DIALLED): (
+            f"{SERVER_KEY} flakelet not dialled: machine alpha declares no address",
+        ),
+        _entry_answer(reached=report.REALISES_NOTHING): (
+            f"{SERVER_KEY} flakelet realises nothing: the entry declares no unit, so no machine "
+            f"holds anything for it",
+        ),
+        _image_answer(
+            reached=report.ANSWERED,
+            held=HELD_IMAGE,
+            built=HELD_IMAGE,
+            state="running",
+            listed="attached",
+            configuration=(),
+        ): (f"{IMAGE_KEY} image running current",),
+        _image_answer(
+            reached=report.ANSWERED,
+            held=HELD_IMAGE,
+            built=BUILT_IMAGE,
+            state="running",
+            listed="attached",
+            configuration=(),
+        ): (f"{IMAGE_KEY} image attached holds {HELD_IMAGE}, built {BUILT_IMAGE}",),
+        _image_answer(
+            reached=report.ANSWERED,
+            held=HELD_IMAGE,
+            built=HELD_IMAGE,
+            state="running",
+            listed="attached",
+            configuration=(("/etc/agent.conf", "stale"),),
+        ): (f"{IMAGE_KEY} image running holds this build's image, /etc/agent.conf stale",),
+        _image_answer(reached=report.ANSWERED, state="attached"): (f"{IMAGE_KEY} image attached",),
+        _image_answer(reached=report.ABSENT): (f"{IMAGE_KEY} image absent",),
+        report.ValueAnswer(key=SESSION_VALUE, machine="beta", present=True): (),
+        report.ValueAnswer(key=SESSION_VALUE, machine="beta", present=False): (
+            f"value {SESSION_VALUE} missing on beta",
+        ),
+        report.ValueAnswer(key=SESSION_VALUE, machine="beta", present=True, seal=report.CLOSED): (
+            f"value {SESSION_VALUE} sealed copy does not open on beta",
+        ),
+        report.ValueAnswer(
+            key=SESSION_VALUE, machine="beta", present=False, seal=remote.MISSING_COPY
+        ): (
+            f"value {SESSION_VALUE} missing on beta",
+            f"value {SESSION_VALUE} has no sealed copy on beta",
+        ),
+        report.ValueAnswer(
+            key=SESSION_VALUE, machine="gamma", present=True, seal=remote.UNCHECKED
+        ): ("gamma holds no unsealer, so its sealed copies were not checked",),
+        report.HoldingAnswer(
+            machine="alpha",
+            holding=remote.Holding(
+                realiser="flakelet", identity=GONE_KEY, name=GONE_NAME, state=""
+            ),
+        ): (f"alpha holds {GONE_KEY}, which this build does not name",),
+    }
+
+    assert {answer: report.lines_of(answer) for answer in rendered} == rendered
+
+
+def test_a_holding_escapes_as_a_record_and_the_caller_renders_it(tmp_path: Path) -> None:
+    """A report and an applying run render one record through one function."""
+    reported, _ = _reported_holdings(tmp_path, _one_holding())
+    log, _ = _retiring(tmp_path / "applied", _one_holding(), retire=False)
+
+    holdings = [answer for answer in reported.answers if isinstance(answer, report.HoldingAnswer)]
+    assert [answer.machine for answer in holdings] == ["alpha"]
+    assert [answer.holding.realiser for answer in holdings] == ["flakelet"]
+    assert [answer.holding.identity for answer in holdings] == [GONE_KEY]
+    assert [answer.holding.name for answer in holdings] == [GONE_NAME]
+    named = f"alpha holds {GONE_KEY}, which this build does not name"
+    assert _named(reported) == [named]
+    assert [line for line in log if " holds " in line] == [f"{named}; not retired"]
+    # The record carries no sentence of its own: the renderer is the one place.
+    assert not hasattr(holdings[0].holding, "sentence")
+
+
+def test_a_stale_record_changes_no_exit_status(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A machine holding another build is a machine that answered, which exits zero."""
+    root = tmp_path / "built"
+    deployment = _built(root, plan=PLAN, entries=_on_alpha(SERVER_KEY))
+    entry = deployment.entries[SERVER_KEY]
+    older = {unit: f"{path}-of-an-older-build" for unit, path in _ran(entry).items()}
+    machine = Answering("flakelet status", _endpoint(entry, older))
+
+    reported = report.status(deployment, machine, base_env={})
+
+    answered = [answer for answer in reported.answers if isinstance(answer, report.EntryAnswer)]
+    assert [answer.units for answer in answered] == [report.RUNS_ANOTHER_BUILD]
+    assert [answer.reached for answer in answered] == [report.ANSWERED]
+    monkeypatch.setattr(remote, "Subprocess", lambda: machine)
+    assert planner.main(["status", str(root)]) == 0
+
+
+class Stale(Holds):
+    """A machine holding another build's units, a value it lost and an unnamed entry."""
+
+    def __init__(self, said: str, endpoint: str) -> None:
+        super().__init__(said, at="10.0.0.10")
+        self.endpoint = endpoint
+
+    def output(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> str:
+        answered = super().output(cmd, env=env, stdin=stdin)
+        if _asked_what_it_holds(cmd):
+            return answered
+        if "flakelet status" in cmd[-1]:
+            return self.endpoint
+        if "present" in cmd[-1]:
+            return f"{TOKEN_PATH} absent\n"
+        return answered
+
+
+def test_a_staleness_a_record_carries_changes_no_exit_status(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Three stale facts, each a field of the record that names it, and a zero exit."""
+    root = tmp_path / "built"
+    deployment = _built(
+        root,
+        plan=PLAN,
+        entries=_on_alpha(SERVER_KEY),
+        values={SESSION_VALUE: {"delivery": ["alpha"], "files": TOKEN}},
+    )
+    entry = deployment.entries[SERVER_KEY]
+    older = {unit: f"{path}-of-an-older-build" for unit, path in _ran(entry).items()}
+    machine = Stale(_one_holding(), _endpoint(entry, older))
+
+    reported = report.status(deployment, machine, base_env={})
+
+    assert [
+        answer.units for answer in reported.answers if isinstance(answer, report.EntryAnswer)
+    ] == [report.RUNS_ANOTHER_BUILD]
+    assert [
+        answer.present for answer in reported.answers if isinstance(answer, report.ValueAnswer)
+    ] == [False]
+    assert [
+        answer.holding.identity
+        for answer in reported.answers
+        if isinstance(answer, report.HoldingAnswer)
+    ] == [GONE_KEY]
+    monkeypatch.setattr(remote, "Subprocess", lambda: machine)
+    assert planner.main(["status", str(root)]) == 0
+
+
+REFUSED_ROW = {
+    "id": "slot-unwired",
+    "subject": SERVER_KEY,
+    "severity": "error",
+    "message": "the slot `site` of that entry is wired to nothing",
+    "evidence": "the module declares `uses.site` and the root wires no member to it",
+    "resolution": "wire `site` in the root, or drop the slot from the module",
+}
+
+
+def test_a_diagnostics_row_reaches_a_program_with_its_evidence_and_its_resolution(
+    tmp_path: Path,
+) -> None:
+    """A program reading a refused build can name the declaration to edit."""
+    deployment = _built(tmp_path, plan=PLAN, entries={}, rows=[REFUSED_ROW])
+
+    row = deployment.diagnostics[0]
+
+    assert (row.id, row.subject, row.severity) == (
+        REFUSED_ROW["id"],
+        REFUSED_ROW["subject"],
+        REFUSED_ROW["severity"],
+    )
+    assert (row.message, row.evidence, row.resolution) == (
+        REFUSED_ROW["message"],
+        REFUSED_ROW["evidence"],
+        REFUSED_ROW["resolution"],
+    )
+    assert deployment.errors == (row,)
+
+
+def test_one_decode_carries_the_fields_for_every_reader(tmp_path: Path) -> None:
+    """Two readers of one build's rows read them through the one decode.
+
+    The rendered table the build wrote and the rows a program holds are the two
+    readers, and the fallback the reading composes where a build wrote no table
+    is made of the same decoded rows.
+    """
+    written = _built(tmp_path / "table", plan=PLAN, entries={}, rows=[REFUSED_ROW], table="rows\n")
+    composed = _built(tmp_path / "fallback", plan=PLAN, entries={}, rows=[REFUSED_ROW])
+
+    assert written.rendered == "rows"
+    assert composed.rendered == (
+        f"{REFUSED_ROW['id']} {REFUSED_ROW['subject']} {REFUSED_ROW['message']}"
+    )
+    assert written.diagnostics == composed.diagnostics
+    assert [row.resolution for row in composed.diagnostics] == [REFUSED_ROW["resolution"]]
