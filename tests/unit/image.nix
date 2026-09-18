@@ -64,6 +64,8 @@ let
       fakeDrv name text // attrs // (attrs.passthru or { });
     closureInfo = { rootPaths }: fakeDrv "closure-info" (toString rootPaths);
     squashfsTools = fakeDrv "squashfs-tools" "";
+    cryptsetup = fakeDrv "cryptsetup" "";
+    openssl = fakeDrv "openssl" "";
   };
 
   builder = import imageSource {
@@ -191,6 +193,32 @@ let
 
   simple = support.serving "only";
 
+  # One unit that says how it is probed, which is the entry every test of the
+  # derived unit reads. `extra` is what the probed unit declares beside the
+  # pair, so a test asking what the probe inherits states only that.
+  probing =
+    {
+      command ? "${borgbackup}/bin/borg check",
+      timeout ? "30s",
+      extra ? { },
+    }:
+    _: {
+      closure = [ borgbackup ];
+      units.only = {
+        command = "${borgbackup}/bin/borg serve";
+        probe = command;
+        probeTimeout = timeout;
+      }
+      // extra;
+    };
+
+  # The text of the derived file among the ones a realiser publishes, read off
+  # the published set rather than off `renderProbe`: what a test asserts is what
+  # a builder writes.
+  probeTextOf =
+    rendered: image:
+    builtins.head (map (f: f.text) (filter (f: f.file == reader.probeFileName image.name) rendered));
+
   # One configuration file whose record the store cannot carry, shown to a unit
   # the caller gives an account, a group, or neither: a confining profile puts a
   # unit that declares no account on a transient one.
@@ -299,6 +327,158 @@ let
       otherKey = "other:only@two";
       unitOf = image: reader.renderUnit image "only";
     };
+
+  # One machine offering the account's scope, stated where the registry states
+  # it. Nothing else about the machine moves, so what a comparison below shows
+  # is the scope and never a second edit.
+  userMachines = support.machines // {
+    one = support.machines.one // {
+      scope = "user";
+    };
+  };
+
+  # The operator's signing key, which is an argument of the build: two paths
+  # the build spends and neither the plan nor the artifact carries.
+  signing = {
+    privateKey = "/nix/store/0000000000000000000000000000000a-verity-key.pem";
+    certificate = "/nix/store/0000000000000000000000000000000b-verity-cert.pem";
+  };
+
+  otherSigning = {
+    privateKey = "/nix/store/0000000000000000000000000000000c-rotated-key.pem";
+    certificate = "/nix/store/0000000000000000000000000000000d-rotated-cert.pem";
+  };
+
+  # One entry on a machine of the stated scope, read under the stated profile.
+  readScoped =
+    args: implementation:
+    let
+      p = planned { inherit (args) registry; } implementation;
+    in
+    reader.read {
+      inherit (p) plan key;
+      profile = args.profile or "trusted";
+    };
+
+  builtScoped =
+    args: implementation:
+    let
+      p = planned { inherit (args) registry; } implementation;
+    in
+    builder.build (
+      {
+        inherit (p) plan key;
+        profile = args.profile or "trusted";
+      }
+      // (if args ? signing then { inherit (args) signing; } else { })
+    );
+
+  # The same builder over a pkgs whose every derivation is its own text, so a
+  # test can read the tree a build writes rather than a path keyed by it: an
+  # inner script is what an outer one interpolates, so the identity file and
+  # every unit file placement are inside the string this answers.
+  inlinePkgs = builderPkgs // {
+    writeText = _name: text: { outPath = text; };
+    writeTextFile = { name, text }: {
+      inherit name;
+      outPath = text;
+    };
+    runCommand =
+      name: attrs: text:
+      {
+        inherit name;
+        outPath = text;
+      }
+      // attrs
+      // (attrs.passthru or { });
+  };
+
+  inlineBuilder = import imageSource {
+    inherit planner;
+    inherit (builderPkgs) lib;
+    pkgs = inlinePkgs;
+  };
+
+  inlineOf =
+    args: implementation:
+    let
+      p = planned { inherit (args) registry; } implementation;
+    in
+    inlineBuilder.build (
+      {
+        inherit (p) plan key;
+        profile = args.profile or "trusted";
+      }
+      // (if args ? signing then { inherit (args) signing; } else { })
+    );
+
+  treeOf = args: implementation: "${(inlineOf args implementation).raw}";
+
+  # A unit needing a static host account, which is what the `DynamicUser`
+  # profiles deny and what a user scope's own profile does not.
+  needsAnAccount = _: {
+    closure = [ borgbackup ];
+    units.only = {
+      command = "${borgbackup}/bin/borg serve";
+      user = "borg";
+    };
+  };
+
+  # One entry with a staged configuration file and a reloading unit, on a
+  # machine of the stated scope, built: the deployment the attach script's own
+  # steps are read off.
+  stagedOn =
+    registry:
+    let
+      result = planOf {
+        machines = registry;
+        instances.svc = {
+          module = soleRoot {
+            module = _: {
+              impl = _: {
+                closure = [ borgbackup ];
+                configData."/etc/thing.conf" = {
+                  mode = "0400";
+                  reload = [ "only" ];
+                  render = [ { text = "value = one\n"; } ];
+                };
+                units.only.command = "${borgbackup}/bin/borg serve";
+                units.sweep = {
+                  command = "${borgbackup}/bin/borg prune";
+                  schedule = "daily";
+                };
+              };
+            };
+          };
+          placement.every.only.machines = [ "one" ];
+        };
+      };
+      built = builder.build (
+        {
+          inherit (result) plan;
+          key = "svc:only@one";
+          profile = "trusted";
+        }
+        // (if registry == userMachines then { inherit signing; } else { })
+      );
+    in
+    {
+      inherit (built) attach detach check;
+      inherit (built.image)
+        staging
+        version
+        name
+        scope
+        ;
+      units = built.attachment.units;
+      image = built.attachment.image;
+      sidecars = reader.sidecarsOf built.attachment.image;
+      raw = "${built.raw}";
+    };
+
+  systemStaged = stagedOn support.machines;
+
+  userStaged = stagedOn userMachines;
 in
 {
   testAPlanEntryBecomesAnImage =
@@ -1312,6 +1492,7 @@ in
         target = {
           system = "x86_64-linux";
           serviceManager = "systemd";
+          scope = "system";
         };
         paths = [ "/etc/thing.conf" ];
         image = "svc-only_${image.version}.raw";
@@ -1935,7 +2116,7 @@ in
       expected = {
         named = false;
         unnamed = true;
-        directiveNames = 22;
+        directiveNames = 24;
         accounted = null;
         because = true;
       };
@@ -2310,6 +2491,801 @@ in
         theFilesDirectory = [ true ];
         nothingWidensIt = [ ];
         theFileKeepsItsMode = true;
+      };
+    };
+
+  # User-mode extraction reads the user unit directories alone, so a system-unit
+  # image yields an account no unit at all, and `PORTABLE_SCOPE=` is what gates
+  # the attachment. Both are bytes the artifact carries, so the digest moves.
+  testAUserScopeImagePlacesItsUnitsWhereAUserManagerReads =
+    let
+      userTree = treeOf {
+        registry = userMachines;
+        inherit signing;
+      } simple;
+      systemTree = treeOf { registry = support.machines; } simple;
+      userReading = readScoped { registry = userMachines; } simple;
+      systemReading = readScoped { registry = support.machines; } simple;
+    in
+    {
+      expr = {
+        userDirectory = userReading.unitDirectory;
+        systemDirectory = systemReading.unitDirectory;
+        theUnitFileIsUnderIt = hasInfix "$out/usr/lib/systemd/user/svc-only-only.service" userTree;
+        andTheImageCarriesNoSystemUnitDirectory = hasInfix "/etc/systemd/system" userTree;
+        theSystemImageIsWhereItWas = hasInfix "$out/etc/systemd/system/svc-only-only.service" systemTree;
+        theIdentityStatesTheScope = hasInfix "PORTABLE_SCOPE=user" userTree;
+        # Unset means the system scope, so a system-scope image states it no
+        # more than it states any other default.
+        theSystemIdentityStatesNone = hasInfix "PORTABLE_SCOPE" systemTree;
+        scopes = [
+          systemReading.scope
+          userReading.scope
+        ];
+        digestMovedWithTheScope = userReading.version != systemReading.version;
+      };
+      expected = {
+        userDirectory = "/usr/lib/systemd/user";
+        systemDirectory = "/etc/systemd/system";
+        theUnitFileIsUnderIt = true;
+        andTheImageCarriesNoSystemUnitDirectory = false;
+        theSystemImageIsWhereItWas = true;
+        theIdentityStatesTheScope = true;
+        theSystemIdentityStatesNone = false;
+        scopes = [
+          "system"
+          "user"
+        ];
+        digestMovedWithTheScope = true;
+      };
+    };
+
+  # `systemd-mountfsd` applies `image_policy_untrusted` to an image outside the
+  # system trusted directories, and an unsigned one escalates to an interactive
+  # polkit action a non-interactive run cannot answer. What it verifies is the
+  # three files beside the image, named off the image with `.raw` dropped.
+  testAUserScopeImageCarriesASignedVerityRoothash =
+    let
+      inline = inlineOf {
+        registry = userMachines;
+        inherit signing;
+      } simple;
+      artifact = "${inline}";
+      systemArtifact = "${inlineOf { registry = support.machines; } simple}";
+      sidecars = reader.sidecarsOf inline.attachment.image;
+      version = inline.image.version;
+    in
+    {
+      expr = {
+        # A hash tree over the squashfs this realiser already builds, and the
+        # root hash of it written out beside it.
+        aHashTreeOverTheImage = hasInfix "veritysetup format " artifact;
+        writingTheRootHash = hasInfix ''--root-hash-file="$out"/${sidecars.roothash}'' artifact;
+        besideTheImage = hasInfix ''"$out"/${sidecars.verity}'' artifact;
+        # Signed here, so no machine is asked to grant anything at attach time.
+        signedOverThatHash = hasInfix "openssl smime -sign -nocerts -noattr -binary -outform der" artifact;
+        byTheOperatorsKey = hasInfix "-inkey ${signing.privateKey}" artifact;
+        underItsCertificate = hasInfix "-signer ${signing.certificate}" artifact;
+        intoTheSignatureFile = hasInfix ''-out "$out"/${sidecars.signature}'' artifact;
+        # Both are drawn from the machine's randomness unless they are stated,
+        # and the root hash is over both, so two builds would sign two hashes.
+        statesItsSalt = hasInfix "--salt=" artifact;
+        statesItsUuid = hasInfix "--uuid=" artifact;
+        # The names a dissection derives: the image's own, `.raw` dropped.
+        names = sidecars;
+        # And the artifact carries them beside the image it verifies.
+        carriedBesideTheImage = map (name: hasInfix ''"$out/${name}"'' artifact) [
+          sidecars.verity
+          sidecars.roothash
+          sidecars.signature
+        ];
+        # The system-scope image is the one this capability already describes.
+        theSystemArtifactCarriesNoVerity = hasInfix "veritysetup" systemArtifact;
+        theSystemImageIsStillTheSquashfs = hasInfix "mksquashfs" systemArtifact;
+        # Handed no key, the build refuses rather than writing an image no
+        # account can mount.
+        refusedWithNoKey = raises (builtScoped { registry = userMachines; } simple);
+      };
+      expected = {
+        aHashTreeOverTheImage = true;
+        writingTheRootHash = true;
+        besideTheImage = true;
+        signedOverThatHash = true;
+        byTheOperatorsKey = true;
+        underItsCertificate = true;
+        intoTheSignatureFile = true;
+        statesItsSalt = true;
+        statesItsUuid = true;
+        names = {
+          verity = "svc-only_${version}.verity";
+          roothash = "svc-only_${version}.roothash";
+          signature = "svc-only_${version}.roothash.p7s";
+        };
+        carriedBesideTheImage = [
+          true
+          true
+          true
+        ];
+        theSystemArtifactCarriesNoVerity = false;
+        theSystemImageIsStillTheSquashfs = true;
+        refusedWithNoKey = true;
+      };
+    };
+
+  # The key reaches the build and nothing else, so rotating it re-keys nothing
+  # and no plan, no machine and no artifact ever holds it.
+  testTheSigningKeyIsAnOperatorArgumentAndNeverAPlanFact =
+    let
+      p = planned { registry = userMachines; } simple;
+      built = builtScoped {
+        registry = userMachines;
+        inherit signing;
+      } simple;
+      rotated = builtScoped {
+        registry = userMachines;
+        signing = otherSigning;
+      } simple;
+      material = [
+        signing.privateKey
+        signing.certificate
+      ];
+      mentions = text: filter (path: hasInfix path text) material;
+    in
+    {
+      expr = {
+        inThePlan = mentions (builtins.toJSON p.plan);
+        inTheEntry = mentions (builtins.toJSON p.plan.${p.key});
+        inTheAttachmentDescription = mentions (builtins.toJSON built.attachment);
+        inTheAttachScript = mentions built.attach;
+        inTheDetachScript = mentions built.detach;
+        inTheCheckScript = mentions built.check;
+        inAUnitFile = mentions (concatStringsSep "\n" (builtins.attrValues built.units));
+        # The one place it is spent.
+        inTheBuild = mentions "${inlineOf {
+          registry = userMachines;
+          inherit signing;
+        } simple}";
+        rotatingItKeysNothing = built.image.version == rotated.image.version;
+        andNamesTheSameImage = built.attachment.image == rotated.attachment.image;
+      };
+      expected = {
+        inThePlan = [ ];
+        inTheEntry = [ ];
+        inTheAttachmentDescription = [ ];
+        inTheAttachScript = [ ];
+        inTheDetachScript = [ ];
+        inTheCheckScript = [ ];
+        inAUnitFile = [ ];
+        inTheBuild = material;
+        rotatingItKeysNothing = true;
+        andNamesTheSameImage = true;
+      };
+    };
+
+  # Upstream's user profiles drop the two statements an account cannot be
+  # granted and keep the one that needs no privilege, and it is one table read
+  # per scope rather than a second table beside the first.
+  testAUserProfileDropsWhatAUserManagerCannotGrant =
+    let
+      userProfiles = reader.profilesFor "user";
+      systemProfiles = reader.profilesFor "system";
+      confining = [
+        "default"
+        "nonetwork"
+        "strict"
+      ];
+      reading = readScoped {
+        registry = userMachines;
+        profile = "default";
+      } simple;
+    in
+    {
+      expr = {
+        inSystemScope = systemProfiles.default.statements;
+        inUserScope = userProfiles.default.statements;
+        everyConfiningProfileKeepsPrivateUsers = map (
+          n: elem "PrivateUsers=yes" userProfiles.${n}.statements
+        ) confining;
+        noneImposesAnAccount = filter (
+          n: elem "DynamicUser=yes" userProfiles.${n}.statements
+        ) reader.profileNames;
+        noneClosesTheHome = filter (
+          n: elem "ProtectHome=yes" userProfiles.${n}.statements
+        ) reader.profileNames;
+        theReadingPublishesWhatApplies = reading.statements;
+        oneTableInBothScopes = attrNames userProfiles == attrNames systemProfiles;
+      };
+      expected = {
+        inSystemScope = [
+          "DynamicUser=yes"
+          "PrivateUsers=yes"
+          "ProtectHome=yes"
+        ];
+        inUserScope = [ "PrivateUsers=yes" ];
+        everyConfiningProfileKeepsPrivateUsers = [
+          true
+          true
+          true
+        ];
+        noneImposesAnAccount = [ ];
+        noneClosesTheHome = [ ];
+        theReadingPublishesWhatApplies = [ "PrivateUsers=yes" ];
+        oneTableInBothScopes = true;
+      };
+    };
+
+  testTheTrustedProfileIsOneProfileInBothScopes =
+    let
+      userProfiles = reader.profilesFor "user";
+      systemProfiles = reader.profilesFor "system";
+      denialsUnderTrusted =
+        registry:
+        let
+          p = planned { inherit registry; } needsAnAccount;
+        in
+        reader.denials {
+          entry = p.plan.${p.key};
+          profile = "trusted";
+        };
+    in
+    {
+      expr = {
+        identical = userProfiles.trusted == systemProfiles.trusted;
+        statements = userProfiles.trusted.statements;
+        denies = userProfiles.trusted.denies;
+        theSameDenialsForOneEntry =
+          denialsUnderTrusted userMachines == denialsUnderTrusted support.machines;
+        andNeitherReadingRefuses = [
+          (raises (readScoped { registry = userMachines; } needsAnAccount))
+          (raises (readScoped { registry = support.machines; } needsAnAccount))
+        ];
+      };
+      expected = {
+        identical = true;
+        statements = [ ];
+        denies = [ ];
+        theSameDenialsForOneEntry = true;
+        andNeitherReadingRefuses = [
+          false
+          false
+        ];
+      };
+    };
+
+  # The denial table follows the profile the scope selects, so a statement the
+  # `DynamicUser` profiles refuse is read for an account and refused for a
+  # machine, by one table and not by a rule per scope.
+  testADenialAbsentInUserScopeEarnsNoRow =
+    let
+      denialsOf =
+        registry:
+        let
+          p = planned { inherit registry; } needsAnAccount;
+        in
+        reader.denials {
+          entry = p.plan.${p.key};
+          profile = "default";
+        };
+      readUnder =
+        registry:
+        readScoped {
+          inherit registry;
+          profile = "default";
+        } needsAnAccount;
+    in
+    {
+      expr = {
+        inUserScope = denialsOf userMachines;
+        inSystemScope = map (d: d.access) (denialsOf support.machines);
+        theUserScopeReadingStands = raises (readUnder userMachines);
+        theSystemScopeReadingIsRefused = raises (readUnder support.machines);
+      };
+      expected = {
+        inUserScope = [ ];
+        inSystemScope = [ "a static host user" ];
+        theUserScopeReadingStands = false;
+        theSystemScopeReadingIsRefused = true;
+      };
+    };
+
+  # One unprivileged portabled and one manager per account, and no `chown`
+  # anywhere: the staging is the account's own, and a delivered ownership a user
+  # scope cannot honor is a planner refusal before this script exists.
+  testTheAttachInUserScopeAddressesTheUserManager =
+    let
+      attach = userStaged.attach;
+      staged = "\"$root\"${userStaged.staging}/files/etc/thing.conf";
+      installing = "\"$root\"${userStaged.staging}/files/etc/thing.conf.installing";
+    in
+    {
+      expr = {
+        asksTheAccountsManager = hasInfix "held=\"$(systemctl --user show -P RootImage" attach;
+        stopsThroughIt = hasInfix "systemctl --user stop " attach;
+        startsThroughIt = hasInfix "systemctl --user start " attach;
+        reloadsThroughIt = hasInfix "systemctl --user is-active --quiet \"$1\"" attach;
+        attachesThroughItsPortabled = hasInfix "portablectl --user attach --profile=trusted " attach;
+        asksThatPortabled = hasInfix "portablectl --user is-attached " attach;
+        detachesThroughIt = hasInfix "portablectl --user detach " userStaged.detach;
+        # The one bare `systemctl` left is the guard asking whether this machine
+        # runs a service manager at all.
+        bareManagerCalls = occurrences "systemctl" attach - occurrences "systemctl --user" attach;
+        barePortabledCalls = occurrences "portablectl" attach - occurrences "portablectl --user" attach;
+        chowns = occurrences "chown" attach;
+        andTheSystemScopeStillOwnsWhatItStages = occurrences "chown" systemStaged.attach;
+        # The staging discipline is the one it always was: one line for the
+        # entry's whole tree under the run's root. The pool chain is its own
+        # statement and is asserted where the pool is.
+        oneDirectoryTree = length (
+          filter (line: hasInfix "install -d -m 0711 " line && hasInfix ''"$root"'' line) (
+            support.lines attach
+          )
+        );
+        createdOwnerOnly = hasInfix "install -m 0600 " attach;
+        setToTheRecordsMode = hasInfix "chmod 0400 ${installing}" attach;
+        movedOntoItsPath = hasInfix "mv ${installing} ${staged}" attach;
+        theRootIsStillTheEnvironments = hasInfix ''root="''${PORTABLE_PLANNER_ROOT:-}"'' attach;
+      };
+      expected = {
+        asksTheAccountsManager = true;
+        stopsThroughIt = true;
+        startsThroughIt = true;
+        reloadsThroughIt = true;
+        attachesThroughItsPortabled = true;
+        asksThatPortabled = true;
+        detachesThroughIt = true;
+        bareManagerCalls = 1;
+        barePortabledCalls = 0;
+        chowns = 0;
+        andTheSystemScopeStillOwnsWhatItStages = 2;
+        oneDirectoryTree = 1;
+        createdOwnerOnly = true;
+        setToTheRecordsMode = true;
+        movedOntoItsPath = true;
+        theRootIsStillTheEnvironments = true;
+      };
+    };
+
+  # A persistent user attach of an out-of-tree path copies the image to a
+  # directory the user image search path never scans, so the image is placed in
+  # the pool that path does scan and attached by the name it resolves.
+  testTheImageIsPlacedWhereTheUserSearchPathScans =
+    let
+      attach = userStaged.attach;
+      named = "${userStaged.name}_${userStaged.version}";
+      poolImage = "\"$pool\"/${userStaged.image}";
+      poolOf = name: "\"$pool\"/${name}";
+      # Every file the pool is handed, in the order the script hands it over.
+      placed =
+        let
+          destinationOf =
+            line: builtins.head (filter (w: hasInfix "$pool" w) (nixpkgsLib.splitString " " line));
+        in
+        map destinationOf (filter (l: hasInfix "install -m 0444 " l) (support.lines attach));
+    in
+    {
+      expr = {
+        thePoolIsTheAccountsStatePool = hasInfix ''pool="''${XDG_STATE_HOME:-$HOME/.local/state}/portables"'' attach;
+        # Traversable by an account that owns none of it and listable by none:
+        # the extraction child opens the image path as a foreign uid, and a
+        # listable pool publishes one entry's image names to every account.
+        eachComponentNamedAtTheTraversableMode = hasInfix ''install -d -m 0711 "$HOME/.local" "$HOME/.local/state" "$pool"'' attach;
+        andTheStatedStateHomeInsteadOfThatChain = hasInfix ''install -d -m 0711 "$XDG_STATE_HOME" "$pool"'' attach;
+        noComponentLeftToInstallToCreate = hasInfix "install -d -m 0700" attach;
+        # The verity data arrives first and the image lands on the name a
+        # resolution finds last, so a name that resolves is verifiable.
+        inThatOrder = placed;
+        fromTheStoreObjectTheBuildWrote = hasInfix "install -m 0444 ${userStaged.raw}/${userStaged.image} ${poolImage}.installing" attach;
+        movedOntoTheNameAResolutionFinds = hasInfix "mv ${poolImage}.installing ${poolImage}" attach;
+        attachedByName = hasInfix "portablectl --user attach --profile=trusted ${named} > /dev/null" attach;
+        askedByName = hasInfix "portablectl --user is-attached ${named} " attach;
+        detachedByName = hasInfix "portablectl --user detach ${named}" userStaged.detach;
+        # Never by the store path it was copied from.
+        attachedByPath = hasInfix "attach --profile=trusted ${userStaged.raw}" attach;
+        comparedAgainstThePoolCopy = hasInfix ''[ "$held" != ${poolImage} ]'' attach;
+        removedWithTheAttachment = hasInfix "rm -f ${poolImage} ${poolOf userStaged.sidecars.verity}" userStaged.detach;
+        # A system-scope attach is the one it was: the store path itself, and no
+        # pool at all.
+        theSystemAttachNamesItsStorePath = hasInfix "portablectl attach --profile=trusted ${systemStaged.raw}/${systemStaged.image}" systemStaged.attach;
+        theSystemAttachHasNoPool = hasInfix "pool" systemStaged.attach;
+      };
+      expected = {
+        thePoolIsTheAccountsStatePool = true;
+        eachComponentNamedAtTheTraversableMode = true;
+        andTheStatedStateHomeInsteadOfThatChain = true;
+        noComponentLeftToInstallToCreate = false;
+        inThatOrder = [
+          "\"$pool\"/${userStaged.sidecars.verity}"
+          "\"$pool\"/${userStaged.sidecars.roothash}"
+          "\"$pool\"/${userStaged.sidecars.signature}"
+          "\"$pool\"/${userStaged.image}.installing"
+        ];
+        fromTheStoreObjectTheBuildWrote = true;
+        movedOntoTheNameAResolutionFinds = true;
+        attachedByName = true;
+        askedByName = true;
+        detachedByName = true;
+        attachedByPath = false;
+        comparedAgainstThePoolCopy = true;
+        removedWithTheAttachment = true;
+        theSystemAttachNamesItsStorePath = true;
+        theSystemAttachHasNoPool = false;
+      };
+    };
+
+  # What a machine's own listing names an image this realiser built by, crossed
+  # against a file name this build composed. The three values are data and no
+  # pattern, because the reader of the record is python and one published
+  # pattern would be one rule with two readings; the pattern here is this
+  # suite's own, built out of them.
+  testTheImageFileNameSplitsAtThePublishedHoldings =
+    let
+      holdings = reader.holdings;
+      split =
+        file:
+        builtins.match "(.*)${holdings.separator}([${holdings.digestAlphabet}]{${toString holdings.digestLength}})\\.raw" file;
+      parts = split systemStaged.image;
+      name = elemAt parts 0;
+      digest = elemAt parts 1;
+      chars = genList (i: builtins.substring i 1 digest) (builtins.stringLength digest);
+    in
+    {
+      expr = {
+        inherit holdings;
+        splits = parts != null;
+        theNameTheRuleAdmits = reader.acceptsName name;
+        theNameIsTheEntrysOwn = name == systemStaged.name;
+        theDigestLength = builtins.stringLength digest;
+        overThePublishedAlphabet = builtins.all (c: hasInfix c holdings.digestAlphabet) chars;
+        theDigestIsTheEntrysVersion = digest == systemStaged.version;
+        # The same composition under the other scope: the file name is the
+        # realiser's and the scope is the machine's.
+        theOtherScope = split userStaged.image != null;
+        # And a listing row of some other tool's image does not split at all.
+        somethingElsesImage = split "debian_bookworm.raw" != null;
+      };
+      expected = {
+        holdings = {
+          separator = "_";
+          digestAlphabet = "0123456789abcdef";
+          digestLength = 16;
+        };
+        splits = true;
+        theNameTheRuleAdmits = true;
+        theNameIsTheEntrysOwn = true;
+        theDigestLength = 16;
+        overThePublishedAlphabet = true;
+        theDigestIsTheEntrysVersion = true;
+        theOtherScope = true;
+        somethingElsesImage = false;
+      };
+    };
+
+  testAnImageOfAProbedEntryCarriesTheProbeUnit =
+    let
+      image = readOf { } (probing { });
+      bare = readOf { } simple;
+      derived = reader.probeFileName image.name;
+    in
+    {
+      expr = {
+        files = map (f: f.file) (reader.renderedUnits image);
+        inherit derived;
+        theImagesOwnPrefix = builtins.substring 0 (builtins.stringLength image.name) derived;
+        whichUnitItProbes = image.probed;
+        # An entry recording no probe carries no such file, and the reading
+        # answers that with the same field the rendering gates on.
+        unprobed = map (f: f.file) (reader.renderedUnits bare);
+        unprobedProbed = bare.probed;
+      };
+      expected = {
+        files = [
+          "svc-only-only.service"
+          "svc-only-health.service"
+        ];
+        derived = "svc-only-health.service";
+        theImagesOwnPrefix = "svc-only";
+        whichUnitItProbes = "only";
+        unprobed = [ "svc-only-only.service" ];
+        unprobedProbed = null;
+      };
+    };
+
+  # The probe pair is a vocabulary field like any other, so a table not naming
+  # it would fail the build for a deployment the vocabulary accepts. What the
+  # two fields render into is the derived file and never the probed unit's own.
+  testAProbeFieldTheDirectiveTableDoesNotName =
+    let
+      image = readOf { } (probing { });
+      probedUnit = reader.renderUnit image "only";
+      probe = probeTextOf (reader.renderedUnits image) image;
+    in
+    {
+      expr = {
+        built = raises image;
+        inTheTable = {
+          probe = reader.unitDirectives.probe;
+          probeTimeout = reader.unitDirectives.probeTimeout;
+        };
+        theProbedUnitsOwnFile = map (needle: hasInfix needle probedUnit) [
+          "${borgbackup}/bin/borg check"
+          "TimeoutStartSec"
+        ];
+        theDerivedFile = map (needle: hasInfix needle probe) [
+          "ExecStart=${borgbackup}/bin/borg check"
+          "TimeoutStartSec=30s"
+        ];
+      };
+      expected = {
+        built = false;
+        inTheTable = {
+          probe = "ExecStart";
+          probeTimeout = "TimeoutStartSec";
+        };
+        theProbedUnitsOwnFile = [
+          false
+          false
+        ];
+        theDerivedFile = [
+          true
+          true
+        ];
+      };
+    };
+
+  # The binds are the entry's and identical on every unit of it, so a probe
+  # reading a delivered value or a configuration file reaches it inside the same
+  # namespace without a bind of its own - and it claims no directory, because a
+  # job that exits takes a runtime directory it declared with it.
+  testAnImagesProbeIsShownWhatTheEntryIsShown =
+    let
+      result = support.valuePlan {
+        instance = "holder";
+        openIt = true;
+        unitArgs = {
+          probe = "${borgbackup}/bin/borg check";
+          probeTimeout = "30s";
+          runtimeDirectory = [ "holder" ];
+          stateDirectory = [ "holder" ];
+          cacheDirectory = [ "holder" ];
+        };
+        extra = _: {
+          configData."/etc/thing.conf" = {
+            mode = "0444";
+            reload = [ "only" ];
+            render = [ { text = "value\n"; } ];
+          };
+        };
+      };
+      image = reader.read {
+        plan = result.plan;
+        key = "holder:only@one";
+        profile = "trusted";
+      };
+      probe = probeTextOf (reader.renderedUnits image) image;
+      unit = reader.renderUnit image "only";
+      bindsIn = text: filter (line: hasInfix "BindReadOnlyPaths=" line) (support.lines text);
+      directoriesIn =
+        text:
+        filter (needle: hasInfix needle text) [
+          "CacheDirectory"
+          "RuntimeDirectory"
+          "StateDirectory"
+        ];
+    in
+    {
+      expr = {
+        shown = map (p: p.path) image.hostPaths;
+        shownToTheProbe = bindsIn probe;
+        theSameAsTheUnitIsShown = bindsIn probe == bindsIn unit;
+        directories = directoriesIn probe;
+        theUnitItProbesDeclaresThem = directoriesIn unit;
+      };
+      expected = {
+        shown = [
+          "/etc/thing.conf"
+          "/run/vars/holder/hostKey/key"
+        ];
+        shownToTheProbe = [
+          "BindReadOnlyPaths=${assemble "holder-only-config-etc-thing-conf" "value\n"}:/etc/thing.conf"
+          "BindReadOnlyPaths=/run/vars/holder/hostKey/key:/run/vars/holder/hostKey/key"
+        ];
+        theSameAsTheUnitIsShown = true;
+        directories = [ ];
+        theUnitItProbesDeclaresThem = [
+          "CacheDirectory"
+          "RuntimeDirectory"
+          "StateDirectory"
+        ];
+      };
+    };
+
+  # A probe and its bound are unit fields, so they are in the entry's key and in
+  # the digest taken over what the artifact holds: a changed probe is a new
+  # image and is replaced at the next apply rather than compared equal.
+  testAChangedProbeIsADifferentImage =
+    let
+      versionOf = implementation: (readOf { } implementation).version;
+      imageOf = implementation: (reader.attachment (readOf { } implementation)).image;
+      keyOf = implementation: (planned { } implementation).plan."svc:only@one".key;
+      changedCommand = probing { command = "${borgbackup}/bin/borg check --repository-only"; };
+      changedBound = probing { timeout = "45s"; };
+    in
+    {
+      expr = {
+        commandMovesTheDigest = versionOf (probing { }) != versionOf changedCommand;
+        boundMovesTheDigest = versionOf (probing { }) != versionOf changedBound;
+        andTheImageFileWithIt = imageOf (probing { }) != imageOf changedCommand;
+        rebuiltIsEqual = versionOf (probing { }) == versionOf (probing { });
+        unprobedDiffers = versionOf simple != versionOf (probing { });
+        # The key moves too, the fields being the unit's, which is what makes a
+        # changed probe a new generation before it is a new image.
+        commandMovesTheKey = keyOf (probing { }) != keyOf changedCommand;
+        boundMovesTheKey = keyOf (probing { }) != keyOf changedBound;
+      };
+      expected = {
+        commandMovesTheDigest = true;
+        boundMovesTheDigest = true;
+        andTheImageFileWithIt = true;
+        rebuiltIsEqual = true;
+        unprobedDiffers = true;
+        commandMovesTheKey = true;
+        boundMovesTheKey = true;
+      };
+    };
+
+  # The attachment's unit list is what the attach script starts, so the probe
+  # runs at attach time and a probe that fails fails the step. Nothing rolls
+  # back: there is no generation to return to, and the machine keeps running
+  # what it holds.
+  testTheProbeIsAttachedAndStartedWithTheEntrysUnits =
+    let
+      result = (planned { } (probing { })).result;
+      built = builtFrom { } result;
+      attachment = built.attachment;
+      words = concatStringsSep " " (map (unit: "'${unit}'") attachment.units);
+    in
+    {
+      expr = {
+        inherit (attachment) units;
+        unprobed = (reader.attachment (readOf { } simple)).units;
+        # The file list the artifact writes and the list the attachment starts
+        # are one list, which is the point of deriving the name once.
+        carriedByTheImage = planner.util.sortStrings (map (f: f.file) (reader.renderedUnits built.image));
+        started = hasInfix "systemctl start ${words}" built.attach;
+        theProbeIsOneOfTheStartedWords = hasInfix "'svc-only-health.service'" words;
+        # And no rollback: nothing in the step that starts them detaches on a
+        # failure, because an image has no previous generation.
+        detachesOnFailure = hasInfix "portablectl detach" (
+          builtins.concatStringsSep "\n" (
+            filter (line: hasInfix "systemctl start" line) (support.lines built.attach)
+          )
+        );
+      };
+      expected = {
+        units = [
+          "svc-only-health.service"
+          "svc-only-only.service"
+        ];
+        unprobed = [ "svc-only-only.service" ];
+        carriedByTheImage = [
+          "svc-only-health.service"
+          "svc-only-only.service"
+        ];
+        started = true;
+        theProbeIsOneOfTheStartedWords = true;
+        detachesOnFailure = false;
+      };
+    };
+
+  # The four conditions this builder refuses a probe under, each reachable only
+  # from a hand-written plan: every refusal the planner rows about withholds
+  # both fields, so no plan a deployment produced can carry one of these. A
+  # record is written rather than declared for that reason, the way the
+  # directive table's own refusal is.
+  testAProbeNoRenderingIsHonestAbout =
+    let
+      recording =
+        record:
+        let
+          p = planned { } simple;
+          entry = p.plan.${p.key};
+        in
+        p.plan
+        // {
+          ${p.key} = entry // {
+            units.only = entry.units.only // record;
+          };
+        };
+      twoProbes =
+        let
+          p = planned { } (probing { });
+          entry = p.plan.${p.key};
+        in
+        p.plan
+        // {
+          ${p.key} = entry // {
+            units = entry.units // {
+              second = entry.units.only;
+            };
+          };
+        };
+      readAs =
+        plan:
+        reader.read {
+          inherit plan;
+          key = "svc:only@one";
+          profile = "trusted";
+        };
+    in
+    {
+      expr = {
+        withoutTimeout = raises (
+          readAs (recording {
+            probe = "${borgbackup}/bin/borg check";
+          })
+        );
+        withoutProbe = raises (
+          readAs (recording {
+            probeTimeout = "30s";
+          })
+        );
+        unbounded = raises (
+          readAs (recording {
+            probe = "${borgbackup}/bin/borg check";
+            probeTimeout = "0s";
+          })
+        );
+        declaredTwice = raises (readAs twoProbes);
+        # The same two units with one probe between them is the ordinary case,
+        # so the refusal above is about the second statement and not about the
+        # second unit.
+        oneOfTwo = raises (
+          readAs (
+            let
+              p = planned { } (probing { });
+              entry = p.plan.${p.key};
+            in
+            p.plan
+            // {
+              ${p.key} = entry // {
+                units = entry.units // {
+                  second = removeAttrs entry.units.only [
+                    "probe"
+                    "probeTimeout"
+                  ];
+                };
+              };
+            }
+          )
+        );
+        # A bound the spelling of zero does not reach is rendered, so the
+        # refusal is over the spelling and not over the pair.
+        bounded = raises (
+          readAs (recording {
+            probe = "${borgbackup}/bin/borg check";
+            probeTimeout = "30s";
+          })
+        );
+        accounted = map (account: account.id) [
+          reader.accounts.probeWithoutTimeout
+          reader.accounts.probeTimeoutWithoutProbe
+          reader.accounts.probeTimeoutUnbounded
+          reader.accounts.probeDeclaredTwice
+        ];
+      };
+      expected = {
+        withoutTimeout = true;
+        withoutProbe = true;
+        unbounded = true;
+        declaredTwice = true;
+        oneOfTwo = false;
+        bounded = false;
+        accounted = [
+          "unit-probe-without-timeout"
+          "unit-probe-timeout-without-probe"
+          "unit-probe-timeout-unbounded"
+          "unit-probe-declared-twice"
+        ];
       };
     };
 }
