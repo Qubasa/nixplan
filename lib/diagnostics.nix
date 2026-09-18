@@ -125,15 +125,24 @@ rec {
 
   # The same fact produced twice is one row: two modules reading one interface
   # cannot turn one bad atom into two problems. listToAttrs keeps the first.
+  #
+  # The key is discarded of its string context, because an attribute name may
+  # carry none and a row's message may name a store path - a closure root
+  # nothing mentions is one - so a real deployment would end the evaluation
+  # inside the table that exists to report it. The row itself keeps its context;
+  # this is `util.shortHash`'s trade, for the same reason and in the same place,
+  # a key string.
   dedup =
     rows:
     builtins.attrValues (
       util.mapToAttrs (r: {
-        name = util.joinLines [
-          r.id
-          r.subject
-          r.message
-        ];
+        name = builtins.unsafeDiscardStringContext (
+          util.joinLines [
+            r.id
+            r.subject
+            r.message
+          ]
+        );
         value = r;
       }) rows
     );

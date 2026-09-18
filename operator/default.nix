@@ -306,6 +306,19 @@
 
       json = name: value: pkgs.writeText "planner-${name}.json" (builtins.toJSON value);
 
+      # A row's message may interpolate a store path - a closure root nothing
+      # mentions is one - and a string carrying context is a string `writeText`
+      # refuses. The table is a sentence rather than a reference, so the context
+      # goes where the bytes are written; `plan.json` and `manifest.json` keep
+      # theirs, which is what roots the paths a copy puts on a machine.
+      sentences = text: builtins.unsafeDiscardStringContext text;
+
+      # The rendered table, bound once and spent twice: the file the farm holds
+      # and the attribute an answer is read off are one text in one rendering,
+      # because rendering is the planner's and a second call is a second format
+      # to keep equal.
+      rendered = sentences (planner.render reading.diagnostics + "\n");
+
       farm = pkgs.linkFarm "planner-deployment" (
         [
           {
@@ -318,14 +331,14 @@
           }
           {
             name = "diagnostics.json";
-            path = json "diagnostics" reading.diagnostics;
+            path = pkgs.writeText "planner-diagnostics.json" (sentences (builtins.toJSON reading.diagnostics));
           }
           # The rendered table travels beside the rows because the reason a build
           # or an apply gives has to be the planner's own words, and rendering is
           # the planner's.
           {
             name = "diagnostics.txt";
-            path = pkgs.writeText "planner-diagnostics.txt" (planner.render reading.diagnostics + "\n");
+            path = pkgs.writeText "planner-diagnostics.txt" rendered;
           }
         ]
         ++ map (key: {
@@ -342,7 +355,7 @@
         passthru = (old.passthru or { }) // {
           inherit (result) plan;
           inherit (reading) manifest diagnostics;
-          inherit entries machines;
+          inherit entries machines rendered;
         };
       });
     in
@@ -471,11 +484,15 @@
         }
         {
           name = "diagnostics.json";
-          path = json "diagnostics" reading.diagnostics;
+          path = pkgs.writeText "planner-diagnostics.json" (
+            builtins.unsafeDiscardStringContext (builtins.toJSON reading.diagnostics)
+          );
         }
         {
           name = "diagnostics.txt";
-          path = pkgs.writeText "planner-diagnostics.txt" (planner.render reading.diagnostics + "\n");
+          path = pkgs.writeText "planner-diagnostics.txt" (
+            builtins.unsafeDiscardStringContext (planner.render reading.diagnostics + "\n")
+          );
         }
       ];
     in

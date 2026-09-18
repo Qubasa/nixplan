@@ -211,6 +211,19 @@ Prose: `docs/diagnostics.md`, under "Which layer reports a refusal" and "What is
 - `storeDir` is an argument. Never write `/nix/store` into `lib/`.
 - `util.shortHash` discards string context to keep a store reference out of a key string;
   `util.uniqueStrings` keeps it, because that context is what lets a consumer copy the bytes.
+- A string a derivation *writes* carries no context; a path a copy has to *follow* keeps it. Every
+  layer spends the same discard, and it is four sites in three layers rather than one rule in one
+  place, because each is a different use of one row's or one record's text: `dedup` in
+  `lib/diagnostics.nix` keys a row by its own identifier, subject and message, and an attribute
+  name may carry no context, so a message naming a store path - a closure root nothing mentions is
+  one - ended the evaluation inside the table that exists to report it;
+  `operator/default.nix` discards where the farm writes `diagnostics.txt` and `diagnostics.json`,
+  because `writeText` refuses a string with context; and `flakelet/default.nix` discards the base
+  name it builds a `closure/` link's name from, while the link's target keeps its own. A fifth site
+  is a place to forget it. `plan.json` and `manifest.json` keep their context, which is what roots
+  the paths a copy puts on a machine, and the discard in `lib/` is at that one key and nowhere
+  else: inside `util.oneLine` it runs three to four times per row and cost 45 gated figures against
+  the key's 33. `probes.nix`'s `aRowNamingAStorePathIsStillARow` is the pin.
 - `image/` and `flakelet/` do the opposite and raise: a fact the entry does not record is a refusal
   naming the entry and the field, never a default.
 - A refusal belongs to the layer holding the fact - `mkPlan`, `operator/read.nix` for the
@@ -374,6 +387,22 @@ Prose: `docs/authoring.md` for interfaces, leaf modules, roots and the deploymen
   refuses.
 - A secret export must publish a generated file, never a bare value: `export-secret-not-a-reference`.
   A path in the plan is deliverable; bytes in the plan are a leak.
+- `mkDeployment` publishes the rendered table beside the rows, bound once in `operator/default.nix`
+  and spent twice, so the farm's `diagnostics.txt` and `passthru.rendered` are one text in one
+  rendering. Rendering is the planner's; a second renderer would be a second format to keep equal
+  to the byte-compared fixture.
+- `lib/vocabulary.nix` publishes the authoring vocabulary as data, projected from the tables
+  `lib/atoms.nix`, `lib/module.nix` and `lib/resolve.nix` already hold and restating none of them,
+  so a key added to a table is described by existing. It is published because the library is what
+  enforces it and because `lib/default.nix` publishes neither `module` nor `resolve`; `moduleKeys`
+  and the four registry key lists are the two additive exports that made the projection possible,
+  both evaluated once per library import and outside `mkPlan`. A type is published by its name and,
+  where it is an enumeration, by its members; a predicate is published in no form, because a
+  validator is a function - the limit `identityOf` and the platform record's absent `is*`
+  predicates already record - and `atoms.domains` is read for its list-valued members alone. Every
+  leaf is a string, a list of strings or a record of those, which is why the port range is text.
+  The row identifiers are deliberately not projected: their home is the production sites and
+  `docs/diagnostics.md`, and the rows one deployment earned are `planner diagnose`'s answer.
 
 ## Platform record
 

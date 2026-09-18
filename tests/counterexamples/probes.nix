@@ -405,4 +405,23 @@ in
         });
       }).plan;
   }) "ok";
+
+  # CLAUDE.md, Purity and totality: "`lib/` never raises: every check returns a
+  # row and evaluation stays total."
+  # A row's message may name a store path - a closure root nothing mentions is
+  # one - and `dedup` keys a row by its own text, where an attribute name may
+  # carry no string context: `the string '…' is not allowed to refer to a store
+  # path`, raised inside the table that exists to report it. Fixed by the
+  # discard at that key; kept as the pin. The path is one this file was handed
+  # rather than one written here, because interpolating it is what gives the
+  # string the context the defect was about.
+  aRowNamingAStorePathIsStillARow = builtins.deepSeq (planner.mkPlan {
+    inherit machines;
+    instances.app = onOne (_: {
+      impl = _: {
+        closure = [ "${imageSource}" ];
+        units.main.command = "/bin/true";
+      };
+    });
+  }) "ok";
 }
