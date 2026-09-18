@@ -27,6 +27,25 @@ files instead - so that comparison is the narrower one, and its words say so
 rather than borrowing the other's. Neither changes the exit status: a stale
 entry is an answer, and what to do about it is the applying command's work.
 
+A machine is then asked, once, what else it holds, and every holding the build
+names no entry for costs its own line. A holding is attributed before it is
+named: only what the record publishes for the realiser that would have put it
+there makes an answer this planner's, so a service the machine's own
+configuration declares is read as nothing. The line carries the machine's own
+answer - the plan key where the answer names one, the listed name where it
+names only that - and it costs no exit status either, for the reason a stale
+entry does not: removing it is the applying command's work.
+
+The one question a machine is asked about its values carries the machine's own
+trial of its sealed copies, because a report that cost a login per file would
+fail as a machine that died. What the trial answers is whether each copy is
+there and whether it opens, never a byte of one: a copy that does not open and
+a value with no copy at all are two lines an operator cannot learn any other
+way, both of them saying that the machine will not have that value after its
+next reboot, and a machine holding no unsealer is reported as one whose copies
+were not checked rather than as one whose copies are fine. None of the three
+changes the exit status, for the reason a stale entry does not.
+
 A rollback is the endpoint's own. An image entry has no generation to return to,
 so rolling one back is a refusal naming the entry and its realiser rather than a
 detach that would leave the machine running nothing.
@@ -47,8 +66,10 @@ from manifest import (
     Entry,
     ValueFile,
     address_of,
+    entry_scope,
     image_file,
     machine_address,
+    machine_scope,
     service_name,
     unit_files,
 )
@@ -110,20 +131,23 @@ def status(
         known, and the machines the report could not ask.
 
     Raises:
-        ApplyError: If a named key is not an entry of the deployment, or an
-            endpoint answered something that is not its own status.
+        ApplyError: If a named key is not an entry of the deployment, if an
+            endpoint answered something that is not its own status, or if a
+            machine answered the question of what it holds with something the
+            command cannot read, naming the machine and what it said.
     """
     opts, env = remote.channel(base_env, ssh_key)
     lines, record = remote.recording(log)
     unasked: set[str] = set()
     for entry in _selected(deployment, only):
-        answer = _ask(runner, entry, opts=opts, user=user, env=env)
+        answer = _ask(runner, deployment, entry, opts=opts, user=user, env=env)
         record(f"{entry.key} {entry.realiser} {_answered(entry, answer)}")
         if answer.status != UNREALISED and not _the_endpoint_answered(answer):
             unasked.add(entry.machine)
     for machine, delivered in _values(deployment, only).items():
         address = machine_address(deployment, machine, of=f"the values of {machine}")
-        question = remote.values_script([file.path for _, file in delivered])
+        trial = _trial(deployment, machine)
+        question = remote.values_script([file.path for _, file in delivered], check=trial)
         answer = remote.asking(
             runner, remote.ssh_argv(address, question, opts=opts, user=user), env=env
         )
@@ -132,7 +156,66 @@ def status(
             continue
         for key in _absent(delivered, answer.said):
             record(f"value {key} missing on {machine}")
+        for line in _seals(delivered, machine, answer.said, asked=trial is not None):
+            record(line)
+    for machine in _machines(deployment, only):
+        held = _holdings(deployment, runner, machine, opts=opts, user=user, env=env)
+        if held is None:
+            unasked.add(machine)
+            continue
+        for holding in held:
+            record(holding.sentence(machine))
     return Report(lines=tuple(lines), unasked=tuple(sorted(unasked)))
+
+
+def _machines(deployment: Deployment, only: Sequence[str]) -> tuple[str, ...]:
+    """Return the machines of the selection an answer can be asked of, sorted.
+
+    A machine declaring no address is asked nothing: its entries' own lines
+    already say it was not dialled, and a machine the build places no entry of
+    the selection on is not asked at all.
+    """
+    placed = {entry.machine for entry in _selected(deployment, only) if entry.address is not None}
+    return tuple(sorted(placed))
+
+
+def _holdings(
+    deployment: Deployment,
+    runner: remote.Runner,
+    machine: str,
+    *,
+    opts: str,
+    user: str,
+    env: dict[str, str],
+) -> tuple[remote.Holding, ...] | None:
+    """Return what one machine holds that the build names no entry for.
+
+    One question per machine, beside the value question, because a machine's
+    endpoint may be reached over a socket-activated login. What the deployment
+    places decides which holdings are named and the selection decides only
+    which machines are asked, so a restriction never makes an entry an orphan.
+
+    Returns:
+        The holdings the build names no entry for, empty for a machine holding
+        none of them, and `None` for a machine that could not be asked.
+
+    Raises:
+        ApplyError: If the answer is not the one the question prints, naming
+            the machine and what it said.
+    """
+    realisers = tuple(deployment.realisers.values())
+    question = remote.holdings_script(realisers, scope=machine_scope(deployment, machine))
+    if not question:
+        return ()
+    address = machine_address(deployment, machine, of=f"what {machine} holds")
+    answer = remote.asking(
+        runner, remote.ssh_argv(address, question, opts=opts, user=user), env=env
+    )
+    if answer.status != 0:
+        return None
+    return remote.unnamed(
+        remote.holdings_of(machine, realisers, answer.said), realisers, deployment.entries
+    )
 
 
 def _values(
@@ -148,9 +231,8 @@ def _values(
         The value entry key and file of every declared file delivered to that
         machine, sorted, for each machine with an address and a value.
     """
-    machines = {entry.machine for entry in _selected(deployment, only) if entry.address is not None}
     delivered: dict[str, tuple[tuple[str, ValueFile], ...]] = {}
-    for machine in sorted(machines):
+    for machine in _machines(deployment, only):
         held = tuple(
             sorted(
                 (
@@ -169,6 +251,18 @@ def _values(
     return delivered
 
 
+def _halves(reported: str) -> tuple[list[str], list[str]]:
+    """Return the presence half of one machine's answer and its trial half.
+
+    The two are one login's output, so they are told apart by the marker the
+    question printed between them and never by the shape of a line: both
+    halves answer `<path> <word>`.
+    """
+    lines = reported.splitlines()
+    mark = lines.index(remote.SEALS) if remote.SEALS in lines else len(lines)
+    return lines[:mark], [line for line in lines[mark + 1 :] if line.strip()]
+
+
 def _absent(delivered: tuple[tuple[str, ValueFile], ...], reported: str) -> tuple[str, ...]:
     """Return the value entries the machine answered were not all there.
 
@@ -182,20 +276,83 @@ def _absent(delivered: tuple[tuple[str, ValueFile], ...], reported: str) -> tupl
     """
     said = {
         columns[0]: columns[1]
-        for columns in (line.split() for line in reported.splitlines())
+        for columns in (line.split() for line in _halves(reported)[0])
         if len(columns) == 2
     }
     return tuple(sorted({key for key, file in delivered if said.get(file.path) != "present"}))
 
 
+def _trial(deployment: Deployment, machine: str) -> Path | None:
+    """Return the machine's own trial of its sealed copies, where the build made one.
+
+    Returns:
+        The unsealer's check program, and nothing for a machine whose copies
+        the record says are not sealed.
+    """
+    stated = deployment.machines.get(machine)
+    if stated is None or not stated.sealed or stated.path is None:
+        return None
+    return stated.path / "bin" / "check"
+
+
+def _seals(
+    delivered: tuple[tuple[str, ValueFile], ...],
+    machine: str,
+    reported: str,
+    *,
+    asked: bool,
+) -> tuple[str, ...]:
+    """Return what one machine answered about the copies it can open by itself.
+
+    The verdict is the machine's own, obtained by asking its own unsealer, and
+    nothing about the bytes of a copy is printed or transferred: a native seal
+    names no recipient, so whether it opens is the only question there is and
+    the tool that owns the format is the only thing that can answer it. A copy
+    sealed to a rotated identity and a copy whose bytes were damaged are one
+    line, because they are one answer.
+
+    Returns:
+        One line per value of that machine whose copy is not there or does not
+        open, and the one line a machine holding no unsealer earns instead.
+        None of them changes the exit status.
+    """
+    if not asked:
+        return ()
+    trial = _halves(reported)[1]
+    if not trial:
+        return ()
+    if remote.UNCHECKED in trial:
+        return (f"{machine} holds no unsealer, so its sealed copies were not checked",)
+    said = {
+        columns[0]: columns[1] for columns in (line.split() for line in trial) if len(columns) == 2
+    }
+    answered = tuple((key, said[file.sealed]) for key, file in delivered if file.sealed in said)
+    missing = sorted({key for key, word in answered if word == remote.MISSING_COPY})
+    closed = sorted(
+        {key for key, word in answered if word not in (remote.OPENS, remote.MISSING_COPY)}
+    )
+    return (
+        *(f"value {key} has no sealed copy on {machine}" for key in missing),
+        *(f"value {key} sealed copy does not open on {machine}" for key in closed),
+    )
+
+
 def _ask(
-    runner: remote.Runner, entry: Entry, *, opts: str, user: str, env: dict[str, str]
+    runner: remote.Runner,
+    deployment: Deployment,
+    entry: Entry,
+    *,
+    opts: str,
+    user: str,
+    env: dict[str, str],
 ) -> remote.Answer:
     if entry.path is None:
         return remote.Answer(UNREALISED, "")
     if entry.address is None:
         return remote.Answer(UNDIALLED, "")
-    argv = remote.ssh_argv(entry.address, remote.status_script(entry), opts=opts, user=user)
+    scope = entry_scope(deployment, entry)
+    question = remote.status_script(entry, scope=scope)
+    argv = remote.ssh_argv(entry.address, question, opts=opts, user=user)
     return remote.asking(runner, argv, env=env)
 
 
