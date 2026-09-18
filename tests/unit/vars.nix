@@ -18,25 +18,30 @@ let
     ;
 
   # Three machines, because a shared value and a per-placement one only differ
-  # once a member is placed more than once.
+  # once a member is placed more than once. Each declares a seal recipient, so a
+  # delivery to it earns no warning and every row list below is about its own
+  # subject; the two cases about that warning state a registry of their own.
   machines = {
     alpha = {
       address = "alpha.example:22";
       tags = [ "fleet" ];
       system = "x86_64-linux";
       serviceManager = "systemd";
+      sealRecipient = "age1wnkdgm47dsz3w6hvckcgvud675pw0zrc2x7k7pm72zx0865dz5uam96ha4";
     };
     beta = {
       address = "beta.example:22";
       tags = [ "fleet" ];
       system = "x86_64-linux";
       serviceManager = "systemd";
+      sealRecipient = "age15wy8legfhld65juvgt5j9yevstdp0l8n9ru4wqum9y6cr64540j8t2wdj8";
     };
     idle = {
       address = "idle.example:22";
       tags = [ "spare" ];
       system = "x86_64-linux";
       serviceManager = "systemd";
+      sealRecipient = "age10krg9v00adjlyp7a9e3cf3rwtne0et6ydsaj8y3azwdecsrtm8ypwhu3yj";
     };
   };
 
@@ -189,6 +194,10 @@ let
       }
       // args
     );
+
+  # The line `alpha` is rotated to, so a rotation is another recipient on one
+  # machine rather than another machine.
+  rotated = "age1kk6vk62pudgt4gvtegrc035aqqq9ky8yty4exlwzp4cgt44j93jrtlszgd";
 
   program = "/nix/store/9dm4x2vqk7z1n5bpr3jlfg8ys6cwh0az-generate-gen.drv";
 
@@ -644,6 +653,54 @@ in
           secrecy = "secret";
         };
         bytesAnywhere = false;
+      };
+    };
+
+  # The credential a machine joins a mesh with is a generated secret delivered to
+  # nobody: the operator reads it out of the value source and hands it over
+  # outside the tree. The plan therefore holds the path and the delivery facts
+  # and no byte of the value, and that is asked of every string the plan carries
+  # at any depth rather than of the fields this case happens to name: a case
+  # reading one field would pass while another leaked.
+  testTheCredentialsBytesAreNotInThePlan =
+    let
+      bytes = "authkey-7be2c1d40f9a";
+      result = deployment {
+        ownerArgs = {
+          per = "instance";
+          deploy = false;
+          openIt = false;
+        };
+        varsState."holder:vars/app"."key" = {
+          present = true;
+          content = bytes;
+        };
+      };
+      entry = result.plan."holder:vars/app";
+      strings = planner.util.stringsDeep result.plan;
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        path = entry.files."key".path;
+        inPlan = entry.files."key".inPlan;
+        secrecy = entry.files."key".secrecy;
+        deploy = entry.files."key".deploy;
+        delivery = entry.delivery;
+        reasons = entry.deliveryDerivedFrom;
+        leakedFields = map (found: found.path) (filter (found: hasInfix bytes found.value) strings);
+        theWalkReadsThePlan = builtins.any (found: found.value == "/run/vars/holder/app/key") strings;
+      };
+      expected = {
+        rows = [ ];
+        path = "/run/vars/holder/app/key";
+        inPlan = "reference";
+        secrecy = "secret";
+        deploy = false;
+        delivery = [ ];
+        reasons = [ ];
+        leakedFields = [ ];
+        theWalkReadsThePlan = true;
       };
     };
 
@@ -1312,6 +1369,255 @@ in
         namedThePath = true;
         delivery = [ "alpha" ];
         reasons = [ "holder:only@alpha owns it" ];
+      };
+    };
+
+  # The path reaches the consumer as a public string export, so no read widens
+  # the delivery set and the only site naming it is the probe. The row therefore
+  # proves the mention scan reached inside a probe with no scan naming the field.
+  testAProbeNamingAValueTheMachineDoesNotReceive =
+    let
+      id = "vars-path-off-delivery-set";
+      pathAndKey = planner.interface {
+        name = "identity";
+        exports = {
+          key = secretRef;
+          keyPath = {
+            type = planner.korora.string;
+            secrecy = "public";
+          };
+        };
+      };
+      holder = _: {
+        vars.app.files."key".secrecy = "secret";
+        provides.identity.interface = pathAndKey;
+        impl =
+          { vars, ... }:
+          {
+            provides.identity.exports = {
+              key = vars.app."key";
+              keyPath = vars.app."key".path;
+            };
+            units.only.command = "/bin/true";
+          };
+      };
+      client = _: {
+        uses.far = {
+          interface = pathAndKey;
+          reads = [ "keyPath" ];
+        };
+        impl =
+          { results, ... }:
+          {
+            units.only = {
+              command = "/bin/true";
+              probe = "/bin/test -r ${results.far.keyPath}";
+              probeTimeout = "30s";
+            };
+          };
+      };
+      result = support.edge {
+        registry = machines;
+        providerName = "holder";
+        providerModule = holder;
+        providerMachines = [ "alpha" ];
+        consumerName = "client";
+        consumerModule = client;
+        consumerMachines = [ "beta" ];
+        varsState."holder:vars/app@alpha"."key".present = true;
+      };
+      valuePath = result.plan."holder:vars/app@alpha".files."key".path;
+      message = messageById id result;
+      entry = result.plan."client:only@beta";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        subjects = subjectsById id result;
+        namesThePath = hasInfix valuePath message;
+        namesTheMachine = hasInfix "`beta`" message;
+        namesWhere = hasInfix "unit `only`" message;
+        namesWhoReceivesIt = hasInfix "`alpha`" (evidenceById id result);
+        theProbeIsTheOnlySiteNamingIt = hasInfix valuePath entry.units.only.probe;
+      };
+      expected = {
+        rows = [ id ];
+        subjects = [ "client:only@beta" ];
+        namesThePath = true;
+        namesTheMachine = true;
+        namesWhere = true;
+        namesWhoReceivesIt = true;
+        theProbeIsTheOnlySiteNamingIt = true;
+      };
+    };
+
+  testAPersistentPathIsDerivedFromTheValuesOwnPath =
+    let
+      once = deployment { };
+      twice = deployment { };
+      pathOf = result: result.plan."holder:vars/app@alpha".files."key".path;
+      sealed = planner.util.sealedPathOf (pathOf once);
+    in
+    {
+      expr = {
+        rows = rowIds once;
+        theRuntimePath = pathOf once;
+        thePersistentPath = sealed;
+        # A function of the runtime path and of nothing else, so two evaluations
+        # of one deployment answer one string.
+        twoEvaluationsAnswerOne = sealed == planner.util.sealedPathOf (pathOf twice);
+        underThePersistentRoot = hasInfix planner.util.sealedRoot sealed;
+        outsideTheRuntimeRoot = hasInfix planner.util.varsRoot sealed;
+      };
+      expected = {
+        rows = [ ];
+        theRuntimePath = "/run/vars/holder/app/key";
+        thePersistentPath = "/var/lib/planner/sealed/holder/app/key.age";
+        twoEvaluationsAnswerOne = true;
+        underThePersistentRoot = true;
+        outsideTheRuntimeRoot = false;
+      };
+    };
+
+  # The check that would catch a persistent root placed under the runtime one:
+  # `varsPathsIn` matches the runtime root plus three components, so a copy
+  # inside it would be read as a mention of a value no module declared and the
+  # two rows below would start firing on it. Each spelling is asserted beside
+  # its own control, or a scan that matched nothing at all would read as a pass.
+  testAPersistentPathIsNotAValuePathToTheScanThatRecognisesOne =
+    let
+      runtime = "${planner.util.varsRoot}/holder/app/key";
+      sealed = planner.util.sealedPathOf runtime;
+      offTheSet =
+        mention:
+        deployment {
+          consumer = reader {
+            reads = [ ];
+            unitArgs.env.SAW = mention;
+          };
+        };
+      undeployed =
+        mention:
+        deployment {
+          ownerArgs = {
+            deploy = false;
+            openIt = false;
+            unitArgs.env.SAW = mention;
+          };
+        };
+    in
+    {
+      expr = {
+        theScanReadsNoValuePathInIt = planner.util.varsPathsIn "opens ${sealed} at boot";
+        andReadsTheRuntimeOneBesideIt = planner.util.varsPathsIn "opens ${runtime} at boot";
+        aUnitOffTheDeliverySetNamingIt = rowIds (offTheSet sealed);
+        namingTheRuntimePathInstead = rowIds (offTheSet runtime);
+        aUnitNamingItOnAnUndeployedValue = rowIds (undeployed sealed);
+        namingTheRuntimePathOfOne = rowIds (undeployed runtime);
+      };
+      expected = {
+        theScanReadsNoValuePathInIt = [ ];
+        andReadsTheRuntimeOneBesideIt = [ runtime ];
+        aUnitOffTheDeliverySetNamingIt = [ ];
+        namingTheRuntimePathInstead = [ "vars-path-off-delivery-set" ];
+        aUnitNamingItOnAnUndeployedValue = [ ];
+        namingTheRuntimePathOfOne = [ "vars-not-deployed-opened" ];
+      };
+    };
+
+  # The trap this pins is `fileKeyInput`: the whole file record less defaulted
+  # ownership is the value entry's key input, so a persistent path recorded as a
+  # field of that record would re-key every generated value in every deployment
+  # for a path that is a function of the path already there.
+  testAPlanIsUnchangedByTheDerivationOfAPersistentPath =
+    let
+      plan = support.workedResult.plan;
+      serialised = builtins.toJSON plan;
+      valueEntries = filter (e: e ? files) (builtins.attrValues plan);
+      fileFields = builtins.sort (a: b: a < b) (
+        planner.util.uniqueStrings (
+          builtins.concatMap (
+            e: builtins.concatMap (f: attrNames f) (builtins.attrValues e.files)
+          ) valueEntries
+        )
+      );
+    in
+    {
+      expr = {
+        readSomeValues = length valueEntries > 1;
+        thePersistentRootIsNamedNowhere = hasInfix planner.util.sealedRoot serialised;
+        noRecordSaysACopyIsKept = [
+          (hasInfix "sealed" serialised)
+          (hasInfix ".age" serialised)
+        ];
+        theFileRecordFields = fileFields;
+      };
+      expected = {
+        readSomeValues = true;
+        thePersistentRootIsNamedNowhere = false;
+        noRecordSaysACopyIsKept = [
+          false
+          false
+        ];
+        theFileRecordFields = [
+          "bytes"
+          "deploy"
+          "group"
+          "inPlan"
+          "mode"
+          "owner"
+          "path"
+          "secrecy"
+        ];
+      };
+    };
+
+  testARotatedIdentityReKeysNothing =
+    let
+      planWith =
+        line:
+        planOf {
+          machines = machines // {
+            alpha = machines.alpha // {
+              sealRecipient = line;
+            };
+          };
+          instances.holder = {
+            module = soleRoot { module = bare "app"; };
+            placement.every.only.machines = [ "alpha" ];
+          };
+          varsState."holder:vars/app@alpha"."key".present = true;
+        };
+      before = planWith machines.alpha.sealRecipient;
+      after = planWith rotated;
+      keysOf = result: builtins.mapAttrs (_: entry: entry.key) result.plan;
+    in
+    {
+      expr = {
+        rows = rowIds before ++ rowIds after;
+        theLineReallyMoved = [
+          (before.plan."machine:alpha".sealRecipient == machines.alpha.sealRecipient)
+          (after.plan."machine:alpha".sealRecipient == rotated)
+        ];
+        everyKey = keysOf before == keysOf after;
+        theValueEntryKey =
+          before.plan."holder:vars/app@alpha".key == after.plan."holder:vars/app@alpha".key;
+        thePlacedEntryKey = before.plan."holder:only@alpha".key == after.plan."holder:only@alpha".key;
+        theMachineKey = before.plan."machine:alpha".key == after.plan."machine:alpha".key;
+        andTheFilesAreTheSameValue =
+          before.plan."holder:vars/app@alpha".files == after.plan."holder:vars/app@alpha".files;
+      };
+      expected = {
+        rows = [ ];
+        theLineReallyMoved = [
+          true
+          true
+        ];
+        everyKey = true;
+        theValueEntryKey = true;
+        thePlacedEntryKey = true;
+        theMachineKey = true;
+        andTheFilesAreTheSameValue = true;
       };
     };
 }
