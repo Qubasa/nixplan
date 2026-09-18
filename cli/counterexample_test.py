@@ -6,7 +6,9 @@ today: the comment above each assertion names the source the invariant is read o
 docstring says the invariant in one line. Every record is a real `Deployment`, `Entry` or
 `Value` and every remote step goes through a local recorder, so a failure is the command's own
 decision and never a mock's. A test turns green when the sentence it pins becomes true; none of
-them is a pin on a message, so a fix may word its refusal however it likes.
+them is a pin on a message, so a fix may word its refusal however it likes. The two about
+sealing are green already: the sentences they pin are a spec's, made true by the change that
+added them, and they stay here as what turns red if either stops holding.
 """
 
 from __future__ import annotations
@@ -29,6 +31,28 @@ from manifest import Deployment, Entry, Value, ValueFile
 MACHINE = "alpha"
 ADDRESS = "alpha.example"
 DIGEST = "deadbeefdeadbeef"
+PUBLISHED: dict[str, Any] = {
+    "flakelet": {"holdings": {"urlPrefix": "plan:"}, "scopes": ["system"]},
+    "image": {
+        "holdings": {"digestAlphabet": "0123456789abcdef", "digestLength": 16, "separator": "_"},
+        "scopes": ["system", "user"],
+    },
+}
+REALISED = {
+    name: manifest.Realiser(name=name, scopes=tuple(record["scopes"]), holdings=record["holdings"])
+    for name, record in PUBLISHED.items()
+}
+
+
+def asked_what_it_holds(cmd: list[str]) -> bool:
+    """Whether one argv is the question of what a machine holds.
+
+    Every channel below answers it with nothing. It is asked of every machine
+    of a run before the first step, so a channel answering it with an endpoint
+    record, an image listing or a refusal would be answering a question none of
+    these cases is about.
+    """
+    return remote.HELD in cmd[-1]
 
 
 class Channel:
@@ -58,7 +82,7 @@ class Channel:
         """Record one step and answer what this channel says."""
         self.calls.append(list(cmd))
         self.payloads.append(stdin)
-        return self.said
+        return "" if asked_what_it_holds(cmd) else self.said
 
 
 class Refusing(Channel):
@@ -70,6 +94,8 @@ class Refusing(Channel):
         """Record one step and refuse it the way a machine's own exit does."""
         self.calls.append(list(cmd))
         self.payloads.append(stdin)
+        if asked_what_it_holds(cmd):
+            return ""
         raise subprocess.CalledProcessError(1, cmd, output=b"", stderr=self.said.encode())
 
 
@@ -111,10 +137,23 @@ def placed(
     )
 
 
+def unsealing(*, sealed: bool = False, path: str | None = None) -> dict[str, manifest.Machine]:
+    """Return the record's table of the machines a delivered value reaches."""
+    return {
+        MACHINE: manifest.Machine(
+            name=MACHINE,
+            sealed=sealed,
+            scope="system",
+            path=None if path is None else Path(path),
+        )
+    }
+
+
 def built(
     plan: dict[str, Any],
     entries: dict[str, Entry],
     generated: dict[str, Value] | None = None,
+    machines: dict[str, manifest.Machine] | None = None,
 ) -> Deployment:
     """Return a built deployment over ``plan``, carrying no diagnostics."""
     return Deployment(
@@ -122,6 +161,8 @@ def built(
         plan=plan,
         entries=entries,
         values={} if generated is None else generated,
+        machines=unsealing() if machines is None else machines,
+        realisers=REALISED,
         diagnostics=(),
         table="",
     )
@@ -137,6 +178,7 @@ def secret_value(key: str, path: str) -> Value:
             ValueFile(
                 name="token",
                 path=path,
+                sealed=f"/var/lib/planner/sealed{path.removeprefix('/run/vars')}.age",
                 secrecy="secret",
                 owner="root",
                 group="root",
@@ -360,6 +402,8 @@ def test_an_artifact_path_that_leaves_the_build_is_refused(tmp_path: Path) -> No
                 {
                     "version": manifest.VERSION,
                     "storeDir": manifest.store_dir(),
+                    "realisers": PUBLISHED,
+                    "machines": {},
                     "entries": {"i:a@alpha": record},
                 }
             )
@@ -393,6 +437,8 @@ def test_an_artifact_path_below_the_build_is_accepted(tmp_path: Path) -> None:
             {
                 "version": manifest.VERSION,
                 "storeDir": manifest.store_dir(),
+                "realisers": PUBLISHED,
+                "machines": {},
                 "entries": {
                     "i:a@alpha": {
                         "realiser": "flakelet",
@@ -416,7 +462,9 @@ def test_an_artifact_path_below_the_build_is_accepted(tmp_path: Path) -> None:
     # CLAUDE.md: "The path an activation names on the machine has to be the path the copy put
     # there."
     copied = [call for call in channel.calls if call[:2] == ["nix", "copy"]]
-    activated = [call for call in channel.calls if call[0] == "ssh"]
+    activated = [
+        call for call in channel.calls if call[0] == "ssh" and not asked_what_it_holds(call)
+    ]
     assert [call[-1] for call in copied] == [str(resolved)], copied
     assert str(resolved) in activated[0][-1], activated
 
@@ -577,3 +625,80 @@ def test_every_undeclared_file_inside_a_values_directory_is_named(tmp_path: Path
         assert "sub/deeper/another" in str(refused), refused
         return
     raise AssertionError("a file inside the value's own directory claimed nothing")
+
+
+# One word of the bech32 alphabet, which is what a native age recipient is. The
+# command reads it as a public line and never checks it: the grammar is the
+# library's, and a line it refused reached no plan.
+RECIPIENT = "age1qpzry9x8gf2tvdw0s3jn54khce6mua7lqpzry9x8gf2tvdw0s3jn54khce"
+
+
+def test_a_run_that_must_seal_and_has_no_sealing_program(tmp_path: Path) -> None:
+    """A run whose record says a machine seals and which can seal nothing dials nothing.
+
+    Args:
+        tmp_path: The artifact and the value source of this run.
+    """
+    artifact = flakelet_artifact(tmp_path)
+    path = "/run/vars/issuer/session/token"
+    value = secret_value("issuer:vars/session", path)
+    plan: dict[str, Any] = {
+        f"machine:{MACHINE}": {"address": ADDRESS, "sealRecipient": RECIPIENT},
+        "issuer:api@alpha": {"placement": {}},
+        "issuer:vars/session": {"delivery": [MACHINE], "files": {"token": {"path": path}}},
+    }
+    deployment = built(
+        plan,
+        {"issuer:api@alpha": placed("issuer:api@alpha", artifact)},
+        {value.key: value},
+        unsealing(sealed=True, path=str(tmp_path / "machines-alpha")),
+    )
+    source = tmp_path / "source"
+    (source / value.key).mkdir(parents=True)
+    (source / value.key / "token").write_bytes(b"s3cret")
+    channel = Channel()
+
+    # The apply-command spec: "the run SHALL refuse before the first machine is contacted,
+    # naming the program it could not find and the machines it would have sealed for".
+    try:
+        apply.apply(deployment, channel, source=source, base_env={})
+    except ApplyError as refused:
+        assert values.SEALING in str(refused), refused
+        assert MACHINE in str(refused), refused
+        assert channel.calls == [], channel.calls
+        # The bytes it would have sealed are in no refusal either.
+        assert "s3cret" not in str(refused), refused
+        return
+    raise AssertionError("a run that can seal nothing wrote a value to a machine that seals")
+
+
+def test_a_record_carrying_no_table_of_machines(tmp_path: Path) -> None:
+    """A record with no table of the machines a value reaches is one to refuse.
+
+    Args:
+        tmp_path: The build directory the record is written into.
+    """
+    build = tmp_path / "build"
+    build.mkdir()
+    (build / "plan.json").write_text("{}")
+    shape: dict[str, Any] = {
+        "version": manifest.VERSION,
+        "storeDir": manifest.store_dir(),
+        "realisers": PUBLISHED,
+        "entries": {},
+    }
+    (build / "manifest.json").write_text(json.dumps({**shape, "machine": {}}))
+
+    # The apply-command spec: "A record carrying no table of the machines a value reaches
+    # SHALL be refused as a record the command cannot read, never read as a deployment whose
+    # machines seal nothing".
+    try:
+        manifest.read(build)
+    except ApplyError as refused:
+        assert manifest.MACHINES in str(refused), refused
+    else:
+        raise AssertionError("a record naming no such table was read as a fleet that seals nothing")
+
+    # And the table carried and empty is a deployment that delivers nothing, which is read.
+    (build / "manifest.json").write_text(json.dumps({**shape, manifest.MACHINES: {}}))
+    assert manifest.read(build).machines == {}
