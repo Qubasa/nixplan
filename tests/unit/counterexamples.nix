@@ -1006,6 +1006,7 @@ in
         builtins.deepSeq (secretsStep.render {
           inherit (result) plan;
           get = "/nix/store/00000000000000000000000000000000-get";
+          seal = "/nix/store/00000000000000000000000000000000-age";
         }) "rendered"
       );
     in
