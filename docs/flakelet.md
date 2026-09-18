@@ -155,8 +155,9 @@ is a reference, a machine that does not run systemd, an entry with no unit.
 - **`state.json`.** flakelet's `export`/`import` needs it and reports its absence itself: the
   throwaway spike's `flakelet status --json` answered
   `"export_blockers": [ "generation was built without state.json, redeploy it" ]`. Writing one
-  needs a state field on the entry, which the `declare-service-state` change adds. Named
-  dependency, not an oversight.
+  needs the folder set as data on the entry, which a unit's declared directories do not answer and
+  which is parked under "Declared state beyond a unit's own directories" in
+  `openspec/changes/PARKED.md`. Named dependency, not an oversight.
 - **`exports.json`.** It would put a second wiring engine on the machine, resolving claims against
   `/etc/flakelet/providers.d` at activation time, while this architecture resolves wires at
   evaluation time with typed values and hands the result to the unit as a value
