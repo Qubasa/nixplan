@@ -10,14 +10,16 @@ None of it is a `check`. A build sandbox has no `/dev/kvm`, no `/dev/net/tun` an
 layer is one app:
 
 ```bash
-nix run .#planner-e2e                  # six folders, fourteen machines
-nix run .#planner-e2e shared-postgres  # two machines, one cluster, two databases
-nix run .#planner-e2e wired-pair       # two machines
-nix run .#planner-e2e portable-image   # one machine booted, two images built
-nix run .#planner-e2e secret-delivery  # three machines
-nix run .#planner-e2e generated-secret # three machines, a real generator and a real store backend
-nix run .#planner-e2e newcomer         # three machines, and a build that runs on one of them
-nix run .#planner-e2e -- nosuchfolder  # refused, without building or booting anything
+nix run .#planner-e2e                   # every folder, one after another
+nix run .#planner-e2e shared-postgres   # two machines, one cluster, two databases
+nix run .#planner-e2e wired-pair        # two machines
+nix run .#planner-e2e portable-image    # one machine booted, two images built
+nix run .#planner-e2e secret-delivery   # three machines
+nix run .#planner-e2e generated-secret  # three machines, a real generator and a real store backend
+nix run .#planner-e2e newcomer          # three machines, and a build that runs on one of them
+nix run .#planner-e2e user-scope        # one machine, deployed as an account
+nix run .#planner-e2e friend-enrollment # one machine reached only by its mesh name
+nix run .#planner-e2e -- nosuchfolder   # refused, without building or booting anything
 ```
 
 `$ROOKERY_FLAKE` has to name a rookery you can fetch; it defaults to
@@ -33,11 +35,13 @@ anyway.
   NO END-TO-END TEST NAMED 'nosuchfolder'
 ===========================================
   the end-to-end tests are:
+    friend-enrollment
     generated-secret
     newcomer
     portable-image
     secret-delivery
     shared-postgres
+    user-scope
     wired-pair
 ===========================================
 ```
@@ -79,7 +83,7 @@ Neither side names a version: `../pytest-env.nix` takes this nixpkgs' default `p
 rookery takes its own. The one dev shell that carries that environment lives in
 `../devshells.nix`.
 
-## The six folders
+## The folders
 
 Each directory under `../tests/e2e/` is one end-to-end test and its own fixture: exactly one
 `test_*.py` and a `deployment/` of `default.nix`, `machines.nix`, `instances.nix`, `interfaces/` and
@@ -102,7 +106,7 @@ realising and the collecting are the repository's and arrive as `operator`, docu
 
 Both discoveries happen by looking. The runner finds a folder's tests as `test_*.py` under each
 directory, and `../flake-module.nix` finds a folder's deployment at
-`tests/e2e/<folder>/deployment/default.nix`, so a sixth folder needs no registration anywhere and
+`tests/e2e/<folder>/deployment/default.nix`, so another folder needs no registration anywhere and
 the flake names no folder. `../tests/unit/layers.nix` holds both halves: no file of a folder names
 `mkPlan`, a link farm or either realiser's builder, and every folder carrying a deployment is
 reachable as a package.
@@ -131,11 +135,27 @@ visible; an unchanged redelivery is a no-op, a changed one is generation 2 and a
 generation 1; a scheduled entry is registered with its timer enabled and is not fired by deploying
 it; and both machines reboot with the entries coming back without a second delivery.
 
+The folder's third build is `retired`, whose instances are its own minus `sweep`, exposed as
+`packages.planner-e2e-wired-pair-retired` by the name rule above. `site` is placed on the same tag,
+so the server machine stays named and reachable while `sweep:job` on it is a holding no build names,
+which is what the three session-scoped phases at the end of the file are for: a report against
+`retired`, which names the holding and exits zero; an apply of `retired` without `--retire`, which
+announces the same holding, says nothing was removed and leaves the entry running; and the same
+apply with the flag, which asks the endpoint to remove it and reports what the endpoint kept.
+`sweep`'s own unit is started by hand before that, because the folder's schedule is `daily` and the
+job fires during no run, and the file it wrote is read back after the retirement: a retirement
+deletes no state.
+
 One test per scenario of
 [`delivery/real-cluster/spec.md`](../openspec/specs/delivery/real-cluster/spec.md),
 named after it, plus one per scenario of
 [`tooling/machine-snapshots/spec.md`](../openspec/specs/tooling/machine-snapshots/spec.md),
-which is about how the machines were obtained rather than what the plan claims.
+which is about how the machines were obtained rather than what the plan claims, plus the scenarios
+of
+[`apply-command/spec.md`](../openspec/changes/retire-an-entry-a-build-no-longer-names/specs/operator/apply-command/spec.md)
+and
+[`machine-report/spec.md`](../openspec/changes/retire-an-entry-a-build-no-longer-names/specs/operator/machine-report/spec.md)
+that need an endpoint to answer for what the machine still holds.
 
 ### `secret-delivery` - three machines
 
@@ -148,8 +168,42 @@ without it, which is what makes the delivery the thing under test rather than th
 value is declared `deploy = false`: its public half travels in the plan as an export the consumer
 reads from its environment, and no machine holds a file of it.
 
+Each of the three machines declares a `sealRecipient`, so a delivery leaves a sealed copy of every
+value beside the plaintext and each machine is given the unsealer the build made for it. `gamma`
+declares a recipient and receives no value, which is what shows that the unsealer follows the
+delivery set rather than the placement: the deployment record's table of machines names `alpha` and
+`beta` and nothing else.
+
+The folder's first phase is provisioning, the one thing an operator does before an apply: the
+parent directory is created `0700` and the age identity whose public line the registry declares is
+installed at `/var/lib/planner/age.key` at `0400`, on every machine. A phase and never a
+preparation of the snapshot cut, because a preparation body does not run on a cache hit and a file
+left by an earlier run is a replay rather than evidence.
+
+Three phases then read what a delivery left. The applied phase asserts the copy beside the value,
+that the copy and the directory holding it are the unsealing account's alone whatever the record
+opens the plaintext to, and that a second apply reports the unsealer install as unchanged. It then
+produces each condition the report has a line for and repairs it: a copy replaced by bytes the
+machine cannot open, a copy removed, and both copies of a value cleared together, which is what a
+report naming a missing value needs now that a reboot no longer produces one. The machine's own
+`bin/unseal` is run on the machine over one damaged copy and one good one, and it names the value it
+could not open, leaves that path empty and restores the other.
+
+The last phase is still the reboot, because `/run` is still what a reboot empties, and it is the
+claim the whole change is for: no command is run against the machine afterwards, every value is at
+its own path again with the ownership and mode its record states, and the reader the phase before it
+stopped comes up against the restored file and reads the bytes of the last delivery. Each of those
+tests repairs what it damaged, since the file order is the order and nothing is restored between
+phases, so the phase below each one starts from a machine holding everything.
+
 One test per scenario of
-[`delivery/real-cluster/spec.md`](../openspec/specs/delivery/real-cluster/spec.md).
+[`delivery/real-cluster/spec.md`](../openspec/specs/delivery/real-cluster/spec.md), plus the
+scenarios of
+[`generated-values/spec.md`](../openspec/changes/unseal-a-value-after-a-reboot/specs/delivery/generated-values/spec.md),
+[`apply-command/spec.md`](../openspec/changes/unseal-a-value-after-a-reboot/specs/operator/apply-command/spec.md)
+and
+[`machine-report/spec.md`](../openspec/changes/unseal-a-value-after-a-reboot/specs/operator/machine-report/spec.md)
+that need a machine to answer for the copies it holds.
 
 ### `portable-image` - one machine, two images
 
@@ -173,12 +227,29 @@ identities, and an apply repeated over an attached entry says so instead of runn
 script again. One phase stops the units and leaves the image attached, because the tool prints
 another word for that and only the word for a detached image reads as absence.
 
+`beacon:ping` is the entry that is there to be dropped: one instance on the booted machine's own
+tag, declaring one long-running unit and no host path, and a third build, `retired`, whose instances
+are the folder's own without it. Its phases come after the one that leaves the machine with nothing
+attached, which is why the first of them re-attaches that entry's image with the artifact's own
+`bin/attach`, and the rest report and apply `retired` with `--retire`. What they assert is the half
+only a real `portablectl` answers: an image the machine holds for no entry of the build is named as
+the machine listed it and no plan key is derived from that name, an image of an earlier build of an
+entry the build still names is the line that carries both identities rather than a second line
+about a holding, and a retired image is detached with the service manager knowing none of the units
+the attachment created. That retirement is `portablectl detach --now` over the name the listing
+printed and not the artifact's own script: `bin/detach` is still what the detaching phase runs and
+is not what retires a holding.
+
 One test per scenario of
 [`realiser/portable-service-image/spec.md`](../openspec/specs/realiser/portable-service-image/spec.md)
 that is about what a real machine does with a built image, plus the image scenarios of
 [`machine-report/spec.md`](../openspec/changes/answer-whether-a-machine-is-current/specs/operator/machine-report/spec.md)
 and the repeated-apply scenario of
-[`apply-command/spec.md`](../openspec/specs/operator/apply-command/spec.md).
+[`apply-command/spec.md`](../openspec/specs/operator/apply-command/spec.md), plus the image
+scenarios of
+[`machine-report/spec.md`](../openspec/changes/retire-an-entry-a-build-no-longer-names/specs/operator/machine-report/spec.md)
+and the retired-image scenario of
+[`apply-command/spec.md`](../openspec/changes/retire-an-entry-a-build-no-longer-names/specs/operator/apply-command/spec.md).
 
 ### `generated-secret` - three machines
 
@@ -285,6 +356,65 @@ other folder's cut key.
 One test per scenario of
 [`delivery/real-cluster/spec.md`](../openspec/specs/delivery/real-cluster/spec.md),
 named after it.
+
+### `user-scope` - one machine, deployed as an account
+
+One machine, and the privilege is the subject. Its registry record declares `scope = "user"`, so
+every step of the run addresses an ordinary account rather than root: the guest provisions that
+account the way [`operator.md`](operator.md) documents it - the roots writable, lingering enabled
+and the verity public half installed - and nothing in the folder's own text is root.
+
+The deployment places one image entry on that machine and delivers one generated value to it,
+stating no ownership on the value's file, because a delivery in this scope cannot chown and a
+record that stated an owner would be a planner row rather than a test. Every host path a unit reads
+is derived inside `impl` from the entry's own identity, as the host-path scan over every folder's
+deployment requires.
+
+What the phases assert is the scope's own three claims: the preflight question was asked on that
+machine before anything there was written, the entry's units are the account's own - the user
+service manager runs them, `portablectl --user` holds the image attached and the served port is one
+no account needs a capability to bind - and a reboot brings them back, because lingering is what
+starts the account's manager with nobody logged in.
+
+One test per scenario of
+[`apply-command/spec.md`](../openspec/changes/run-an-entry-without-root/specs/operator/apply-command/spec.md)
+and
+[`portable-service-image/spec.md`](../openspec/changes/run-an-entry-without-root/specs/realiser/portable-service-image/spec.md)
+that needs a machine to answer.
+
+### `friend-enrollment` - two machines, one of them reached only by a name
+
+Two machines, and the difference between their addresses is the whole folder. `hub` declares an
+address the cluster's own network resolves and runs the coordination server as a planned entry like
+any other, with a unit, a state directory and a configuration file the module derives from its own
+identity, rather than as something the guest image was wired with. `friend` declares no address the
+operator can route to: its registry `address` is the name the mesh gives it, and its record states
+`scope = "user"`, so once it is a member the entry placed there is an ordinary account's image
+entry and nothing about that entry is about enrollment.
+
+The credential is a generated secret of the deployment. The hub entry's generator mints one
+single-use key with a stated expiry, `deploy = false` keeps it off every machine, and the operator
+reads it out of the value source and hands it over outside the tree, which is the one step no
+command of this repository takes. Its bytes reach no plan field and no argument vector, the
+discipline every secret value of this tree already has.
+
+The transport is the host's own and not the operator's network. The run brings up an unprivileged
+userspace-networking node inside the cluster's namespace, and every ssh command reaches a mesh name
+through a `ProxyCommand` of that node, because a node with no OS resolver of its own resolves the
+name only inside the dialling path.
+
+The phases are ordered and the file order is the order: the friend joins with the credential and
+the server's node list names it; an apply over the mesh name asks the user-scope preflight first
+and activates the entry under the account's own manager; a second machine presenting the same key
+is refused by the server in the server's own words, as is a key past its expiry; and a declared
+machine that never joined is refused at its first step, naming what the dial answered, with nothing
+written anywhere after the refusal. The last phase expires the friend's node on the server, which
+removes the wire every phase above it stood on: the report names the machine as one it could not
+ask and exits non-zero.
+
+One test per scenario of
+[`machine-enrollment/spec.md`](../openspec/changes/enroll-a-friend-machine/specs/operator/machine-enrollment/spec.md)
+that needs a machine to answer.
 
 ## Where the machines come from
 
@@ -418,6 +548,14 @@ issue"), the guest package exports the private half beside the image as `sshPriv
 run copies that store file to mode 0600 because ssh refuses to read a private key a store's 0444
 leaves readable by everyone. Password authentication stays refused.
 
+`secret-delivery` commits a credential of its own for the same reason, and it is a throwaway in the
+same sense. Both halves of an age identity are in
+`../tests/e2e/secret-delivery/throwaway-age-identity.txt`: the public line is the `sealRecipient` of
+all three machines, because a deployment the build already read cannot name a recipient a run mints,
+and the private half is what that folder's first phase installs on each machine. It opens nothing
+but the test tokens that folder mints on an offline guest, and nothing outside the folder reads
+either half.
+
 Because rookery is resolved at run time, `base-image-configuration.nix` is not available at
 evaluation and this configuration is ours, and every invariant a rookery guest has to hold is an
 `assertion` in `../tests/e2e/guest.nix` whose message names what depends on it. A trim that drops
@@ -437,6 +575,31 @@ Most are rookery's, copied from its `nix/base-image-configuration.nix:25-59`; wh
 breaks a boot, diff `../tests/e2e/guest.nix` against
 `$ROOKERY_FLAKE/nix/base-image-configuration.nix`. The last two are this layer's own, and they are
 what keeps the guest snapshottable.
+
+`user-scope` needs the portabled an account can reach, which is a different thing from the one
+`portable-image` uses. The image therefore enables `systemd-mountfsd.socket` and
+`systemd-nsresourced.socket`, the two daemons a user portabled delegates a mount and a user
+namespace to, runs the per-user `systemd-portabled`, and provisions one unprivileged account: linger
+enabled, so its service manager is up with nobody logged in, the deployment's fixed roots writable
+by it, and the public half of the key that folder's images are signed with installed. The pinned
+nixpkgs resolves systemd 261, and the per-user portabled exists since 260, so the guest can hold
+the whole stack rather than a stand-in of it.
+
+A mesh is two programs rather than a configuration, so the image runs the mesh client as a system
+daemon (`tailscaled`) and carries the coordination server as a machine program (`headscale`). The
+machine that coordinates a mesh and the machine that joins one are therefore the same one image:
+nothing has to be delivered to make a member, and no plan states either program. Neither costs a
+run anything until a login presents a credential: a client with no login server stated dials
+nobody, and a server nothing started listens nowhere. Every other folder's machines therefore
+carry the two and notice neither. What they do notice is the cut: every property of this image is
+in every snapshot cut's key, so one more of them makes the next run of every folder cold and
+leaves the cuts taken before it to be reclaimed, which is what the paragraph below is about.
+
+Editing `../tests/e2e/guest.nix` re-keys every cut, and the stale ones have to go before anything
+else runs: `rookery snapshot gc --all`, then the next run boots. A resumed cut is frozen RAM naming
+a system generation the new disk does not carry, so `/run/current-system/sw/bin` is a directory of
+dangling links and every remote command answers `mkdir: command not found` while `$PATH` reads
+correctly. That reads as a broken write script and is a stale cut.
 
 ## Running pytest by hand
 
@@ -476,14 +639,16 @@ from the working tree, because that is the point of running by hand.
 | `PLANNER_SECRET_DELIVERY_DEPLOYMENT` | the same, for that folder | app and `planner-e2e-env` |
 | `PLANNER_GENERATED_SECRET_DEPLOYMENT` | the same, for that folder | app and `planner-e2e-env` |
 | `PLANNER_NEWCOMER_DEPLOYMENT` | the same, for that folder | app and `planner-e2e-env` |
+| `PLANNER_SHARED_POSTGRES_DEPLOYMENT` | the same, for that folder | app and `planner-e2e-env` |
+| `PLANNER_USER_SCOPE_DEPLOYMENT` | the same, for that folder | app and `planner-e2e-env` |
 | `PLANNER_E2E_GUEST_IMAGE` | the qcow2 every machine boots | app and `planner-e2e-env` |
 | `PLANNER_E2E` | the layer's root, on `PYTHONPATH` so a test can `import delivery` | app; the shell puts the working tree there instead |
 | `PLANNER_E2E_STATE` | the run's state root | `runner.py` |
 | `PLANNER_E2E_SSH_KEY` | the store file holding the key the image authorizes | app and `planner-e2e-env` |
 
 One deployment row exists per folder, and the rows are written from the same discovery the packages
-are, so a fourth folder gains its variable by existing. No variable names a built
-deployment: the machine layer builds one with the command, which keeps three link farms out of the
+are, so a folder gains its variable by existing. No variable names a built
+deployment: the machine layer builds one with the command, which keeps every link farm out of the
 app's closure and lets a folder's build failure be a test error. A folder skips itself when a
 variable it needs names nothing, and `-rs` in `../pytest.ini` is what prints the reason.
 
