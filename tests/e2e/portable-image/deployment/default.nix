@@ -1,5 +1,6 @@
-# One deployment, two images: the entry this host attaches and the entry it
-# cannot, because no machine here runs its architecture.
+# One deployment and three images: the entry this host attaches, the entry it
+# cannot because no machine here runs its architecture, and the entry a build is
+# allowed to drop.
 #
 # The report script is a fact about this fixture and stays here. So does the
 # realisation statement: nothing in a plan says whether an entry wants an image
@@ -33,6 +34,23 @@ let
       exec ${pkgs.coreutils}/bin/sleep infinity
     '';
 
+  # The long-running unit of `beacon:ping`, which writes the one file its module
+  # derives and then stays up. Everything it runs is a reference of it.
+  beaconScript = pkgs.writeShellScript "planner-portable-beacon" ''
+    set -u
+    printf 'beacon up\n' > "$1"
+    exec ${pkgs.coreutils}/bin/sleep infinity
+  '';
+
+  # The probe of the `probed` build below, which refuses whatever it reads: the
+  # failure is what that build is for, and a probe that could pass would make
+  # the phase's evidence a race with the unit it probes.
+  refusingProbe = pkgs.writeShellScript "planner-portable-probe" ''
+    set -u
+    printf 'probe: %s does not say this service is serving\n' "$1" >&2
+    exit 1
+  '';
+
   interfaces = import ./interfaces/default.nix { korora = planner.korora; };
   inherit (interfaces) reportFile;
 
@@ -62,35 +80,60 @@ let
     };
   };
 
+  beaconModuleOf = probeCommand: {
+    services.default = import ./modules/beacon/default.nix {
+      beacon = "${beaconScript}";
+      inherit probeCommand;
+    };
+  };
+
   registry = import ./machines.nix;
 
+  # One statement per instance rather than one table, so a build that drops an
+  # instance drops its statement with it: a statement naming a key the plan does
+  # not carry is a row of its own.
+  #
+  # `watch:file` is stated strict because the enforcement is the claim under
+  # test. `mirror:copy` is never attached and `beacon:ping` is attached and then
+  # retired, so both take the default profile.
+  statements = {
+    watch."watch:file" = {
+      realiser = "image";
+      profile = "strict";
+    };
+    mirror."mirror:copy" = {
+      realiser = "image";
+      profile = "default";
+    };
+    beacon."beacon:ping" = {
+      realiser = "image";
+      profile = "default";
+    };
+  };
+
   buildOf =
-    delivery:
+    {
+      delivery,
+      probeCommand ? null,
+      drop ? [ ],
+    }:
     operator.mkDeployment {
       inherit pkgs planner;
 
-      # `watch:file` is stated strict because the enforcement is the claim under
-      # test. `mirror:copy` is never attached, so it takes the default profile.
-      realise = {
-        "watch:file" = {
-          realiser = "image";
-          profile = "strict";
-        };
-        "mirror:copy" = {
-          realiser = "image";
-          profile = "default";
-        };
-      };
+      realise = builtins.foldl' (stated: kept: stated // kept) { } (
+        builtins.attrValues (builtins.removeAttrs statements drop)
+      );
 
       args =
         let
           deployment = import ./instances.nix {
             report = reportModuleOf delivery;
             mirror = mirrorModule;
+            beacon = beaconModuleOf probeCommand;
           };
         in
         {
-          inherit (deployment) instances;
+          instances = builtins.removeAttrs deployment.instances drop;
           inherit (registry) machines;
 
           varsState."watch:vars/upstream".secret.present = true;
@@ -105,20 +148,38 @@ let
             modules = {
               watch = "report/default.nix";
               mirror = "mirror/default.nix";
+              beacon = "beacon/default.nix";
             };
             leaves = {
               watch.file = "report/watch.nix";
               mirror.copy = "mirror/copy.nix";
+              beacon.ping = "beacon/ping.nix";
             };
           };
         };
     };
 in
 {
-  default = buildOf "first";
+  default = buildOf { delivery = "first"; };
 
   # A second build of the same deployment, whose unit runs another script and so
   # carries another identity. Nothing attaches it: what a report says about a
   # machine holding an earlier build needs two identities and one machine.
-  changed = buildOf "second";
+  changed = buildOf { delivery = "second"; };
+
+  # The same deployment without `beacon`, so the image the machine holds for
+  # that entry is a holding this build names nothing for while `watch:file` is
+  # still named, still placed and still reachable.
+  retired = buildOf {
+    delivery = "first";
+    drop = [ "beacon" ];
+  };
+
+  # The same deployment whose `beacon` declares a probe that refuses. This
+  # realiser starts the probe at attach and has no generation to return to, so
+  # applying this build is a failed step over a machine that stays attached.
+  probed = buildOf {
+    delivery = "first";
+    probeCommand = "${refusingProbe}";
+  };
 }
