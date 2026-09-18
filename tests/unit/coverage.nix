@@ -79,17 +79,29 @@ let
     "specs/tooling/repository-shape/spec.md"
     "specs/tooling/test-layers/spec.md"
     "changes/answer-whether-a-machine-is-current/specs/operator/machine-report/spec.md"
+    "changes/enroll-a-friend-machine/specs/operator/machine-enrollment/spec.md"
+    "changes/run-an-entry-without-root/specs/operator/apply-command/spec.md"
+    "changes/run-an-entry-without-root/specs/operator/deployment-build/spec.md"
+    "changes/run-an-entry-without-root/specs/planner/machine-platform/spec.md"
+    "changes/run-an-entry-without-root/specs/realiser/flakelet-artifact/spec.md"
+    "changes/run-an-entry-without-root/specs/realiser/portable-service-image/spec.md"
+    "changes/probe-a-service-before-it-counts-as-live/specs/planner/unit-vocabulary/spec.md"
+    "changes/probe-a-service-before-it-counts-as-live/specs/realiser/flakelet-artifact/spec.md"
+    "changes/probe-a-service-before-it-counts-as-live/specs/realiser/portable-service-image/spec.md"
+    "changes/retire-an-entry-a-build-no-longer-names/specs/operator/apply-command/spec.md"
+    "changes/retire-an-entry-a-build-no-longer-names/specs/operator/deployment-build/spec.md"
+    "changes/retire-an-entry-a-build-no-longer-names/specs/operator/machine-report/spec.md"
+    "changes/unseal-a-value-after-a-reboot/specs/delivery/generated-values/spec.md"
+    "changes/unseal-a-value-after-a-reboot/specs/operator/apply-command/spec.md"
+    "changes/unseal-a-value-after-a-reboot/specs/operator/deployment-build/spec.md"
+    "changes/unseal-a-value-after-a-reboot/specs/operator/machine-report/spec.md"
+    "changes/unseal-a-value-after-a-reboot/specs/planner/machine-platform/spec.md"
+    "changes/unseal-a-value-after-a-reboot/specs/planner/secret-delivery/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
   # rather than ignored, so a new specification fails here instead of passing unseen.
   excused = {
-    "changes/declare-service-state/specs/planner/plan-artifact/spec.md" =
-      "an unimplemented change: no task of declare-service-state has been done, so nothing in this package claims to satisfy it yet";
-    "changes/declare-service-state/specs/planner/state-declaration/spec.md" =
-      "an unimplemented change: no task of declare-service-state has been done, so nothing in this package claims to satisfy it yet";
-    "changes/declare-service-state/specs/realiser/portable-service-image/spec.md" =
-      "an unimplemented change: no task of declare-service-state has been done, so nothing in this package claims to satisfy it yet";
     "changes/deliver-a-secret-without-exposing-it/specs/delivery/real-cluster/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "changes/deliver-a-secret-without-exposing-it/specs/operator/apply-command/spec.md" =
@@ -100,48 +112,12 @@ let
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "changes/deliver-a-secret-without-exposing-it/specs/realiser/portable-service-image/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
-    "changes/enroll-a-friend-machine/specs/operator/machine-enrollment/spec.md" =
-      "an unimplemented change: no task of enroll-a-friend-machine has been done, so nothing in this package claims to satisfy it yet";
     "changes/name-the-machine-a-run-dials/specs/operator/apply-command/spec.md" =
       "an unimplemented change: no task of name-the-machine-a-run-dials has been done, so nothing in this package claims to satisfy it yet";
     "changes/name-the-machine-a-run-dials/specs/planner/machine-platform/spec.md" =
       "an unimplemented change: no task of name-the-machine-a-run-dials has been done, so nothing in this package claims to satisfy it yet";
     "changes/name-the-machine-a-run-dials/specs/planner/secret-delivery/spec.md" =
       "an unimplemented change: no task of name-the-machine-a-run-dials has been done, so nothing in this package claims to satisfy it yet";
-    "changes/probe-a-service-before-it-counts-as-live/specs/planner/unit-vocabulary/spec.md" =
-      "an unimplemented change: no task of probe-a-service-before-it-counts-as-live has been done, so nothing in this package claims to satisfy it yet";
-    "changes/probe-a-service-before-it-counts-as-live/specs/realiser/flakelet-artifact/spec.md" =
-      "an unimplemented change: no task of probe-a-service-before-it-counts-as-live has been done, so nothing in this package claims to satisfy it yet";
-    "changes/probe-a-service-before-it-counts-as-live/specs/realiser/portable-service-image/spec.md" =
-      "an unimplemented change: no task of probe-a-service-before-it-counts-as-live has been done, so nothing in this package claims to satisfy it yet";
-    "changes/retire-an-entry-a-build-no-longer-names/specs/operator/apply-command/spec.md" =
-      "an unimplemented change: no task of retire-an-entry-a-build-no-longer-names has been done, so nothing in this package claims to satisfy it yet";
-    "changes/retire-an-entry-a-build-no-longer-names/specs/operator/deployment-build/spec.md" =
-      "an unimplemented change: no task of retire-an-entry-a-build-no-longer-names has been done, so nothing in this package claims to satisfy it yet";
-    "changes/retire-an-entry-a-build-no-longer-names/specs/operator/machine-report/spec.md" =
-      "an unimplemented change: no task of retire-an-entry-a-build-no-longer-names has been done, so nothing in this package claims to satisfy it yet";
-    "changes/run-an-entry-without-root/specs/operator/apply-command/spec.md" =
-      "an unimplemented change: no task of run-an-entry-without-root has been done, so nothing in this package claims to satisfy it yet";
-    "changes/run-an-entry-without-root/specs/operator/deployment-build/spec.md" =
-      "an unimplemented change: no task of run-an-entry-without-root has been done, so nothing in this package claims to satisfy it yet";
-    "changes/run-an-entry-without-root/specs/planner/machine-platform/spec.md" =
-      "an unimplemented change: no task of run-an-entry-without-root has been done, so nothing in this package claims to satisfy it yet";
-    "changes/run-an-entry-without-root/specs/realiser/flakelet-artifact/spec.md" =
-      "an unimplemented change: no task of run-an-entry-without-root has been done, so nothing in this package claims to satisfy it yet";
-    "changes/run-an-entry-without-root/specs/realiser/portable-service-image/spec.md" =
-      "an unimplemented change: no task of run-an-entry-without-root has been done, so nothing in this package claims to satisfy it yet";
-    "changes/unseal-a-value-after-a-reboot/specs/delivery/generated-values/spec.md" =
-      "an unimplemented change: no task of unseal-a-value-after-a-reboot has been done, so nothing in this package claims to satisfy it yet";
-    "changes/unseal-a-value-after-a-reboot/specs/operator/apply-command/spec.md" =
-      "an unimplemented change: no task of unseal-a-value-after-a-reboot has been done, so nothing in this package claims to satisfy it yet";
-    "changes/unseal-a-value-after-a-reboot/specs/operator/deployment-build/spec.md" =
-      "an unimplemented change: no task of unseal-a-value-after-a-reboot has been done, so nothing in this package claims to satisfy it yet";
-    "changes/unseal-a-value-after-a-reboot/specs/operator/machine-report/spec.md" =
-      "an unimplemented change: no task of unseal-a-value-after-a-reboot has been done, so nothing in this package claims to satisfy it yet";
-    "changes/unseal-a-value-after-a-reboot/specs/planner/machine-platform/spec.md" =
-      "an unimplemented change: no task of unseal-a-value-after-a-reboot has been done, so nothing in this package claims to satisfy it yet";
-    "changes/unseal-a-value-after-a-reboot/specs/planner/secret-delivery/spec.md" =
-      "an unimplemented change: no task of unseal-a-value-after-a-reboot has been done, so nothing in this package claims to satisfy it yet";
   };
 
   isSpecFile = path: match ".*/spec\\.md" path != null;
