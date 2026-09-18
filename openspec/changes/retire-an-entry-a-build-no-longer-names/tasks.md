@@ -1,12 +1,12 @@
 ## 1. Baseline and registration, before anything is edited
 
-- [ ] 1.1 Record the perf baseline before touching anything the planner evaluates: run `bash
+- [x] 1.1 Record the perf baseline before touching anything the planner evaluates: run `bash
   perf/measure.sh` (or `~/.claude/outputs/measure-perf.sh worked 0`) and paste the nine counters into
   this change's working notes. Nothing of this change is expected to be inside `mkPlan` - the
   published table is `operator/read.nix`'s and the realisers' - so the counters are expected not to
   move, and the recorded baseline is what turns "expected" into evidence. The gate is two-sided with
   a 0.15 margin, so a regression is a task to fix and never a re-recorded budget.
-- [ ] 1.2 Register this change's three delta specs in `excused` in `tests/unit/coverage.nix`, one
+- [x] 1.2 Register this change's three delta specs in `excused` in `tests/unit/coverage.nix`, one
   line per file, each reason naming this change in the shape `excuseNamesChange`
   (`tests/unit/coverage.nix:373-378`) matches - "an unimplemented change: no task of
   retire-an-entry-a-build-no-longer-names has been done, so nothing in this package claims to satisfy
@@ -15,14 +15,14 @@
   `.../specs/operator/apply-command/spec.md` and `.../specs/operator/deployment-build/spec.md`.
   Verify with `nix build .#checks.x86_64-linux.planner-tests` after 1.4: an unclassified `spec.md`
   fails `testEverySpecificationIsClassified`.
-- [ ] 1.3 **Leave every checkbox of this file unchecked for as long as the excuse stands.**
+- [x] 1.3 **Leave every checkbox of this file unchecked for as long as the excuse stands.**
   `changeHasLanded` (`tests/unit/coverage.nix:380-385`) reads this `tasks.md` for a single `- [x]`
   line, and `staleExcuses` (`:387-397`) fails the suite for an excuse whose change has landed, so
   ticking one box while the three paths are excused turns the suite red for a reason that reads like
   a missing test. The paths move to `accountable` and the boxes are ticked in the one edit task 10.2
   makes. Verify by ticking nothing until then, and by `nix build
   .#checks.x86_64-linux.planner-tests` staying green through every task below.
-- [ ] 1.4 `git add` every new file of this change before evaluating anything - the flake does not see
+- [x] 1.4 `git add` every new file of this change before evaluating anything - the flake does not see
   an untracked path and the failure reads as a missing file. That is the three spec files,
   `proposal.md`, `design.md`, `tasks.md`, and every new file a later task creates (the portable-image
   module, its deployment build, and any new test file). Verify with `nix eval --json
@@ -30,34 +30,34 @@
 
 ## 2. What each realiser publishes
 
-- [ ] 2.1 In `flakelet/read.nix`, bind the `plan:` prefix once - it is written at
+- [x] 2.1 In `flakelet/read.nix`, bind the `plan:` prefix once - it is written at
   `flakelet/read.nix:194` as part of `flake_url` - and publish it beside `nameRule`, `acceptsName`,
   `unitRule` and `acceptsUnit` in the endpoint record (`flakelet/read.nix:81-86`, `:139-148`) as what
   a machine's own answer names this realiser's holdings by. `meta.json` keeps being built from the
   same binding, so the prefix has one home. Verify with a `tests/unit/flakelet.nix` case asserting
   the published value and the `flake_url` of one artifact are the one string.
-- [ ] 2.2 In `image/read.nix`, publish the name separator, the digest alphabet and the digest length
+- [x] 2.2 In `image/read.nix`, publish the name separator, the digest alphabet and the digest length
   the image file name is composed of (`image/read.nix:919` over `:208` and `lib/util.nix:495-496`) in
   the same record the name and unit rules are published in (`image/read.nix:520-526`). Publish data
   and no regular expression: a nix pattern and a python pattern are two dialects, and one published
   pattern would be one rule with two readings. Verify with a `tests/unit/image.nix` case asserting
   that the image file name of one entry splits, at the published separator, into a name
   `acceptsName` admits and a digest of the published length over the published alphabet.
-- [ ] 2.3 In `operator/read.nix`, publish one `realisers` table in `manifest` (`operator/read.nix:608-627`),
+- [x] 2.3 In `operator/read.nix`, publish one `realisers` table in `manifest` (`operator/read.nix:608-627`),
   keyed by realiser, holding what each realiser published in 2.1 and 2.2, for **every** realiser the
   reading is handed rather than only the ones this deployment's entries state - an entry the build
   dropped may have been the last one of its realiser, and a table of the stated ones would make
   exactly that holding unfindable. Ask the realiser for it the way `endpoint.pathRule` and
   `endpoint.recordRule` are asked for (`operator/read.nix:180-190`, `:313-323`), so a third realiser
   is published by existing. Verify with 2.4.
-- [ ] 2.4 Move the record's stated version from 1 to 2 in `operator/read.nix:609` and
+- [x] 2.4 Move the record's stated version from 1 to 2 in `operator/read.nix:609` and
   `cli/manifest.py:36`, with no dual support and no default for a missing table: a new command
   reading an older record would attribute no holding and report none, and a false negative here reads
   as nothing to retire. Update the literals in `tests/unit/operator.nix:835,839`,
   `tests/e2e/test_harness.py:170,1249,1263` and anything else `grep -rn '"version": 1'` finds; the
   two counterexample records already read `manifest.VERSION`. Verify with `nix build
   .#checks.x86_64-linux.planner-tests` and `nix run .#planner-e2e -- test_harness.py`.
-- [ ] 2.5 Add to `tests/unit/operator.nix` the three nix-unit tests of
+- [x] 2.5 Add to `tests/unit/operator.nix` the three nix-unit tests of
   `specs/operator/deployment-build/spec.md`, which is the only layer those three scenarios land in
   because they are decisions of an evaluation and no machine is involved:
   `testTheRecordPublishesWhatAMachineNamesAFlakeletHoldingBy`,
@@ -66,7 +66,7 @@
   the suite is handed against the table the reading published, so a realiser that publishes none
   fails here rather than reaching a deployment. Verify with `nix build
   .#checks.x86_64-linux.planner-tests`.
-- [ ] 2.6 Delete `LOCKED_URL_PREFIX` from `tests/e2e/delivery.py:36` and read the published value out
+- [x] 2.6 Delete `LOCKED_URL_PREFIX` from `tests/e2e/delivery.py:36` and read the published value out
   of the deployment record instead, so `delivery.locked_url` stops keeping a second copy equal by
   comment. Verify that `tests/e2e/wired-pair/test_wired_pair.py` and
   `tests/e2e/newcomer/test_newcomer.py`, which both call `delivery.locked_url`, still pass:
@@ -74,18 +74,18 @@
 
 ## 3. The command reads the record
 
-- [ ] 3.1 In `cli/manifest.py`, read the `realisers` table into a frozen dataclass per realiser on
+- [x] 3.1 In `cli/manifest.py`, read the `realisers` table into a frozen dataclass per realiser on
   `Deployment`, refusing a record that carries no table for a realiser one of its entries states,
   naming the realiser and the field the way the version refusal names both versions. Verify with a
   `tests/e2e/test_harness.py` case handing the command a record with the table removed and asserting
   the refusal names the realiser.
-- [ ] 3.2 Keep `cli/` importing nothing of `lib/`, `operator/` or `tests/`: what a deployment is, the
+- [x] 3.2 Keep `cli/` importing nothing of `lib/`, `operator/` or `tests/`: what a deployment is, the
   command learns from `manifest.json`. Verify by `grep -rn "^import\|^from" cli/` naming no such
   module, which is what `tests/unit/layers.nix` already asserts.
 
 ## 4. Asking a machine what it holds
 
-- [ ] 4.1 In `cli/remote.py`, add the one question per machine: a script built from the published
+- [x] 4.1 In `cli/remote.py`, add the one question per machine: a script built from the published
   table that prints, per realiser, a marker line carrying the realiser and the exit status of its own
   tool, then that tool's answer - `flakelet status --json` with no names for one, `portablectl list
   --no-legend` for the other. A realiser joins the script only where the `scopes` the record
@@ -97,7 +97,7 @@
   questions. Verify with `tests/e2e/test_harness.py` cases asserting one argv per machine carries
   both halves on a system-scope machine, and on a user-scope one only the halves whose published
   scopes admit it, with `--user` in the image half.
-- [ ] 4.2 In `cli/remote.py`, read each half into holdings: a frozen dataclass carrying the realiser,
+- [x] 4.2 In `cli/remote.py`, read each half into holdings: a frozen dataclass carrying the realiser,
   the identity or name the machine gave it, and the state where the answer has one. A flakelet answer
   is a holding of this planner where its `locked_url` starts with the published prefix, and what
   follows is the plan key; an image row is one where its name splits at the published separator into
@@ -106,7 +106,7 @@
   therefore no holding and no refusal; any other non-zero status is the command's own refusal naming
   the machine and what it said. Verify with `tests/e2e/test_harness.py` cases over fabricated answers
   for each of the four readings.
-- [ ] 4.3 In `cli/remote.py`, add the retirement step per realiser through the existing `REALISERS`
+- [x] 4.3 In `cli/remote.py`, add the retirement step per realiser through the existing `REALISERS`
   table (`cli/remote.py:533-542`): `flakelet remove <name>` without `--purge`, and `portablectl
   detach --now <name>` over the name the listing printed, with `--user` where the machine's scope is
   `user` - the flag the holdings question carried. Do not call `bin/detach`: the artifact of a
@@ -117,13 +117,13 @@
 
 ## 5. The report
 
-- [ ] 5.1 In `cli/report.py`, ask the holdings question once per machine of the selection, beside the
+- [x] 5.1 In `cli/report.py`, ask the holdings question once per machine of the selection, beside the
   value question, and print one line per holding the build names no entry for: `<machine> holds
   <identity>, which this build does not name`. Leave the exit status alone - a holding is an answer a
   machine gave, like a stale entry and a missing value - and leave `_held`
   (`cli/report.py:372-391`) answering the question it already answers, so an image of an earlier
   build of a named entry stays one line and is not also a holding. Verify with 5.2 and 7.
-- [ ] 5.2 Add to `tests/e2e/test_harness.py` the seven scenarios of
+- [x] 5.2 Add to `tests/e2e/test_harness.py` the seven scenarios of
   `specs/operator/machine-report/spec.md` that a recorder can answer, which is the only layer they
   land in because each is decided by what the command does with an answer rather than by what a tool
   prints: `test_a_machine_holding_nothing_unnamed_is_reported_without_such_a_line`,
@@ -140,18 +140,18 @@
 
 ## 6. The apply walk
 
-- [ ] 6.1 In `cli/apply.py`, ask every machine of the selection what it holds before the first write,
+- [x] 6.1 In `cli/apply.py`, ask every machine of the selection what it holds before the first write,
   announce each holding where the run's other announcements are printed - after the cycle,
   contradicted-edge and unsatisfied-read lines and before the first step - with `; not retired`
   appended where the run was not asked to retire, and take every retirement before the first value
   write, the first copy and the first activation. Ask all machines before writing anything so a run
   that cannot read one answer has changed nothing anywhere. Verify with 6.3.
-- [ ] 6.2 In `cli/planner.py`, add `--retire` to `apply` only, as a flag, with help that says it
+- [x] 6.2 In `cli/planner.py`, add `--retire` to `apply` only, as a flag, with help that says it
   removes what the machines hold that the build does not name and deletes no state. Add nothing to
   `status` and add no subcommand: `README.md`'s five documented commands are asserted literally in
   `tests/unit/layers.nix`, and a step of the walk belongs in the walk. Verify with `nix run .#planner
   -- apply --help` and the parser cases in `tests/e2e/test_harness.py`.
-- [ ] 6.3 Add to `tests/e2e/test_harness.py` the seven scenarios of
+- [x] 6.3 Add to `tests/e2e/test_harness.py` the seven scenarios of
   `specs/operator/apply-command/spec.md` that a recorder can answer, which is the only layer they
   land in because each is about the argv a step is addressed by or a refusal made before a machine
   matters: `test_a_run_asked_what_it_would_do_names_no_holding`,
@@ -166,13 +166,13 @@
 
 ## 7. The machines
 
-- [ ] 7.1 In `tests/e2e/wired-pair/deployment/default.nix`, add a third build, `retired`, whose
+- [x] 7.1 In `tests/e2e/wired-pair/deployment/default.nix`, add a third build, `retired`, whose
   instances are the folder's own minus `sweep` (`tests/e2e/wired-pair/deployment/instances.nix:26-31`),
   so that the server machine keeps `site` and the machine is still named and still reachable while
   `sweep:job@<server>` is a holding the build does not name. Note that it is exposed as
   `packages.planner-e2e-wired-pair-retired` by the name rule `docs/cluster.md:97-98` states. Verify
   with `nix build .#packages.x86_64-linux.planner-e2e-wired-pair-retired`.
-- [ ] 7.2 Add to `tests/e2e/wired-pair/test_wired_pair.py`, at the end of the file because the file
+- [x] 7.2 Add to `tests/e2e/wired-pair/test_wired_pair.py`, at the end of the file because the file
   order is the phase order, the six scenarios that need a real endpoint, which is the only layer they
   land in: `test_a_machine_holds_what_no_build_names`,
   `test_an_apply_of_a_build_that_dropped_an_entry_announces_what_the_machine_still_runs`,
@@ -185,7 +185,7 @@
   purpose and the job never fires during a run, and starting a unit by hand is what
   `secret-delivery`'s reboot phase already does - and assert that file is still there afterwards.
   Verify with `nix run .#planner-e2e wired-pair`.
-- [ ] 7.3 In `tests/e2e/portable-image/deployment/`, add one instance placed on the booted machine's
+- [x] 7.3 In `tests/e2e/portable-image/deployment/`, add one instance placed on the booted machine's
   own tag whose module declares one long-running unit, no host path and `platforms = [
   "x86_64-linux" ]` - neither existing module fits, `mirror/copy.nix:7` being aarch64 and
   `report/watch.nix` owning the folder's host paths - and a third build, `retired`, whose instances
@@ -194,7 +194,7 @@
   host path. Verify with `nix build
   .#packages.x86_64-linux.planner-e2e-portable-image-retired` and with `nix build
   .#checks.x86_64-linux.planner-tests`, which is what refuses a declared host path.
-- [ ] 7.4 Add to `tests/e2e/portable-image/test_portable_image.py`, at the end of the file, the three
+- [x] 7.4 Add to `tests/e2e/portable-image/test_portable_image.py`, at the end of the file, the three
   image scenarios, which land in this folder and nowhere else because it owns every claim this
   repository makes about `portablectl`:
   `test_an_image_the_machine_holds_for_no_entry_of_the_build_is_named_as_the_machine_listed_it`,
@@ -205,7 +205,7 @@
   attached, and it leaves `bin/detach` and
   `test_detaching_removes_the_units_and_the_staging_directory` untouched. Verify with `nix run
   .#planner-e2e portable-image`.
-- [ ] 7.5 If the third artifact and its closure do not fit, give this folder's stage its own disk
+- [x] 7.5 If the third artifact and its closure do not fit, give this folder's stage its own disk
   through `delivery.cluster_stage`'s `disk_gib` (`tests/e2e/portable-image/test_portable_image.py:283`)
   and never through `additionalSpace` in `tests/e2e/guest.nix:184`: growing the shared image re-keys
   every other folder's cut, and growing one stage re-keys only its own. Do not edit
@@ -214,12 +214,12 @@
 
 ## 8. Documents
 
-- [ ] 8.1 In `docs/operator.md`, document the fifth thing a report says, `--retire`, where the
+- [x] 8.1 In `docs/operator.md`, document the fifth thing a report says, `--retire`, where the
   retirement sits in the walk (`## The order apply walks`), that it deletes no state, and the limit
   of D8: a machine the build no longer names carries no address in the build, so it is emptied while
   the build still names an entry on it, or by hand with the endpoint's own tool. Verify with `nix
   build .#checks.x86_64-linux.treefmt`, which lints every `*.md` outside the excludes.
-- [ ] 8.2 In `docs/cluster.md`, state the new phases of both folders and the third build each grows,
+- [x] 8.2 In `docs/cluster.md`, state the new phases of both folders and the third build each grows,
   beside the existing paragraphs for `wired-pair` and `portable-image`, and keep the sentence about
   `bin/detach` accurate - it is still the artifact's own script and still what that folder's last
   phase runs, and it is not what a retirement runs. Verify with `nix build
@@ -227,20 +227,20 @@
 
 ## 9. Gates
 
-- [ ] 9.1 `nix eval --json '.#debug.failures'` returns `[]`.
-- [ ] 9.2 `nix build .#checks.x86_64-linux.planner-tests`.
-- [ ] 9.3 `nix build .#checks.x86_64-linux.treefmt`.
-- [ ] 9.4 `nix build .#checks.x86_64-linux.planner-perf`, against the baseline of 1.1. The gate is
+- [x] 9.1 `nix eval --json '.#debug.failures'` returns `[]`.
+- [x] 9.2 `nix build .#checks.x86_64-linux.planner-tests`.
+- [x] 9.3 `nix build .#checks.x86_64-linux.treefmt`.
+- [x] 9.4 `nix build .#checks.x86_64-linux.planner-perf`, against the baseline of 1.1. The gate is
   two-sided with a 0.15 margin: a counter that moved is a task to fix here, never a re-recorded
   budget.
-- [ ] 9.5 `fixtures/minimal-typed-edge/plan/backup.json` is **not** regenerated by this change: no
+- [x] 9.5 `fixtures/minimal-typed-edge/plan/backup.json` is **not** regenerated by this change: no
   declaration of that fixture changes, nothing of this change is inside `mkPlan`, and the fixture's
   plan is therefore byte-identical. Verify by `nix eval --json .#debug.worked.plan | jq -S .`
   comparing equal to the committed file, and regenerate only if it does not.
 
 ## 10. Close
 
-- [ ] 10.1 Add this change's invariants to `CLAUDE.md`: under "The operator's command", that a report
+- [x] 10.1 Add this change's invariants to `CLAUDE.md`: under "The operator's command", that a report
   names what a machine holds that the build does not, that the line costs no exit status and that
   retirement is opt-in, uses the endpoint's own removal verb, deletes no state and is taken before
   anything is put in place; under "Realisers", that each realiser publishes what a machine's own
@@ -254,7 +254,7 @@
   `lib/module.nix` is untouched; no excluded construct, so `lib/excluded.nix` is untouched; and no
   command is added or removed, so the `README.md` literals are untouched. Verify with `nix build
   .#checks.x86_64-linux.treefmt`, which lints `CLAUDE.md`.
-- [ ] 10.2 In **one** edit, now that every scenario of task groups 2, 5, 6 and 7 has its test: delete
+- [x] 10.2 In **one** edit, now that every scenario of task groups 2, 5, 6 and 7 has its test: delete
   this change's three `excused` entries from `tests/unit/coverage.nix`, add the same three paths to
   `accountable`, and tick every checkbox of this file. The three steps are one edit because the
   excuse is stale the moment a box is ticked (`changeHasLanded`, `tests/unit/coverage.nix:380-385`)
