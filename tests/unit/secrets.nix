@@ -54,6 +54,12 @@ let
 
   programOf = gen: "/nix/store/9dm4x2vqk7z1n5bpr3jlfg8ys6cwh0az-generate-${gen}.drv";
   getProgram = "/nix/store/3q8xk1p7v2mz9jd4rlnb6ycsfwg0h5aq-age-backend/bin/secrets-age-backend";
+  sealProgram = "/nix/store/7b5wq2ckx9nz4mj1pdlr8vfhs6gy03at-age-1.2.1/bin/age";
+
+  # One age native recipient, the public line `age-keygen` prints: one word of
+  # the grammar a rendered step can carry, which is what lets the recipient be
+  # a word rather than a file in the store.
+  recipient = "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p";
 
   caBytes = "PUBLIC-CA-BYTES";
 
@@ -149,6 +155,7 @@ let
     deployStep.render {
       inherit plan;
       get = getProgram;
+      seal = sealProgram;
     };
 
   # A file record as the planner writes one. The ownership and the mode are
@@ -191,7 +198,10 @@ let
       // entry
     ) entries;
 
-  deliverLines = text: filter (line: builtins.match " *deliver .*" line != null) (lines text);
+  # The calls of one rendered step, by the name the reading gave that step.
+  callLines = step: text: filter (line: builtins.match " *${step} .*" line != null) (lines text);
+  deliverLines = callLines "deliver";
+  sealLines = callLines "seal_copy";
 
   # The worked plan with one field of the shared value's only file replaced, so
   # a word the rendered step carries can be moved one at a time.
@@ -203,6 +213,30 @@ let
         files.token = worked.plan."issuer:vars/session".files.token // attrs;
       };
     };
+
+  # The worked plan with a recipient stated on the machine records named and
+  # none on the others: the plan's own machine record is where a machine says
+  # whether its values are sealed, so the whole difference between a fleet that
+  # seals and one that does not is one field of one record.
+  withRecipients =
+    recipients:
+    worked.plan
+    // builtins.mapAttrs (key: line: worked.plan.${key} // { sealRecipient = line; }) recipients;
+
+  sealing = withRecipients {
+    "machine:one" = recipient;
+    "machine:two" = null;
+  };
+
+  bothSealing = withRecipients {
+    "machine:one" = recipient;
+    "machine:two" = recipient;
+  };
+
+  unsealed = withRecipients {
+    "machine:one" = null;
+    "machine:two" = null;
+  };
 in
 {
   testAGeneratedValueBecomesOneStoreEntry =
@@ -546,11 +580,91 @@ in
       };
     };
 
+  testTheRenderedStepWritesASealedCopyForAMachineThatSeals =
+    let
+      script = renderOf sealing;
+      numbered = lines script;
+      at =
+        needle:
+        head (
+          filter (i: hasInfix needle (builtins.elemAt numbered i)) (
+            builtins.genList (i: i) (builtins.length numbered)
+          )
+        );
+      tokenPath = worked.plan."issuer:vars/session".files.token.path;
+    in
+    {
+      expr = {
+        # One machine of the delivery set states a recipient and the other does
+        # not, so the whole difference is inside one rendered script.
+        sealed = sealLines script;
+        plaintext = deliverLines script;
+        # Sealed copy first: a run interrupted between the two must never leave
+        # a sealed copy older than the plaintext beside it.
+        theSealedCopyIsSentFirst =
+          at "seal_copy 'issuer:session'" < at "deliver 'issuer:session' 'token' 'root@one";
+        # The sealed path is the library's derivation of the value's own path,
+        # not a root this reading restates.
+        theSealedPathIsTheLibrarysOwn = hasInfix (planner.util.sealedPathOf tokenPath) script;
+        # A value's bytes are in the plan, which is what makes their absence
+        # from the script an observation rather than a vacuum.
+        thePlanCarriesTheBytes = hasInfix caBytes (builtins.toJSON sealing);
+        theScriptCarriesThem = hasInfix caBytes script;
+      };
+      expected = {
+        sealed = [
+          "    seal_copy 'issuer:host:one' 'key' 'root@one.example:22' '/var/lib/planner/sealed/issuer/host' '/var/lib/planner/sealed/issuer/host/key.age' '${recipient}'"
+          "    seal_copy 'issuer:session' 'token' 'root@one.example:22' '/var/lib/planner/sealed/issuer/session' '/var/lib/planner/sealed/issuer/session/token.age' '${recipient}'"
+        ];
+        plaintext = [
+          "    deliver 'issuer:host:one' 'key' 'root@one.example:22' '/run/vars/issuer/host' '/run/vars/issuer/host/key' '0400' 'root:root'"
+          "    deliver 'issuer:host:two' 'key' 'root@two.example:22' '/run/vars/issuer/host' '/run/vars/issuer/host/key' '0400' 'root:root'"
+          "    deliver 'issuer:session' 'token' 'root@one.example:22' '/run/vars/issuer/session' '/run/vars/issuer/session/token' '0400' 'root:root'"
+          "    deliver 'issuer:session' 'token' 'root@two.example:22' '/run/vars/issuer/session' '/run/vars/issuer/session/token' '0400' 'root:root'"
+        ];
+        theSealedCopyIsSentFirst = true;
+        theSealedPathIsTheLibrarysOwn = true;
+        thePlanCarriesTheBytes = true;
+        theScriptCarriesThem = false;
+      };
+    };
+
+  testTheRenderedStepForAMachineWithoutARecipientIsUnchanged =
+    let
+      script = renderOf unsealed;
+    in
+    {
+      expr = {
+        sealed = sealLines script;
+        plaintext = deliverLines script;
+        # Not one path under the sealed root anywhere in the script: a fleet
+        # stating no recipient pays nothing for this change.
+        itNamesNoSealedPath = hasInfix planner.util.sealedRoot script;
+        # And a machine of the set that states none is delivered to exactly as
+        # it is beside a machine that seals: one record's recipient moves no
+        # other machine's line.
+        besideAMachineThatSeals = deliverLines (renderOf sealing) == deliverLines script;
+        theScriptCarriesTheBytes = hasInfix caBytes script;
+      };
+      expected = {
+        sealed = [ ];
+        plaintext = [
+          "    deliver 'issuer:host:one' 'key' 'root@one.example:22' '/run/vars/issuer/host' '/run/vars/issuer/host/key' '0400' 'root:root'"
+          "    deliver 'issuer:host:two' 'key' 'root@two.example:22' '/run/vars/issuer/host' '/run/vars/issuer/host/key' '0400' 'root:root'"
+          "    deliver 'issuer:session' 'token' 'root@one.example:22' '/run/vars/issuer/session' '/run/vars/issuer/session/token' '0400' 'root:root'"
+          "    deliver 'issuer:session' 'token' 'root@two.example:22' '/run/vars/issuer/session' '/run/vars/issuer/session/token' '0400' 'root:root'"
+        ];
+        itNamesNoSealedPath = false;
+        besideAMachineThatSeals = true;
+        theScriptCarriesTheBytes = false;
+      };
+    };
+
   # A pure evaluation cannot run a shell, so this is a reading of the rendered
   # text. What the step does when it runs is asserted in tests/e2e/generated-secret.
   testTheRenderedStepRemovesThePlaintextItFetched =
     let
-      script = renderOf worked.plan;
+      script = renderOf bothSealing;
       numbered = lines script;
       indexed = builtins.genList (i: {
         inherit i;
@@ -572,12 +686,17 @@ in
         # that already exists.
         theTrapIsBeforeTheFirstFetch = firstAt "trap " < firstAt "\"$get\"";
         eachFetchTruncatesTheOneTemporary = countOf ": > \"$tmp\"" == 1;
+        # The ciphertext is plaintext one key away, so the temporary it is
+        # written into is removed by the same trap and truncated by the
+        # redirection that writes it.
+        theCiphertextIsTruncatedByItsOwnRedirection = countOf "> \"$sealed\"" == 1;
       };
       expected = {
-        trap = [ "trap 'rm -f \"$tmp\"' EXIT INT TERM HUP" ];
-        temporaries = 1;
+        trap = [ "trap 'rm -f \"$tmp\" \"$sealed\"' EXIT INT TERM HUP" ];
+        temporaries = 2;
         theTrapIsBeforeTheFirstFetch = true;
         eachFetchTruncatesTheOneTemporary = true;
+        theCiphertextIsTruncatedByItsOwnRedirection = true;
       };
     };
 
@@ -820,6 +939,7 @@ in
       script = unruled.render {
         plan = hostile;
         get = getProgram;
+        seal = sealProgram;
       };
     in
     {
@@ -921,9 +1041,16 @@ in
   testEveryValueTheRenderedStepEscapesIsCrossedAgainstTheReading =
     let
       # The step and the reading are crossed through the words the reading
-      # publishes: the call carries one word per entry of that set and the shell
-      # function reads exactly those positions, so a set the two halves do not
-      # share is a call the function cannot take apart.
+      # publishes: the call of each rendered step carries one word per entry of
+      # that set whose `steps` name it, and that step's own shell function reads
+      # exactly those positions, so a set the two halves do not share is a call
+      # the function cannot take apart.
+      index =
+        list: needle:
+        head (
+          filter (i: builtins.elemAt list i == needle) (builtins.genList (i: i) (builtins.length list))
+        );
+
       crossing =
         words:
         let
@@ -935,23 +1062,50 @@ in
               };
             }).render
               {
-                plan = worked.plan;
+                plan = bothSealing;
                 get = getProgram;
+                seal = sealProgram;
               };
-          call = head (deliverLines script);
-          carried =
-            builtins.length (filter (word: builtins.isString word && word != "") (builtins.split " +" call))
+          numbered = lines script;
+          wordsOf = step: filter (word: builtins.elem step word.steps) words;
+          # The function a step's calls land in, from its own opening line to the
+          # brace that closes it: the positions a script reads somewhere are the
+          # union of both functions', which is one question too coarse.
+          bodyOf =
+            step:
+            let
+              opened = index numbered "${step}() {";
+              after = builtins.genList (i: builtins.elemAt numbered (opened + 1 + i)) (
+                builtins.length numbered - opened - 1
+              );
+            in
+            builtins.concatStringsSep "\n" (builtins.genList (builtins.elemAt after) (index after "}"));
+          carriedBy =
+            step:
+            builtins.length (
+              filter (word: builtins.isString word && word != "") (
+                builtins.split " +" (head (callLines step script))
+              )
+            )
             - 1;
-          read = filter (n: hasInfix ("$" + toString n) script) (builtins.genList (i: i + 1) 9);
+          readBy =
+            step: filter (n: hasInfix ("$" + toString n) (bodyOf step)) (builtins.genList (i: i + 1) 9);
         in
         {
           fields = map (word: word.field) words;
-          theStepCarriesOneWordPerField = carried == 2 + builtins.length words;
-          theStepReadsThemAll = read == builtins.genList (i: i + 1) (2 + builtins.length words);
+          theStepCarriesOneWordPerField = map (
+            step: carriedBy step == 2 + builtins.length (wordsOf step)
+          ) reader.renderedSteps;
+          theStepReadsThemAll = map (
+            step: readBy step == builtins.genList (i: i + 1) (2 + builtins.length (wordsOf step))
+          ) reader.renderedSteps;
         };
 
-      # One plan per word, each moving that word alone out of what a rendered
-      # word admits.
+      # One plan per word a record states on its own, each moving that word alone
+      # out of what a rendered word admits. The two sealed words are not among
+      # them and cannot be: each is the file's own path put through
+      # `sealedPathOf`, so a sealed word this reading refuses is a path it
+      # refuses, which is the one row `aRefusedPathIsOneRow` reads.
       hostile = {
         address = worked.plan // {
           "machine:one" = worked.plan."machine:one" // {
@@ -962,14 +1116,20 @@ in
         path = sessionFileWith { path = "/run/vars/issuer/ses sion/token"; };
         mode = sessionFileWith { mode = "0 400"; };
         ownership = sessionFileWith { owner = "svc$"; };
+        recipient = withRecipients {
+          "machine:one" = "age1 nope";
+          "machine:two" = null;
+        };
       };
+
+      stated = filter (word: hostile ? ${word.field}) reader.renderedWords;
 
       checks = filter (
         word:
         builtins.any (row: hasInfix "${word.what} of " row.message) (
           rowsById "secrets-rendered-word-refused" hostile.${word.field}
         )
-      ) reader.renderedWords;
+      ) stated;
 
       held = crossing reader.renderedWords;
       andOneWordMore = crossing (reader.renderedWords ++ [ (head reader.renderedWords) ]);
@@ -979,19 +1139,29 @@ in
       expr = {
         inherit held;
         checkedByTheReading = map (word: word.field) checks;
+        # The words no record states, which are the two a path is put through a
+        # derivation for.
+        derivedFromAnotherWord = map (word: word.field) (
+          filter (word: !(hostile ? ${word.field})) reader.renderedWords
+        );
         # The row of a word the reading never checked before: it names the
         # field, the value entry and the text the step cannot carry.
         theOwnershipRow = removeAttrs (oneRow "secrets-rendered-word-refused" hostile.ownership) [
           "evidence"
         ];
-        # A path whose own word is refused is one mistake, so the word derived
-        # from it is not a second row.
+        # The recipient is a word of the machine's own record, so its row names
+        # the machine the way the address's does and its subject stays the value.
+        theRecipientRow = removeAttrs (oneRow "secrets-rendered-word-refused" hostile.recipient) [
+          "evidence"
+        ];
+        # A path whose own word is refused is one mistake, so the words derived
+        # from it are not three rows.
         aRefusedPathIsOneRow = map (row: row.message) (
           rowsById "secrets-rendered-word-refused" hostile.path
         );
         # And the refusal is the second time each fact is stated: the reading
         # rowed it, the step will not render it.
-        theStepRefusesEachOfThem = map (word: raises (renderOf hostile.${word.field})) reader.renderedWords;
+        theStepRefusesEachOfThem = map (word: raises (renderOf hostile.${word.field})) stated;
         # A word only the rendering half carries: the call grows and the
         # function reads no more than it did.
         aWordOnlyTheStepCarries = andOneWordMore.theStepReadsThemAll;
@@ -1007,9 +1177,18 @@ in
             "path"
             "mode"
             "ownership"
+            "sealedParent"
+            "sealed"
+            "recipient"
           ];
-          theStepCarriesOneWordPerField = true;
-          theStepReadsThemAll = true;
+          theStepCarriesOneWordPerField = [
+            true
+            true
+          ];
+          theStepReadsThemAll = [
+            true
+            true
+          ];
         };
         checkedByTheReading = [
           "address"
@@ -1017,6 +1196,11 @@ in
           "path"
           "mode"
           "ownership"
+          "recipient"
+        ];
+        derivedFromAnotherWord = [
+          "sealedParent"
+          "sealed"
         ];
         theOwnershipRow = {
           id = "secrets-rendered-word-refused";
@@ -1024,6 +1208,13 @@ in
           severity = "error";
           message = "the ownership of `issuer:vars/session` is `svc$:root`, which is not something this reading will render into a shell script";
           resolution = "write `issuer:vars/session` as one shell word of ASCII letters, digits, `_`, `.`, `/`, `:`, `@`, `%`, `+`, `=`, `,`, `~`, `-` and nothing else";
+        };
+        theRecipientRow = {
+          id = "secrets-rendered-word-refused";
+          subject = "issuer:vars/host@one";
+          severity = "error";
+          message = "the seal recipient of `one` is `age1 nope`, which is not something this reading will render into a shell script";
+          resolution = "write `one` as one shell word of ASCII letters, digits, `_`, `.`, `/`, `:`, `@`, `%`, `+`, `=`, `,`, `~`, `-` and nothing else";
         };
         aRefusedPathIsOneRow = [
           "the path of `issuer:vars/session` is `/run/vars/issuer/ses sion/token`, which is not something this reading will render into a shell script"
@@ -1034,9 +1225,16 @@ in
           true
           true
           true
+          true
         ];
-        aWordOnlyTheStepCarries = false;
-        aWordTheStepDoesNotCarry = false;
+        aWordOnlyTheStepCarries = [
+          false
+          false
+        ];
+        aWordTheStepDoesNotCarry = [
+          false
+          false
+        ];
       };
     };
 
