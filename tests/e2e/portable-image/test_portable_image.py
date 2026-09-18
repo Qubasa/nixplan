@@ -1,4 +1,4 @@
-"""One real machine, two built images, and what attaching one does to it.
+"""One real machine, four built deployments, and what attaching one does to it.
 
 ``nix run .#planner-e2e portable-image`` runs this. It builds the deployment this
 folder declares with ``planner build $PLANNER_E2E_FLAKE#planner-e2e-portable-image``,
@@ -8,12 +8,20 @@ script that artifact carries. One test per scenario of
 ``openspec/specs/realiser/portable-service-image/spec.md``
 that is about what a real machine does with a built image, named after it, plus
 the image scenario of
-``openspec/specs/operator/apply-command/spec.md``.
+``openspec/specs/operator/apply-command/spec.md``, the image scenarios of
+``openspec/changes/retire-an-entry-a-build-no-longer-names/specs/operator/machine-report/spec.md``
+and that change's retired-image scenario of its own ``apply-command`` delta, and
+the failing-probe scenario of
+``openspec/changes/probe-a-service-before-it-counts-as-live/specs/realiser/portable-service-image/spec.md``.
 
-It builds that deployment twice. The second build,
+It builds that deployment four times. The second build,
 ``planner-e2e-portable-image-changed``, is attached by nothing and exists so
 that a report about a machine holding an earlier build has two identities to
-name.
+name. The third, ``planner-e2e-portable-image-retired``, is the same deployment
+without ``beacon``, so that the image the machine holds for that entry is a
+holding the build names no entry for. The fourth,
+``planner-e2e-portable-image-probed``, declares a probe on ``beacon`` that
+refuses.
 
 The build runs in this process and the apply runs inside the cluster (`design.md
 D8`): a build needs no address, and a machine's address exists only in the
@@ -28,6 +36,9 @@ cluster's own net namespace.
 5. a report says what this machine holds, against this build and against another
 6. the units are stopped, the image stays attached, and a report says so
 7. detaching removes what attaching made, and leaves what it was shown
+8. an image the machine holds for no entry of the build is named as the machine
+   listed it, and retiring it is the endpoint's own removal verb
+9. a probe that refuses is a failed apply step, and the image stays attached
 
 rookery is imported at run time rather than statically: it is resolved from
 ``$ROOKERY_FLAKE`` by the runner and is deliberately not an input of this flake
@@ -65,6 +76,7 @@ USER = "root"
 CONFINED_KEY = "watch:file@alpha"
 SECRET_VALUE = "watch:vars/upstream"
 FOREIGN_KEY = "mirror:copy@elsewhere"
+BEACON_KEY = "beacon:ping@alpha"
 SHOWN_TEXT = "upstream says so\n"
 EDITED_TEXT = "upstream changed its mind\n"
 AGAIN_TEXT = "upstream said it twice\n"
@@ -113,6 +125,9 @@ BUILT = _built(f"{FLAKE}#planner-e2e-portable-image")
 DEPLOYMENT = manifest.read(BUILT)
 CHANGED = _built(f"{FLAKE}#planner-e2e-portable-image-changed")
 CHANGED_BUILD = manifest.read(CHANGED)
+RETIRED = _built(f"{FLAKE}#planner-e2e-portable-image-retired")
+PROBED = _built(f"{FLAKE}#planner-e2e-portable-image-probed")
+PROBED_BUILD = manifest.read(PROBED)
 
 
 def _configured() -> tuple[str, str]:
@@ -1331,3 +1346,274 @@ def test_a_host_file_the_image_was_shown_survives_detaching(detached: Run) -> No
     """
     shown = detached.shown_path()
     assert detached.vm.ssh_succeed(f"cat {shlex.quote(shown)}") == AGAIN_TEXT
+
+
+# The phases below are last in file order because the file order is the phase
+# order and nothing is restored between them: the one above leaves the machine
+# with nothing attached, so the first of these puts an image there again, and
+# the last one leaves an image attached that no phase takes away - this realiser
+# has no generation to return to, which is the claim it proves.
+
+
+def _listed_names(listing: str) -> list[str]:
+    """Every image name one `portablectl list --no-legend` printed, in its order."""
+    return [line.split()[0] for line in listing.splitlines() if line.strip()]
+
+
+def _image_of(deployment: manifest.Deployment, key: str) -> dict[str, Any]:
+    """The attachment description one build published for one entry.
+
+    Read off the build being asked about rather than off the run's own, because
+    two of the phases below hold one entry's image against another build of it.
+    """
+    loaded = json.loads(
+        (manifest.artifact_of(deployment.entries[key]) / "attachment.json").read_text()
+    )
+    assert isinstance(loaded, dict), loaded
+    return loaded
+
+
+def _held_name(deployment: manifest.Deployment, key: str) -> str:
+    """The name a machine's own listing gives the image one build published."""
+    return str(_image_of(deployment, key)["image"]).removesuffix(".raw")
+
+
+def _asked(run: Run, *asked: str) -> str:
+    """Ask one machine several things in one login and return what it printed.
+
+    One login rather than one per observation: the guest's sshd is
+    per-connection socket activated, and a burst of short logins is answered by
+    the socket's own trigger limit rather than by a shell.
+    """
+    return str(run.vm.ssh_succeed("; ".join(asked), timeout=180))
+
+
+def _pairs(reported: str) -> dict[str, str]:
+    """The `key=value` lines of one such answer, which is how a machine is read here."""
+    return dict(line.split("=", 1) for line in reported.splitlines() if "=" in line)
+
+
+@pytest.fixture(scope="session")
+def beaconed(detached: Run) -> Run:
+    """Phase 8: an image the machine holds for an entry the build below drops.
+
+    Nothing is attached when this runs, the phase above having detached the only
+    image the machine held, so this one is what puts an image there again. It is
+    the artifact's own `bin/attach` and not an apply on purpose: what the tests
+    below read is a machine holding something a build names no entry for, and an
+    apply is a build naming it. The artifact arrives by the harness's own copy
+    for the same reason.
+    """
+    if detached.observed.get("beaconed"):
+        return detached
+
+    artifact = detached.artifact(BEACON_KEY)
+    address = manifest.address_of(detached.entry(BEACON_KEY))
+    detached.cluster.run(
+        [
+            "nix",
+            "copy",
+            "--to",
+            f"ssh://{USER}@{address}",
+            "--no-check-sigs",
+            str(artifact),
+        ],
+        env=delivery.command_env(dict(os.environ), detached.key),
+    )
+    detached.observed["beaconed"] = detached.vm.ssh_succeed(
+        f"{artifact}/bin/attach > /dev/null && portablectl list --no-legend", timeout=300
+    )
+    return detached
+
+
+def test_an_image_the_machine_holds_for_no_entry_of_the_build_is_named_as_the_machine_listed_it(
+    beaconed: Run,
+) -> None:
+    """The line carries the name the machine printed, and derives no plan key from it.
+
+    The projection a plan key is turned into an image name by is not injective,
+    so the only identity an image the build names nothing for has is the name
+    the machine's own listing gave it. The entry the build still names keeps its
+    own line, and the holding costs no exit status.
+    """
+    listed = _listed_names(beaconed.observed["beaconed"])
+    held = _held_name(DEPLOYMENT, BEACON_KEY)
+
+    status, reported = _status(beaconed, RETIRED, CONFINED_KEY)
+
+    assert held in listed, beaconed.observed["beaconed"]
+    assert [line for line in reported if "does not name" in line] == [
+        f"{MACHINE} holds {held}, which this build does not name"
+    ], reported
+    assert "beacon:ping" not in "\n".join(reported), reported
+    assert [line for line in reported if line.startswith(CONFINED_KEY)] != [], reported
+    assert status == 0, reported
+
+
+@pytest.fixture(scope="session")
+def retired(beaconed: Run) -> Run:
+    """Phase 9: the build that names no `beacon` entry, applied and asked to retire.
+
+    Restricted to the entry this build still places on the machine, which bounds
+    the machines the run asks and decides nothing about what counts as a
+    holding. The apply attaches that entry as it would any other, which is what
+    leaves the two tests below an image of an earlier build of a named entry
+    beside a retirement.
+    """
+    if beaconed.observed.get("retired"):
+        return beaconed
+
+    beaconed.observed["retired"] = beaconed.cluster.run(
+        [
+            str(CLI),
+            "apply",
+            str(RETIRED),
+            "--retire",
+            "--only",
+            CONFINED_KEY,
+            "--values",
+            str(beaconed.source),
+        ],
+        env=delivery.command_env(dict(os.environ), beaconed.key),
+    ).stdout
+    beaconed.observed["listed-after-retirement"] = beaconed.vm.ssh_succeed(
+        "portablectl list --no-legend"
+    )
+    beaconed.observed["gone"] = _asked(
+        beaconed,
+        *[
+            f'echo "load-{unit}=$(systemctl show -P LoadState {shlex.quote(unit)})"'
+            for unit in beaconed.units_of(BEACON_KEY)
+        ],
+        f'echo "kept=$(portablectl is-attached'
+        f' {shlex.quote(beaconed.raw(CONFINED_KEY))} 2>&1 || echo detached)"',
+    )
+    return beaconed
+
+
+def test_an_earlier_builds_image_of_a_named_entry_is_not_an_unnamed_holding(
+    retired: Run,
+) -> None:
+    """One fact earns one line, and it is the line that carries both identities.
+
+    The machine holds the image the apply above attached, which is an earlier
+    build of an entry the second build still names, so the holdings question
+    adds nothing to what the report already says about it.
+    """
+    held = retired.entry(CONFINED_KEY).digest
+    built = CHANGED_BUILD.entries[CONFINED_KEY].digest
+
+    status, reported = _status(retired, CHANGED, CONFINED_KEY)
+
+    state = _listed_state(retired, CONFINED_KEY)
+    assert reported == [f"{CONFINED_KEY} image {state} holds {held}, built {built}"], reported
+    assert [line for line in reported if "does not name" in line] == [], reported
+    assert status == 0, reported
+
+
+def test_a_retired_image_is_detached_and_its_units_are_gone(retired: Run) -> None:
+    """The removal verb was the endpoint's own, and the machine holds nothing of it.
+
+    The step names the identity the machine answered rather than any path of the
+    retired holding's own artifact - that artifact is a build this run is not
+    applying - and it is taken before the first value write and the first
+    activation, because a holding owns the unit file names the entry replacing
+    it would claim.
+    """
+    steps = [line for line in retired.observed["retired"].splitlines() if not line.startswith("  ")]
+    dropped = _held_name(DEPLOYMENT, BEACON_KEY)
+    step = f"retire {dropped} on {USER}@{retired.entry(CONFINED_KEY).address} (no state deleted)"
+    answered = _pairs(retired.observed["gone"])
+    name = str(_image_of(DEPLOYMENT, BEACON_KEY)["name"])
+    listed = _listed_names(retired.observed["listed-after-retirement"])
+
+    assert step in steps, steps
+    assert steps.index(step) < min(
+        index
+        for index, line in enumerate(steps)
+        if line.startswith(("value ", "copy ", "activate "))
+    ), steps
+    assert str(retired.artifact(BEACON_KEY)) not in retired.observed["retired"], steps
+    assert [held for held in listed if held.startswith(f"{name}_")] == [], listed
+    for unit in retired.units_of(BEACON_KEY):
+        assert answered[f"load-{unit}"] == "not-found", answered
+    assert _held_name(DEPLOYMENT, CONFINED_KEY) in listed, listed
+    assert answered["kept"] != "detached", answered
+
+
+@pytest.fixture(scope="session")
+def probed(retired: Run) -> Run:
+    """Phase 10: the build whose probe refuses, applied to the machine.
+
+    Restricted to the probed entry, and the apply is expected to fail: this
+    realiser starts the derived probe unit with the entry's own and has no
+    generation to return to, so the failure is the last thing this folder
+    observes and the image it attached stays attached.
+    """
+    if retired.observed.get("probed"):
+        return retired
+
+    applied = retired.cluster.run(
+        [
+            str(CLI),
+            "apply",
+            str(PROBED),
+            "--only",
+            BEACON_KEY,
+            "--values",
+            str(retired.source),
+        ],
+        env=delivery.command_env(dict(os.environ), retired.key),
+        check=False,
+    )
+    retired.observed["probed"] = f"{applied.stdout}\n{applied.stderr}"
+    retired.observed["probed-status"] = str(applied.returncode)
+    return retired
+
+
+def test_a_failing_probe_fails_the_attach_and_changes_nothing_else(probed: Run) -> None:
+    """A probe that refuses is a failed apply step, and the image stays attached.
+
+    This realiser has no previous generation to return to, so the probe is
+    evidence and not a gate: what it buys is a failing step naming the entry,
+    the machine and what the machine printed, over a machine that goes on
+    running what it holds.
+    """
+    entry = PROBED_BUILD.entries[BEACON_KEY]
+    attachment = _image_of(PROBED_BUILD, BEACON_KEY)
+    units = [str(unit) for unit in attachment["units"]]
+    declared = [str(unit) for unit in _image_of(DEPLOYMENT, BEACON_KEY)["units"]]
+    # The derived probe unit, read as the file the probed build carries and the
+    # unprobed build of the same entry does not: the name is the realiser's and
+    # is not restated here.
+    derived = [unit for unit in units if unit not in declared]
+    logged = probed.observed["probed"]
+    raw = str(manifest.artifact_of(entry) / str(attachment["image"]))
+    assert len(derived) == 1, units
+
+    answered = _pairs(
+        _asked(
+            probed,
+            f'echo "attached=$(portablectl is-attached {shlex.quote(raw)} 2>&1 || echo detached)"',
+            f'echo "result=$(systemctl show -P Result {shlex.quote(derived[0])})"',
+            f'echo "status=$(systemctl show -P ExecMainStatus {shlex.quote(derived[0])})"',
+            f'echo "serving=$(systemctl is-active {shlex.quote(declared[0])} || true)"',
+            # The probe's own output, which `systemctl start` does not print and
+            # the journal does. It is what every assertion below reports on a
+            # failure: a probe unit that failed for a reason other than the
+            # probe refusing would be a green test otherwise.
+            f'echo "probe=$(journalctl --no-pager -o cat -u {shlex.quote(derived[0])}'
+            f" | tr '\\n' '|')\"",
+            f'echo "kept=$(portablectl is-attached'
+            f' {shlex.quote(probed.raw(CONFINED_KEY))} 2>&1 || echo detached)"',
+        )
+    )
+
+    assert probed.observed["probed-status"] != "0", logged
+    assert f"activate {BEACON_KEY} (image) on {USER}@{entry.address}" in logged, logged
+    assert derived[0] in logged, logged
+    assert answered["result"] == "exit-code", answered
+    assert answered["status"] == "1", answered
+    assert answered["attached"] != "detached", answered
+    assert answered["serving"] == "active", answered
+    assert answered["kept"] != "detached", answered
