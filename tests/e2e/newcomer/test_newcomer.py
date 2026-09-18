@@ -663,16 +663,23 @@ def test_the_machine_that_built_it_runs_none_of_it(
 
 
 def test_the_workstation_asks_both_machines_what_they_hold(
-    workstation: Workstation, applied: tuple[str, ...]
+    workstation: Workstation,
+    built: tuple[str, dict[str, Reported]],
+    applied: tuple[str, ...],
 ) -> None:
     """The last step of the walk answers from the machines, not from the build."""
     assert applied, applied
+    root, _ = built
     reported = _planner(workstation, "status", CONSUMER, timeout=BRIEF).splitlines()
+    # The prefix an identity carries is the one the record the workstation built
+    # publishes, read where that record is, which is on that machine.
+    record = json.loads(workstation.vm.ssh_succeed(f"cat {root}/manifest.json", timeout=BRIEF))
 
     for name in TARGETS:
         key = f"{ENTRY}@{name}"
         expected = (
-            f"{key} {REALISER} generation 1 of {delivery.locked_url(key)} runs this build's units"
+            f"{key} {REALISER} generation 1 of {delivery.locked_url(record, key)} "
+            f"runs this build's units"
         )
         assert expected in reported, reported
 
