@@ -57,6 +57,7 @@ def _apply(args: argparse.Namespace) -> int:
         ssh_key=Path(args.ssh_key) if args.ssh_key else None,
         user=args.user,
         dry_run=args.dry_run,
+        retire=args.retire,
         log=print,
     )
     if args.dry_run:
@@ -189,6 +190,16 @@ def parser() -> argparse.ArgumentParser:
                     "make every refusal, print the value writes, copies and activations this "
                     "run would perform in the order it would perform them, and contact no "
                     "machine"
+                ),
+            )
+            sub.add_argument(
+                "--retire",
+                action="store_true",
+                help=(
+                    "remove what the machines hold that this build names no entry for, with the "
+                    "endpoint's own removal verb and before anything is put in place; it deletes "
+                    "no state, and every run announces such a holding whether or not it is given "
+                    "this flag"
                 ),
             )
     return root
