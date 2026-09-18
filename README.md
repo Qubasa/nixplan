@@ -2,7 +2,11 @@
 
 **WIP**: This is in heavy LLM assisted prototyping phase, not for general use.
 
-A prototype to make Spaces OS reality.
+A prototype to make selfhosted agentic app distribution feasable.
+Problem: You vibe code an app, but you want to distribute it to your friends,
+it needs a postgresql on a server and an app with credentials on your friends computer.
+
+
 Making someone join a space is then equivalent to building a set of user services and handing them over.
 
 We achieve this by allowing services to be deployed anywhere, Android / embedded devices,
@@ -34,23 +38,6 @@ its own entry, or reaches that module through an export and a wire, so the secon
 path of its own instead of a collision. Two consequences are checked rather than remembered: no
 deployment declaration carries a host path, and a test that has to assert one reads it off the
 plan.
-
-## What is where
-
-```
-lib/       the planner: a deployment in, a plan and a diagnostics table out
-image/     a realiser: one plan entry as a systemd portable-service image
-flakelet/  a realiser: one plan entry as a flakelet service artifact
-secrets/   a realiser: a whole plan as a configuration for the external secret generator
-operator/  a whole deployment built: the plan, a manifest, one artifact per entry
-cli/       the operator's command, `planner`, which builds and applies one
-tests/unit/  nix-unit suites over the library, the realisers and the build
-tests/e2e/   six folders of real machines, and the harness they share
-fixtures/  the worked deployment the unit suites evaluate, with its golden plan
-perf/      two synthetic deployments, a measurement harness and committed budgets
-docs/      the documentation, starting at docs/README.md
-openspec/  one spec per capability, the open changes, and the archive they land in
-```
 
 ## Using it from your own flake
 
