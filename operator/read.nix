@@ -22,6 +22,7 @@ let
     groupBy
     head
     isAttrs
+    isList
     isString
     length
     mapAttrs
@@ -33,6 +34,7 @@ let
     optional
     quote
     quoteList
+    sealedPathOf
     sortStrings
     subtractList
     uniqueStrings
@@ -117,8 +119,10 @@ let
 
   # The names are the shared reading's own derivation, read here rather than
   # derived a second time: a row about a unit file name and the refusal over the
-  # same name ask one function.
-  unitFilesOf = name: units: sortStrings (imageReader.unitFilesOf name units);
+  # same name ask one function. One entry spelling one name twice claims it once
+  # here, because the per-machine index below is the question about two entries
+  # and the same-entry case has a row and a sentence of its own.
+  unitFilesOf = name: units: sortStrings (uniqueStrings (imageReader.unitFilesOf name units));
 
   readEntry =
     { plan, realise }:
@@ -138,6 +142,10 @@ let
       record = machineRecordOf plan parts.machine;
       declared = record.address or null;
       address = if declared == "" then null else declared;
+      # The machine's own scope, read off the record the plan carries: a
+      # system-scope machine states none, the field entering the record only
+      # where it is `user`.
+      scope = record.scope or "system";
       entry = plan.${key};
       name = imageReader.nameOf parts;
       realised = entry.units or { } != { };
@@ -214,6 +222,18 @@ let
             what = "the unit file";
             rule = endpoint.unitRule name;
           }) (filter (file: !(endpoint.acceptsUnit name file)) (unitFilesOf name (entry.units or { })));
+      # The entry's own probe file, against the files its own declared units
+      # spell. Two entries deriving one file is the per-machine namespace's
+      # question below; this one is one entry claiming one name twice, which
+      # that row's sentence is not about.
+      probeFile = imageReader.probeFileName name;
+      probeTaken =
+        if imageReader.probedUnits (entry.units or { }) == [ ] then
+          [ ]
+        else
+          filter (unit: imageReader.unitFileName name unit == probeFile) (
+            sortStrings (attrNames (entry.units or { }))
+          );
       denials =
         if confinement == null then
           [ ]
@@ -339,6 +359,12 @@ let
               evidence = "which service manager an artifact is emitted for is the realiser's, and which one a machine runs is the registry's";
               resolution = "place ${quote key} on a machine running ${quote emits}, or state a realiser that emits for ${shown runs}";
             })
+            ++ optional (known && !(elem scope endpoint.scopes)) (row {
+              id = "operator-entry-scope-unsupported";
+              message = "entry ${quote key} is planned for machine ${quote parts.machine}, which is deployed in the ${quote scope} scope, and the stated realiser ${quote realiser} realises ${quoteList endpoint.scopes}";
+              evidence = "which scopes a realiser can realise is the realiser's own statement, asked of it rather than restated here, so a scope it does not publish is an artifact the machine would never run";
+              resolution = "state a realiser whose scopes carry ${quote scope} for ${quote key}, or place it on a machine whose ${quote "scope"} is one of ${quoteList endpoint.scopes}";
+            })
             ++ map (
               refused:
               row {
@@ -348,6 +374,15 @@ let
                 resolution = "rename the instance or the service of ${quote key} so that ${refused.what} it derives is one the endpoint accepts";
               }
             ) (refusedNames ++ refusedUnits)
+            ++ map (
+              unit:
+              row {
+                id = "operator-entry-probe-unit-file-taken";
+                message = "entry ${quote key} declares a probe and declares unit ${quote unit}, whose unit file is the ${quote probeFile} the probe itself derives";
+                evidence = "a probed entry derives one unit file off its own service name, and a declared unit spelling it would have the two render into one file";
+                resolution = "rename unit ${quote unit} of ${quote key}, or move the probe off ${quote key}";
+              }
+            ) probeTaken
             ++ map (
               denial:
               row {
@@ -412,9 +447,17 @@ let
     let
       at = " on file ${quote name}";
       read = map (field: { inherit field; } // planned key at file field "") fileFields;
+      record = indexBy (f: f.field) (f: f.value) read;
     in
     {
-      value = indexBy (f: f.field) (f: f.value) read;
+      value = record // {
+        # The sealed copy's path, derived here rather than read off the plan: it
+        # is a function of the runtime path, and a field on `fileRecord` would
+        # re-key every generated value in every deployment for a path the
+        # record already carries. A file whose `path` is not one is refused by
+        # the command that reads this record, so none is published for it.
+        sealed = if isString record.path && record.path != "" then sealedPathOf record.path else "";
+      };
       rows = concatLists (map (f: f.rows) read);
     };
 
@@ -438,6 +481,87 @@ let
       rows = delivery.rows ++ files.rows ++ concatLists (planner.util.mapAttrsToList (_: f: f.rows) read);
     }
     // (if entry.program or null == null then { } else { inherit (entry) program; });
+
+  # The unit the machine-scoped oneshot is installed as, one hyphen wide. That
+  # width is what keeps it outside the namespace an entry can spell: every unit
+  # file a realiser derives is `<instance>-<service>-<unit>.service`, which
+  # carries at least two hyphens outside its components. The disjointness is a
+  # property of those derivations rather than a row, because a collision nobody
+  # can earn is a row nobody can test.
+  unsealUnit = "planner-unseal.service";
+
+  # Whether an entry's own record names a generated value's path at any depth of
+  # its units or its configuration files. The library's own recogniser, asked of
+  # the two records `imageReader.hostPaths` is asked of, so a declared read and
+  # an owner naming its own generator's file are covered by one rule, and an
+  # entry that opens no value is ordered behind nothing.
+  opensAValue =
+    entry:
+    planner.util.varsPathsDeep {
+      units = entry.units or { };
+      configData = entry.configData or { };
+    } != [ ];
+
+  # The per-machine half of the reading, beside the per-entry one: what a
+  # machine's own boot-time restore needs, which is the files delivered there,
+  # the scope whose manager runs it and the units it has to precede. A value's
+  # machine need run no entry, so the machines are the delivery sets' and never
+  # the placements'; the recipient and the scope are read with `machineRecordOf`
+  # the way an entry's address is. A machine in a delivery set that states no
+  # recipient is a warning the planner already produced, so this states the fact
+  # and adds no row of its own - and the record carries the recipient nowhere,
+  # so a rotation leaves every field of it equal.
+  readMachine =
+    {
+      plan,
+      values,
+      entries,
+    }:
+    machine:
+    let
+      record = machineRecordOf plan machine;
+      declared = record.sealRecipient or null;
+      seals = isString declared && declared != "";
+
+      # A file whose record is not five non-empty strings is left out: every
+      # step of a restore interpolates the record, and the command that reads
+      # this record refuses such a file before any of it runs.
+      stated = f: all (field: isString f.${field} && f.${field} != "") fileFields;
+
+      receives =
+        key: elem machine (if isList values.${key}.delivery then values.${key}.delivery else [ ]);
+
+      # In plan key order and then by file name, which is the order a restore
+      # walks them in.
+      files = filter stated (
+        concatLists (
+          map (key: map (name: values.${key}.files.${name}) (sortStrings (attrNames values.${key}.files))) (
+            filter receives (sortStrings (attrNames values))
+          )
+        )
+      );
+
+      before = sortStrings (
+        uniqueStrings (
+          concatLists (
+            map (key: entries.${key}.units) (
+              filter (key: entries.${key}.machine == machine && opensAValue plan.${key}) (
+                sortStrings (attrNames entries)
+              )
+            )
+          )
+        )
+      );
+    in
+    {
+      inherit machine files before;
+      # The machine's own scope, read off the record the plan carries: a
+      # system-scope machine states none.
+      scope = record.scope or "system";
+      sealed = seals;
+      unit = unsealUnit;
+      artifact = if seals then "machines/${machine}" else null;
+    };
 
   collisionRows =
     entries:
@@ -592,6 +716,25 @@ in
         }) valueKeys
       );
 
+      # The machines a delivered value reaches: the union of the delivery sets
+      # and never the placements', because a value's machine need run no entry.
+      receiving = sortStrings (
+        uniqueStrings (
+          concatLists (
+            map (
+              key: if isList values.${key}.delivery then filter isString values.${key}.delivery else [ ]
+            ) valueKeys
+          )
+        )
+      );
+
+      machines = builtins.listToAttrs (
+        map (machine: {
+          name = machine;
+          value = readMachine { inherit plan values entries; } machine;
+        }) receiving
+      );
+
       rows =
         concatLists (map (key: entries.${key}.rows) placedKeys)
         ++ concatLists (map (key: values.${key}.rows) valueKeys)
@@ -606,8 +749,18 @@ in
       refused = filter (r: r.severity == "error") table != [ ];
 
       manifest = {
-        version = 1;
+        version = 3;
         inherit storeDir;
+        # Each realiser's own statement of the scopes it can realise and of what
+        # a machine's own answer names its holdings by, published rather than
+        # restated: a reader of the record alone knows which scope a realiser's
+        # steps may be addressed to, and which of the things a machine answers
+        # with came from a deployment this planner applied. Every realiser the
+        # reading was handed is in the table and not only the ones this
+        # deployment's entries state, because the entry a build dropped may have
+        # been the last one of its realiser and a table of the stated ones would
+        # make exactly that holding unfindable.
+        realisers = mapAttrs (_: endpoint: { inherit (endpoint) scopes holdings; }) readers;
         entries = mapAttrs (
           _: entry:
           {
@@ -632,12 +785,30 @@ in
           }
           // (if value ? program then { inherit (value) program; } else { })
         ) values;
+        # The machines a delivered value reaches, one record each, whether or
+        # not any of them seals: a reader of the old shape would have read a
+        # missing table as a fleet whose machines seal nothing, which is the
+        # silent failure the table exists to prevent, and that is why it is the
+        # record's version that moved rather than an optional addition to the
+        # old one. The recipient the seal is made to is not restated here - the
+        # plan's own `machine:<name>` record carries it, and a second copy is a
+        # second answer a stale build could disagree with. A machine that seals
+        # nothing carries no path at all, the way an entry realised into
+        # nothing does.
+        machines = mapAttrs (
+          _: m:
+          {
+            inherit (m) sealed scope;
+          }
+          // (if m.artifact == null then { } else { path = m.artifact; })
+        ) machines;
       };
     in
     {
       inherit
         entries
         values
+        machines
         manifest
         rows
         storeDir
