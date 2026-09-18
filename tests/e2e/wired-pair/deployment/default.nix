@@ -1,5 +1,11 @@
-# Two deployments from one source that differ in the served file. That is what
-# gives the redelivery and rollback tests an entry whose identity changed.
+# Five deployments from one source. `default` and `changed` differ in the served
+# file, which is what gives the redelivery and rollback tests an entry whose
+# identity changed. `retired` is the folder's own instances minus `sweep`, so
+# the machine stays named and reachable while `sweep:job@alpha` is a holding no
+# build names. `probed` and `healthy` declare a probe on the served unit, one
+# the page answers and one it does not, and they are builds of their own because
+# a probe is a unit field: giving `default` one would put a second unit file in
+# the artifact every phase above reads as the entry's only one.
 #
 # What the folder owns is the packages its modules run and the statement of how
 # its entries are realised; the planning, the realising and the collecting are
@@ -24,12 +30,17 @@ let
     };
 
   argsOf =
-    page:
+    {
+      page,
+      health ? null,
+      without ? [ ],
+    }:
     let
       pageModule = {
         services.default = import ./modules/page/default.nix {
           python3 = "${pkgs.python3Minimal}";
-          inherit page httpEndpoint;
+          curl = "${pkgs.curl}";
+          inherit page health httpEndpoint;
         };
       };
 
@@ -53,7 +64,11 @@ let
       };
     in
     {
-      inherit (deployment) instances;
+      # A build drops an instance rather than declaring its own set: the folder
+      # states its instances in one place, and what `retired` is is that
+      # statement minus one name.
+      instances = removeAttrs deployment.instances without;
+
       inherit (registry) machines;
 
       interfaces = {
@@ -77,13 +92,29 @@ let
     };
 
   buildOf =
-    name: text:
+    args:
     operator.mkDeployment {
       inherit pkgs planner;
-      args = argsOf "${pageDirOf name text}";
+      args = argsOf args;
     };
+
+  first = "${pageDirOf "first" "cluster page, first delivery\n"}";
 in
 {
-  default = buildOf "first" "cluster page, first delivery\n";
-  changed = buildOf "second" "cluster page, second delivery\n";
+  default = buildOf { page = first; };
+  changed = buildOf { page = "${pageDirOf "second" "cluster page, second delivery\n"}"; };
+  retired = buildOf {
+    page = first;
+    without = [ "sweep" ];
+  };
+  # The page directory carries `/index.html` and nothing else, so one request
+  # the server answers and one it refuses are the two probes.
+  probed = buildOf {
+    page = first;
+    health = "/absent.html";
+  };
+  healthy = buildOf {
+    page = first;
+    health = "/index.html";
+  };
 }
