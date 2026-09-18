@@ -21,9 +21,11 @@ import hashlib
 import json
 import os
 import pwd
+import re
 import shlex
 import stat
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -49,6 +51,16 @@ SESSION_VALUE = "issuer:vars/session"
 CA_VALUE = "issuer:vars/ca"
 
 
+def _sealed_path(path: str) -> str:
+    """Where a machine keeps the copy of one value it can open by itself.
+
+    The derivation is the library's and this repeats its answer rather than
+    importing it, because the command imports nothing of `lib/` either: what it
+    reads is the record, and this writes the record a build writes.
+    """
+    return f"/var/lib/planner/sealed{path.removeprefix('/run/vars')}.age"
+
+
 def _delivered(
     path: str,
     secrecy: str,
@@ -60,6 +72,7 @@ def _delivered(
     """One generated file record, at the ownership the planner defaults to."""
     return {
         "path": path,
+        "sealed": _sealed_path(path),
         "secrecy": secrecy,
         "owner": owner,
         "group": group,
@@ -74,9 +87,14 @@ PROGRAM = "/nix/store/3k9m2x7vqz1n5bpr4jlfg8ys6cwh0d2a-mint-token.drv"
 # than a string, because a generated secret is bytes.
 SECRET = b"s3cret-payload"
 
+# One word of the bech32 alphabet, which is what a native age recipient is. It
+# stands in the plan's own machine records, where the command reads it: the
+# grammar is the library's, and a line it refused reached no plan.
+RECIPIENT = "age1qpzry9x8gf2tvdw0s3jn54khce6mua7lqpzry9x8gf2tvdw0s3jn54khce"
+
 PLAN = {
-    "machine:alpha": {"address": "10.0.0.10", "tags": ["cluster"]},
-    "machine:beta": {"address": "10.0.0.11", "tags": ["cluster"]},
+    "machine:alpha": {"address": "10.0.0.10", "tags": ["cluster"], "sealRecipient": RECIPIENT},
+    "machine:beta": {"address": "10.0.0.11", "tags": ["cluster"], "sealRecipient": RECIPIENT},
     SERVER_KEY: {"key": "sha256-1111111111111111"},
     CLIENT_KEY: {"key": "sha256-2222222222222222"},
     SESSION_VALUE: {
@@ -118,6 +136,17 @@ class Recorder:
         return ""
 
 
+def _asked_what_it_holds(cmd: list[str]) -> bool:
+    """Whether one argv is the question of what a machine holds.
+
+    Every recorder below answers that question before its own answers: it is
+    asked of every machine of a report and of an apply, and a recorder handing
+    it an endpoint record or an activation's report would be handing the
+    command an answer no machine gives.
+    """
+    return remote.HELD in cmd[-1]
+
+
 PUBLISHED = "sha256-3333333333333333"
 
 
@@ -135,12 +164,122 @@ def _stated(key: str, machine: str, address: str) -> dict[str, Any]:
     }
 
 
+# What the reading publishes about each realiser it knows, verbatim as
+# `operator/read.nix` emits it: the scopes it realises - flakelet's core writes
+# paths only root owns, so it states one - and what a machine's own answer names
+# its holdings by. flakelet's is the prefix of the identity it registers, and an
+# image's is the shape of the file name it is listed under.
+URL_PREFIX = "plan:"
+SEPARATOR = "_"
+ALPHABET = "0123456789abcdef"
+DIGEST_LENGTH = 16
+REALISERS: dict[str, Any] = {
+    "flakelet": {"holdings": {"urlPrefix": URL_PREFIX}, "scopes": ["system"]},
+    "image": {
+        "holdings": {
+            "digestAlphabet": ALPHABET,
+            "digestLength": DIGEST_LENGTH,
+            "separator": SEPARATOR,
+        },
+        "scopes": ["system", "user"],
+    },
+}
+
+
+def _holds(*sections: tuple[str, int, str]) -> str:
+    """Return one machine's answer to that question, section by section.
+
+    Each section is a realiser, the exit status of its own tool and that tool's
+    answer, printed the way the question prints them. Only an endpoint answer is
+    ever fabricated here: an image verdict measured against an invented
+    `portablectl` listing is what `tests/e2e/portable-image` exists to avoid.
+    """
+    return "".join(
+        f"{remote.HELD} {realiser} {status}\n{said}\n" for realiser, status, said in sections
+    )
+
+
+def _registered(*records: dict[str, Any]) -> str:
+    """Return what `flakelet status --json` with no name answers, as JSON."""
+    return json.dumps(list(records))
+
+
+def _registration(key: str, name: str, **fields: Any) -> dict[str, Any]:
+    """One entry a flakelet endpoint registers, in the fields the locked one reports.
+
+    The identity is the one the realiser wrote into the artifact and the
+    endpoint reports back, so a record of this planner's carries the published
+    prefix and the plan key behind it.
+    """
+    return {
+        "name": name,
+        "origin": "manual",
+        "generation": 1,
+        "units": {},
+        "locked_url": f"{URL_PREFIX}{key}",
+        "state": "running",
+        "last_error": None,
+        **fields,
+    }
+
+
+def _reached(plan: dict[str, Any], values: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Return the machines table of a build that seals nothing.
+
+    One record per machine a delivered value reaches, which is the delivery set
+    and never the placement, each saying that machine's copies are not sealed:
+    a machine states no recipient until a test states one.
+    """
+    scopes = {
+        key.removeprefix("machine:"): record.get("scope", "system")
+        for key, record in plan.items()
+        if key.startswith("machine:") and isinstance(record, dict)
+    }
+    return {
+        machine: {"sealed": False, "scope": scopes.get(machine, "system")}
+        for machine in sorted(
+            {machine for value in values.values() for machine in value.get("delivery", [])}
+        )
+    }
+
+
+def _sealing(*machines: str, scope: str = "system") -> dict[str, Any]:
+    """Return machines table records for machines whose copies are sealed."""
+    return {
+        machine: {"sealed": True, "scope": scope, "path": f"machines/{machine}"}
+        for machine in machines
+    }
+
+
+def _unsealers(root: Path, machines: dict[str, Any]) -> None:
+    """Write the per-machine unsealer of every record that names one.
+
+    A link into a directory beside the build, because that is what the build
+    is, and carrying the three files the artifact carries: the program the
+    unit runs, the trial a report asks, and the unit itself.
+    """
+    for machine, record in sorted(machines.items()):
+        stated = record.get("path")
+        if not stated:
+            continue
+        artifact = root / "artifacts" / f"machines-{machine}"
+        (artifact / "bin").mkdir(parents=True, exist_ok=True)
+        for program in ("unseal", "check"):
+            (artifact / "bin" / program).write_text("#!/bin/sh\nexit 0\n")
+        (artifact / "planner-unseal.service").write_text("[Unit]\nDescription=unseal\n")
+        link = root / stated
+        link.parent.mkdir(parents=True, exist_ok=True)
+        link.symlink_to(artifact)
+
+
 def _built(
     root: Path,
     *,
     plan: dict[str, Any],
     entries: dict[str, dict[str, Any]],
     values: dict[str, dict[str, Any]] | None = None,
+    machines: dict[str, Any] | None = None,
+    realisers: dict[str, Any] | None = None,
     rows: list[dict[str, str]] | None = None,
     table: str = "",
 ) -> manifest.Deployment:
@@ -156,24 +295,31 @@ def _built(
         plan: The plan artifact.
         entries: The manifest's placed entries, as `_stated` states them.
         values: The manifest's value entries.
+        machines: The machines a delivered value reaches, the delivery sets'
+            own and sealing nothing by default.
         rows: The diagnostics rows.
+        realisers: The scopes each realiser publishes, the two real ones by default.
         table: The rendered diagnostics table.
 
     Returns:
         The deployment, read back from what was written.
     """
     root.mkdir(parents=True, exist_ok=True)
+    reached = _reached(plan, values or {}) if machines is None else machines
     (root / "plan.json").write_text(json.dumps(plan))
     (root / "manifest.json").write_text(
         json.dumps(
             {
-                "version": 1,
+                "version": manifest.VERSION,
                 "storeDir": "/nix/store",
                 "entries": entries,
                 "values": values or {},
+                "machines": reached,
+                "realisers": REALISERS if realisers is None else realisers,
             }
         )
     )
+    _unsealers(root, reached)
     (root / "diagnostics.json").write_text(json.dumps(rows or []))
     (root / "diagnostics.txt").write_text(table)
     # A symlink to a directory beside the build, because that is what a build is:
@@ -251,7 +397,8 @@ def test_an_entry_is_copied_before_it_is_activated(tmp_path: Path) -> None:
 
     apply.apply(deployment, recorder, base_env={})
 
-    copy, activation = recorder.commands
+    asked, copy, activation = recorder.commands
+    assert _asked_what_it_holds(asked)
     resolved = str(tmp_path / "artifacts" / "site-server-alpha")
     assert copy[:2] == ["nix", "copy"]
     assert copy[3] == "ssh://root@10.0.0.10"
@@ -540,15 +687,18 @@ def test_an_entry_named_on_the_command_line_is_not_in_the_plan(tmp_path: Path) -
 class Reporting(Recorder):
     """A recorder that answers each question the way a machine answers it.
 
-    Three questions reach a machine through `output` and each has its own
-    answer: a value write says whether the bytes moved, a restart says nothing,
-    and an activation reports the steps the artifact's own script took.
+    Four questions reach a machine through `output` and each has its own
+    answer: what the machine holds is nothing, a value write says whether the
+    bytes moved, a restart says nothing, and an activation reports the steps
+    the artifact's own script took.
     """
 
     def output(
         self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
     ) -> str:
         self.commands.append(cmd)
+        if _asked_what_it_holds(cmd):
+            return ""
         if 'cat > "$tmp"' in cmd[-1]:
             return "unchanged"
         if "try-restart" in cmd[-1]:
@@ -709,6 +859,7 @@ def test_a_process_table_observed_during_a_value_write(tmp_path: Path) -> None:
         ValueFile(
             name="token",
             path=TOKEN["token"]["path"],
+            sealed=TOKEN["token"]["sealed"],
             secrecy="secret",
             owner="root",
             group="root",
@@ -740,6 +891,192 @@ def test_two_values_of_one_length_run_one_argument_vector(tmp_path: Path) -> Non
     assert runs[0][0] == runs[1][0]
     assert runs[0][1] == runs[1][1]
     assert any('cat > "$tmp"' in cmd[-1] for cmd in runs[0][0])
+
+
+def _sealer(root: Path) -> Path:
+    """Return a stand-in for the sealing program the command's own wrapper names.
+
+    It is not `age` and does not pretend to be: what these assertions are about
+    is where the ciphertext travels and what the argument vectors carry, so the
+    program has to be one the run resolves, take the recipient as an argument,
+    read the plaintext on its input and answer bytes that are not the plaintext.
+    Whether the real tool round-trips is `tests/e2e/delivery.py`'s own guard,
+    asked of the resolved tool rather than of an invention.
+    """
+    program = root / "seal"
+    program.parent.mkdir(parents=True, exist_ok=True)
+    program.write_text(
+        f"#!{sys.executable}\n"
+        "import sys\n"
+        "sys.stdout.buffer.write(\n"
+        "    b'sealed:' + sys.argv[2].encode() + b':'\n"
+        "    + bytes(byte ^ 0x5A for byte in sys.stdin.buffer.read())\n"
+        ")\n"
+    )
+    program.chmod(0o755)
+    return program
+
+
+# The entry each machine of the sealing cases runs, and where it answers.
+PLACED = {"alpha": (SERVER_KEY, "10.0.0.10"), "beta": (CLIENT_KEY, "10.0.0.11")}
+
+
+def _sealed_delivery(root: Path, *machines: str) -> manifest.Deployment:
+    """One entry per machine, and the session value delivered to sealing ``machines``."""
+    return _built(
+        root,
+        plan=PLAN,
+        entries={
+            PLACED[machine][0]: _stated(PLACED[machine][0], machine, PLACED[machine][1])
+            for machine in machines
+        },
+        values={SESSION_VALUE: {"delivery": list(machines), "files": TOKEN}},
+        machines=_sealing(*machines),
+    )
+
+
+def test_a_machine_that_states_no_recipient_is_delivered_to_as_before(tmp_path: Path) -> None:
+    """A machine the record says seals nothing is written to exactly as it was."""
+    deployment = _delivering(tmp_path / "built")
+    source = _bytes_source(tmp_path / "values", {f"{SESSION_VALUE}/token": SECRET})
+    recorder = Reporting()
+
+    log = apply.apply(
+        deployment,
+        recorder,
+        source=source,
+        base_env={"PLANNER_AGE": str(_sealer(tmp_path / "tools"))},
+    )
+
+    assert _steps(log) == [
+        f"value {SESSION_VALUE} token -> root@10.0.0.10:{TOKEN['token']['path']} (root:root 0400)",
+        f"copy {SERVER_KEY} {(tmp_path / 'built' / 'artifacts' / 'site-server-alpha')} "
+        f"-> root@10.0.0.10",
+        f"activate {SERVER_KEY} (flakelet) on root@10.0.0.10",
+    ]
+    # Nothing about a sealed copy reached the machine either: no unsealer, and
+    # no step naming the root a sealed copy would live under.
+    spoken = " ".join(" ".join(command) for command in recorder.commands)
+    assert remote.SEALED_ROOT not in spoken
+    assert remote.UNSEAL_UNIT not in spoken
+
+
+def test_a_run_installs_the_unsealer_of_every_machine_it_seals_a_value_to(
+    tmp_path: Path,
+) -> None:
+    """Each sealing machine is given its unsealer before the first value written to it."""
+    deployment = _sealed_delivery(tmp_path / "built", "alpha", "beta")
+    source = _bytes_source(tmp_path / "values", {f"{SESSION_VALUE}/token": SECRET})
+    recorder = Reporting()
+
+    log = apply.apply(
+        deployment,
+        recorder,
+        source=source,
+        base_env={"PLANNER_AGE": str(_sealer(tmp_path / "tools"))},
+    )
+
+    steps = _steps(log)
+    for machine, address in (("alpha", "10.0.0.10"), ("beta", "10.0.0.11")):
+        artifact = (tmp_path / "built" / "artifacts" / f"machines-{machine}").resolve()
+        copied = steps.index(f"unsealer {machine} {artifact} -> root@{address}")
+        installed = steps.index(f"unseal {machine} on root@{address}")
+        written = [at for at, line in enumerate(steps) if f"@{address}:" in line]
+        assert copied < installed < min(written), steps
+    assert sorted(_activated(log)) == sorted([SERVER_KEY, CLIENT_KEY])
+
+
+def test_a_run_that_writes_no_value_installs_no_unsealer(tmp_path: Path) -> None:
+    """A run restricted to an entry that reads no value contacts no sealing machine."""
+    deployment = _built(
+        tmp_path / "built",
+        plan=PLAN,
+        entries={
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+        },
+        values={SESSION_VALUE: {"delivery": ["alpha"], "files": TOKEN}},
+        machines=_sealing("alpha"),
+    )
+    source = _bytes_source(tmp_path / "values", {f"{SESSION_VALUE}/token": SECRET})
+    recorder = Reporting()
+
+    log = apply.apply(
+        deployment,
+        recorder,
+        source=source,
+        only=(CLIENT_KEY,),
+        base_env={"PLANNER_AGE": str(_sealer(tmp_path / "tools"))},
+    )
+
+    assert [
+        line for line in _steps(log) if line.startswith(("unsealer ", "unseal ", "sealed "))
+    ] == []
+    dialled = " ".join(" ".join(command) for command in recorder.commands)
+    assert "10.0.0.10" not in dialled
+
+
+def test_a_sealed_payload_enters_no_argument_vector(tmp_path: Path) -> None:
+    """Two sealed deliveries of one length are one argv, and no vector holds a value.
+
+    The sealed bytes are a value's as much as the plaintext is, so the property
+    is asserted over both: the vectors of two runs delivering different bytes to
+    one path are equal, which is stronger than the absence of a known needle,
+    and no element of either carries an encoding of either payload.
+    """
+    deployment = _sealed_delivery(tmp_path / "built", "alpha")
+    program = _sealer(tmp_path / "tools")
+    runs = []
+    payloads = (b"\x00\x01payload-one", b"payload-two\xff\xfe")
+    for name, content in zip(("one", "two"), payloads, strict=True):
+        source = _bytes_source(tmp_path / name, {f"{SESSION_VALUE}/token": content})
+        recorder = Reporting()
+        log = apply.apply(
+            deployment, recorder, source=source, base_env={"PLANNER_AGE": str(program)}
+        )
+        runs.append((recorder.commands, _steps(log)))
+
+    assert runs[0][0] == runs[1][0]
+    assert runs[0][1] == runs[1][1]
+    # The sealed copy travelled, on a step of its own and before the plaintext.
+    sealed = [at for at, line in enumerate(runs[0][1]) if line.startswith("sealed ")]
+    written = [at for at, line in enumerate(runs[0][1]) if line.startswith("value ")]
+    assert sealed and written and sealed[0] < written[0], runs[0][1]
+    assert TOKEN["token"]["sealed"] in runs[0][1][sealed[0]]
+    for commands, _ in runs:
+        for command in commands:
+            for word in command:
+                spoken = word.encode(errors="surrogateescape")
+                for content in payloads:
+                    for what, needle in _leaks(content).items():
+                        assert needle not in spoken, f"{what} of the value is in {word}"
+
+
+def test_a_value_whose_bytes_did_not_move_restarts_nothing(tmp_path: Path) -> None:
+    """A rewritten seal is no reason to restart: the plaintext's answer decides."""
+    plan = {**PLAN, "reader:app@alpha": {"reads": {"creds": _reading()}}}
+    deployment = _built(
+        tmp_path / "built",
+        plan=plan,
+        entries={"reader:app@alpha": _stated("reader:app@alpha", "alpha", "10.0.0.10")},
+        values={SESSION_VALUE: {"delivery": ["alpha"], "files": TOKEN}},
+        machines=_sealing("alpha"),
+    )
+    source = _bytes_source(tmp_path / "values", {f"{SESSION_VALUE}/token": SECRET})
+    program = str(_sealer(tmp_path / "tools"))
+
+    first = apply.apply(deployment, Rotating(), source=source, base_env={"PLANNER_AGE": program})
+    recorder = Reporting()
+    again = apply.apply(deployment, recorder, source=source, base_env={"PLANNER_AGE": program})
+
+    # The bytes moved on the first run, so that one restarts the reader.
+    assert [line for line in first if line.startswith("restart ")], first
+    # On the second the machine said the plaintext was unchanged, and the seal
+    # was rewritten anyway, because two sealings of one file differ.
+    assert [line for line in _steps(again) if line.startswith("sealed ")], again
+    assert "  unchanged" in again
+    assert [line for line in again if line.startswith("restart ")] == []
+    assert not [cmd for cmd in recorder.commands if "try-restart" in cmd[-1]]
 
 
 def test_a_dry_run_of_a_deployment_the_planner_refuses(tmp_path: Path) -> None:
@@ -1232,21 +1569,23 @@ def _record(root: Path, record: dict[str, Any]) -> Path:
 
 def test_a_record_states_a_version_the_command_does_not_implement(tmp_path: Path) -> None:
     """A record of another shape is refused before any entry of it is interpreted."""
-    root = _record(tmp_path, {"version": 2, "storeDir": manifest.store_dir(), "entries": {}})
+    shape = {"storeDir": manifest.store_dir(), "entries": {}, "realisers": REALISERS}
+    root = _record(tmp_path, {"version": 1, **shape})
     recorder = Recorder()
 
     with pytest.raises(errors.ApplyError) as raised:
         apply.apply(manifest.read(root), recorder, base_env={})
 
     message = str(raised.value)
-    assert "version 2" in message
+    assert "version 1" in message
     assert f"version {manifest.VERSION}" in message
     assert recorder.commands == []
 
 
 def test_a_record_names_a_store_the_command_does_not_run_against(tmp_path: Path) -> None:
     """Artifact paths of another store are paths this command cannot copy."""
-    root = _record(tmp_path, {"version": 1, "storeDir": "/gnu/store", "entries": {}})
+    shape = {"version": manifest.VERSION, "entries": {}, "realisers": REALISERS}
+    root = _record(tmp_path, {**shape, "storeDir": "/gnu/store"})
     recorder = Recorder()
 
     with pytest.raises(errors.ApplyError) as raised:
@@ -1260,7 +1599,13 @@ def test_a_record_names_a_store_the_command_does_not_run_against(tmp_path: Path)
 
 def test_a_record_carries_no_table_of_entries(tmp_path: Path) -> None:
     """A misspelled table is a record to refuse, never a deployment placing nothing."""
-    shape = {"version": 1, "storeDir": manifest.store_dir(), "values": {}}
+    shape = {
+        "version": manifest.VERSION,
+        "storeDir": manifest.store_dir(),
+        "values": {},
+        "realisers": REALISERS,
+        "machines": {},
+    }
     misspelled = _record(tmp_path / "misspelled", {**shape, "entires": {}})
 
     with pytest.raises(errors.ApplyError) as raised:
@@ -1272,6 +1617,30 @@ def test_a_record_carries_no_table_of_entries(tmp_path: Path) -> None:
 
     empty = manifest.read(_record(tmp_path / "empty", {**shape, "entries": {}}))
     assert empty.entries == {}
+
+
+def test_a_record_carries_no_table_of_realisers(tmp_path: Path) -> None:
+    """What a realiser realises and what names its holdings are read out of the record."""
+    shape = {
+        "version": manifest.VERSION,
+        "storeDir": manifest.store_dir(),
+        "entries": {},
+        "machines": {},
+    }
+    root = _record(tmp_path, shape)
+
+    with pytest.raises(errors.ApplyError) as raised:
+        manifest.read(root)
+
+    assert "realisers" in str(raised.value)
+
+    published = manifest.read(_record(tmp_path / "published", {**shape, "realisers": REALISERS}))
+    assert {name: record.scopes for name, record in published.realisers.items()} == {
+        "flakelet": ("system",),
+        "image": ("system", "user"),
+    }
+    assert published.realisers["flakelet"].text(remote.URL_PREFIX) == URL_PREFIX
+    assert published.realisers["image"].number(remote.LENGTH) == DIGEST_LENGTH
 
 
 def test_a_record_carrying_an_entry_with_no_address_is_read(tmp_path: Path) -> None:
@@ -1637,7 +2006,7 @@ def test_an_unreachable_machine_is_refused_without_a_prompt(tmp_path: Path) -> N
 
     apply.apply(deployment, recorder, base_env={"NIX_SSHOPTS": "-o ConnectTimeout=1"}, log=print)
 
-    _, activation = recorder.commands
+    activation = recorder.commands[-1]
     assert "BatchMode=yes" in activation
     assert "ServerAliveInterval=30" in activation
     assert "ServerAliveCountMax=3" in activation
@@ -1648,7 +2017,12 @@ REFUSED = "No space left on device"
 
 
 class Failing(Recorder):
-    """A recorder whose machine refuses every step whose argv holds ``at``."""
+    """A recorder whose machine refuses every step whose argv holds ``at``.
+
+    The question of what the machine holds is answered rather than refused: it
+    is not a step, it is asked of every machine before the first one, and what
+    this recorder is for is a step a machine refuses.
+    """
 
     def __init__(self, at: str) -> None:
         super().__init__()
@@ -1667,7 +2041,7 @@ class Failing(Recorder):
         return super().output(cmd, env=env, stdin=stdin)
 
     def _refuse(self, cmd: list[str]) -> None:
-        if self.at in " ".join(cmd):
+        if self.at in " ".join(cmd) and not _asked_what_it_holds(cmd):
             raise subprocess.CalledProcessError(1, cmd, output="", stderr=f"{REFUSED}\n")
 
 
@@ -1726,8 +2100,13 @@ def test_the_run_stops_at_the_step_that_broke(tmp_path: Path) -> None:
     _, failing, log = _broken(tmp_path)
 
     assert _activated(tuple(log)) == [SERVER_KEY]
-    assert [command[:2] for command in failing.commands] == [["nix", "copy"], ["ssh", "-o"]]
-    assert all("10.0.0.11" not in " ".join(command) for command in failing.commands)
+    steps = [command for command in failing.commands if not _asked_what_it_holds(command)]
+    assert [command[:2] for command in steps] == [["nix", "copy"], ["ssh", "-o"]]
+    # Every machine is asked what it holds before the first step, so the only
+    # thing addressed to the second machine is that question.
+    assert all("10.0.0.11" not in " ".join(command) for command in steps)
+    asked = [command for command in failing.commands if _asked_what_it_holds(command)]
+    assert [command[-2] for command in asked] == ["root@10.0.0.10", "root@10.0.0.11"]
 
 
 def test_a_step_the_machine_refuses_is_named_by_the_run_that_took_it(tmp_path: Path) -> None:
@@ -1791,7 +2170,12 @@ def test_a_restriction_that_names_a_value_entry_reaches_its_delivery_set(tmp_pat
 
 
 class Answering(Recorder):
-    """A recorder whose machine answers ``said`` to the script naming ``asked``."""
+    """A recorder whose machine answers ``said`` to the script naming ``asked``.
+
+    The question of what it holds is answered with nothing whatever ``asked``
+    names, so a machine asked about one entry does not answer that question
+    with an endpoint record of every entry it holds.
+    """
 
     def __init__(self, asked: str, said: str) -> None:
         super().__init__()
@@ -1802,7 +2186,9 @@ class Answering(Recorder):
         self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
     ) -> str:
         answered = super().output(cmd, env=env, stdin=stdin)
-        return self.said if self.asked in " ".join(cmd) else answered
+        if _asked_what_it_holds(cmd) or self.asked not in " ".join(cmd):
+            return answered
+        return self.said
 
 
 def test_an_artifact_the_run_needs_later_is_missing(tmp_path: Path) -> None:
@@ -2133,6 +2519,8 @@ class Fleet(Recorder):
         self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
     ) -> str:
         answered = super().output(cmd, env=env, stdin=stdin)
+        if _asked_what_it_holds(cmd):
+            return answered
         for address, said in self.said.items():
             if address in " ".join(cmd):
                 return said
@@ -2202,6 +2590,36 @@ def test_the_pinned_endpoints_answer_still_carries_no_identity() -> None:
 
     assert delivery.endpoint_refusal(source) is None, delivery.endpoint_refusal(source)
     assert "settings_hash" not in delivery.ENDPOINT_REPORTS
+
+
+def test_the_resolved_tool_round_trips_a_native_recipient(tmp_path: Path) -> None:
+    """The one behaviour this change rests on, asserted against the tool a run uses.
+
+    Mint a throwaway pair, seal a known string to the printed line, open it with
+    the identity file, compare. No version is compared, so a bump that changes
+    nothing changes nothing here.
+    """
+    tool = delivery.sealing_tool()
+    if tool is None:
+        pytest.skip(delivery.sealing_skip())
+
+    assert delivery.sealing_refusal(tool, tmp_path) is None, delivery.sealing_refusal(
+        tool, tmp_path
+    )
+
+
+def test_a_tool_that_cannot_be_resolved_skips_rather_than_passes() -> None:
+    """A reference naming nothing answers nothing, and the reason names that reference.
+
+    The round trip above reads that answer and skips on it. An unresolvable
+    reference is not evidence that sealing still works, so it may not be read as
+    a claim that was satisfied.
+    """
+    reference = f"{Path(__file__).resolve().parents[2]}#planner-seals-with-nothing"
+
+    assert delivery.sealing_tool(reference) is None
+    assert reference in delivery.sealing_skip(reference)
+    assert delivery.SEALING in delivery.sealing_skip(reference)
 
 
 def _row(severity: str) -> dict[str, str]:
@@ -2281,6 +2699,7 @@ def test_a_mode_widened_on_the_machine(tmp_path: Path) -> None:
         file = ValueFile(
             name="token",
             path=str(path),
+            sealed=f"{path}.age",
             secrecy="secret",
             owner=owner,
             group=group,
@@ -2305,6 +2724,7 @@ def test_an_interrupted_write(tmp_path: Path) -> None:
     file = ValueFile(
         name="token",
         path=str(path),
+        sealed=f"{path}.age",
         secrecy="secret",
         owner=owner,
         group=group,
@@ -2325,6 +2745,7 @@ def test_an_account_the_machine_does_not_have(tmp_path: Path) -> None:
     file = ValueFile(
         name="token",
         path=str(path),
+        sealed=f"{path}.age",
         secrecy="secret",
         owner="nosuchaccount",
         group="nosuchaccount",
@@ -2347,7 +2768,13 @@ def test_an_account_the_machine_does_not_have(tmp_path: Path) -> None:
 def _file_record(path: Path, *, owner: str, group: str, mode: str = "0400") -> ValueFile:
     """One value file record naming ``path``."""
     return ValueFile(
-        name="token", path=str(path), secrecy="secret", owner=owner, group=group, mode=mode
+        name="token",
+        path=str(path),
+        sealed=f"{path}.age",
+        secrecy="secret",
+        owner=owner,
+        group=group,
+        mode=mode,
     )
 
 
@@ -2407,7 +2834,9 @@ def test_a_write_that_fails_after_its_bytes_have_arrived(tmp_path: Path) -> None
     message = str(reported.value)
     for named in (SESSION_VALUE, "token", "10.0.0.10", TOKEN["token"]["path"], REFUSED):
         assert named in message
-    assert failing.commands == []
+    # The question of what the machine holds is asked before any step, and the
+    # write that broke is the first step, so no step is recorded at all.
+    assert [cmd for cmd in failing.commands if not _asked_what_it_holds(cmd)] == []
     assert printed[-1].startswith("failed ")
 
 
@@ -2487,3 +2916,730 @@ def test_a_value_one_of_whose_files_is_gone_is_named_once(tmp_path: Path) -> Non
         f"value {SESSION_VALUE} missing on alpha"
     ]
     assert reported.unasked == ()
+
+
+class Unchecked(Holding):
+    """A machine holding its values and no unsealer, so its trial answers nothing.
+
+    The question is one login, so the answer is one answer: the presence of
+    each delivered path, the marker, and the word a machine with no trial to
+    run prints instead of that trial's own lines.
+    """
+
+    def output(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> str:
+        answered = super().output(cmd, env=env, stdin=stdin)
+        if "present" not in cmd[-1]:
+            return answered
+        return f"{answered}{remote.SEALS}\n{remote.UNCHECKED}\n"
+
+
+def test_a_machine_that_holds_no_unsealer_is_not_reported_either_way(tmp_path: Path) -> None:
+    """A machine the record says seals and which was never applied to is neither."""
+    deployment = _built(
+        tmp_path,
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+        values={SESSION_VALUE: {"delivery": ["alpha"], "files": TWO_FILES}},
+        machines=_sealing("alpha"),
+    )
+    machine = Unchecked({TOKEN_PATH, OWNED_PATH})
+
+    reported = report.status(deployment, machine, base_env={})
+
+    assert "alpha holds no unsealer, so its sealed copies were not checked" in reported.lines
+    assert [line for line in reported.lines if "sealed copy" in line] == []
+    # A machine that answered is not a machine that could not be asked.
+    assert reported.unasked == ()
+    # One question per machine: the trial rides in the login the presence
+    # question already cost, because a socket-activated sshd refuses a burst.
+    assert len([cmd for cmd in machine.commands if remote.SEALS in cmd[-1]]) == 1
+
+
+USER_ADDRESS = "10.0.0.10"
+ASKED = re.compile(r"printf '%s=%s\\n' (\S+) ok")
+
+
+def _user_scope(root: Path) -> manifest.Deployment:
+    """One image entry and one value on a machine whose registry states `scope = "user"`.
+
+    The scope is stated twice because the plan states it twice: in the machine
+    record every reader of a machine asks, and in the target of the entry that
+    was planned for it.
+    """
+    deployment = _built(
+        root,
+        plan={
+            **PLAN,
+            "machine:alpha": {"address": USER_ADDRESS, "tags": ["cluster"], "scope": "user"},
+            SERVER_KEY: {
+                "key": PUBLISHED,
+                "target": {"address": USER_ADDRESS, "scope": "user"},
+                "reads": {"token": _reading()},
+            },
+        },
+        entries={SERVER_KEY: {**_stated(SERVER_KEY, "alpha", USER_ADDRESS), "realiser": "image"}},
+        values={SESSION_VALUE: {"delivery": ["alpha"], "files": TOKEN}},
+    )
+    artifact = manifest.artifact_of(deployment.entries[SERVER_KEY])
+    (artifact / "attachment.json").write_text(json.dumps({"image": f"site-server_{PUBLISHED}.raw"}))
+    return deployment
+
+
+class Provisioned(Recorder):
+    """A machine answering the preflight question it was asked, fact by fact.
+
+    The answer is read out of the question rather than written beside it, so a
+    requirement the command stops asking is a requirement this stops answering.
+    ``failing`` is what the machine says instead of `ok`, by requirement key.
+    """
+
+    def __init__(self, failing: dict[str, str] | None = None) -> None:
+        super().__init__()
+        self.failing = {} if failing is None else failing
+
+    def output(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> str:
+        self.commands.append(cmd)
+        asked = cmd[-1]
+        if _asked_what_it_holds(cmd):
+            return ""
+        keys = ASKED.findall(asked)
+        if keys:
+            return "".join(f"{key}={self.failing.get(key, remote.OK)}\n" for key in keys)
+        if 'cat > "$tmp"' in asked:
+            return "changed"
+        if "flakelet status" in asked:
+            return "[]"
+        return "attached site-server"
+
+
+def _steps(log: tuple[str, ...]) -> list[str]:
+    """Return the step lines of a log, without what the machines said under them."""
+    return [line for line in log if not line.startswith("  ")]
+
+
+def test_a_user_scope_machine_is_asked_before_anything_is_written(tmp_path: Path) -> None:
+    """The question is the first step against the machine, and it asks every fact.
+
+    Provisioning is root's work done once, so each of these is verified: a
+    machine that was never provisioned and one that was are told apart here and
+    nowhere else.
+    """
+    deployment = _user_scope(tmp_path / "built")
+    source = _source(tmp_path / "values", {f"{SESSION_VALUE}/token": "s3cret"})
+    machine = Provisioned()
+
+    log = apply.apply(deployment, machine, source=source, base_env={})
+
+    steps = _steps(log)
+    assert steps[0] == f"preflight alpha at root@{USER_ADDRESS}"
+    for mutation in ("value ", "copy ", "activate ", "restart "):
+        assert [at for at, line in enumerate(steps) if line.startswith(mutation)] > [0], steps
+    # By what it asks and not by its position: the question of what the machine
+    # holds precedes every step, and prints no step line of its own.
+    question = next(cmd[-1] for cmd in machine.commands if ASKED.findall(cmd[-1]))
+    assert ASKED.findall(question) == [
+        "values-root",
+        "sealed-root",
+        "staging-root",
+        "lingering",
+        "user-manager",
+        "user-portabled",
+        "home-traversable",
+        "mountfsd",
+        "nsresourced",
+        "user-namespaces",
+    ]
+    for named in (
+        remote.VALUES_ROOT,
+        remote.SEALED_ROOT,
+        remote.STAGING_ROOT,
+        remote.MOUNTFSD,
+        remote.NSRESOURCED,
+        remote.NAMESPACES,
+        "Linger",
+        "XDG_RUNTIME_DIR",
+        '"$HOME"',
+    ):
+        assert named in question, named
+    # One question per machine, for the reason the values question is one.
+    assert len([cmd for cmd in machine.commands if ASKED.findall(cmd[-1])]) == 1
+
+
+def test_a_failed_preflight_fact_is_the_runs_own_refusal(tmp_path: Path) -> None:
+    """A fact the machine says it does not hold stops the run there, naming all three."""
+    deployment = _user_scope(tmp_path / "built")
+    source = _source(tmp_path / "values", {f"{SESSION_VALUE}/token": "s3cret"})
+    said = "loginctl reports no lingering for the account"
+    machine = Provisioned({"lingering": said})
+
+    with pytest.raises(errors.ApplyError) as raised:
+        apply.apply(deployment, machine, source=source, base_env={})
+
+    message = str(raised.value)
+    assert "alpha" in message
+    assert "lingering" in message
+    assert said in message
+    assert "Traceback" not in message
+    # Nothing after the question was attempted on that machine: what it holds,
+    # which every run asks first and no run writes anything for, and this.
+    assert [_asked_what_it_holds(cmd) for cmd in machine.commands] == [True, False]
+
+
+def test_a_system_scope_machine_is_asked_nothing_new(tmp_path: Path) -> None:
+    """A machine stating no scope is a system-scope machine, and its steps are what they were."""
+    deployment = _delivering(tmp_path / "built")
+    source = _source(tmp_path / "values", {f"{SESSION_VALUE}/token": "s3cret"})
+    machine = Provisioned()
+
+    log = apply.apply(deployment, machine, source=source, base_env={})
+
+    assert [line for line in _steps(log) if line.startswith("preflight ")] == []
+    assert [cmd for cmd in machine.commands if ASKED.findall(cmd[-1])] == []
+    assert _steps(log)[0].startswith(f"value {SESSION_VALUE} ")
+
+
+def test_a_dry_run_records_the_preflight_question(tmp_path: Path) -> None:
+    """The question goes through the replaced channel, so it is printed and never asked."""
+    deployment = _user_scope(tmp_path / "built")
+    source = _source(tmp_path / "values", {f"{SESSION_VALUE}/token": "s3cret"})
+
+    asked = Provisioned()
+    would = apply.apply(deployment, asked, source=source, dry_run=True, base_env={})
+
+    assert asked.commands == []
+    assert would[0] == f"preflight alpha at root@{USER_ADDRESS}"
+
+    taken = Provisioned()
+    did = apply.apply(deployment, taken, source=source, base_env={})
+
+    # A restart is a function of what the machine said a write did, which a dry
+    # run never asked, so the steps compared are the ones a plan decides.
+    assert [line for line in _steps(did) if not line.startswith("restart ")] == list(would)
+
+
+def test_a_user_scope_machine_is_addressed_as_the_account(tmp_path: Path) -> None:
+    """`--user` is in every step that addresses a manager or a portabled, and nowhere else."""
+    deployment = _user_scope(tmp_path / "built")
+    source = _source(tmp_path / "values", {f"{SESSION_VALUE}/token": "s3cret"})
+    machine = Provisioned()
+
+    apply.apply(deployment, machine, source=source, base_env={})
+    report.status(deployment, machine, base_env={})
+
+    scripts = [cmd[-1] for cmd in machine.commands if cmd[0] == "ssh"]
+    restarts = [script for script in scripts if "try-restart" in script]
+    asked = [script for script in scripts if "is-attached" in script]
+    written = [script for script in scripts if 'cat > "$tmp"' in script]
+    assert restarts == [f"{remote.BUS}systemctl --user try-restart site-server-serve.service 2>&1"]
+    assert asked and all("portablectl --user" in script for script in asked)
+    assert all(remote.BUS in script for script in restarts + asked)
+    # The account owns what it writes, and chowning a file to the owner it
+    # already has is refused by the kernel, so the write states the mode alone.
+    assert written and all("chown" not in script for script in written)
+    assert all(f"chmod {TOKEN['token']['mode']}" in script for script in written)
+
+
+def test_a_system_scope_machine_is_addressed_as_root(tmp_path: Path) -> None:
+    """The same steps on a machine stating no scope name no account and no bus."""
+    deployment = _built(
+        tmp_path / "built",
+        plan={**PLAN, SERVER_KEY: {"key": PUBLISHED, "reads": {"token": _reading()}}},
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", USER_ADDRESS)},
+        values={SESSION_VALUE: {"delivery": ["alpha"], "files": TOKEN}},
+    )
+    source = _source(tmp_path / "values", {f"{SESSION_VALUE}/token": "s3cret"})
+    machine = Provisioned()
+
+    apply.apply(deployment, machine, source=source, base_env={})
+    report.status(deployment, machine, base_env={})
+
+    scripts = [cmd[-1] for cmd in machine.commands if cmd[0] == "ssh"]
+    written = [script for script in scripts if 'cat > "$tmp"' in script]
+    assert [script for script in scripts if "--user" in script] == []
+    assert [script for script in scripts if "XDG_RUNTIME_DIR" in script] == []
+    assert written and all("chown root:root" in script for script in written)
+
+
+def test_an_entry_states_a_realiser_that_does_not_realise_its_scope(tmp_path: Path) -> None:
+    """The record publishes what each realiser realises, and the crossing is made against it."""
+    deployment = _built(
+        tmp_path / "built",
+        plan={
+            **PLAN,
+            "machine:alpha": {"address": USER_ADDRESS, "tags": ["cluster"], "scope": "user"},
+            SERVER_KEY: {"key": PUBLISHED, "target": {"scope": "user"}},
+        },
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", USER_ADDRESS)},
+    )
+    recorder = Recorder()
+
+    with pytest.raises(errors.ApplyError) as raised:
+        apply.apply(deployment, recorder, base_env={})
+
+    message = str(raised.value)
+    assert SERVER_KEY in message
+    assert "user scope" in message
+    assert "flakelet" in message
+    assert recorder.commands == []
+
+
+GONE_KEY = "sweep:job@alpha"
+GONE_NAME = "sweep-job"
+GONE_OTHER_KEY = "spare:agent@alpha"
+GONE_OTHER_NAME = "spare-agent"
+
+
+class Holds(Recorder):
+    """A machine answering ``said`` to the question of what it holds.
+
+    Every other question is answered with nothing, which is what a machine's
+    endpoint says about an entry it holds nothing for, so each case below is
+    about the answer under test and no other. ``at`` is the machine that
+    answers, where a case has more than one and only one of them holds
+    anything.
+    """
+
+    def __init__(self, said: str, at: str | None = None) -> None:
+        super().__init__()
+        self.said = said
+        self.at = at
+
+    def output(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> str:
+        answered = super().output(cmd, env=env, stdin=stdin)
+        addressed = self.at is None or self.at in " ".join(cmd)
+        return self.said if _asked_what_it_holds(cmd) and addressed else answered
+
+
+def _on_alpha(*keys: str) -> dict[str, dict[str, Any]]:
+    """Return those entries, all of them placed on one machine."""
+    return {key: _stated(key, "alpha", "10.0.0.10") for key in keys}
+
+
+def _reported_holdings(
+    tmp_path: Path,
+    said: str,
+    *,
+    entries: dict[str, dict[str, Any]] | None = None,
+    only: tuple[str, ...] = (),
+) -> tuple[report.Report, Holds]:
+    """Report on a deployment whose machines answer ``said`` about what they hold."""
+    deployment = _built(
+        tmp_path, plan=PLAN, entries=_on_alpha(SERVER_KEY) if entries is None else entries
+    )
+    machine = Holds(said)
+    return report.status(deployment, machine, only=only, base_env={}), machine
+
+
+def _named(reported: report.Report) -> list[str]:
+    """Return the holding lines of a report, in the order it printed them."""
+    return [line for line in reported.lines if " holds " in line]
+
+
+def test_one_question_per_machine_carries_every_realiser_the_scopes_admit(
+    tmp_path: Path,
+) -> None:
+    """The question is built from the table, and a realiser whose scopes refuse stays out."""
+    system, machine = _reported_holdings(tmp_path, "")
+    asked = [cmd[-1] for cmd in machine.commands if _asked_what_it_holds(cmd)]
+    assert len(asked) == 1
+    assert "flakelet status --json" in asked[0]
+    assert "portablectl list --no-legend" in asked[0]
+    assert "--user" not in asked[0]
+    assert system.unasked == ()
+
+    scoped = Holds("")
+    report.status(_user_scope(tmp_path / "user"), scoped, base_env={})
+
+    user = [cmd[-1] for cmd in scoped.commands if _asked_what_it_holds(cmd)]
+    assert len(user) == 1
+    assert "portablectl --user list --no-legend" in user[0]
+    assert remote.BUS in user[0]
+    # flakelet publishes system scope alone, so its half reaches no such machine.
+    assert "flakelet" not in user[0]
+
+
+def test_a_machine_without_a_realisers_tool_holds_nothing_of_it(tmp_path: Path) -> None:
+    """A missing tool is an answer about the machine, and any other status is unreadable."""
+    without, _ = _reported_holdings(
+        tmp_path, _holds(("flakelet", 127, "flakelet: command not found"))
+    )
+
+    assert _named(without) == []
+    assert without.unasked == ()
+
+    with pytest.raises(errors.ApplyError) as raised:
+        _reported_holdings(tmp_path / "refused", _holds(("flakelet", 1, "no endpoint socket")))
+
+    message = str(raised.value)
+    assert "alpha" in message
+    assert "no endpoint socket" in message
+
+
+def test_a_machine_holding_nothing_unnamed_is_reported_without_such_a_line(
+    tmp_path: Path,
+) -> None:
+    """A machine holding exactly what the build names says nothing more."""
+    reported, _ = _reported_holdings(
+        tmp_path,
+        _holds(("flakelet", 0, _registered(_registration(SERVER_KEY, "site-server")))),
+    )
+
+    assert _named(reported) == []
+    assert reported.lines == (f"{SERVER_KEY} flakelet absent",)
+    assert reported.unasked == ()
+
+
+def test_an_unnamed_holding_does_not_change_the_exit_status(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A holding is an answer a machine gave, which costs no exit status."""
+    root = tmp_path / "built"
+    _built(root, plan=PLAN, entries=_on_alpha(SERVER_KEY))
+    machine = Holds(_holds(("flakelet", 0, _registered(_registration(GONE_KEY, GONE_NAME)))))
+    monkeypatch.setattr(remote, "Subprocess", lambda: machine)
+
+    assert planner.main(["status", str(root)]) == 0
+
+    printed = capsys.readouterr().out.splitlines()
+    assert f"alpha holds {GONE_KEY}, which this build does not name" in printed
+
+
+def test_a_service_the_machines_own_configuration_declares_is_not_reported(
+    tmp_path: Path,
+) -> None:
+    """An identity carrying nothing the record publishes came from no deployment of ours."""
+    declared = {
+        **_registration(GONE_KEY, "monitoring"),
+        "locked_url": "github:someone/monitoring",
+        "origin": "declarative",
+    }
+    reported, _ = _reported_holdings(
+        tmp_path,
+        _holds(
+            ("flakelet", 0, _registered(_registration(SERVER_KEY, "site-server"), declared)),
+        ),
+    )
+
+    assert _named(reported) == []
+    assert reported.lines == (f"{SERVER_KEY} flakelet absent",)
+
+
+def test_an_entry_the_selection_excluded_is_not_reported_as_unnamed(tmp_path: Path) -> None:
+    """The restriction bounds which machines are asked and not what counts as unnamed."""
+    reported, _ = _reported_holdings(
+        tmp_path,
+        _holds(
+            (
+                "flakelet",
+                0,
+                _registered(
+                    _registration(SERVER_KEY, "site-server"),
+                    _registration(CLIENT_KEY, "check-client"),
+                ),
+            ),
+        ),
+        entries=_on_alpha(SERVER_KEY, CLIENT_KEY),
+        only=(SERVER_KEY,),
+    )
+
+    assert _named(reported) == []
+    assert reported.lines == (f"{SERVER_KEY} flakelet absent",)
+
+
+def test_a_machine_the_build_no_longer_names_is_not_asked(tmp_path: Path) -> None:
+    """The plan carries the machine and the build places nothing on it, so nobody dials it."""
+    reported, machine = _reported_holdings(
+        tmp_path,
+        _holds(("flakelet", 0, _registered(_registration(GONE_KEY, GONE_NAME)))),
+    )
+
+    dialled = " ".join(" ".join(cmd) for cmd in machine.commands)
+    assert "10.0.0.11" not in dialled
+    assert [line for line in reported.lines if "beta" in line] == []
+    assert reported.unasked == ()
+
+
+def test_the_question_of_what_a_machine_holds_is_asked_once_per_machine(
+    tmp_path: Path,
+) -> None:
+    """Three entries on one machine are one question, and its answer is read whole."""
+    reported, machine = _reported_holdings(
+        tmp_path,
+        _holds(
+            (
+                "flakelet",
+                0,
+                _registered(
+                    _registration(GONE_KEY, GONE_NAME),
+                    _registration(GONE_OTHER_KEY, GONE_OTHER_NAME),
+                ),
+            ),
+        ),
+        entries=_on_alpha(SERVER_KEY, CLIENT_KEY, RELAY_KEY),
+    )
+
+    assert len([cmd for cmd in machine.commands if _asked_what_it_holds(cmd)]) == 1
+    assert _named(reported) == [
+        f"alpha holds {GONE_KEY}, which this build does not name",
+        f"alpha holds {GONE_OTHER_KEY}, which this build does not name",
+    ]
+
+
+def test_an_answer_about_what_a_machine_holds_that_the_command_cannot_read_is_a_refusal(
+    tmp_path: Path,
+) -> None:
+    """An answer that is not the endpoint's own is refused, never read as holding nothing."""
+    said = "ssh: /bin/sh: no such file"
+
+    with pytest.raises(errors.ApplyError) as raised:
+        _reported_holdings(tmp_path, said)
+
+    message = str(raised.value)
+    assert "alpha" in message
+    assert said in message
+
+
+def _retiring(
+    tmp_path: Path,
+    said: str,
+    *,
+    entries: dict[str, dict[str, Any]] | None = None,
+    only: tuple[str, ...] = (),
+    retire: bool = True,
+) -> tuple[tuple[str, ...], Holds]:
+    """Apply a deployment whose alpha answers ``said`` about what it holds."""
+    deployment = _built(
+        tmp_path, plan=PLAN, entries=_on_alpha(SERVER_KEY) if entries is None else entries
+    )
+    machine = Holds(said, at="10.0.0.10")
+    return apply.apply(deployment, machine, only=only, retire=retire, base_env={}), machine
+
+
+def _one_holding() -> str:
+    """One machine's answer naming one entry of this planner's that no build here names."""
+    return _holds(("flakelet", 0, _registered(_registration(GONE_KEY, GONE_NAME))))
+
+
+def _retirements(machine: Holds) -> list[str]:
+    """Return the removal steps a run addressed to a machine, as the machine saw them."""
+    return [cmd[-1] for cmd in machine.commands if "flakelet remove" in cmd[-1]]
+
+
+def test_a_run_asked_what_it_would_do_names_no_holding(tmp_path: Path) -> None:
+    """A dry run contacts no machine, so it names no holding: reporting answers that."""
+    deployment = _built(tmp_path, plan=PLAN, entries=_on_alpha(SERVER_KEY))
+    machine = Holds(_one_holding())
+
+    would = apply.apply(deployment, machine, dry_run=True, retire=True, base_env={})
+
+    assert machine.commands == []
+    assert [line for line in would if " holds " in line] == []
+    assert _activated(would) == [SERVER_KEY]
+
+
+def test_a_retirement_asks_the_endpoint_to_remove_the_entry(tmp_path: Path) -> None:
+    """The step is the endpoint's own removal verb, and never the one that empties state."""
+    log, machine = _retiring(tmp_path / "retired", _one_holding())
+
+    assert _retirements(machine) == [f"flakelet remove {GONE_NAME} 2>&1"]
+    assert all("--purge" not in cmd[-1] for cmd in machine.commands)
+    assert [line for line in log if line.startswith("retire ")] == [
+        f"retire {GONE_KEY} on root@10.0.0.10 (no state deleted)"
+    ]
+    assert f"alpha holds {GONE_KEY}, which this build does not name" in log
+
+    announced, untouched = _retiring(tmp_path / "announced", _one_holding(), retire=False)
+
+    # A run that was not asked announces the holding and says what it did about it.
+    assert _retirements(untouched) == []
+    assert [line for line in announced if " holds " in line] == [
+        f"alpha holds {GONE_KEY}, which this build does not name; not retired"
+    ]
+    assert _activated(announced) == [SERVER_KEY]
+
+
+def test_a_retirement_names_only_what_the_machine_answered_and_the_record_published(
+    tmp_path: Path,
+) -> None:
+    """Every word of the step comes from the answer, the record and the invocation."""
+    _, machine = _retiring(tmp_path, _one_holding())
+
+    taken = _retirements(machine)
+    assert taken == [f"flakelet remove {GONE_NAME} 2>&1"]
+    # The name the endpoint registered, which the machine answered, and not the
+    # identity a line carries nor any path of the holding's own artifact: that
+    # artifact belongs to a build this run is not applying.
+    assert GONE_KEY not in taken[0]
+    assert "/nix/store" not in taken[0]
+    assert str(tmp_path) not in taken[0]
+    assert "detach" not in taken[0]
+
+
+def test_a_retirement_precedes_every_value_write_and_every_activation_of_the_run(
+    tmp_path: Path,
+) -> None:
+    """A holding owns the host resources the entry replacing a renamed one claims."""
+    deployment = _built(
+        tmp_path / "built",
+        plan=PLAN,
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+        values={SESSION_VALUE: {"delivery": ["alpha", "beta"], "files": TOKEN}},
+    )
+    source = _source(tmp_path / "values", {f"{SESSION_VALUE}/token": "s3cret"})
+    machine = Holds(_one_holding(), at="10.0.0.10")
+
+    log = apply.apply(deployment, machine, source=source, retire=True, base_env={})
+
+    steps = _steps(log)
+    retirement = [at for at, line in enumerate(steps) if line.startswith("retire ")]
+    assert len(retirement) == 1
+    for mutation in ("value ", "copy ", "activate "):
+        put = [at for at, line in enumerate(steps) if line.startswith(mutation)]
+        assert put and retirement[0] < min(put), steps
+
+
+def test_an_entry_left_out_of_a_restricted_run_is_not_retired(tmp_path: Path) -> None:
+    """An entry the deployment places is no holding, whichever entries a run applies."""
+    log, machine = _retiring(
+        tmp_path,
+        _holds(
+            (
+                "flakelet",
+                0,
+                _registered(
+                    _registration(SERVER_KEY, "site-server"),
+                    _registration(CLIENT_KEY, "check-client"),
+                ),
+            ),
+        ),
+        entries=_on_alpha(SERVER_KEY, CLIENT_KEY),
+        only=(SERVER_KEY,),
+    )
+
+    assert _retirements(machine) == []
+    assert [line for line in log if line.startswith("retire ")] == []
+    assert _activated(log) == [SERVER_KEY]
+
+
+def test_a_restriction_naming_a_holding_the_deployment_does_not_place_is_refused(
+    tmp_path: Path,
+) -> None:
+    """A holding is not addressable as a plan key of this build."""
+    deployment = _built(tmp_path, plan=PLAN, entries=_on_alpha(SERVER_KEY))
+    machine = Holds(_one_holding())
+
+    with pytest.raises(errors.ApplyError) as raised:
+        apply.apply(deployment, machine, only=(GONE_KEY,), retire=True, base_env={})
+
+    message = str(raised.value)
+    assert GONE_KEY in message
+    assert SERVER_KEY in message
+    assert machine.commands == []
+
+
+def test_a_build_naming_no_entry_on_a_machine_retires_nothing_there(tmp_path: Path) -> None:
+    """A build carries an address only for a machine it places an entry on."""
+    log, machine = _retiring(tmp_path, _one_holding())
+
+    dialled = " ".join(" ".join(cmd) for cmd in machine.commands)
+    assert "10.0.0.11" not in dialled
+    assert _retirements(machine) == [f"flakelet remove {GONE_NAME} 2>&1"]
+    assert _activated(log) == [SERVER_KEY]
+
+
+def test_a_machine_that_answers_nothing_is_left_to_fail_at_its_own_step(tmp_path: Path) -> None:
+    """ssh's own silence is a machine that is unreachable, not an answer nobody can read.
+
+    A machine whose sshd is down answers the question of what it holds with
+    nothing, and a run that refused there would take no step at all, so its last
+    line would name no step against that machine and the recovery of a run
+    broken between two machines could not be read off it.
+    """
+    deployment = _built(
+        tmp_path,
+        plan={**PLAN, CLIENT_KEY: {"reads": {"site": {"entry": SERVER_KEY}}}},
+        entries={
+            CLIENT_KEY: _stated(CLIENT_KEY, "beta", "10.0.0.11"),
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+        },
+    )
+    silent = Silent("10.0.0.11", remote.UNREACHABLE, "ssh: connect to host 10.0.0.11: refused")
+    printed: list[str] = []
+
+    with pytest.raises(errors.ApplyError) as raised:
+        apply.apply(deployment, silent, base_env={}, log=printed.append)
+
+    # The step line of a step that never completed is the run's last word about
+    # it, so the run got as far as the first step against that machine.
+    steps = [line for line in printed if not line.startswith(("  ", "failed "))]
+    assert steps[-1].startswith(f"activate {CLIENT_KEY} ")
+    assert printed[-1].startswith("failed ")
+    message = str(raised.value)
+    assert "10.0.0.11" in message
+    assert "what it holds" not in message
+
+
+ENROLLMENT_VALUE = "mesh:vars/enrollment"
+
+# The bytes a coordination server admits one machine on. The operator reads
+# them out of the value source and hands them over outside the tree, so the
+# source is the one place they are, and a run that delivers them nowhere is a
+# run no step of which can have spoken them.
+CREDENTIAL = b"\x00authkey-7be2c1d40f9a\xff"
+
+
+def test_no_argv_of_a_run_carries_the_credential(tmp_path: Path) -> None:
+    """A credential delivered to nobody is in no vector of a run that delivers.
+
+    The run has a value to write and an entry to activate, so what it recorded
+    is a real run's vectors rather than an empty list, and the source it was
+    handed holds the credential beside the delivered value. Every encoding a
+    step could have reached for is asked of every word of every vector, which
+    is the assertion a delivered secret already earns.
+    """
+    credential = {
+        "per": "instance",
+        "deploy": False,
+        "delivery": [],
+        "program": PROGRAM,
+        "files": {"preauthkey": _delivered("/run/vars/mesh/enrollment/preauthkey", "secret")},
+    }
+    deployment = _built(
+        tmp_path / "built",
+        plan={**PLAN, ENROLLMENT_VALUE: credential},
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+        values={
+            SESSION_VALUE: {"delivery": ["alpha"], "files": TOKEN},
+            ENROLLMENT_VALUE: credential,
+        },
+    )
+    source = _bytes_source(
+        tmp_path / "values",
+        {f"{SESSION_VALUE}/token": SECRET, f"{ENROLLMENT_VALUE}/preauthkey": CREDENTIAL},
+    )
+    recorder = Reporting()
+
+    log = apply.apply(deployment, recorder, source=source, base_env={})
+
+    steps = _steps(log)
+    assert [line for line in steps if line.startswith("value ")]
+    assert _activated(log) == [SERVER_KEY]
+    # No step named the credential either: a run that wrote it somewhere would
+    # have carried its path, whatever the bytes travelled on.
+    spoken = [word for command in recorder.commands for word in command]
+    assert not [word for word in spoken if "enrollment" in word]
+    for word in spoken:
+        said = word.encode(errors="surrogateescape")
+        for what, needle in _leaks(CREDENTIAL).items():
+            assert needle not in said, f"{what} of the credential is in {word}"
