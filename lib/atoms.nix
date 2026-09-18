@@ -1,7 +1,7 @@
 # The type layer: korora's own types plus the atoms this library needs and korora
 # has no name for. verify is the only entry point used anywhere here, because
 # korora's raising validator would end an evaluation this library keeps total.
-{ korora }:
+{ korora, util }:
 let
   inherit (builtins)
     elem
@@ -21,6 +21,15 @@ let
     "always"
   ];
 
+  # Which service manager runs a machine's units, and so which privilege a
+  # deployment onto it may spend. Root is the account every check admits, so the
+  # domain is two values and not a mode: `system` is the manager root runs and
+  # `user` is the account's own.
+  scopes = [
+    "system"
+    "user"
+  ];
+
   # How many slots may be wired to one provided capability. `many` is what a
   # capability declaring nothing means, so the domain carries it rather than
   # leaving the default unnameable.
@@ -38,10 +47,14 @@ let
   ];
 
   # The range a port is an integer of, read by the atom and by the row that
-  # reports a value outside it.
+  # reports a value outside it, with the first port an account may bind without
+  # a capability root holds. The boundary rides the range because it is a fact
+  # about the same domain, and the row about a privileged claim in a user scope
+  # reads it here.
   portRange = {
     first = 1;
     last = 65535;
+    privilegedBelow = 1024;
   };
 
   # The wildcard is the absence of a claim's address and never a spelling of it.
@@ -81,6 +94,22 @@ korora
     v: isString v && match "([0-9]+(ns|us|ms|s|m|min|h|d|w))+|[0-9]+" v != null
   );
 
+  # Which durations spell no bound at all. The type keeps admitting zero -
+  # `timeout` and `restartSec` may legitimately state it, and narrowing the type
+  # would re-key every plan that does - so the reading that refuses a zero is
+  # handed the spelling instead. The magnitudes are the only digits a duration
+  # carries, so it spells zero exactly when it carries no nonzero digit, written
+  # as the absence of one rather than as a list of literals: the type admits any
+  # concatenation, so `0`, `0s`, `0min` and `0s0min` are all of them and `0s1s`
+  # is none.
+  #
+  # A predicate in a table of value domains keyed by korora type name is not a
+  # mistake: it rides an existing key because a new top-level key on the right of
+  # the update below costs one copied value per plan, which the gate has no room
+  # for, and `isZeroDuration` is a name no atom carries, so the field-type row's
+  # lookup by type name cannot reach it.
+  domains.isZeroDuration = v: isString v && match "[^1-9]*" v != null;
+
   schedule = korora.typedef "schedule" (
     v:
     isString v
@@ -99,6 +128,12 @@ korora
   restartPolicy = korora.typedef "restartPolicy" (v: isString v && elem v restartPolicies);
 
   domains.restartPolicy = restartPolicies;
+
+  # The privilege a machine offers a deployment. The domain is the whole type:
+  # unstated means `system`, no module or interface declares a scope, and the one
+  # reading that crosses a stated value against it is the registry's, so the list
+  # is the single home and a korora typedef over it would be a second one.
+  domains.scope = scopes;
 
   # Whether a provided capability may be taken by one slot or by any number. A
   # provider states it; no deployment can widen it.
@@ -155,4 +190,13 @@ korora
   # A path on the machine as a unit states it. Relative resolves against nothing
   # a plan records, and whitespace is what a directive line cannot carry.
   absolutePath = korora.typedef "absolutePath" (v: isString v && match "/[^[:space:]]*" v != null);
+
+  # The public half of the identity a machine opens its own sealed values with,
+  # as the registry declares it. The grammar is `util.ageRecipientRule`, stated
+  # beside the word grammar it is a subset of, the way `restartPolicy` reads
+  # `restartPolicies`: the atom and the row that reports a refused line read one
+  # home, and a rendered step carries the recipient as an ordinary word.
+  ageRecipient = korora.typedef "ageRecipient" (
+    v: isString v && match util.ageRecipientRule v != null
+  );
 }
