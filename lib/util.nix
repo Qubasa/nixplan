@@ -164,6 +164,17 @@ rec {
   pathRule = characterClass pathExtras;
   pathAdmits = quoteList pathExtras;
 
+  # One age native X25519 recipient: the public line `age-keygen` prints beside
+  # the identity file it writes. The class is a *subset* of `wordRule`'s - the
+  # bech32 alphabet is lowercase letters and digits, and `age1` is alphanumeric
+  # - which is what lets a rendered deploy step carry a recipient as an ordinary
+  # word instead of a file in the store. An SSH recipient line, which the first
+  # draft sealed to, carries spaces and could not.
+  bech32Alphabet = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+
+  ageRecipientRule = "age1[${bech32Alphabet}]{58}";
+  ageRecipientAdmits = "${quote "age1"} followed by 58 characters of the bech32 alphabet ${quote bech32Alphabet}";
+
   unrenderable = value: match wordRule value == null;
 
   unbindable = value: match pathRule value == null;
@@ -332,6 +343,23 @@ rec {
   # that builds the path and the scan that recognises one have to agree about
   # its shape.
   varsRoot = "/run/vars";
+
+  # Where a copy of a delivered value is kept so the machine can put the value
+  # back by itself after a reboot. Beside `varsRoot` and deliberately outside
+  # it, for two reasons a reader has to see together: a service manager clears
+  # `/run` across a reboot and clears nothing here, and `varsPathsIn` below
+  # recognises a value's path by its shape *under `varsRoot`*, so a copy inside
+  # that root would be read as a mention of a value no module declared. Nothing
+  # in this library spends either of the two below per entry: they are the
+  # definitions a realiser and the command spend.
+  sealedRoot = "/var/lib/planner/sealed";
+
+  # A file's sealed path from its runtime path: the root replaced and the
+  # extension age publishes for its own files appended, so a sealed path is
+  # derived from the value's identity - the instance, the generator and the file
+  # name - exactly as far as the runtime path is, and no deployment states one.
+  sealedPathOf =
+    path: "${sealedRoot}${substring (stringLength varsRoot) (stringLength path) path}.age";
 
   # Every generated value path a string names: the root, the instance, the
   # generator and the file. Read by its shape and never by comparison against
