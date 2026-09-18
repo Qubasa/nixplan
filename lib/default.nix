@@ -21,7 +21,7 @@ let
   util = import ./util.nix;
   excluded = import ./excluded.nix;
   diag = import ./diagnostics.nix { inherit util; };
-  atoms = import ./atoms.nix { inherit korora; };
+  atoms = import ./atoms.nix { inherit korora util; };
   interface = import ./interface.nix { inherit util diag excluded; };
   platform = import ./platform.nix { inherit util systems; };
   module = import ./module.nix {
