@@ -395,6 +395,8 @@ empty".
 | `reloadCommand` | string | what reloads it |
 | `restart` | `restartPolicy` | what the service manager does when it stops: `no`, `on-failure`, `on-abnormal`, `always` |
 | `restartSec` | `duration` | how long to wait before restarting; recordable only beside a `restart` |
+| `probe` | string | the command that decides whether the unit is serving; recordable only beside a `probeTimeout` |
+| `probeTimeout` | `duration` | how long that command may take; recordable only beside a `probe` |
 | `stateDirectory` | list of `directoryName` | directories the service manager creates and keeps, relative to the root that kind implies |
 | `runtimeDirectory` | list of `directoryName` | the same, deleted when the unit restarts |
 | `cacheDirectory` | list of `directoryName` | the same, a cache the machine may drop |
@@ -441,6 +443,27 @@ unit declaring a `schedule` and any policy but `no` is
 `restartSec` with no `restart` is `unit-restart-delay-without-policy`. In each
 case the field is not recorded, so no renderer is handed two statements about
 when the unit runs.
+
+**A probe says whether the service works.** The rest of this vocabulary says
+what a unit runs, as which account and when, and never whether what it started
+is serving what it exists to serve. `probe` is the command that answers that,
+and `probeTimeout` is the bound on how long the command may take. An entry
+carries one probe: a realiser derives one file per entry, because one file is
+what an activation starts, and two units of one entry declaring a probe is
+`unit-probe-declared-twice` with neither statement recorded. Neither field is
+defaulted and neither is recordable without the other — a `probe` alone is
+`unit-probe-without-timeout`, a `probeTimeout` alone is
+`unit-probe-timeout-without-probe`, and a bound spelling zero is
+`unit-probe-timeout-unbounded` — because a bound nobody stated is a service
+manager's own default standing in the record as a fact no deployment declared,
+and a zero duration is how a service manager spells no bound at all. What a
+realiser does with the probe is the realiser's: flakelet starts the derived
+unit as the gate on the activation and rolls the generation back where it
+fails, so a unit whose process crash-loops never becomes the running
+generation; the portable image carries that unit in the attachment's unit list
+and starts it at attach time with no generation to return to, so a failing
+probe is a failed apply step and the image stays attached, running what it
+holds until a corrected build is applied.
 
 **A directory is declared, not made.** The three kinds are the three a service
 manager creates for a unit and owns on its behalf, and a mode is per kind
