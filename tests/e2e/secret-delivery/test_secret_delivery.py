@@ -12,14 +12,21 @@ each named after it, and one for the value-source scenario of
 
 **The phases are ordered and the file order is the order.**
 
-1. the deployment is built by the command, in this process and before any
+1. every machine is provisioned the way an operator provisions one: the age
+   identity whose public line its registry record declares is installed at
+   ``/var/lib/planner/age.key``, before anything is applied
+2. the deployment is built by the command, in this process and before any
    machine is dialled, and the manifest it wrote is what the tests read
-2. the run writes its own bytes into the value source, exactly the files the
+3. the run writes its own bytes into the value source, exactly the files the
    plan declares of a value some machine receives and nothing else
-3. one ``planner apply`` writes every value to the set the plan named and
-   activates the three entries, provider before consumer
-4. the consumer's unit is the assertion: it authenticated with the delivered
+4. one ``planner apply`` writes every value to the set the plan named, seals a
+   copy of each beside it and activates the three entries, provider before
+   consumer
+5. the consumer's unit is the assertion: it authenticated with the delivered
    bytes and was refused without them
+6. the value rotates, the reader is stopped under it, and the last phase
+   reboots its machine: ``/run`` is emptied and the machine puts its own values
+   back out of the copies it can open, with no command run against it
 
 The bytes are minted here, once per session, with ``secrets.token_hex``. That is
 the operator's generator run: they are in no plan, in no artifact and in no store
@@ -34,6 +41,7 @@ so the module skips itself when it is absent.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import secrets
@@ -68,6 +76,22 @@ IDLE_UNIT = "idle-job-mark.service"
 MACHINES = (ISSUER_MACHINE, PROBE_MACHINE, IDLE_MACHINE)
 ATTRIBUTE = "planner-e2e-secret-delivery"
 USER = "root"
+
+# What provisioning leaves on a machine, and the unit an apply installs there.
+# The identity file's path is the same in both scopes and is a documented
+# provisioning location rather than a plan field: nothing in a deployment
+# records it, so the phase that installs it is the only thing that states it.
+IDENTITY = Path(__file__).parent / "throwaway-age-identity.txt"
+IDENTITY_ROOT = "/var/lib/planner"
+IDENTITY_PATH = f"{IDENTITY_ROOT}/age.key"
+UNSEAL_UNIT = "planner-unseal.service"
+# Where a system manager is given that unit and what pulls it in at boot. The
+# guest's own `/etc/systemd/system` is a link into a read-only store, and
+# `/run/systemd/system` is emptied by the reboot the unit exists for, so the
+# install writes the unit and its `.wants` link into the one directory that is
+# writable, persistent and in systemd's own search path.
+UNIT_DIRECTORY = "/usr/local/lib/systemd/system"
+WANTED = "multi-user.target"
 
 
 def _env_path(variable: str) -> Path:
@@ -160,6 +184,23 @@ def _files_in(root: Path) -> list[Path]:
     return found
 
 
+def _answers(reported: str) -> dict[str, str]:
+    """Return the ``key=value`` lines one machine printed, as a table.
+
+    One case is one ssh command: the guest's sshd is per-connection socket
+    activated, so a burst of short logins is answered by the socket's own
+    trigger limit and reads as a machine that died. Everything a case observes
+    is therefore echoed as a line of this shape in that one command, and a
+    value that spanned lines would be a parse no reader could make.
+    """
+    table: dict[str, str] = {}
+    for line in reported.splitlines():
+        key, separator, value = line.partition("=")
+        if separator:
+            table[key] = value
+    return table
+
+
 @dataclass
 class Run:
     """The cluster, the deployment the command built, this run's secret and its source."""
@@ -188,6 +229,25 @@ class Run:
     def value_path(self, key: str, name: str) -> str:
         """The path the plan records for one file of one generated value."""
         return self.value_file(key, name).path
+
+    def sealed_path(self, key: str, name: str) -> str:
+        """The path the record states the machine's own copy of one file is kept at.
+
+        Read off the record rather than derived here: the derivation is the
+        library's, and a path restated in this file would be the test agreeing
+        with a convention instead of reading what the build published.
+        """
+        return self.value_file(key, name).sealed
+
+    def unsealer(self, machine: str) -> Path:
+        """The store path of the program one machine opens its own copies with."""
+        stated = self.deployment.machines[machine]
+        assert stated.sealed and stated.path is not None, stated
+        return stated.path
+
+    def recipient(self, machine: str) -> Any:
+        """The public line the plan's own machine record states, or ``None``."""
+        return self.deployment.plan[f"machine:{machine}"]["sealRecipient"]
 
     def value_writes(self, key: str) -> list[str]:
         """The steps of the apply that wrote one generated value, in the order taken."""
@@ -232,11 +292,44 @@ def booted(cluster: Any) -> Iterator[Any]:
 
 
 @pytest.fixture(scope="session")
-def run(booted: Any) -> Run:
+def provisioned(booted: Any) -> Any:
+    """Phase 1: each machine holds the identity its registry record names.
+
+    Provisioning and not delivery. An operator runs these lines once per
+    machine, before the first apply: ``install -d -m 0700`` of the parent, the
+    identity file inside it, ``0400``. Here the private half is the committed
+    throwaway, because the public line of it is already in the registry the
+    build read; minting one per run would move the recipient under every run.
+
+    A phase rather than a preparation of the cut, deliberately: a preparation
+    body does not run on a cache hit, so a file it left behind would be an
+    earlier run's and the evidence would be a replay.
+    """
+    encoded = base64.b64encode(IDENTITY.read_bytes()).decode()
+    for machine in MACHINES:
+        vm = booted.cluster.vm(machine)
+        answered = vm.ssh_succeed(
+            f"install -d -m 0700 {IDENTITY_ROOT}; "
+            f"printf %s {encoded} | base64 -d > {IDENTITY_PATH}; "
+            f"chmod 0400 {IDENTITY_PATH}; "
+            f"printf 'identity=%s\\n' \"$(stat -c %U:%G:%a {IDENTITY_PATH})\"; "
+            f"printf 'parent=%s\\n' \"$(stat -c %U:%G:%a {IDENTITY_ROOT})\"; "
+            f"printf 'public=%s\\n' \"$(grep -c public.key {IDENTITY_PATH})\""
+        )
+        assert _answers(answered) == {
+            "identity": f"{USER}:{USER}:400",
+            "parent": f"{USER}:{USER}:700",
+            "public": "1",
+        }, (machine, answered)
+    return booted
+
+
+@pytest.fixture(scope="session")
+def run(provisioned: Any) -> Run:
     """Three machines named as the plan names them, this run's secret, and its source."""
     token = secrets.token_hex(16)
     return Run(
-        cluster=booted.cluster,
+        cluster=provisioned.cluster,
         deployment=DEPLOYMENT,
         key=KEY,
         token=token,
@@ -550,6 +643,252 @@ def test_a_value_delivered_to_one_of_two_machines_is_named_where_it_is_missing(
     assert probe.ssh_succeed(f"cat {path}").strip() == run.token
 
 
+def _ownership(file: manifest.ValueFile) -> str:
+    """What ``stat`` prints for a file delivered as the record states it."""
+    return f"{file.owner}:{file.group}:{int(file.mode, 8):o}"
+
+
+def _damage(run: Run, machine: str, sealed: str) -> None:
+    """Replace one machine's sealed copy with bytes it cannot open."""
+    run.vm(machine).ssh_succeed(f"printf %s {shlex.quote('not a sealed copy')} > {sealed}")
+
+
+def test_a_delivery_writes_a_sealed_copy_beside_the_value(applied: Run) -> None:
+    """Both machines of the set hold the plaintext as the record states it, and a copy.
+
+    The copy's path is the record's own field, and the step that wrote it is in
+    the apply's log beside the value write: sealed first, so a run interrupted
+    between the two leaves no copy older than the plaintext beside it.
+    """
+    run = applied
+    record = run.value_file(SESSION_VALUE, "token")
+    sealed = run.sealed_path(SESSION_VALUE, "token")
+
+    for machine in (ISSUER_MACHINE, PROBE_MACHINE):
+        assert run.recipient(machine) is not None, machine
+        answered = run.vm(machine).ssh_succeed(
+            f"printf 'plain=%s\\n' \"$(stat -c %U:%G:%a {record.path})\"; "
+            f"printf 'copy=%s\\n' \"$(stat -c %U:%G:%a {sealed})\"; "
+            f"printf 'bytes=%s\\n' \"$(stat -c %s {sealed})\"; "
+            f"printf 'header=%s\\n' \"$(head -c 20 {sealed})\""
+        )
+        read = _answers(answered)
+        assert read["plain"] == _ownership(record), (machine, answered)
+        # Ciphertext, whatever the record opens the plaintext to: its one reader
+        # is the step that runs as the account owning the identity file.
+        assert read["copy"] == f"{USER}:{USER}:400", (machine, answered)
+        assert int(read["bytes"]) > 0, (machine, answered)
+        assert read["header"].startswith("age-encryption.org/"), (machine, answered)
+
+    assert [step for step in run.steps if step.startswith(f"sealed {SESSION_VALUE} token ")] == [
+        f"sealed {SESSION_VALUE} token -> {USER}@{run.address(machine)}:{sealed}"
+        for machine in (ISSUER_MACHINE, PROBE_MACHINE)
+    ]
+
+
+def test_a_sealed_copy_is_readable_by_the_unsealing_account_alone(applied: Run) -> None:
+    """The file whose record opens the plaintext to an account keeps its copy closed.
+
+    ``owned`` is delivered ``nobody:nogroup 0440``, so the account the record
+    names reads the plaintext and nothing else of that value: neither the copy
+    nor the directory holding it is reachable by it.
+    """
+    run = applied
+    record = run.value_file(SESSION_VALUE, "owned")
+    sealed = run.sealed_path(SESSION_VALUE, "owned")
+    directory = os.path.dirname(sealed)
+
+    answered = run.vm(PROBE_MACHINE).ssh_succeed(
+        f"printf 'plain=%s\\n' \"$(stat -c %U:%G:%a {record.path})\"; "
+        f"printf 'copy=%s\\n' \"$(stat -c %U:%G:%a {sealed})\"; "
+        f"printf 'directory=%s\\n' \"$(stat -c %U:%G:%a {directory})\"; "
+        f"printf 'opens=%s\\n' "
+        f'"$(runuser -u nobody -- cat {sealed} > /dev/null 2>&1 && echo yes || echo no)"; '
+        f"printf 'lists=%s\\n' "
+        f'"$(runuser -u nobody -- ls {directory} > /dev/null 2>&1 && echo yes || echo no)"; '
+        f"printf 'reads=%s\\n' "
+        f'"$(runuser -u nobody -- cat {record.path} > /dev/null 2>&1 && echo yes || echo no)"'
+    )
+
+    assert _answers(answered) == {
+        "plain": _ownership(record),
+        "copy": f"{USER}:{USER}:400",
+        "directory": f"{USER}:{USER}:700",
+        "opens": "no",
+        "lists": "no",
+        "reads": "yes",
+    }, answered
+
+
+def test_a_machine_that_already_holds_the_unsealer_is_reported_as_unchanged(
+    applied: Run,
+) -> None:
+    """The second apply installs nothing, and the unit is the one the build published.
+
+    What systemd resolved is read back rather than the links alone: an install
+    that wrote a link the manager does not read would pass a step here and fail
+    the reboot phase, which is the phase that matters.
+    """
+    run = applied
+    again = _apply(run)
+    assert again.returncode == 0, again.stdout
+    log = again.stdout.splitlines()
+
+    for machine in (ISSUER_MACHINE, PROBE_MACHINE):
+        step = f"unseal {machine} on {USER}@{run.address(machine)}"
+        assert step in log, log
+        assert log[log.index(step) + 1].strip() == "unchanged", log
+
+        published = str(run.unsealer(machine) / UNSEAL_UNIT)
+        answered = run.vm(machine).ssh_succeed(
+            f"printf 'wanted=%s\\n' \"$(systemctl show -P WantedBy {UNSEAL_UNIT})\"; "
+            f"printf 'fragment=%s\\n' \"$(systemctl show -P FragmentPath {UNSEAL_UNIT})\"; "
+            f"printf 'unit=%s\\n' "
+            f'"$(readlink "$(systemctl show -P FragmentPath {UNSEAL_UNIT})")"; '
+            f"printf 'shown=%s\\n' "
+            f'"$(systemctl cat {UNSEAL_UNIT} | grep -cF {shlex.quote("ExecStart=")})"; '
+            f"printf 'wants=%s\\n' "
+            f'"$(readlink {UNIT_DIRECTORY}/{WANTED}.wants/{UNSEAL_UNIT})"'
+        )
+        # `systemctl is-enabled` answers `alias` for a unit whose file is a link
+        # out of the artifact, which is a word about how the file arrived and
+        # not about what starts it. What starts it is the target's own answer.
+        assert _answers(answered) == {
+            "wanted": WANTED,
+            "fragment": f"{UNIT_DIRECTORY}/{UNSEAL_UNIT}",
+            "unit": published,
+            "shown": "1",
+            "wants": published,
+        }, (machine, answered)
+
+
+def test_a_machine_holding_a_sealed_copy_it_cannot_open(applied: Run) -> None:
+    """A copy that does not open is named per value, and its own apply repairs it.
+
+    The damage is self-healing and the phases below are unaffected: a copy is
+    rewritten on every apply, because two sealings of one file differ and there
+    is nothing to compare, so the apply at the end of this test puts the machine
+    back where the phase found it.
+    """
+    run = applied
+    sealed = run.sealed_path(SESSION_VALUE, "token")
+    _damage(run, PROBE_MACHINE, sealed)
+
+    status, reported = _status(run)
+
+    assert status == 0, "\n".join(reported)
+    assert [line for line in reported if line.startswith("value ")] == [
+        f"value {SESSION_VALUE} sealed copy does not open on {PROBE_MACHINE}"
+    ], reported
+
+    assert _apply(run).returncode == 0
+    status, reported = _status(run)
+    assert status == 0, "\n".join(reported)
+    assert [line for line in reported if line.startswith("value ")] == [], reported
+
+
+def test_a_machine_that_seals_and_holds_no_sealed_copy(applied: Run) -> None:
+    """A machine holding a plaintext and no copy of it is named as that, and exits zero."""
+    run = applied
+    sealed = run.sealed_path(SESSION_VALUE, "token")
+    probe = run.vm(PROBE_MACHINE)
+    probe.ssh_succeed(f"rm {sealed}")
+
+    status, reported = _status(run)
+
+    assert status == 0, "\n".join(reported)
+    assert [line for line in reported if line.startswith("value ")] == [
+        f"value {SESSION_VALUE} has no sealed copy on {PROBE_MACHINE}"
+    ], reported
+
+    assert _apply(run).returncode == 0
+    assert probe.ssh(f"test -s {sealed}").returncode == 0, sealed
+
+
+def test_a_machine_that_lost_its_values_is_reported_and_an_apply_restores_them(
+    applied: Run,
+) -> None:
+    """Both copies of a value cleared: the report names it, and an apply puts it back.
+
+    A reboot no longer produces this condition, because a machine that seals
+    restores its own plaintexts before its readers start, so the condition is
+    stated directly here: the paths the values were written to and the copies
+    the machine could have opened them from are cleared together.
+    """
+    run = applied
+    vm = run.vm(PROBE_MACHINE)
+    token = run.value_file(SESSION_VALUE, "token")
+    owned = run.value_file(SESSION_VALUE, "owned")
+    vm.ssh_succeed(
+        f"rm -f {token.path} {owned.path} {token.sealed} {owned.sealed}; "
+        f"printf 'held=%s\\n' \"$(ls -A {os.path.dirname(token.path)})\""
+    )
+
+    status, reported = _status(run)
+    assert status == 0, "\n".join(reported)
+    assert [line for line in reported if line.startswith("value ")] == [
+        f"value {SESSION_VALUE} missing on {PROBE_MACHINE}",
+        f"value {SESSION_VALUE} has no sealed copy on {PROBE_MACHINE}",
+    ], reported
+
+    reapplied = _apply(run)
+    assert reapplied.returncode == 0, reapplied.stdout
+    assert vm.ssh_succeed(f"cat {token.path}").strip() == run.token
+
+    status, reported = _status(run)
+    assert status == 0, "\n".join(reported)
+    assert [line for line in reported if line.startswith("value ")] == [], reported
+
+
+def test_a_copy_the_machine_cannot_open_leaves_the_value_absent_and_names_it(
+    applied: Run,
+) -> None:
+    """The machine's own program names the copy it could not open and restores the rest.
+
+    Run on the machine, out of the artifact the apply copied there, because the
+    program a machine recovers with is the one in its own closure and not one
+    this host has. Both plaintexts are cleared and one copy is damaged, so the
+    two answers are in one run: a value left absent and named, and a value put
+    back at the ownership its record states.
+    """
+    run = applied
+    vm = run.vm(PROBE_MACHINE)
+    token = run.value_file(SESSION_VALUE, "token")
+    owned = run.value_file(SESSION_VALUE, "owned")
+    unseal = run.unsealer(PROBE_MACHINE) / "bin" / "unseal"
+
+    _damage(run, PROBE_MACHINE, token.sealed)
+    answered = vm.ssh_succeed(
+        f"rm -f {token.path} {owned.path}; "
+        f"said=$({unseal} 2>&1); status=$?; "
+        f"printf 'status=%s\\n' \"$status\"; "
+        f"printf 'named=%s\\n' "
+        f'"$(printf \'%s\\n\' "$said" | grep -cF {shlex.quote("did not open")})"; '
+        f"printf 'about=%s\\n' "
+        f'"$(printf \'%s\\n\' "$said" | grep -cF {shlex.quote(token.path)})"; '
+        f"printf 'restored=%s\\n' "
+        f'"$(printf \'%s\\n\' "$said" | grep -cF {shlex.quote(f"unsealed {owned.path}")})"; '
+        f"printf 'absent=%s\\n' \"$(test -e {token.path} && echo no || echo yes)\"; "
+        f"printf 'owned=%s\\n' \"$(stat -c %U:%G:%a {owned.path})\""
+    )
+
+    assert _answers(answered) == {
+        "status": "1",
+        "named": "1",
+        "about": "1",
+        "restored": "1",
+        "absent": "yes",
+        "owned": _ownership(owned),
+    }, answered
+    assert vm.ssh_succeed(f"cat {owned.path}").strip() == run.token
+
+    # The value it could not open is the operator's to put back, which is one
+    # apply, and the phases below start from a machine holding everything.
+    assert _apply(run).returncode == 0
+    assert vm.ssh_succeed(f"cat {token.path}").strip() == run.token
+    assert vm.ssh_succeed(f"systemctl is-active {PROBE_UNIT}").strip() == "active"
+
+
 @pytest.fixture(scope="session")
 def rotated(applied: Run) -> Run:
     """Phase 5: the same deployment applied again with different bytes in the source.
@@ -669,7 +1008,16 @@ def test_a_reader_that_is_not_running_is_not_started_by_the_restart(halted: Run)
 
 @pytest.fixture(scope="session")
 def rebooted(halted: Run) -> Run:
-    """Phase 7: the reader's machine rebooted, which is what empties ``/run``."""
+    """The last phase: the reader's machine rebooted, which is what empties ``/run``.
+
+    The reboot is issued in the guest rather than from outside, so the machine
+    shuts down and comes up the way one that was told to does. Nothing is run
+    against it afterwards: whatever it holds when the tests below read it, it
+    put there itself, out of the copies the last apply left in the sealed root
+    and with the identity file provisioning put there. That is the claim this
+    phase exists for, and it is last because ``/run`` is still what a reboot
+    empties.
+    """
     run = halted
     vm = run.vm(PROBE_MACHINE)
     vm.ssh("systemctl reboot")
@@ -677,35 +1025,61 @@ def rebooted(halted: Run) -> Run:
     return run
 
 
-def test_a_machine_that_lost_its_values_is_reported_and_an_apply_restores_them(
-    rebooted: Run,
-) -> None:
-    """A value lives under ``/run``, so a reboot loses it; the report names each one.
+def test_a_machine_that_rebooted_holds_its_values_again(rebooted: Run) -> None:
+    """Every value is at its own path again, with the ownership and mode of its record.
 
-    The entry itself is back - the endpoint brings its units up again - so the
-    report's value lines are the only thing that says the machine is not where the
-    deployment left it, and a second apply is what puts it back.
+    No command was run against the machine between the reboot and this read.
+    The unit the apply installed ran the machine's own program, which opened
+    each copy it holds and printed the path of every plaintext it restored.
     """
     run = rebooted
     vm = run.vm(PROBE_MACHINE)
-    path = run.value_path(SESSION_VALUE, "token")
-    assert vm.ssh(f"test -e {path}").returncode != 0
+    files = [run.value_file(SESSION_VALUE, name) for name in ("token", "owned")]
 
-    status, reported = _status(run)
-    assert status == 0, "\n".join(reported)
-    assert [line for line in reported if line.startswith("value ")] == [
-        f"value {SESSION_VALUE} missing on {PROBE_MACHINE}"
-    ], reported
+    answered = vm.ssh_succeed(
+        "; ".join(
+            f"printf '{file.name}=%s\\n' \"$(stat -c %U:%G:%a {file.path})\"" for file in files
+        )
+        + f"; printf 'unseal=%s\\n' \"$(systemctl is-active {UNSEAL_UNIT})\""
+        + f"; printf 'restored=%s\\n' \"$(journalctl -b -u {UNSEAL_UNIT} --no-pager -o cat "
+        + f'| grep -cF {shlex.quote("unsealed /")})"'
+    )
 
-    reapplied = _apply(run)
-    assert reapplied.returncode == 0, reapplied.stdout
-    assert vm.ssh_succeed(f"cat {path}").strip() == run.token
+    assert _answers(answered) == {
+        files[0].name: _ownership(files[0]),
+        files[1].name: _ownership(files[1]),
+        "unseal": "active",
+        "restored": str(len(files)),
+    }, answered
+    assert vm.ssh_succeed(f"cat {files[0].path}").strip() == run.token
 
-    # The restart step leaves a unit that is not running alone, which is the rule
-    # the phase above measures, so the unit is started here to read the bytes back.
-    vm.ssh_succeed(f"systemctl start {PROBE_UNIT}")
-    assert vm.ssh_succeed(f"systemctl is-active {PROBE_UNIT}").strip() == "active"
 
-    status, reported = _status(run)
-    assert status == 0, "\n".join(reported)
-    assert [line for line in reported if line.startswith("value ")] == [], reported
+def test_a_reader_started_after_a_reboot_reads_the_delivered_bytes(rebooted: Run) -> None:
+    """The reader came up against the restored file and read the bytes last delivered.
+
+    The phase above stopped it and rotated the value under it, so the bytes in
+    its record are the last delivery's and not the ones it read when it last
+    ran. The unit that restores the machine's values is ordered before this one,
+    which is why the machine starting it on its own is the assertion.
+    """
+    run = rebooted
+    vm = run.vm(PROBE_MACHINE)
+    vm.wait_for_unit(PROBE_UNIT, timeout=180)
+
+    record = json.loads(vm.ssh_succeed(f"cat {RECORD_PATH}"))
+    assert record["authorizedStatus"] == 200, record
+    assert record["anonymousStatus"] == 401, record
+
+    token_file = record["tokenFile"]
+    answered = vm.ssh_succeed(
+        f"printf 'reader=%s\\n' \"$(systemctl is-active {PROBE_UNIT})\"; "
+        f"printf 'token=%s\\n' \"$(cat {token_file})\"; "
+        f"printf 'ordered=%s\\n' "
+        f'"$(systemctl show -P Before {UNSEAL_UNIT} | grep -cF {shlex.quote(PROBE_UNIT)})"'
+    )
+
+    assert _answers(answered) == {
+        "reader": "active",
+        "token": run.token,
+        "ordered": "1",
+    }, answered
