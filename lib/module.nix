@@ -19,6 +19,7 @@ let
     isFunction
     isList
     isString
+    length
     mapAttrs
     ;
 
@@ -94,6 +95,8 @@ let
     reloadCommand = atoms.string;
     restart = atoms.restartPolicy;
     restartSec = atoms.duration;
+    probe = atoms.string;
+    probeTimeout = atoms.duration;
     startIfPathPresent = atoms.absolutePath;
     startIfPathAbsent = atoms.absolutePath;
   }
@@ -107,6 +110,22 @@ let
     "after"
     "requires"
   ];
+
+  # The command and the bound it is only ever recorded beside. Neither is
+  # recordable without the other, so every refusal about either withholds both:
+  # a record keeping a bound whose command the reading refused is the one state a
+  # realiser cannot render and no row reports.
+  probeFields = [
+    "probe"
+    "probeTimeout"
+  ];
+
+  # What the question above answers for a unit declaring neither field, written
+  # once so the common case allocates nothing per unit.
+  unprobed = {
+    rows = [ ];
+    refused = false;
+  };
 
   implKeys = [
     "units"
@@ -916,6 +935,7 @@ rec {
       unitSet,
       name,
       unit,
+      probedTwice,
     }:
     let
       where = "unit ${util.quote name} of ${module}";
@@ -938,12 +958,83 @@ rec {
       onScheduled = scheduled && policy != null && policy != "no";
       delayWithoutPolicy = elem "restartSec" typed && policy == null;
 
+      # The probe and its bound are read behind one question, asked once per
+      # unit: a unit declaring neither pays two membership tests and no row, and
+      # that is what every unit of every entry pays. The pair is read off what
+      # the reading kept rather than off what was written, so a value that
+      # failed its type is a missing half here too and no bound reaches a
+      # renderer without the command it bounds.
+      probeRead =
+        if !(unit ? probe || unit ? probeTimeout) then
+          unprobed
+        else
+          let
+            command = if elem "probe" typed then unit.probe else null;
+            bound = if elem "probeTimeout" typed then unit.probeTimeout else null;
+            withoutBound = command != null && bound == null;
+            boundWithoutProbe = bound != null && command == null;
+            unbounded = bound != null && atoms.domains.isZeroDuration bound;
+            onOneShot = command != null && oneShot;
+            whileScheduled = command != null && scheduled;
+          in
+          {
+            rows =
+              util.optional withoutBound (
+                diag.error {
+                  inherit subject;
+                  id = "unit-probe-without-timeout";
+                  message = "${where} declares a `probe` and no `probeTimeout`";
+                  evidence = "a probe is a start job, and the bound is what stops a hanging probe from holding the activation open until a service manager's own default expires; a default this vocabulary does not record is a fact no reader of the plan can see";
+                  resolution = "declare `probeTimeout` beside it in ${module}, or drop `probe`; neither field is recorded";
+                }
+              )
+              ++ util.optional boundWithoutProbe (
+                diag.error {
+                  inherit subject;
+                  id = "unit-probe-timeout-without-probe";
+                  message = "${where} declares `probeTimeout` and no `probe`";
+                  evidence = "a bound is how long the command that decides whether the unit is serving may take, and a unit stating no such command has nothing to bound";
+                  resolution = "declare `probe` beside it in ${module}, or drop `probeTimeout`; the bound is not recorded";
+                }
+              )
+              ++ util.optional unbounded (
+                diag.error {
+                  inherit subject;
+                  id = "unit-probe-timeout-unbounded";
+                  message = "${where} declares a `probeTimeout` of ${util.shownValue bound}, which spells no bound at all";
+                  evidence = "a service manager reads a zero duration as the absence of the property, so the value that looks like the tightest bound is the one that removes the only thing the field was asked for; every spelling of zero the duration type admits is read, and not the literal `0` alone";
+                  resolution = "write in ${module} the time a hanging probe is stopped after, such as `30s`; neither field is recorded";
+                }
+              )
+              ++ util.optional onOneShot (
+                diag.error {
+                  inherit subject;
+                  id = "unit-probe-on-one-shot";
+                  message = "${where} declares `oneShot` and a `probe`";
+                  evidence = "a job that applies and exits reports whether it worked in its own exit status, so a second job ordered after it answers the question the first already answered";
+                  resolution = "drop `oneShot` in ${module} if the unit is long running, or drop the probe; neither the probe nor its bound is recorded";
+                }
+              )
+              ++ util.optional whileScheduled (
+                diag.error {
+                  inherit subject;
+                  id = "unit-probe-on-scheduled";
+                  message = "${where} declares a `schedule` and a `probe`";
+                  evidence = "the timer is what decides when a scheduled unit runs and the unit is not running between elapses, so a probe of it reports the schedule rather than the service";
+                  resolution = "drop the schedule in ${module} and let the unit run continuously, or drop the probe; neither the probe nor its bound is recorded";
+                }
+              );
+            refused =
+              withoutBound || boundWithoutProbe || unbounded || onOneShot || whileScheduled || probedTwice;
+          };
+
       withheld =
         util.optional (contradictsOneShot || onScheduled) "restart"
         ++ util.optional (contradictsOneShot || onScheduled || delayWithoutPolicy) "restartSec"
         ++ withheldDirectories
         ++ util.optional (refusedEnv != [ ] && envKept == { }) "env"
-        ++ (if contradictedPaths == [ ] then [ ] else conditionPolarities);
+        ++ (if contradictedPaths == [ ] then [ ] else conditionPolarities)
+        ++ (if probeRead.refused then probeFields else [ ]);
 
       recorded = util.subtractList typed withheld;
 
@@ -1140,6 +1231,7 @@ rec {
             resolution = "drop the policy in ${module}, or drop the schedule and let the unit run continuously; the policy is not recorded";
           }
         )
+        ++ probeRead.rows
         ++ map (
           kind:
           diag.error {
@@ -1177,6 +1269,33 @@ rec {
       inherit record rows;
       extensions = applied;
     };
+
+  # A probe is per unit because it needs the probed unit's identity and its
+  # ordering, and an entry carries one because one file is what an activation
+  # starts, so how many units declare one is a question about the set, asked
+  # once per entry beside the reading's own fold. Only the row lives here: the
+  # count itself is one `filter` at its caller, because wrapping it in a
+  # function of its own allocates an environment on a call every entry makes.
+  # This is one attribute pattern rather than a curried chain for the same
+  # reason, and the caller asks it behind its own count, so an entry with no
+  # second probe calls nothing.
+  probeTwiceRows =
+    {
+      subject,
+      module,
+      probed,
+    }:
+    [
+      (diag.error {
+        inherit subject;
+        id = "unit-probe-declared-twice";
+        message = "${module} declares a `probe` on ${
+          util.countNoun (length probed) "unit" "units"
+        } ${util.quoteList probed} of ${subject}, and an entry carries one";
+        evidence = "an entry is activated and rolled back as one, so whether it is serving is one question, and the one file a realiser derives to ask it belongs to the entry rather than to a unit; a second probe is a second answer only one of which any realiser starts";
+        resolution = "keep the probe in ${module} on the unit whose serving the entry is and drop it from the others; no probe and no bound is recorded on any of them";
+      })
+    ];
 
   readConfigFile =
     {
