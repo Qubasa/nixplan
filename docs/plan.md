@@ -68,7 +68,7 @@ field, and the table below says why.
 | `key` | a hash over instance, service, machine, that machine's key, the target it was planned for, its pin, its units, its declared closure, the store directory, its configuration data, its resolved reads, its settings and its allocated ports. Two evaluations of one input produce equal keys; an unrelated edit moves nothing |
 | `placement` | `reason` plus the `machines` or `tags` that selected it |
 | `storeDir` | the store directory the entry's paths are read against and the one a consumer populates, so a machine whose store lives elsewhere is planned under its own |
-| `target` | `{ system, serviceManager, address }`: the reduced platform record of the machine's system, what runs its units, and the address it is reached at. All three are present wherever the record is, and the whole record is absent at an entry no placement selected |
+| `target` | `{ system, serviceManager, address }`: the reduced platform record of the machine's system, what runs its units, and the address it is reached at. All three are present wherever the record is, and the whole record is absent at an entry no placement selected. A fourth field, `scope`, is there only where the machine declares `scope = "user"`, so an implementation asks `target.scope or "system"` |
 | `closure` | the store path roots the implementation **declared**, as literal strings. The planner's scan verifies them and never produces them |
 | `pin` | `{ key, locked }`, the lock entry the resolver handed the module. Recorded, never verified; absent when the module declares none |
 | `dependsOn` | keys that appear elsewhere **in the same plan**, each carrying the depended-on entry's own key hash |
@@ -87,16 +87,40 @@ field, and the table below says why.
   "address": "beta.example",
   "tags": ["always-on", "backed-up"],
   "system": "aarch64-linux",
-  "serviceManager": "systemd"
+  "serviceManager": "systemd",
+  "sealRecipient": null
 }
 ```
 
-`address` and `tags` always; `system`, `serviceManager` and
+`address`, `tags` and `sealRecipient` always; `system`, `serviceManager` and
 `microarchitecture` when the registry declared them. `key` is a hash of the
 whole registry record, and it is the hash a placed entry's `dependsOn` carries,
 so editing a machine's `serviceManager` re-keys every entry on it. The system
 string stays a string here — the elaborated platform record lives on each
 entry's `target.system`, once per placement rather than once per machine.
+
+`scope` is what privilege the machine offers the deployment, `system` or `user`, unstated meaning
+`system`. It is in the record only where the registry declared `user`, the way `microarchitecture`
+is recorded only where the registry declared it, so a machine stating the default keys as a machine
+stating nothing and every existing registry keys as it did before the field existed. A machine
+flipped to `user` re-keys its own record and, through `dependsOn`, every entry placed on it. That is
+the answer rather than a cost to engineer away: the units of such an entry are rendered into the
+user unit directory, the attach argv addresses the account's own manager, and the confinement
+profile imposes another account, so an entry built for one scope is not the artifact the other
+scope runs. A value outside the two is `machine-scope-unknown`, and a refused value is as
+incomplete as none, so the machine has no derivable target and its placements are dropped rather
+than planned.
+
+`sealRecipient` is the age recipient a delivery seals this machine's copies of its values to, and
+it is in the record whether or not the registry declared one: present, or present and `null`, the
+way a placed entry keeps `closure` and `units` where `pruned` drops a field whose value was empty.
+An absent field means the plan does not know, and a reader has to be able to tell a machine that
+declares no recipient from a record written before the field existed. It is read in a projection no
+key consumes, beside the resources the registry says the machine already holds, so `key` above does
+not hash it: declaring a recipient, changing one and deleting one each re-key the machine's record
+and every entry placed on it as little as a reservation does. A line outside the grammar one age
+native recipient carries is `machine-seal-recipient-malformed` and is left out of every projection,
+and the recipient is in no target, so refusing it drops no placement.
 
 ## A generated value entry
 
@@ -141,6 +165,18 @@ the value, not from the interface, and not from what `impl` interpolates. A
 consumer that omits an export from `uses.<slot>.reads` does not receive it, and
 the export is absent from its `results` rather than null, so the omission cannot
 be defaulted around.
+
+A machine whose record declares a recipient also holds a sealed copy of each file delivered to it,
+and the path of that copy is in no record here. Whichever layer needs it derives it from
+`files.<file>.path` - the two layers that write a value, and the build reading that renders a
+machine's unsealer - and no field of any file record carries it, so no key of the plan moves for
+it. A file record enters the value entry's key input whole, less ownership sitting at its default,
+so a field recording the copy would re-key every generated value in every deployment for a path
+that is a function of the path already there. Rotating a machine's recipient re-keys nothing for
+the same reason the delivery set is not in a value's key: a value kept for another recipient is the
+same value, and re-keying it would ask for a regeneration of bytes that are still correct and a
+redelivery of every entry on the machine. What the copy is for is in [secrets.md](secrets.md), and
+what writes it and what opens it is in [operator.md](operator.md).
 
 ## The platform record
 
@@ -286,6 +322,7 @@ own rather than a `plane` string.
 | the `closure` list | a store path root the implementation **declared** | moves the closure |
 | `pin` | the lock entry the roots were resolved from | moves every entry built from it |
 | `target.system` | the platform record the entry was planned for | re-keys every entry placed on that machine |
+| `target.scope` | the privilege the entry's machine offers, recorded only where it is `user` | re-keys every entry placed on that machine, and the units, the attach argv and the imposed account move with it; a machine stating `system` records nothing and re-keys nothing |
 | a generated file's declared `owner`, `group` or `mode` | the bytes a reader on the machine can open | re-keys that value; a record that declares none of the three keys as it did before the fields existed |
 
 A generated file records the same distinction from the other side, as
