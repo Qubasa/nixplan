@@ -95,18 +95,25 @@ rec {
       );
     };
 
+  # Each machine declares the recipient a delivery seals to, because a machine a
+  # delivered value reaches and that declares none earns a warning of its own,
+  # and a suite about a file record or a closure would then carry that warning in
+  # every row list it asserts. The registries that deliberately declare none are
+  # the worked fixture's and the cases about the warning itself.
   machines = {
     one = {
       address = "one.example:22";
       tags = [ "everywhere" ];
       system = "x86_64-linux";
       serviceManager = "systemd";
+      sealRecipient = "age1kjrd4qmquzt6wxdg8jj52vw3rqdhl53d7d68ayfpx0nvetvnwh5auff9ej";
     };
     two = {
       address = "two.example:22";
       tags = [ "everywhere" ];
       system = "x86_64-linux";
       serviceManager = "systemd";
+      sealRecipient = "age1lyv75cszqel3n0s9vdd5uphnnksmx9zn3ak7zrt2m8w628f6a60s0d6cgk";
     };
   };
 
@@ -115,6 +122,7 @@ rec {
     tags = [ "everywhere" ];
     system = "aarch64-darwin";
     serviceManager = "launchd";
+    sealRecipient = "age18qwr8shvp904mw6l3e5ywldyaqcml8393kzq64q086r8jxw4fpc8x768yp";
   };
 
   laptopMachines = machines // {
