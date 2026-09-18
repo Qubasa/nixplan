@@ -62,6 +62,20 @@ Non-goals:
   runs headscale as a planned entry, not as guest-image wiring, so the folder proves the operator
   story - the server is itself a service the plan places - and the guest image only gains the
   packages.
+- **D6. The operator's own machine joins the mesh, and joins it unprivileged.** A run dials
+  `ssh <user>@<address>` and `nix copy --to ssh://<user>@<address>` from wherever the command runs
+  (`cli/remote.py`), so a mesh name in the registry has to resolve and route on that machine: the
+  operator's machine is a member like the friend's, which is the real story rather than a harness
+  trick. The end-to-end run cannot be root, so its node is a `tailscaled
+  --tun=userspace-networking` one - no tun device, no CAP_NET_ADMIN - and the name is resolved
+  inside the dialing path by an ssh `ProxyCommand` through that node, because a userspace node
+  installs no OS resolver and the host's own resolver therefore answers nothing about the mesh.
+  Measured before it was built: a userspace node joins, routes to a peer with the relay
+  unreachable, and resolves a peer's mesh name when dialing it, while `tailscale ping <name>`
+  fails - the CLI's own lookups go to the operating system and the dialer's do not.
+  *Alternative considered: run the apply inside the hub machine, which is a member already.*
+  Rejected: it moves the command off the operator's machine, so the proof would be about a guest
+  running a command rather than about an operator dialing a name.
 
 ## Risks / Trade-offs
 
