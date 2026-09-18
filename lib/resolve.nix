@@ -55,6 +55,8 @@ let
     "system"
     "serviceManager"
     "microarchitecture"
+    "scope"
+    "sealRecipient"
     "reserves"
   ];
 
@@ -269,7 +271,8 @@ in
 
       missingTargetKeys = machine: filter (k: !(statedTargetKey machine k)) machineTargetKeys;
 
-      placeable = machine: selectable machine && missingTargetKeys machine == [ ];
+      placeable =
+        machine: selectable machine && missingTargetKeys machine == [ ] && machineScopes.${machine}.usable;
 
       nameRows =
         map (
@@ -462,8 +465,31 @@ in
         system = machineFieldOf name "system" shapes.name null;
         serviceManager = machineFieldOf name "serviceManager" shapes.name null;
         microarchitecture = machineFieldOf name "microarchitecture" shapes.name null;
+        scope = machineFieldOf name "scope" shapes.name null;
+        sealRecipient = machineFieldOf name "sealRecipient" shapes.name null;
         reserves = reservationOf name;
       }) machines;
+
+      # The privilege a deployment onto the machine may spend, unstated meaning
+      # the manager root runs, read once per machine beside the fields above.
+      # The domain is crossed here rather than by the field's shape, because a
+      # value outside it earns a row of its own; a value of another kind earns
+      # the malformed row every registry field earns, and either way the target
+      # is unusable, because a refused value is as incomplete as none and
+      # reading it as the default would be the silent downgrade every check
+      # below exists to refuse.
+      machineScopes = mapAttrs (
+        name: _:
+        let
+          declared = machineFields.${name}.scope.value;
+          refused = declared != null && !(elem declared atoms.domains.scope);
+          usable = !(machineDeclarations.${name}.value ? scope) || (declared != null && !refused);
+        in
+        {
+          inherit refused usable;
+          value = if usable && declared != null then declared else "system";
+        }
+      ) machines;
 
       machineFieldRows =
         concatLists (util.mapAttrsToList (_: record: record.rows) machineDeclarations)
@@ -562,6 +588,35 @@ in
           }
         ) incompleteMachines
         ++ platformRows
+        ++ util.concatMapAttrsToList (
+          name: _:
+          util.optional machineScopes.${name}.refused (
+            diag.error {
+              subject = machinesFile;
+              id = "machine-scope-unknown";
+              message = "machine ${util.quote name} declares scope ${
+                util.quote (toString machineFields.${name}.scope.value)
+              }, and the scopes are ${util.quoteList atoms.domains.scope}";
+              evidence = "the scopes are ${util.quoteList atoms.domains.scope}, unstated meaning ${util.quote "system"}, and which of them a machine offers decides the units a realiser renders, the argv an attach spends and the account a profile imposes";
+              resolution = "write one of ${util.quoteList atoms.domains.scope} at `scope` for ${util.quote name} in ${machinesFile}, or omit the key";
+            }
+          )
+        ) machines
+        ++ util.concatMapAttrsToList (
+          name: _:
+          let
+            declared = machineFields.${name}.sealRecipient.value;
+          in
+          util.optional (declared != null && machineSealRecipients.${name} == null) (
+            diag.error {
+              subject = machinesFile;
+              id = "machine-seal-recipient-malformed";
+              message = "machine ${util.quote name} declares `sealRecipient` ${util.quote declared}, and a recipient is ${util.ageRecipientAdmits}";
+              evidence = "the recipient is the public half of the identity the machine opens its own sealed values with, so a line no sealing tool accepts is a delivery nothing on the machine can open; it sits in no target, so every entry placed on ${util.quote name} is still planned and delivered to as a machine that declares none";
+              resolution = "paste the line `age-keygen` printed on ${util.quote name} at `sealRecipient` in ${machinesFile}, or omit the key";
+            }
+          )
+        ) machines
         ++ machineFieldRows;
 
       incompleteMachines = filter (m: m.missing != [ ]) (
@@ -577,6 +632,24 @@ in
         name: _:
         let
           fields = machineFields.${name};
+          micro = fields.microarchitecture.value;
+          user = machineScopes.${name}.value == "user";
+          # Both optional fields ride one update, the `microarchitecture`
+          # precedent: a field enters the record, and so every key hashing it,
+          # only where its value differs from the one it resolves to unstated.
+          # Stating `system` re-keys nothing and flipping to `user` re-keys every
+          # entry on the machine, which is right: the rendered units, the attach
+          # argv and the imposed account all change with it.
+          stated =
+            if micro == null then
+              (if user then { scope = "user"; } else { })
+            else if user then
+              {
+                microarchitecture = micro;
+                scope = "user";
+              }
+            else
+              { microarchitecture = micro; };
         in
         {
           address = fields.address.value;
@@ -584,12 +657,7 @@ in
           system = fields.system.value;
           serviceManager = fields.serviceManager.value;
         }
-        // (
-          if fields.microarchitecture.value == null then
-            { }
-          else
-            { microarchitecture = fields.microarchitecture.value; }
-        )
+        // stated
       ) machines;
 
       # The target a placement was planned for. The address sits inside it because
@@ -604,8 +672,19 @@ in
           serviceManager = if fields == null then null else fields.serviceManager.value;
           address = if fields == null then null else fields.address.value;
         in
-        if platformRecord == null || serviceManager == null || address == null then
+        if
+          platformRecord == null
+          || serviceManager == null
+          || address == null
+          || !machineScopes.${machine}.usable
+        then
           null
+        else if machineScopes.${machine}.value == "user" then
+          {
+            system = platformRecord;
+            inherit serviceManager address;
+            scope = "user";
+          }
         else
           {
             system = platformRecord;
@@ -617,6 +696,21 @@ in
       # The third projection of the machine reading, beside the record the plan
       # keys and the target an entry is planned for. No key is derived from it.
       machineReservations = mapAttrs (name: _: machineFields.${name}.reserves.value) machines;
+
+      # The same projection, for the same reason. The grammar is crossed here
+      # rather than by the field's shape, because a line outside it earns a row
+      # of its own; a refused line is left out of the value, so a machine whose
+      # declaration the grammar refuses seals nothing rather than sealing to a
+      # word no tool accepts. It is in no machine record and in no target, so
+      # declaring or rotating a recipient re-keys nothing and refusing one drops
+      # no placement.
+      machineSealRecipients = mapAttrs (
+        name: _:
+        let
+          declared = machineFields.${name}.sealRecipient.value;
+        in
+        if declared == null || atoms.ageRecipient.verify declared == null then declared else null
+      ) machines;
 
       # The placement table of each instance, read once with its shape: the
       # instance's own rows and every member's selector come off one reading.
@@ -1687,6 +1781,14 @@ in
           unitNames = util.sortStrings (attrNames unitsGiven);
           unitSet = util.stringSet unitNames;
 
+          # An entry carries one probe, so the count is the entry's question and
+          # is asked here once beside the fold rather than re-folded inside it,
+          # and inline rather than through a helper, whose call would allocate an
+          # environment for every entry of every plan. `probe` is the
+          # vocabulary's field and `lib/module.nix` owns its rows.
+          probedUnits = filter (n: unitsGiven.${n} ? probe) unitNames;
+          probedTwice = length probedUnits > 1;
+
           units = mapAttrs (
             name: unit:
             module.readUnit {
@@ -1696,6 +1798,7 @@ in
                 unitSet
                 name
                 unit
+                probedTwice
                 ;
               subject = entryKey;
               module = member.moduleLabel;
@@ -1760,6 +1863,52 @@ in
               }
             ) (filter (e: e.backend != target.serviceManager) u.extensions)
           ) units;
+
+          # The crossings between a placement and the privilege its machine
+          # offers, beside the crossing above it. Each is a refusal and not a
+          # filter: the entry stays in the plan, so an operator reads what they
+          # declared and why the scope cannot honor it. A user manager runs every
+          # unit as the account and switches to none, grants itself no group, and
+          # binds no port below 1024.
+          scopeCrossingRows =
+            if machine == null || target == null || (target.scope or "system") != "user" then
+              [ ]
+            else
+              util.concatMapAttrsToList (
+                uname: u:
+                util.optional ((u.record.user or null) != null) (
+                  diag.error {
+                    subject = entryKey;
+                    id = "unit-account-in-user-scope";
+                    message = "unit ${util.quote uname} of ${entryKey} declares the account ${util.quote (toString u.record.user)}, and ${util.quote machine} is deployed as an account rather than as root";
+                    evidence = "a user service manager runs every unit as the account that owns it and can switch to no other, so the account a unit declares is a fact the scope cannot honor";
+                    resolution = "drop `user` from unit ${util.quote uname} in ${member.moduleLabel}, or place the member on a machine whose scope is ${util.quote "system"}";
+                  }
+                )
+                ++ util.optional (util.declaredGroups u.record != [ ]) (
+                  diag.error {
+                    subject = entryKey;
+                    id = "unit-groups-in-user-scope";
+                    message = "unit ${util.quote uname} of ${entryKey} declares the supplementary ${
+                      util.countNoun (length (util.declaredGroups u.record)) "group" "groups"
+                    } ${util.quoteList (util.sortStrings (util.declaredGroups u.record))}, and ${util.quote machine} is deployed as an account rather than as root";
+                    evidence = "a group is granted by a system service manager, and an account cannot grant one to itself, so the groups an extension application records are a fact the scope cannot honor";
+                    resolution = "drop `supplementaryGroups` from unit ${util.quote uname} in ${member.moduleLabel}, or place the member on a machine whose scope is ${util.quote "system"}";
+                  }
+                )
+              ) units
+              ++ util.concatMapAttrsToList (
+                cname: number:
+                util.optional (number < atoms.portRange.privilegedBelow) (
+                  diag.error {
+                    subject = entryKey;
+                    id = "port-privileged-in-user-scope";
+                    message = "${entryKey} claims port ${toString number} as ${util.quote cname}, and ${util.quote machine} is deployed as an account rather than as root";
+                    evidence = "binding a port below ${toString atoms.portRange.privilegedBelow} needs a capability the account does not hold, and the claim is read after normalisation, so this row and the allocation index name one number";
+                    resolution = "claim a port of ${toString atoms.portRange.privilegedBelow} or above at `claims.ports.${cname}.fixed` in ${member.moduleLabel}, or place the member on a machine whose scope is ${util.quote "system"}";
+                  }
+                )
+              ) member.alloc.ports;
 
           capabilities = mapAttrs (
             cap: declared:
@@ -1845,6 +1994,17 @@ in
               }
             )
             ++ (if target == null || !(target ? serviceManager) then [ ] else backendRows)
+            ++ scopeCrossingRows
+            ++ (
+              if !probedTwice then
+                [ ]
+              else
+                module.probeTwiceRows {
+                  subject = entryKey;
+                  module = member.moduleLabel;
+                  probed = probedUnits;
+                }
+            )
             ++ util.concatMapAttrsToList (_: u: u.rows) units
             ++ util.concatMapAttrsToList (_: f: f.rows) configFiles
             ++ util.concatMapAttrsToList (_: c: c.rows) capabilities;
@@ -2537,6 +2697,7 @@ in
         );
         machines = machineRecords;
         reservations = machineReservations;
+        sealRecipients = machineSealRecipients;
         interfaces = reachedInterfaces;
         usedMachines = selectedMachines;
         inherit storeDir;
