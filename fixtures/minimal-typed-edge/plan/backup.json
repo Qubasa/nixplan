@@ -2,6 +2,7 @@
   "machine:alpha": {
     "address": "alpha.example",
     "key": "sha256-5840440439b3bbf1",
+    "sealRecipient": null,
     "serviceManager": "systemd",
     "system": "x86_64-linux",
     "tags": [
@@ -12,6 +13,7 @@
   "machine:beta": {
     "address": "beta.example",
     "key": "sha256-a515feee51d2fc42",
+    "sealRecipient": null,
     "serviceManager": "systemd",
     "system": "aarch64-linux",
     "tags": [
@@ -22,6 +24,7 @@
   "machine:gamma": {
     "address": "gamma.example",
     "key": "sha256-2b728258e1f935d5",
+    "sealRecipient": null,
     "serviceManager": "systemd",
     "system": "x86_64-linux",
     "tags": [
@@ -31,6 +34,7 @@
   "machine:vault": {
     "address": "vault.example",
     "key": "sha256-faa763b1d2703255",
+    "sealRecipient": null,
     "serviceManager": "systemd",
     "system": "x86_64-linux",
     "tags": [
