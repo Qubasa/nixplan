@@ -203,6 +203,7 @@ in
         PLANNER_E2E_SSH_KEY = "${e2eGuest.sshPrivateKey}";
         PLANNER_CLI = pkgs.lib.getExe config.packages.planner;
         PLANNER_CLI_SRC = "${config.packages.planner-src}";
+        PLANNER_TAILSCALE = "${pkgs.tailscale}";
       };
 
       envNameOf = folder: pkgs.lib.toUpper (builtins.replaceStrings [ "-" ] [ "_" ] folder);
