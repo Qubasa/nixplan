@@ -754,4 +754,47 @@ in
         theEntryIsStillRead = [ openssh ];
       };
     };
+
+  # The scan is handed the unit record minus `env` and `extends`, so a store
+  # path a probe names is reached without the scan naming the field: a list of
+  # fields is what the next field is left out of.
+  testAProbeNamingAnUndeclaredStorePath =
+    let
+      probed =
+        roots:
+        placed { } (_: {
+          closure = roots;
+          units.only = {
+            command = "${borgbackup}/bin/borg serve";
+            probe = "${openssh}/bin/ssh -O check localhost";
+            probeTimeout = "30s";
+          };
+        });
+      result = probed [ borgbackup ];
+      declared = probed [
+        borgbackup
+        openssh
+      ];
+      message = messageById "closure-path-undeclared" result;
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        severity = severityById "closure-path-undeclared" result;
+        subjects = subjectsById "closure-path-undeclared" result;
+        namesThePath = hasInfix openssh message;
+        namesWhere = hasInfix "unit `only`" message;
+        entryIsInThePlan = result.plan ? "svc:only@one";
+        declaringItRemovesTheRow = rowIds declared;
+      };
+      expected = {
+        rows = [ "closure-path-undeclared" ];
+        severity = "error";
+        subjects = [ "svc:only@one" ];
+        namesThePath = true;
+        namesWhere = true;
+        entryIsInThePlan = true;
+        declaringItRemovesTheRow = [ ];
+      };
+    };
 }
