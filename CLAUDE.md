@@ -59,7 +59,16 @@ the exported bundle for a machine no run can dial.
   ask "can this account do it".
 - `scope` is a machine registry key with two values, `system` unstated. Stating the default
   re-keys nothing; `user` enters the hashed machine record and the target, because rendered
-  units, attach argv and profiles all differ under it.
+  units, attach argv and profiles all differ under it. The domain has one home,
+  `atoms.domains.scope`, and deliberately no korora typedef of its own: no module and no
+  interface declares a scope, the one reading that crosses a stated value against the domain is
+  the registry's, and a second top-level key in `lib/atoms.nix` costs a gated counter - the
+  reason is under Perf harness. The boundary a privileged port claim is read against is
+  `atoms.portRange.privilegedBelow`, in the record that already states the port domain.
+- The registry's scope reading is one memoised table, `machineScopes` in `lib/resolve.nix`,
+  answering `refused`, `usable` and `value` per machine, because `placeable`, the row, the machine
+  record and the target all ask it. Both optional fields of a machine record - the
+  microarchitecture and the scope - ride one update for the same reason a plan counts its copies.
 - A declared fact a user scope cannot honor is an error row, never a silent drop or a collapsed
   default: a unit's account, its supplementary groups, a fixed port below 1024, a delivered
   file's stated ownership. Confinement that needs no privilege - seccomp filters, the
@@ -77,15 +86,31 @@ the exported bundle for a machine no run can dial.
   `systemd-nsresourced`, unprivileged user namespaces, and a **signed dm-verity** image: an
   unsigned image outside the system trusted directories escalates to an interactive polkit
   action, which a non-interactive run reads as a hard failure. The verity public key is installed
-  at provision time and the signing key is an operator argument to the build, never a plan fact.
+  at provision time and the signing key is `mkDeployment`'s `signing` argument,
+  `{ privateKey, certificate }`, one key per operator and never per entry, spent only by the image
+  build: no plan field, no reading field, no record field and no artifact carries it, so rotating
+  it re-keys nothing.
+- The signature is a **sidecar** set beside the squashfs and not a signed GPT image: upstream's own
+  user-scope portable test signs `<name>.verity`, `<name>.roothash` and `<name>.roothash.p7s` with
+  the `.raw` dropped from the image's name, which is the naming rule `systemd.exec(5)` states, and
+  `veritysetup format` plus `openssl smime -sign` is the whole step. A `systemd-repart` DDI was
+  built first and deleted: it needs a systemd architecture-name table the tree has no other use
+  for.
 - A user-scope image places its unit files under the user unit directory - user-mode extraction
-  reads only that path and a system-unit image yields no matching units - and states
-  `PORTABLE_SCOPE=` in its os-release, which gates attachment. Upstream's user profiles drop
+  reads only that path and a system-unit image yields `Couldn't find any matching unit files`,
+  observed - and states `PORTABLE_SCOPE=` in its os-release, which gates attachment: the same
+  image offered to the system manager is refused with `portable scope 'user' incompatible with
+  portabled runtime scope 'system'`, also observed. Upstream's user profiles drop
   `DynamicUser=yes` and `ProtectHome=yes` and keep `PrivateUsers=yes`; `trusted` is identical, and
-  the reading's denial table is per scope.
+  the reading's denial table is per scope, derived from the statements the scope keeps rather than
+  written out twice.
 - Persistent user attach copies an out-of-tree image to `~/.config/portables`, which the user
-  image search path never scans (systemd 261). The attach flow places the image into the
-  account's state pool and attaches by name rather than relying on that move.
+  image search path never scans (systemd 261). The attach flow places the image and its three
+  sidecars into `${XDG_STATE_HOME:-$HOME/.local/state}/portables` at `0700` and attaches by name
+  rather than relying on that move.
+- An attach does not deliver: `portablectl attach --now` cannot start a user unit the manager has
+  not reloaded yet, so the script attaches and then `systemctl --user start`s the entry's units by
+  name.
 - The seal recipient is an age key the registry declares (`sealRecipient`), never the machine's
   ssh host key: an account cannot read `/etc/ssh` host keys, sshd refuses looser modes, and age
   supports no agent. The identity file is minted at provision time and its public line pasted
@@ -93,9 +118,11 @@ the exported bundle for a machine no run can dial.
 
 ## Enrollment and the mesh
 
-How a machine becomes a member is `openspec/changes/enroll-a-friend-machine`, ordered behind the
-four production changes. The decentralized alternative was designed, red-teamed and parked: it is
-in `openspec/changes/PARKED.md` with the trigger that revives it.
+How a machine becomes a member is `openspec/changes/enroll-a-friend-machine`, **landed** behind the
+four production changes: no registry key, no plan field and no library rule, so the whole of it is
+a row convention, a credential's handling discipline and the proof in
+`tests/e2e/friend-enrollment/`. The decentralized alternative was designed, red-teamed and parked:
+it is in `openspec/changes/PARKED.md` with the trigger that revives it.
 
 - Enrollment is centralized on purpose: a coordination server the operator runs is the membership
   authority. The registry declares, the server admits and expels, and the sync is one-way,
@@ -109,6 +136,32 @@ in `openspec/changes/PARKED.md` with the trigger that revives it.
 - The join credential is a generated secret value like any other: minted by the hub entry's
   generator, single-use and expiring, delivered to no machine, handed over outside the tree, and
   its bytes enter no plan field and no argv.
+- A run reaches a mesh name from wherever the command runs, so the operator's own machine is a
+  member too: a run dials `ssh <user>@<address>` and `nix copy --to ssh://<user>@<address>` and no
+  layer below that resolves a name for it. The end-to-end run cannot be root, so its node is a
+  `tailscaled --tun=userspace-networking` one started inside the cluster's own user and network
+  namespace, and the name is resolved by an ssh `ProxyCommand` through that node - measured, and
+  the reason it cannot be a hostname the machine's resolver answers: a userspace node installs no
+  OS resolver, so `tailscale ping <name>` and `tailscale debug resolve` fail while
+  `tailscale nc <name> <port>` resolves it inside the dialing path. `delivery.mesh_membership`
+  owns the node and `delivery.namespace_prefix` the namespace it is started in.
+- The coordination server is an entry the plan places, never guest-image wiring: the image carries
+  the client daemon and the server's tool and nothing else, because a daemon holding a tun device
+  and a node key is nothing a plan creates and the operator's mint, node list and expiry are acts
+  against the server rather than units of it.
+- The server's own tool reads a copy of the configuration under a name ending `.yaml`. The store
+  object the unit is shown is named by its hash with no suffix, and the server decides a
+  configuration's format from the extension: `error loading config file <store path>` is what an
+  operator invocation pointed at the object itself answers. The host path the entry states exists
+  inside that unit's namespace alone, which is why a copy and not that path.
+- `headscale preauthkeys create` takes a numeric user id, not a name, so the id the server's own
+  database assigned is read back with `headscale users list --output json` and handed to the
+  minting program. A credential appears in the server's own listings masked to its first twelve
+  characters, which is why a listing may be read back verbatim.
+- An expiry is a fact about the dialing node's map of the mesh and not about the server's database:
+  the server answers immediately and the route goes when the node is handed a map without that
+  peer, so the folder waits by asking its own node and never by sleeping. A report run in between
+  reads the route that is about to go and answers `current`.
 
 ## No solver, no Datalog, no Prolog
 
@@ -189,6 +242,18 @@ Prose: `docs/diagnostics.md`, which also tables every row a layer of this tree c
 - `tests/unit/diagnostics.nix` walks two file lists and they are not one list: `totalFiles` is
   `lib/**` plus `operator/read.nix`, which the purity scan reads, and `producingFiles` adds
   `secrets/read.nix`, whose reading writes row identifiers while still raising.
+- The four rows a user scope earns are produced where the crossing they are about is held: the
+  three entry-side ones in `mkPlacement`, beside `unit-extension-backend-mismatch`, because two of
+  them read the units an implementation produced for that placement, and
+  `value-ownership-in-user-scope` in `lib/plan.nix`, whose subject is the value entry. Each is a
+  refusal and not a filter: the entry stays in the plan.
+- "States an ownership" is read off the file record against the default it resolves to unstated,
+  which is the comparison the value's key already makes. Stating `root` therefore states nothing,
+  in the row as in the key.
+- The accounting cross-walk reads comment-stripped source lines with no notion of a nix string, so
+  the moment a builder *borrows* a reading's `fail`, every rendered shell `fail "…"` line in that
+  builder reads as an unaccounted refusal - `image/default.nix` renders six. A realiser's refusal
+  therefore lives in its `read.nix`, which is where the sentence belongs anyway.
 - The host-resource index is two `groupBy` passes over one flat list built in `entries`, each
   claim carrying the field it was recorded under, and a machine's `reserves` is a claimant of it
   keyed `machine:<name>`, earning the entries' own identifiers rather than any of its own.
@@ -218,6 +283,17 @@ Prose: `docs/plan.md`, under "Entry keys" and "Keys and re-keying", and `docs/op
 "The artifact name a plan key projects onto".
 
 - An entry key is structural: placement decides it, never units.
+- A probe and its bound are unit fields, so they are in the entry's key like every other unit
+  field: a changed probe is a new generation and a new image, observed on a machine as two image
+  digests for one entry. Neither is defaulted, because a bound nobody stated would be a service
+  manager's own default standing in the record.
+- A machine's own answer about what it holds is keyed by nothing this tree writes: a flakelet
+  holding is recognised by the published `plan:` prefix and what follows it is the plan key, and an
+  image holding is recognised by splitting the name `portablectl` printed at the published
+  separator into a name and a digest of the published length over the published alphabet, with no
+  plan key derived from it at all. That is why the fact is published as data - a separator, an
+  alphabet, a length, a prefix - and never as a pattern: a nix pattern and a python pattern are two
+  dialects and one published pattern would be one rule with two readings.
 - A plan key is `<instance>:<service>@<machine>` and a keyed form appends `@<hash>`. Split at the
   last `@`.
 - `@`, `:` and `/` in a machine, instance, member or generator name are
@@ -240,6 +316,16 @@ Prose: `docs/plan.md`, under "Entry keys" and "Keys and re-keying", and `docs/op
 - The reservation a machine states is a third projection of the registry reading, outside
   `machineRecords` and `targetOf`, because `machineKey` hashes the record every placed entry and
   per-placement value depends on. The plan records it nowhere and nothing reads it.
+- The seal recipient a machine states is a fourth projection of the registry reading, beside the
+  reservation and for the same reason, so declaring or rotating one re-keys nothing - which is what
+  `testARotatedIdentityReKeysNothing` asserts by planning one deployment twice. Unlike the
+  reservation the plan does record it: the `machine:<name>` record carries it as an explicit
+  absence, present and null where none is declared, because an absent field means the plan does not
+  know and a reader has to be able to tell that apart from "declared none".
+- A value's sealed path is derived from its runtime path by `util.sealedPathOf` and is a field of no
+  file record, which is what keeps it out of `fileKeyInput`: a sealed path in the record would
+  re-key every generated value the first time a root moved. The realisers and the command derive
+  it; nothing in `lib/` spends it per entry.
 - An image's version digest is deliberately not the entry key. It is taken over what the artifact
   holds: a shown path by its bytes where the artifact carries them and by its path where the host
   writes them, and the stated confinement profile is in it because it decides rendered directives.
@@ -310,6 +396,21 @@ The image realiser has no document of its own, so its rules are here in full.
 - An image carries an empty file at every host path it is shown. The image root is a read-only
   squashfs, so a missing mount point is not a missing file at run time but a unit that cannot start
   (`Failed to create parent directories …: Read-only file system`, then `226/NAMESPACE`).
+- The image root carries `/etc` whatever the entry is shown, because it carries `/etc/os-release`,
+  `/etc/resolv.conf` and `/etc/machine-id`: a system-scope image got the directory for free from
+  its unit directory `/etc/systemd/system`, and a user-scope one, whose units go to
+  `/usr/lib/systemd/user`, failed the build at `touch $out/etc/resolv.conf`.
+- An image an account attaches is reached by its path by a child that owns none of the account's
+  directories, so every component of the pool path is created traversable. portabled extracts the
+  metadata in a child that joined the user namespace nsresourced delegated, in which the
+  account's own uid is unmapped, and `extract_now` asks whether the image path is the root
+  directory (`chaseat_prefix_root` -> `path_is_root_at`), which opens the path itself
+  `O_PATH|O_DIRECTORY`: a world-traversable path answers `ENOTDIR` and is read as `not root`, and
+  one that is not answers `EACCES`, which `portable.c` returns unlogged and the manager reports
+  as `AttachImage failed: Access denied`. The attach script therefore names `$HOME/.local`,
+  `$HOME/.local/state` and the pool - or `$XDG_STATE_HOME` and the pool where that is stated - in
+  one `install -d -m 0711`, which is the staging tree's mode and for the staging tree's reason,
+  and the home above them is the machine's, verified by the preflight.
 - A realiser shows a host path only for a generated file whose entry records `deploy` true. An
   undeployed value is on no machine, so binding its path mounts nothing and the unit fails at
   `226/NAMESPACE` naming neither the value nor the declaration. That is why every file record in
@@ -379,10 +480,33 @@ The image realiser has no document of its own, so its rules are here in full.
   neither statement.
 - flakelet decides `[Install]`, no plan field does: an `[Install]` on the service of a scheduled
   unit would run the job once at deploy time and again on its schedule.
+- A probe is one derived `<service name>-health.service` per entry, derived in `unitFilesOf`
+  because that is the one derivation the image's name rule, flakelet's `acceptsUnit` and the
+  per-machine unit-file index all read, so all three see it by existing. One per entry and not one
+  per unit, because that name is the only file flakelet's activation starts; a second probe on a
+  second unit is `unit-probe-declared-twice` rather than a file nobody starts. It carries no
+  `[Install]`, which is why it is rendered by the shared reading and by neither realiser's wrapper,
+  and both realisers therefore produce one text. It inherits the probed unit's account and declares
+  no directory of any kind: a service manager deletes a unit's runtime directory when that unit
+  stops, so a oneshot that exited would take the probed unit's directory with it.
+- What a failing probe means is the realiser's and not the plan's. flakelet deletes the new
+  generation, switches back and exits non-zero, so the previous generation is what runs. The image
+  realiser has no generation to return to: the probe is in the attachment's unit list, the attach
+  script starts it, and a failure is a failed apply step naming the entry and what the machine
+  printed while the image stays attached running what it holds. Nothing rolls back there, and that
+  is stated rather than dressed up.
+- Each realiser publishes, beside its name rule, its unit rule and its `scopes`, one `holdings`
+  record saying what a machine's own answer names its holdings by, and it publishes for every
+  realiser the reading is handed rather than only the ones an entry states: an entry the build
+  dropped may have been the last one of its realiser, and a table of the stated ones would make
+  exactly that holding unfindable.
 - Both realisers are handed the same `assemble` argument, so a configuration file whose bytes the
   plan holds is one store object written once.
 - `flakelet/read.nix` restates `validate_name` and `validate_units` from flakelet's own
-  `manager.rs`, and `LOCKED_URL_PREFIX` in `tests/e2e/delivery.py` must match the prefix there.
+  `manager.rs`, and binds the `plan:` prefix once so `meta.json`'s `flake_url` and the published
+  `holdings.urlPrefix` are the one string. `tests/e2e/delivery.py` keeps no copy of it any more: it
+  reads the published value off the deployment record, which is what deleted a second literal that
+  was kept equal by comment.
 - The secrets reading has two halves and one description per condition: `rows` and `generation`
   answer a table and raise nothing, `store`, `configuration` and `deliveriesOf` refuse with the
   sentence that row states. A file record's ownership is a fifth escaped word `rows` asks nothing
@@ -407,6 +531,23 @@ The image realiser has no document of its own, so its rules are here in full.
   refuses `passthru.entries.<key>` with `planner.render` of the table.
 - The per-entry identity `manifest.json` publishes is the artifact's own version digest, which the
   endpoint stores as `settings_hash`; the plan entry key stays in `plan.json`.
+- The unsealer is the one artifact keyed by a machine and not by an entry: `machines/<name>` in the
+  same link farm as the entries, one per machine a **delivered value reaches** that declares a
+  recipient - the delivery set and never the placement, which is why the fixture's `gamma` gets
+  none. It is a function of the value file records, the machine's scope and the ordering list, and
+  never of the recipient, so a rotation rebuilds nothing. It carries `bin/unseal`, `bin/check` and
+  `planner-unseal.service`, with `age` in its closure, because a program that arrives off the
+  machine's own `PATH` is a fact no plan records.
+- `planner-unseal.service` orders and does not require: `Before=` every unit file the reading's
+  ordering list names and no `Requires` of any reader, so a machine whose seals do not open still
+  starts its readers and they still fail on the file that is not there. Its own name carries one
+  hyphen where every name an entry can derive carries at least two, which is how a machine's unit
+  cannot collide with an entry's.
+- `bin/unseal` opens into a temporary created `0600` inside the plaintext's own parent chain, owns
+  it, chmods it and **moves** it into place, for the reason the attach script does the same: the
+  move is what makes the readable window empty rather than narrow. It leaves a plaintext that is
+  already there untouched, names a copy it could not open and exits non-zero **after** restoring
+  every other, and age's own stderr goes nowhere, so no byte of a sealed file reaches a log line.
 - `operator.mkGeneration` is where the secrets reading is built. `operator/default.nix` takes
   `korora` for `plan.nix` alone, nixpkgs arriving as `pkgs.path` and the library as `../lib`, and
   that expression imports the deployment's `args.nix`, never its `default.nix`.
@@ -422,6 +563,31 @@ Prose: `docs/operator.md`, under "The command", "Where the bytes of a generated 
   refusal naming the consumer and the slot, because an unrecognised shape that contributes zero
   edges is what let that stand. Values are written before any entry is activated, and an entry is
   copied before it is activated.
+- A user-scope machine is asked one question before the run writes anything there, and the answer
+  is read where it was asked: the plan holds no fact about what a machine currently permits, so a
+  fact that does not hold is the command's own `ApplyError` naming the machine and every failed
+  requirement with what the machine answered, and no diagnostics row. One question per machine,
+  folded the way the values and holdings questions fold, because a guest's sshd is per-connection
+  socket activated and a burst of short logins hits the socket's own trigger limit. It is the head
+  of the on-machine line - before the retirement, the unsealer install, the value writes, the copy,
+  the activation and the value-driven restarts, which `openspec/changes/INTEGRATION.md` writes out
+  once - and under `--dry-run` it goes through the replaced channel and is recorded rather than
+  asked. A system-scope machine is asked nothing new.
+- Root at provision time, never at deploy time. The three fixed roots the preflight verifies are
+  stated once in `cli/remote.py` - `/run/vars`, `/run/portable-planner` and the sealed root - and
+  the sealed root is that file's own constant until `unseal-a-value-after-a-reboot` lands, which
+  has to adopt it rather than state a second one.
+- Two of the preflight's facts are the attach's alone and are asked only where an image entry is
+  placed: the account's own portabled, and the account's home and every directory above it being
+  traversable by a uid that owns none of them. The second is stated as traversal by another uid
+  rather than as a mode, so 0711 and 0755 both answer `ok`, and it exists because its absence is
+  otherwise unreadable: portabled answers `AttachImage failed: Access denied` and names no path.
+  The key set the question asks is crossed against `tests/e2e/test_harness.py`, so a fact added
+  here is added there.
+- Every step that addresses an account's own manager states `XDG_RUNTIME_DIR` itself: a
+  non-interactive login has no session, so nothing else sets it, and `systemctl --user` then
+  answers about no manager at all. The `--user` a step spends is read off the machine's scope in
+  the record and the published `scopes` of the realiser the step belongs to, never off the login.
 - The walk refuses in a position a condensation cannot reach: an unorderable state is an
   `ApplyError` naming the entries and the reads, because the `next(...)` that stood there ended a
   run in `StopIteration`, which `cli/planner.py` does not handle.
@@ -440,6 +606,21 @@ Prose: `docs/operator.md`, under "The command", "Where the bytes of a generated 
   endpoint answers and fails the moment that field set moves.
 - Staleness is a line and never an exit status. A report whose machines all answered exits zero
   however stale they are: a stale entry is an answer, and changing it is `apply`'s work.
+- A machine's unsealer is copied and its unit installed before that machine's **first** value
+  write, for exactly the machines the run writes a value to whose record says they seal. The unit
+  goes to `/usr/local/lib/systemd/system` with a `<target>.wants` link beside it, one spelling on
+  every machine rather than a path chosen by testing what the machine permits: `/etc/systemd/system`
+  is a link into a read-only store on an image-managed machine and `systemctl enable` writes into
+  that same directory, and `/run/systemd/system` is disqualified by the thing the change exists
+  for, a reboot emptying it. Observed on the guest: `FragmentPath` answers that path and `WantedBy`
+  answers `multi-user.target`. Idempotence compares the two links and never `systemctl is-enabled`,
+  which answers `alias` there - a word about how the file arrived rather than about what starts the
+  unit.
+- A sealed copy is written on every apply and has no `changed`/`unchanged` answer of its own,
+  because two sealings of one file differ; whether the bytes moved stays the plaintext step's
+  answer. The sealed copy is written **first**, so an interrupted run never leaves a sealed copy
+  older than the plaintext beside it. The recipient is a public word and may appear in an argv; the
+  ciphertext travels on the step's input stream, so no byte of a value, sealed or plain, ever does.
 - A value write compares on the machine and answers `changed` or `unchanged`, and neither the bytes
   nor a digest of them is ever printed or put in an argv. A value that moved restarts its readers
   last, after every activation: the readers are the entries whose resolved reads name that value on
@@ -448,6 +629,21 @@ Prose: `docs/operator.md`, under "The command", "Where the bytes of a generated 
   entry reads a value and never which of its units opens the file - and `try-restart` because
   whether a unit runs at all is the activation's answer and never this step's, so a unit an operator
   stopped stays stopped and a unit the activation just started is not restarted twice.
+  A value that moved does not re-run a probe either, for the same reason and by the same mechanism:
+  `try-restart` skips a oneshot that already completed, so a probe is a question about an
+  activation and never about a value write.
+- What a machine holds that the build names no entry for is a line every apply and every report
+  prints, and removing it is opt-in. Every run asks one holdings question per machine of the
+  selection before it writes anything anywhere, so a run that cannot read one answer has changed
+  nothing; without `--retire` the line carries `; not retired`, which makes a plain apply the
+  preview of one with the flag. The retirement itself is the endpoint's own verb - `flakelet
+  remove` without `--purge`, `portablectl detach --now` over the name the listing printed - and it
+  deletes no state and runs no script out of the retired entry's own artifact, which is not in this
+  build and which nothing on the machine roots. It is taken after the preflight question and before
+  the first value write, the first copy and the first activation, because the host resources an
+  orphan holds - a port, a unit file name, a host path - are exactly what a renamed entry needs
+  back before it can start. `--only` bounds which machines are asked and decides nothing about what
+  counts as unnamed: a holding is unnamed when the deployment places no entry that owns it at all.
 - The harness's recorder keeps the argv and drops the payload: the property asserted is that two
   payloads of one length produce equal vectors.
 - The value source is measured under the directories of the value entries the deployment delivers.
@@ -504,24 +700,28 @@ silently unobserved.
   tasks file states `- [x]` at the start of a line and may name the marker in prose: the reading
   anchors it, and every one of the four production changes documents the trap in prose and would
   have read as landed under an unanchored match.
-- Nine changes are open. `answer-whether-a-machine-is-current` stays open because its tasks 1.1
+- Eight changes are open. `answer-whether-a-machine-is-current` stays open because its tasks 1.1
   and 1.2 record themselves as not doable and superseded by `tests/e2e/test_harness.py`, so marking
   them done would falsify the record, and its 21 landed tasks are what the synthetic half of
   `testAnExcuseOutlivesTheStateItDescribes` reads: archiving it moves that probe.
-  `declare-service-state` is untouched. `deliver-a-secret-without-exposing-it` is narrowed: its
+  `declare-service-state` was **struck**: the vocabulary's own `directoryKinds` made its premise
+  false and the readers it was for are outside this repository, so its unbuilt half is in
+  `openspec/changes/PARKED.md` with the trigger that revives it.
+  `deliver-a-secret-without-exposing-it` is narrowed: its
   `operator/machine-identity` capability, its sections 3 and 5 and its task 7.5 are superseded by
   `name-the-machine-a-run-dials`, and the delta file is deleted, because a capability that never
   landed cannot be the home of a rule the current `planner/machine-platform` spec refuses and the
   current `operator/apply-command` spec licenses. `name-the-machine-a-run-dials` is itself parked:
   user scope moved the seal recipient to an age key, so nothing consumes `hostKey` any more, and
-  connection pinning is unowned until an operator decision revives or deletes the change. The four
-  that make the tree operable are `run-an-entry-without-root`,
-  `retire-an-entry-a-build-no-longer-names`, `unseal-a-value-after-a-reboot` and
-  `probe-a-service-before-it-counts-as-live`; none has a box ticked, so all seventeen of their
-  delta specs are `excused`, beside the parked change's three.
-  `enroll-a-friend-machine` is planned and ordered behind those four; its one delta spec is
-  `excused` too, and the designs it deliberately does not build are parked with their triggers in
-  `openspec/changes/PARKED.md`.
+  connection pinning is unowned until an operator decision revives or deletes the change. The five
+  that make the tree operable have **landed**: `run-an-entry-without-root`,
+  `retire-an-entry-a-build-no-longer-names`, `probe-a-service-before-it-counts-as-live`,
+  `unseal-a-value-after-a-reboot` and `enroll-a-friend-machine`, each with every box ticked and all
+  eighteen of their delta specs moved from `excused` to `accountable` in the one edit that ticks
+  them. They stay on disk under `openspec/changes/` until they are archived; the parked change's
+  three delta specs are still `excused`, and archiving a landed change moves its delta specs out of
+  `accountable` and its content into the current spec. The designs `enroll-a-friend-machine`
+  deliberately does not build are parked with their triggers in `openspec/changes/PARKED.md`.
 - A directory kind goes in `directoryKinds` in `lib/module.nix`, which is what `unitVocabulary`,
   the two rows about a directory, `directoriesOf` in `lib/plan.nix` and the claim index all read.
   `unitVocabulary` reads it by deriving the kind's own field and its mode field from it rather than
@@ -529,11 +729,11 @@ silently unobserved.
   silently inert: the field was dropped before `typed`, so `unit-directory-declared-twice` and
   `unit-directory-mode-without-directory` could not fire for it and the unit declaring it earned
   `implementation-unknown-key` instead.
-  Adding a third *declaration site* for one is the open question
-  `openspec/changes/declare-service-state` carries: its path-keyed `implKeys.state` would be a
-  third place one directory is stated, and `unit-directory-declared-twice` only refuses two.
-  Whichever of the three lands has to decide which site owns the fact, rather than growing a rule
-  per pair of sites.
+  Adding a third *declaration site* for one is parked rather than open, under "Declared state
+  beyond a unit's own directories" in `openspec/changes/PARKED.md`: a path-keyed `state` would be
+  a third place one directory is stated, `unit-directory-declared-twice` only refuses two, and
+  whichever shape lands has to decide which site owns the fact rather than growing a rule per
+  pair of sites.
 - A new excluded construct goes in `lib/excluded.nix`, the single home of that table - `rows` plus
   `constructs.<key> = { row, trigger }` - and gets a refusal test in `tests/unit/exclusions.nix`,
   whose one scanner reads the table rather than a count written out beside it.
@@ -582,7 +782,27 @@ Prose: `docs/tooling.md`, under "The performance gate".
 - `perf/measure.sh` applies arguments with `--apply` because `nix eval --file` will not auto-call
   a function from `--argstr`.
 - A budget is cost per plan entry, with a margin of 0.15 and a growth bound of 1.25 across sizes
-  4, 16, 64, and 256.
+  4, 16, 64, and 256. The margin is one-sided: it is the headroom a measurement may have *below*
+  its budget before the budget has to be lowered, and anything above the budget fails by any
+  amount.
+- The gate is a two-sided ratchet, so it is re-recorded and the rule is about when. A refactor that
+  costs evaluation for no new fact pays for it at its own site and the budget does not move. A
+  declared fact the planner has to read is the other case, and it re-records with three things on
+  the record: the measurement that shows the cheapest implementation does not fit, the figure it
+  cost, and the reading that accounts for it. `perf/budgets.json`'s `note` is where that is written,
+  and one recording covers a whole set of landings rather than one per change: the 2026-09-18
+  recording is four changes at once, because recording per change would have re-recorded the same
+  counters four times and the fourth would have measured the first three rather than itself.
+  `packages.planner-perf-results` is the measurement a recording is taken from; `check.py` compares
+  and never writes.
+- Two counters are sensitive in ways nothing else in the tree is. `nrOpUpdateValuesCopied` counts
+  every value an `//` copies, so one new top-level key in the attrset on the right of
+  `korora // { … }` in `lib/atoms.nix` costs one copy per plan and one extra `//` per machine
+  costs one per machine: that is why the scope domain is a `domains` member rather than an atom of
+  its own, why the privileged-port boundary rides `portRange`, and why a machine record's two
+  optional fields are folded into one update. `envs.bytes` grows with the bindings of a `let` that
+  is instantiated per placement, so a reading that is asked more than once is one memoised table
+  rather than four functions.
 - `tests/unit/perf.nix` plans size 64 rather than 256, and compares plans rather than deployments,
   because a deployment carries module functions and two functions are never equal in Nix.
 
@@ -657,10 +877,19 @@ machines come from and a manual `pytest` run. What follows is what that document
 - The pytest phases are session-scoped and order-dependent, and the trailing `wait_until_succeeds`
   restores the wire for the phases after it.
 - `secret-delivery`'s later phases are the value half of a second apply and run in file order,
-  ending with a reboot because `/run` is what it empties: after it the restart step finds a failed
-  unit and leaves it alone, which is why that test starts the unit itself. `systemctl is-active`
-  exits 3 for an inactive unit, so that assertion uses `ssh` rather than `ssh_succeed`, and the
-  reboot is issued in the guest rather than by QMP reset.
+  ending with a reboot because `/run` is what it empties. What that last phase asserts was
+  **inverted** by `unseal-a-value-after-a-reboot`: it used to prove a value was lost and reported,
+  and it now proves the machine holds every value again with no command run against it, which is
+  the one claim that change exists for. Losing a value is produced by clearing **both** copies
+  instead. `systemctl is-active` exits 3 for an inactive unit, so that assertion uses `ssh` rather
+  than `ssh_succeed`, and the reboot is issued in the guest rather than by QMP reset.
+- That folder's first phase provisions each machine the way an operator would - the identity file
+  at `/var/lib/planner/age.key`, `0400` inside a `0700` directory - and it is a **phase** and never
+  a snapshot preparation, because a preparation body does not run on a cache hit and the evidence
+  would be a replay. Both halves of its age identity are committed, on the snakeoil login key's
+  precedent: a throwaway that opens nothing but that folder's test tokens on an offline guest. Its
+  `gamma` declares a recipient and receives no value, which is what proves the unsealer follows the
+  delivery set and not the placement.
 - `portable-image` owns every `portablectl` claim, states its attaching entry `strict` because
   enforcement is the claim under test, and builds the same deployment twice; nothing attaches
   `changed`, and one phase stops the units and leaves the image attached, the tool printing
@@ -728,6 +957,45 @@ machines come from and a manual `pytest` run. What follows is what that document
   the library's pin, and a second one would evaluate the deployment against packages the library
   never saw. The guest image carries `nix-command`, `flakes` and 6 GiB of spare filesystem for that
   machine, all three properties of the shared image, so changing one re-keys every cut.
+- The user-scope stack is six guest properties, each of which the change needs and none of which a
+  plan can state. `systemd-mountfsd` and `systemd-nsresourced` arrive through
+  `systemd.additionalUpstreamSystemUnits` and are enabled one `overrideStrategy = "asDropin"`
+  `wantedBy = [ "sockets.target" ]` each, because that option only copies a unit; the user
+  portabled and its D-Bus activation ride `systemd.additionalUpstreamUserUnits`. systemd is rebuilt
+  with `-Dvmlinux-h=provided` off the guest kernel's own BTF: the stock build logs `Not setting up
+  BPF subsystem, as functionality has been disabled at compile time` and nsresourced then refuses
+  the userns API. polkit is enabled with a rule admitting the account's
+  `org.freedesktop.portable1.*` and `io.systemd.mount-file-system.*` actions, which is why
+  upstream's own user-scope portable test skips itself unless `pkcheck` is at least 124. The
+  account's home is `homeMode = "711"`, for the reason under Realisers: an extraction child holds a
+  foreign uid and NixOS' `createHome` default of 0700 refuses it. The account is in
+  `nix.settings.trusted-users`, because the run copies each artifact as that login and a remote
+  daemon refuses an unsigned path from a login it does not trust. And the throwaway dm-verity pair
+  is `tests/e2e/user-scope/verity.nix`, read by the guest for the public half it installs under
+  `/etc/verity.d` and by that folder's deployment for the `signing` argument, one file because two
+  copies of a pair can disagree.
+- `tests/e2e/user-scope/` is where the scope's own refusals are exercised, deployed as an account
+  like `tests/e2e/friend-enrollment/` below it: its registry states
+  `scope = "user"`, the run is `planner apply --user deployer`, and every step of it - the
+  preflight question, the value write, the `nix copy` and the activation - is that login's. Its
+  entry declares no unit `user`, no groups, no port and no ownership on its one value, each being
+  a planner refusal in that scope, and it reads the value back out of the runtime directory its
+  own manager created. Its last phase reboots from inside the guest: lingering brings the manager
+  back and the attachment survives, because the pool and the attached unit files are the account's
+  own state, while `/run` and the value in it do not. The apply after that reboot writes the value
+  again and starts nothing - starting is the attachment's own step and the value step is a
+  `try-restart` - and the folder starts the unit the way an operator would.
+- `tests/e2e/friend-enrollment/` is the second folder deployed as an account and the only one whose
+  machine is reached by a name rather than a number: its `hub` runs the coordination server as a
+  planned entry at `10.0.0.10` and its `friend` declares the mesh name as its `address`, so the
+  lease that machine does hold appears nowhere in the deployment. Its `disk_gib` has to exceed the
+  shared image's own virtual size - `qemu-img resize` refuses a shrink without `--shrink`, which is
+  what a figure below it is - and every credential it mints is read into the test process on the
+  standard output of one ssh and reaches exactly two argument vectors, both a presenter's own.
+  A throwaway node the folder brings up on the hub to present a spent key is a second `tailscaled`
+  with a state directory of its own, because the machine's own daemon already holds one membership,
+  and it is backgrounded with `& pid=$!` in one command element: a `; ` after the `&` is a shell
+  syntax error rather than a launch.
 
 ## Machine layer snapshots
 
@@ -772,6 +1040,12 @@ Prose: `docs/cluster.md`, under "Where the machines come from", for the cut, its
 - The external generator's `generate.py` at the pinned revision writes PEP 758 unparenthesized
   `except A, B:`, so it parses under python 3.14 and under nothing older. The pinned nixpkgs'
   `python3` is 3.14, which is the only reason the composition runs at all.
+- A deployment hands a module a store path as a string (`"${script}"`) and never the derivation.
+  Every reading in `lib/` walks a unit record for line breaks and store paths, and a derivation
+  attribute set reaches nixpkgs' own `stdenv` through its inputs, where that walk ends in
+  `error: stack overflow; max-call-depth exceeded` pointing at
+  `pkgs/stdenv/generic/default.nix` and naming nothing of this tree. Every folder's deployment
+  already interpolates; the trap is that a derivation evaluates fine until the walk reaches it.
 - An entry realised into nothing carries no artifact path: `operator/read.nix` omits `path` from its
   record and the command reads the field as optional. Both sides move together. A record stating
   `path` as `null` is read as an omission, not refused: JSON `null` decodes to `None` and
