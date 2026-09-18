@@ -102,6 +102,14 @@ let
   # Every other spec.md in the repository, with the reason it has no test. Listed
   # rather than ignored, so a new specification fails here instead of passing unseen.
   excused = {
+    "changes/account-for-every-counterexample/specs/tooling/test-layers/spec.md" =
+      "an unimplemented change: no task of account-for-every-counterexample has been done, so nothing in this package claims to satisfy it yet";
+    "changes/hold-the-attach-script-to-its-own-discipline/specs/realiser/portable-service-image/spec.md" =
+      "an unimplemented change: no task of hold-the-attach-script-to-its-own-discipline has been done, so nothing in this package claims to satisfy it yet";
+    "changes/hold-the-attach-script-to-its-own-discipline/specs/tooling/nix-unit-suite/spec.md" =
+      "an unimplemented change: no task of hold-the-attach-script-to-its-own-discipline has been done, so nothing in this package claims to satisfy it yet";
+    "changes/hold-the-index-to-the-tree/specs/tooling/repository-shape/spec.md" =
+      "an unimplemented change: no task of hold-the-index-to-the-tree has been done, so nothing in this package claims to satisfy it yet";
     "changes/deliver-a-secret-without-exposing-it/specs/delivery/real-cluster/spec.md" =
       "an unimplemented change: no task of deliver-a-secret-without-exposing-it has been done, so nothing in this package claims to satisfy it yet";
     "changes/deliver-a-secret-without-exposing-it/specs/operator/apply-command/spec.md" =

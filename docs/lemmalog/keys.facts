@@ -1,0 +1,343 @@
+inv_entry_key_is_structural --invariant[1.0]--> placement decides an entry key never units
+inv_entry_key_is_structural --topic[1.0]--> keys_identity
+inv_entry_key_is_structural --governs[1.0]--> lib/resolve.nix
+inv_entry_key_is_structural --governs[1.0]--> lib/plan.nix
+inv_entry_key_is_structural --located[1.0]--> lib/resolve.nix:1474
+inv_entry_key_is_structural --prose_in[1.0]--> docs/plan.md
+inv_entry_key_is_structural --rationale[1.0]--> a key is computed in an earlier stratum
+inv_plan_key_names_three_things --invariant[1.0]--> a plan key names instance member and machine
+inv_plan_key_names_three_things --topic[1.0]--> keys_identity
+inv_plan_key_names_three_things --governs[1.0]--> lib/resolve.nix
+inv_plan_key_names_three_things --located[1.0]--> lib/resolve.nix:1474
+inv_plan_key_names_three_things --names[1.0]--> entryKey
+inv_plan_key_names_three_things --prose_in[1.0]--> docs/plan.md
+inv_keyed_form_splits_at_the_last_at --invariant[1.0]--> a keyed form appends a hash split last
+inv_keyed_form_splits_at_the_last_at --topic[1.0]--> keys_identity
+inv_keyed_form_splits_at_the_last_at --governs[1.0]--> lib/util.nix
+inv_keyed_form_splits_at_the_last_at --governs[1.0]--> tests/e2e/delivery.py
+inv_keyed_form_splits_at_the_last_at --located[1.0]--> lib/util.nix:107
+inv_keyed_form_splits_at_the_last_at --located[1.0]--> tests/e2e/delivery.py:118
+inv_key_separators_are_a_denylist --invariant[1.0]--> three name separators are refused as denylist
+inv_key_separators_are_a_denylist --topic[1.0]--> keys_identity
+inv_key_separators_are_a_denylist --governs[1.0]--> lib/util.nix
+inv_key_separators_are_a_denylist --governs[1.0]--> lib/resolve.nix
+inv_key_separators_are_a_denylist --governs[1.0]--> lib/module.nix
+inv_key_separators_are_a_denylist --located[1.0]--> lib/util.nix:111
+inv_key_separators_are_a_denylist --located[1.0]--> lib/resolve.nix:246
+inv_key_separators_are_a_denylist --located[1.0]--> lib/module.nix:836
+inv_key_separators_are_a_denylist --names[1.0]--> keySeparators
+inv_key_separators_are_a_denylist --row[1.0]--> name-carries-key-separator
+inv_key_separators_are_a_denylist --rationale[1.0]--> an allowlist would refuse legitimate existing names
+inv_separator_check_precedes_any_key --invariant[1.0]--> a refused name is checked before any key
+inv_separator_check_precedes_any_key --topic[1.0]--> keys_identity
+inv_separator_check_precedes_any_key --governs[1.0]--> lib/resolve.nix
+inv_separator_check_precedes_any_key --located[1.0]--> lib/resolve.nix:277
+inv_separator_check_precedes_any_key --row[1.0]--> name-carries-key-separator
+inv_probe_and_bound_are_unit_fields --invariant[1.0]--> a probe and its bound are unit fields
+inv_probe_and_bound_are_unit_fields --topic[1.0]--> keys_identity
+inv_probe_and_bound_are_unit_fields --governs[1.0]--> lib/module.nix
+inv_probe_and_bound_are_unit_fields --located[1.0]--> lib/module.nix:98
+inv_probe_and_bound_are_unit_fields --located[1.0]--> lib/module.nix:118
+inv_probe_and_bound_are_unit_fields --names[1.0]--> probeFields
+inv_probe_and_bound_are_unit_fields --rationale[1.0]--> a changed probe is a new generation
+inv_neither_probe_field_is_defaulted --invariant[1.0]--> neither probe nor bound carries a default
+inv_neither_probe_field_is_defaulted --topic[1.0]--> keys_identity
+inv_neither_probe_field_is_defaulted --governs[1.0]--> lib/module.nix
+inv_neither_probe_field_is_defaulted --located[1.0]--> lib/module.nix:967
+inv_neither_probe_field_is_defaulted --row[1.0]--> unit-probe-without-timeout
+inv_neither_probe_field_is_defaulted --row[1.0]--> unit-probe-timeout-without-probe
+inv_neither_probe_field_is_defaulted --row[1.0]--> unit-probe-timeout-unbounded
+inv_neither_probe_field_is_defaulted --rationale[1.0]--> a service manager default would stand in
+inv_machine_holding_keyed_by_nothing_written --invariant[1.0]--> a machine names its holdings by nothing written
+inv_machine_holding_keyed_by_nothing_written --topic[1.0]--> keys_identity
+inv_machine_holding_keyed_by_nothing_written --governs[1.0]--> image/read.nix
+inv_machine_holding_keyed_by_nothing_written --governs[1.0]--> flakelet/read.nix
+inv_machine_holding_keyed_by_nothing_written --located[1.0]--> image/read.nix:279
+inv_machine_holding_keyed_by_nothing_written --located[1.0]--> flakelet/read.nix:97
+inv_machine_holding_keyed_by_nothing_written --names[1.0]--> holdings
+inv_holdings_are_published_as_data --invariant[1.0]--> holdings are published as data never pattern
+inv_holdings_are_published_as_data --topic[1.0]--> keys_identity
+inv_holdings_are_published_as_data --governs[1.0]--> image/read.nix
+inv_holdings_are_published_as_data --governs[1.0]--> flakelet/read.nix
+inv_holdings_are_published_as_data --located[1.0]--> image/read.nix:269
+inv_holdings_are_published_as_data --located[1.0]--> flakelet/read.nix:95
+inv_holdings_are_published_as_data --rationale[1.0]--> a nix pattern and a python pattern differ
+inv_incomplete_machine_is_dropped --invariant[1.0]--> a placement onto an incomplete machine drops
+inv_incomplete_machine_is_dropped --topic[1.0]--> keys_identity
+inv_incomplete_machine_is_dropped --governs[1.0]--> lib/resolve.nix
+inv_incomplete_machine_is_dropped --located[1.0]--> lib/resolve.nix:274
+inv_incomplete_machine_is_dropped --names[1.0]--> placeable
+inv_selection_is_read_twice --invariant[1.0]--> the selection is read matched then survived
+inv_selection_is_read_twice --topic[1.0]--> keys_identity
+inv_selection_is_read_twice --governs[1.0]--> lib/resolve.nix
+inv_selection_is_read_twice --located[1.0]--> lib/resolve.nix:1192
+inv_selection_is_read_twice --located[1.0]--> lib/resolve.nix:1193
+inv_selection_is_read_twice --rationale[1.0]--> a check over survivors removes its own subject
+inv_completeness_is_read_off_the_value --invariant[1.0]--> machine completeness is read off the value
+inv_completeness_is_read_off_the_value --topic[1.0]--> keys_identity
+inv_completeness_is_read_off_the_value --governs[1.0]--> lib/resolve.nix
+inv_completeness_is_read_off_the_value --located[1.0]--> lib/resolve.nix:678
+inv_unplaced_reading_hands_no_target --invariant[1.0]--> an unplaced reading hands the implementation no target
+inv_unplaced_reading_hands_no_target --topic[1.0]--> keys_identity
+inv_unplaced_reading_hands_no_target --governs[1.0]--> lib/resolve.nix
+inv_unplaced_reading_hands_no_target --located[1.0]--> lib/resolve.nix:1711
+inv_member_identity_is_its_attribute_key --invariant[1.0]--> a member identity is its attribute key alone
+inv_member_identity_is_its_attribute_key --topic[1.0]--> keys_identity
+inv_member_identity_is_its_attribute_key --governs[1.0]--> lib/resolve.nix
+inv_member_identity_is_its_attribute_key --located[1.0]--> lib/resolve.nix:983
+inv_member_identity_is_its_attribute_key --row[1.0]--> member-name-disagrees
+inv_delivery_set_is_not_in_a_value_key --invariant[1.0]--> a delivery set stays out of value keys
+inv_delivery_set_is_not_in_a_value_key --topic[1.0]--> keys_identity
+inv_delivery_set_is_not_in_a_value_key --governs[1.0]--> lib/plan.nix
+inv_delivery_set_is_not_in_a_value_key --located[1.0]--> lib/plan.nix:1354
+inv_program_keys_only_where_declared --invariant[1.0]--> a generator program keys only where declared
+inv_program_keys_only_where_declared --topic[1.0]--> keys_identity
+inv_program_keys_only_where_declared --governs[1.0]--> lib/plan.nix
+inv_program_keys_only_where_declared --located[1.0]--> lib/plan.nix:1360
+inv_program_keys_only_where_declared --rationale[1.0]--> every older plan stays keyed as it was
+inv_a_field_keys_only_off_its_default --invariant[1.0]--> a field keys only when it differs
+inv_a_field_keys_only_off_its_default --topic[1.0]--> keys_identity
+inv_a_field_keys_only_off_its_default --governs[1.0]--> lib/plan.nix
+inv_a_field_keys_only_off_its_default --located[1.0]--> lib/plan.nix:144
+inv_a_field_keys_only_off_its_default --located[1.0]--> lib/plan.nix:148
+inv_a_field_keys_only_off_its_default --names[1.0]--> withoutDefaults
+inv_a_field_keys_only_off_its_default --names[1.0]--> ownershipDefaults
+inv_a_field_keys_only_off_its_default --prose_in[1.0]--> docs/plan.md
+inv_config_file_mode_is_always_keyed --invariant[1.0]--> a configuration file mode is always keyed
+inv_config_file_mode_is_always_keyed --topic[1.0]--> keys_identity
+inv_config_file_mode_is_always_keyed --governs[1.0]--> lib/plan.nix
+inv_config_file_mode_is_always_keyed --located[1.0]--> lib/plan.nix:542
+inv_config_file_mode_is_always_keyed --rationale[1.0]--> the mode sits at no default
+inv_vars_state_is_keyed_by_the_entry --invariant[1.0]--> value existence is keyed by entry not machine
+inv_vars_state_is_keyed_by_the_entry --topic[1.0]--> keys_identity
+inv_vars_state_is_keyed_by_the_entry --governs[1.0]--> lib/resolve.nix
+inv_vars_state_is_keyed_by_the_entry --located[1.0]--> lib/resolve.nix:1518
+inv_vars_state_is_keyed_by_the_entry --names[1.0]--> varsState
+inv_vars_state_is_keyed_by_the_entry --rationale[1.0]--> one value has one existence answer
+inv_reservation_is_a_third_projection --invariant[1.0]--> a machine reservation is a third registry projection
+inv_reservation_is_a_third_projection --topic[1.0]--> keys_identity
+inv_reservation_is_a_third_projection --governs[1.0]--> lib/resolve.nix
+inv_reservation_is_a_third_projection --located[1.0]--> lib/resolve.nix:334
+inv_reservation_is_a_third_projection --names[1.0]--> machineKey
+inv_reservation_is_a_third_projection --rationale[1.0]--> the machine record is hashed by every entry
+inv_reservation_is_recorded_nowhere --invariant[1.0]--> the plan records a reservation nowhere
+inv_reservation_is_recorded_nowhere --topic[1.0]--> keys_identity
+inv_reservation_is_recorded_nowhere --governs[1.0]--> lib/plan.nix
+inv_reservation_is_recorded_nowhere --located[1.0]--> lib/plan.nix:1486
+inv_seal_recipient_is_a_fourth_projection --invariant[1.0]--> a seal recipient is a fourth registry projection
+inv_seal_recipient_is_a_fourth_projection --topic[1.0]--> keys_identity
+inv_seal_recipient_is_a_fourth_projection --governs[1.0]--> lib/resolve.nix
+inv_seal_recipient_is_a_fourth_projection --located[1.0]--> lib/resolve.nix:707
+inv_seal_recipient_is_a_fourth_projection --enforced_by[1.0]--> tests/unit/vars.nix%testARotatedIdentityReKeysNothing
+inv_seal_recipient_is_a_fourth_projection --rationale[1.0]--> declaring or rotating a recipient re-keys nothing
+inv_seal_recipient_is_an_explicit_absence --invariant[1.0]--> a recorded recipient is present and null unstated
+inv_seal_recipient_is_an_explicit_absence --topic[1.0]--> keys_identity
+inv_seal_recipient_is_an_explicit_absence --governs[1.0]--> lib/plan.nix
+inv_seal_recipient_is_an_explicit_absence --located[1.0]--> lib/plan.nix:1490
+inv_seal_recipient_is_an_explicit_absence --enforced_in[1.0]--> tests/unit/platform.nix
+inv_seal_recipient_is_an_explicit_absence --enforced_by[1.0]--> testAMachineStatesASealRecipientAndKeysAsItDid
+inv_seal_recipient_is_an_explicit_absence --rationale[1.0]--> a reader tells not-known from declared-none
+inv_sealed_path_is_no_record_field --invariant[1.0]--> a sealed path is no record field
+inv_sealed_path_is_no_record_field --topic[1.0]--> keys_identity
+inv_sealed_path_is_no_record_field --governs[1.0]--> lib/util.nix
+inv_sealed_path_is_no_record_field --governs[1.0]--> operator/read.nix
+inv_sealed_path_is_no_record_field --located[1.0]--> lib/util.nix:361
+inv_sealed_path_is_no_record_field --located[1.0]--> operator/read.nix:459
+inv_sealed_path_is_no_record_field --names[1.0]--> util.sealedPathOf
+inv_sealed_path_is_no_record_field --rationale[1.0]--> a moved root would re-key every value
+inv_image_digest_is_not_the_entry_key --invariant[1.0]--> an image digest is not the entry key
+inv_image_digest_is_not_the_entry_key --topic[1.0]--> keys_identity
+inv_image_digest_is_not_the_entry_key --governs[1.0]--> image/read.nix
+inv_image_digest_is_not_the_entry_key --located[1.0]--> image/read.nix:713
+inv_image_digest_is_not_the_entry_key --names[1.0]--> versionFor
+inv_image_digest_is_not_the_entry_key --prose_in[1.0]--> docs/operator.md
+inv_image_digest_holds_the_profile --invariant[1.0]--> the confinement profile is in the version digest
+inv_image_digest_holds_the_profile --topic[1.0]--> keys_identity
+inv_image_digest_holds_the_profile --governs[1.0]--> image/read.nix
+inv_image_digest_holds_the_profile --located[1.0]--> image/read.nix:726
+inv_image_digest_holds_the_profile --rationale[1.0]--> a profile decides rendered directives
+inv_image_digest_reads_shown_bytes --invariant[1.0]--> a shown path enters the digest by bytes
+inv_image_digest_reads_shown_bytes --topic[1.0]--> keys_identity
+inv_image_digest_reads_shown_bytes --governs[1.0]--> image/read.nix
+inv_image_digest_reads_shown_bytes --located[1.0]--> image/read.nix:740
+inv_artifact_name_projects_from_the_key --invariant[1.0]--> an artifact name projects from its plan key
+inv_artifact_name_projects_from_the_key --topic[1.0]--> keys_identity
+inv_artifact_name_projects_from_the_key --governs[1.0]--> operator/read.nix
+inv_artifact_name_projects_from_the_key --located[1.0]--> operator/read.nix:57
+inv_artifact_name_projects_from_the_key --located[1.0]--> operator/read.nix:276
+inv_artifact_name_projects_from_the_key --names[1.0]--> projected
+inv_artifact_name_projects_from_the_key --prose_in[1.0]--> docs/operator.md
+inv_the_name_projection_is_not_injective --invariant[1.0]--> two keys sharing one artifact name is refused
+inv_the_name_projection_is_not_injective --topic[1.0]--> keys_identity
+inv_the_name_projection_is_not_injective --governs[1.0]--> operator/read.nix
+inv_the_name_projection_is_not_injective --located[1.0]--> operator/read.nix:580
+inv_the_name_projection_is_not_injective --row[1.0]--> operator-entry-name-collision
+inv_the_name_projection_is_not_injective --rationale[1.0]--> a silent overwrite is the alternative
+inv_manifest_records_the_name_mapping --invariant[1.0]--> the manifest records the key to name mapping
+inv_manifest_records_the_name_mapping --topic[1.0]--> keys_identity
+inv_manifest_records_the_name_mapping --governs[1.0]--> operator/read.nix
+inv_manifest_records_the_name_mapping --located[1.0]--> operator/read.nix:751
+inv_unit_file_names_are_one_namespace --invariant[1.0]--> one machine unit file names are one namespace
+inv_unit_file_names_are_one_namespace --topic[1.0]--> keys_identity
+inv_unit_file_names_are_one_namespace --governs[1.0]--> operator/read.nix
+inv_unit_file_names_are_one_namespace --located[1.0]--> operator/read.nix:620
+inv_unit_file_names_are_one_namespace --row[1.0]--> operator-entry-unit-file-collision
+inv_unit_file_names_are_one_namespace --rationale[1.0]--> that name drops the machine
+inv_interfaces_argument_is_attribution --invariant[1.0]--> the interfaces argument is attribution not registry
+inv_interfaces_argument_is_attribution --topic[1.0]--> interfaces
+inv_interfaces_argument_is_attribution --governs[1.0]--> lib/resolve.nix
+inv_interfaces_argument_is_attribution --located[1.0]--> lib/resolve.nix:2627
+inv_interfaces_argument_is_attribution --located[1.0]--> lib/resolve.nix:2634
+inv_interfaces_argument_is_attribution --names[1.0]--> reachedInterfaces
+inv_interfaces_argument_is_attribution --prose_in[1.0]--> docs/authoring.md
+inv_interfaces_argument_is_attribution --rationale[1.0]--> every row is reached from importing modules
+inv_file_of_matches_value_then_identity --invariant[1.0]--> file lookup matches by value then identity
+inv_file_of_matches_value_then_identity --topic[1.0]--> interfaces
+inv_file_of_matches_value_then_identity --governs[1.0]--> lib/interface.nix
+inv_file_of_matches_value_then_identity --located[1.0]--> lib/interface.nix:144
+inv_file_of_matches_value_then_identity --names[1.0]--> fileOf
+inv_file_of_matches_value_then_identity --rationale[1.0]--> the identity pass only turns miss into hit
+inv_a_refused_claim_equals_no_claim --invariant[1.0]--> a refused claim equals no claim
+inv_a_refused_claim_equals_no_claim --topic[1.0]--> interfaces
+inv_a_refused_claim_equals_no_claim --governs[1.0]--> lib/interface.nix
+inv_a_refused_claim_equals_no_claim --located[1.0]--> lib/interface.nix:111
+inv_a_refused_claim_equals_no_claim --names[1.0]--> identityOf
+inv_a_refused_claim_equals_no_claim --row[1.0]--> interface-id-unnamed-fold
+inv_a_refused_claim_equals_no_claim --row[1.0]--> interface-fold-not-a-function
+inv_member_and_slot_names_stay_disjoint --invariant[1.0]--> a member name and a slot name collide
+inv_member_and_slot_names_stay_disjoint --topic[1.0]--> interfaces
+inv_member_and_slot_names_stay_disjoint --governs[1.0]--> lib/resolve.nix
+inv_member_and_slot_names_stay_disjoint --located[1.0]--> lib/resolve.nix:1064
+inv_member_and_slot_names_stay_disjoint --located[1.0]--> lib/resolve.nix:1275
+inv_member_and_slot_names_stay_disjoint --row[1.0]--> member-and-slot-name-collide
+inv_member_and_slot_names_stay_disjoint --prose_in[1.0]--> docs/authoring.md
+inv_member_and_slot_names_stay_disjoint --rationale[1.0]--> the wire reading decides from members alone
+inv_planner_fold_is_typedef_reworded --invariant[1.0]--> a named fold is a reworded typedef
+inv_planner_fold_is_typedef_reworded --topic[1.0]--> interfaces
+inv_planner_fold_is_typedef_reworded --governs[1.0]--> lib/interface.nix
+inv_planner_fold_is_typedef_reworded --located[1.0]--> lib/interface.nix:73
+inv_planner_fold_is_typedef_reworded --names[1.0]--> foldApply
+inv_planner_fold_is_typedef_reworded --names[1.0]--> foldName
+inv_a_fold_normalises_and_refuses --invariant[1.0]--> a fold normalises and refuses and renders nothing
+inv_a_fold_normalises_and_refuses --topic[1.0]--> interfaces
+inv_a_fold_normalises_and_refuses --governs[1.0]--> lib/interface.nix
+inv_a_fold_normalises_and_refuses --located[1.0]--> lib/interface.nix:81
+inv_a_fold_normalises_and_refuses --prose_in[1.0]--> docs/authoring.md
+inv_a_fold_normalises_and_refuses --rationale[1.0]--> rendering bytes belongs to the consuming implementation
+inv_a_refusable_fold_read_is_guarded --invariant[1.0]--> a refusable fold slot is read guarded
+inv_a_refusable_fold_read_is_guarded --topic[1.0]--> interfaces
+inv_a_refusable_fold_read_is_guarded --governs[1.0]--> tests/unit/resolution.nix
+inv_a_refusable_fold_read_is_guarded --located[1.0]--> tests/unit/resolution.nix:1507
+inv_a_refusable_fold_read_is_guarded --located[1.0]--> docs/authoring.md:669
+inv_a_refusable_fold_read_is_guarded --enforced_in[1.0]--> tests/unit/resolution.nix
+inv_a_refusable_fold_read_is_guarded --enforced_by[1.0]--> testAGuardedConsumerStillReportsARefusedFold
+inv_a_refusable_fold_read_is_guarded --prose_in[1.0]--> docs/diagnostics.md
+inv_a_refusable_fold_read_is_guarded --row[1.0]--> interface-fold-refused
+inv_a_refusable_fold_read_is_guarded --row[1.0]--> interface-fold-raised
+inv_no_other_refused_read_is_guarded --invariant[1.0]--> no other refused read carries a guard
+inv_no_other_refused_read_is_guarded --topic[1.0]--> interfaces
+inv_no_other_refused_read_is_guarded --governs[1.0]--> lib/resolve.nix
+inv_no_other_refused_read_is_guarded --located[1.0]--> lib/resolve.nix:2404
+inv_no_other_refused_read_is_guarded --row[1.0]--> slot-unwired
+inv_no_other_refused_read_is_guarded --rationale[1.0]--> an unwired slot rows before any implementation runs
+inv_settings_derived_slot_set_is_a_warning --invariant[1.0]--> a settings-derived slot set warns never refuses
+inv_settings_derived_slot_set_is_a_warning --topic[1.0]--> interfaces
+inv_settings_derived_slot_set_is_a_warning --governs[1.0]--> lib/compose.nix
+inv_settings_derived_slot_set_is_a_warning --located[1.0]--> lib/compose.nix:271
+inv_settings_derived_slot_set_is_a_warning --row[1.0]--> slot-set-settings-derived
+inv_only_the_uses_keyset_is_compared --invariant[1.0]--> only the slot keyset is compared
+inv_only_the_uses_keyset_is_compared --topic[1.0]--> interfaces
+inv_only_the_uses_keyset_is_compared --governs[1.0]--> lib/compose.nix
+inv_only_the_uses_keyset_is_compared --located[1.0]--> lib/compose.nix:23
+inv_only_the_uses_keyset_is_compared --names[1.0]--> slotsOf
+inv_slot_set_baseline_is_defaults_and_fixed --invariant[1.0]--> the baseline reading is defaults overwritten by fixed
+inv_slot_set_baseline_is_defaults_and_fixed --topic[1.0]--> interfaces
+inv_slot_set_baseline_is_defaults_and_fixed --governs[1.0]--> lib/compose.nix
+inv_slot_set_baseline_is_defaults_and_fixed --located[1.0]--> lib/compose.nix:109
+inv_config_record_owns_both_branches --invariant[1.0]--> ownership is recorded on both render branches
+inv_config_record_owns_both_branches --topic[1.0]--> interfaces
+inv_config_record_owns_both_branches --governs[1.0]--> lib/plan.nix
+inv_config_record_owns_both_branches --located[1.0]--> lib/plan.nix:497
+inv_config_record_owns_both_branches --located[1.0]--> lib/plan.nix:510
+inv_config_record_owns_both_branches --names[1.0]--> configDataRecord
+inv_config_record_owns_both_branches --row[1.0]--> set-entry-absent
+inv_config_record_owns_both_branches --rationale[1.0]--> an unfinished render still says who opens
+inv_file_denial_is_about_permission --invariant[1.0]--> a delivered file denial is about permission
+inv_file_denial_is_about_permission --topic[1.0]--> interfaces
+inv_file_denial_is_about_permission --governs[1.0]--> lib/util.nix
+inv_file_denial_is_about_permission --located[1.0]--> lib/util.nix:496
+inv_file_denial_is_about_permission --rationale[1.0]--> declared groups are read under any backend
+inv_admits_is_one_predicate_three_sites --invariant[1.0]--> readability is one predicate asked at three sites
+inv_admits_is_one_predicate_three_sites --topic[1.0]--> interfaces
+inv_admits_is_one_predicate_three_sites --governs[1.0]--> lib/util.nix
+inv_admits_is_one_predicate_three_sites --governs[1.0]--> lib/plan.nix
+inv_admits_is_one_predicate_three_sites --governs[1.0]--> image/read.nix
+inv_admits_is_one_predicate_three_sites --governs[1.0]--> operator/read.nix
+inv_admits_is_one_predicate_three_sites --located[1.0]--> lib/util.nix:488
+inv_admits_is_one_predicate_three_sites --located[1.0]--> lib/plan.nix:352
+inv_admits_is_one_predicate_three_sites --located[1.0]--> lib/plan.nix:384
+inv_admits_is_one_predicate_three_sites --located[1.0]--> image/read.nix:596
+inv_admits_is_one_predicate_three_sites --located[1.0]--> operator/read.nix:389
+inv_admits_is_one_predicate_three_sites --names[1.0]--> util.admits
+inv_admits_is_one_predicate_three_sites --row[1.0]--> slot-reads-value-unreadable-by-user
+inv_admits_is_one_predicate_three_sites --row[1.0]--> entry-config-file-unreadable-by-user
+inv_admits_is_one_predicate_three_sites --row[1.0]--> operator-entry-access-denied
+inv_admits_is_one_predicate_three_sites --rationale[1.0]--> a fourth site is a place to forget
+inv_root_admitted_is_the_only_difference --invariant[1.0]--> callers differ on whether root is admitted
+inv_root_admitted_is_the_only_difference --topic[1.0]--> interfaces
+inv_root_admitted_is_the_only_difference --governs[1.0]--> lib/util.nix
+inv_root_admitted_is_the_only_difference --governs[1.0]--> image/read.nix
+inv_root_admitted_is_the_only_difference --located[1.0]--> lib/util.nix:489
+inv_root_admitted_is_the_only_difference --located[1.0]--> image/read.nix:596
+inv_root_admitted_is_the_only_difference --names[1.0]--> rootAdmitted
+inv_root_admitted_is_the_only_difference --rationale[1.0]--> a profile imposes an account never root
+inv_closure_and_units_survive_pruning --invariant[1.0]--> a placed entry keeps closure and units empty
+inv_closure_and_units_survive_pruning --topic[1.0]--> interfaces
+inv_closure_and_units_survive_pruning --governs[1.0]--> lib/plan.nix
+inv_closure_and_units_survive_pruning --governs[1.0]--> image/read.nix
+inv_closure_and_units_survive_pruning --located[1.0]--> lib/plan.nix:1176
+inv_closure_and_units_survive_pruning --located[1.0]--> image/read.nix:300
+inv_closure_and_units_survive_pruning --names[1.0]--> pruned
+inv_closure_and_units_survive_pruning --rationale[1.0]--> an absent field means the plan cannot know
+inv_secret_export_must_be_a_reference --invariant[1.0]--> a secret export publishes a file never bytes
+inv_secret_export_must_be_a_reference --topic[1.0]--> interfaces
+inv_secret_export_must_be_a_reference --governs[1.0]--> lib/resolve.nix
+inv_secret_export_must_be_a_reference --located[1.0]--> lib/resolve.nix:2116
+inv_secret_export_must_be_a_reference --row[1.0]--> export-secret-not-a-reference
+inv_secret_export_must_be_a_reference --prose_in[1.0]--> docs/plan.md
+inv_secret_export_must_be_a_reference --rationale[1.0]--> bytes in the plan are a leak
+inv_platform_is_predicates_are_absent --invariant[1.0]--> the derived platform predicates are absent deliberately
+inv_platform_is_predicates_are_absent --topic[1.0]--> platform
+inv_platform_is_predicates_are_absent --governs[1.0]--> lib/platform.nix
+inv_platform_is_predicates_are_absent --located[1.0]--> lib/platform.nix:4
+inv_platform_is_predicates_are_absent --enforced_in[0.6]--> tests/unit/platform.nix
+inv_platform_is_predicates_are_absent --enforced_by[0.6]--> testAFieldOutsideTheAllowListIsAbsent
+inv_platform_is_predicates_are_absent --prose_in[1.0]--> docs/plan.md
+inv_platform_is_predicates_are_absent --rationale[1.0]--> each is a function of the parsed record
+inv_gcc_names_are_written_by_hand --invariant[1.0]--> the codegen field list is written by hand
+inv_gcc_names_are_written_by_hand --topic[1.0]--> platform
+inv_gcc_names_are_written_by_hand --governs[1.0]--> lib/platform.nix
+inv_gcc_names_are_written_by_hand --located[1.0]--> lib/platform.nix:32
+inv_gcc_names_are_written_by_hand --names[1.0]--> platform.gccNames
+inv_gcc_names_are_written_by_hand --enforced_in[1.0]--> tests/unit/platform.nix
+inv_gcc_names_are_written_by_hand --enforced_by[1.0]--> testTheProjectionsFieldSetNamesNoFunction
+inv_gcc_names_are_written_by_hand --rationale[1.0]--> an upstream field would vanish from records
+inv_gcc_names_crossed_against_every_double --invariant[1.0]--> the codegen list is crossed against every double
+inv_gcc_names_crossed_against_every_double --topic[1.0]--> platform
+inv_gcc_names_crossed_against_every_double --governs[1.0]--> tests/unit/platform.nix
+inv_gcc_names_crossed_against_every_double --located[1.0]--> tests/unit/platform.nix:388
+inv_gcc_names_crossed_against_every_double --enforced_in[1.0]--> tests/unit/platform.nix
+inv_gcc_names_crossed_against_every_double --enforced_by[1.0]--> testTheProjectionsFieldSetNamesNoFunction
+inv_the_upstream_guard_is_never_deleted --invariant[1.0]--> a red upstream guard is rewritten never deleted
+inv_the_upstream_guard_is_never_deleted --topic[1.0]--> platform
+inv_the_upstream_guard_is_never_deleted --governs[1.0]--> tests/unit/platform.nix
+inv_the_upstream_guard_is_never_deleted --located[1.0]--> tests/unit/platform.nix:354
+inv_the_upstream_guard_is_never_deleted --enforced_in[1.0]--> tests/unit/platform.nix
+inv_the_upstream_guard_is_never_deleted --enforced_by[1.0]--> testUpstreamsOwnFilterIsNotAPlanValue
+inv_the_upstream_guard_is_never_deleted --stale_anchor[0.9]--> design.md
+inv_the_upstream_guard_is_never_deleted --rationale[1.0]--> upstream fixing the filter moves the measurement
+inv_guard_evidence_is_surviving_paths --invariant[1.0]--> the guard evidence is surviving function paths
+inv_guard_evidence_is_surviving_paths --topic[1.0]--> platform
+inv_guard_evidence_is_surviving_paths --governs[1.0]--> tests/unit/platform.nix
+inv_guard_evidence_is_surviving_paths --located[1.0]--> tests/unit/platform.nix:370
+inv_guard_evidence_is_surviving_paths --rationale[1.0]--> serialising a function aborts the whole suite

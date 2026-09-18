@@ -1,0 +1,194 @@
+inv_enrollment_is_centralized --invariant[1.0]--> a server the operator runs is membership authority
+inv_enrollment_is_centralized --topic[1.0]--> enrollment
+inv_enrollment_is_centralized --governs[1.0]--> tests/e2e/friend-enrollment/**
+inv_enrollment_is_centralized --located[1.0]--> tests/e2e/friend-enrollment/deployment/modules/mesh/hub.nix
+inv_enrollment_is_centralized --rationale[1.0]--> the registry declares and the server admits
+inv_enrollment_is_centralized --enforced_in[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_enrollment_is_centralized --enforced_by_prefix[1.0]--> test_the_coordination_server_is_a_planned_entry_that_ans
+inv_enrollment_is_centralized --prose_in[1.0]--> openspec/changes/enroll-a-friend-machine/design.md
+inv_registry_to_server_sync_is_one_way --invariant[1.0]--> the sync runs registry to server only
+inv_registry_to_server_sync_is_one_way --topic[1.0]--> enrollment
+inv_registry_to_server_sync_is_one_way --governs[1.0]--> tests/e2e/friend-enrollment/deployment/machines.nix
+inv_registry_to_server_sync_is_one_way --located[1.0]--> tests/e2e/friend-enrollment/deployment/machines.nix:8
+inv_registry_to_server_sync_is_one_way --rationale[1.0]--> the server database is never a planner source
+inv_enrollment_adds_no_registry_key --invariant[1.0]--> enrollment adds no registry key or plan field
+inv_enrollment_adds_no_registry_key --topic[1.0]--> enrollment
+inv_enrollment_adds_no_registry_key --governs[1.0]--> tests/e2e/friend-enrollment/**
+inv_enrollment_adds_no_registry_key --located[1.0]--> tests/e2e/friend-enrollment/deployment/machines.nix:8
+inv_enrollment_adds_no_registry_key --rationale[1.0]--> the whole change is a row convention
+inv_enrollment_adds_no_registry_key --prose_in[1.0]--> openspec/changes/enroll-a-friend-machine/proposal.md
+inv_runtime_mesh_facts_never_enter_evaluation --invariant[1.0]--> endpoint presence and last-seen never reach planning
+inv_runtime_mesh_facts_never_enter_evaluation --topic[1.0]--> enrollment
+inv_runtime_mesh_facts_never_enter_evaluation --governs[0.6]--> lib/plan.nix
+inv_runtime_mesh_facts_never_enter_evaluation --governs[1.0]--> tests/e2e/friend-enrollment/deployment/machines.nix
+inv_runtime_mesh_facts_never_enter_evaluation --rationale[1.0]--> only an operator reviewed registry edit gates
+inv_export_binds_to_a_mesh_name --invariant[1.0]--> a friend machine address is its mesh name
+inv_export_binds_to_a_mesh_name --topic[1.0]--> enrollment
+inv_export_binds_to_a_mesh_name --governs[1.0]--> tests/e2e/friend-enrollment/deployment/machines.nix
+inv_export_binds_to_a_mesh_name --governs[1.0]--> tests/e2e/friend-enrollment/deployment/mesh.nix
+inv_export_binds_to_a_mesh_name --located[1.0]--> tests/e2e/friend-enrollment/deployment/machines.nix:28
+inv_export_binds_to_a_mesh_name --names[1.0]--> address
+inv_export_binds_to_a_mesh_name --rationale[1.0]--> whatever answers the name is the mesh business
+inv_export_binds_to_a_mesh_name --enforced_in[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_export_binds_to_a_mesh_name --enforced_by_prefix[1.0]--> test_the_servers_node_list_names_the_machine_the_registr
+inv_friend_lease_is_absent_from_deployment --invariant[1.0]--> nothing in the deployment dials the friend numerically
+inv_friend_lease_is_absent_from_deployment --topic[1.0]--> enrollment
+inv_friend_lease_is_absent_from_deployment --governs[1.0]--> tests/e2e/friend-enrollment/deployment/machines.nix
+inv_friend_lease_is_absent_from_deployment --located[1.0]--> tests/e2e/friend-enrollment/deployment/machines.nix:13
+inv_join_credential_is_a_generated_secret --invariant[1.0]--> the join key is minted single-use and expiring
+inv_join_credential_is_a_generated_secret --topic[1.0]--> enrollment
+inv_join_credential_is_a_generated_secret --governs[1.0]--> tests/e2e/friend-enrollment/deployment/mint.sh
+inv_join_credential_is_a_generated_secret --located[1.0]--> tests/e2e/friend-enrollment/deployment/mint.sh:47
+inv_join_credential_is_a_generated_secret --rationale[1.0]--> its bytes enter no plan field or argv
+inv_join_credential_is_a_generated_secret --enforced_in[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_join_credential_is_a_generated_secret --enforced_by[1.0]--> test_a_second_join_with_a_spent_key_is_refused
+inv_join_credential_reaches_no_machine --invariant[1.0]--> the credential is handed over outside the tree
+inv_join_credential_reaches_no_machine --topic[1.0]--> enrollment
+inv_join_credential_reaches_no_machine --governs[1.0]--> tests/e2e/friend-enrollment/deployment/mint.sh
+inv_join_credential_reaches_no_machine --located[1.0]--> tests/e2e/friend-enrollment/deployment/mint.sh:44
+inv_join_credential_reaches_no_machine --rationale[1.0]--> a single-use handover is visible when intercepted
+inv_operator_machine_is_a_mesh_member --invariant[1.0]--> a run dials a mesh name from anywhere
+inv_operator_machine_is_a_mesh_member --topic[1.0]--> enrollment
+inv_operator_machine_is_a_mesh_member --governs[1.0]--> tests/e2e/delivery.py
+inv_operator_machine_is_a_mesh_member --located[1.0]--> tests/e2e/delivery.py:615
+inv_operator_machine_is_a_mesh_member --rationale[1.0]--> no layer below the run resolves a name
+inv_operator_machine_is_a_mesh_member --enforced_in[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_operator_machine_is_a_mesh_member --enforced_by[1.0]--> test_a_user_scope_entry_is_applied_over_the_mesh
+inv_run_node_is_a_userspace_tailscaled --invariant[1.0]--> the dialing node claims no root or tun
+inv_run_node_is_a_userspace_tailscaled --topic[1.0]--> enrollment
+inv_run_node_is_a_userspace_tailscaled --governs[1.0]--> tests/e2e/delivery.py
+inv_run_node_is_a_userspace_tailscaled --located[1.0]--> tests/e2e/delivery.py:666
+inv_run_node_is_a_userspace_tailscaled --names[1.0]--> mesh_membership
+inv_run_node_is_a_userspace_tailscaled --figure[1.0]--> --tun=userspace-networking
+inv_run_node_is_a_userspace_tailscaled --rationale[1.0]--> the end-to-end run cannot be root
+inv_mesh_name_resolved_by_ssh_proxycommand --invariant[1.0]--> a proxy command resolves the name while dialing
+inv_mesh_name_resolved_by_ssh_proxycommand --topic[1.0]--> enrollment
+inv_mesh_name_resolved_by_ssh_proxycommand --governs[1.0]--> tests/e2e/delivery.py
+inv_mesh_name_resolved_by_ssh_proxycommand --located[1.0]--> tests/e2e/delivery.py:610
+inv_mesh_name_resolved_by_ssh_proxycommand --names[1.0]--> ProxyCommand
+inv_mesh_name_resolved_by_ssh_proxycommand --rationale[1.0]--> a userspace node installs no operating system resolver
+inv_mesh_node_runs_in_the_cluster_namespace --invariant[1.0]--> the node starts inside the cluster own namespaces
+inv_mesh_node_runs_in_the_cluster_namespace --topic[1.0]--> enrollment
+inv_mesh_node_runs_in_the_cluster_namespace --governs[1.0]--> tests/e2e/delivery.py
+inv_mesh_node_runs_in_the_cluster_namespace --located[1.0]--> tests/e2e/delivery.py:784
+inv_mesh_node_runs_in_the_cluster_namespace --names[1.0]--> namespace_prefix
+inv_coordination_server_is_a_placed_entry --invariant[1.0]--> the plan places the server as an entry
+inv_coordination_server_is_a_placed_entry --topic[1.0]--> enrollment
+inv_coordination_server_is_a_placed_entry --governs[1.0]--> tests/e2e/friend-enrollment/deployment/modules/mesh/hub.nix
+inv_coordination_server_is_a_placed_entry --located[1.0]--> tests/e2e/friend-enrollment/deployment/modules/mesh/hub.nix
+inv_coordination_server_is_a_placed_entry --rationale[1.0]--> the guest image carries only the client daemon
+inv_coordination_server_is_a_placed_entry --enforced_in[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_coordination_server_is_a_placed_entry --enforced_by_prefix[1.0]--> test_the_coordination_server_is_a_planned_entry_that_ans
+inv_operator_acts_are_not_units_of_the_plan --invariant[1.0]--> minting and expiry are acts against the server
+inv_operator_acts_are_not_units_of_the_plan --topic[1.0]--> enrollment
+inv_operator_acts_are_not_units_of_the_plan --governs[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_operator_acts_are_not_units_of_the_plan --located[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py:16
+inv_operator_acts_are_not_units_of_the_plan --rationale[1.0]--> no plan records their arguments
+inv_server_config_needs_a_yaml_extension --invariant[1.0]--> the server tool reads a copy named yaml
+inv_server_config_needs_a_yaml_extension --topic[1.0]--> enrollment
+inv_server_config_needs_a_yaml_extension --governs[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_server_config_needs_a_yaml_extension --located[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py:201
+inv_server_config_needs_a_yaml_extension --host_path[1.0]--> /run/planner-friend-enrollment/config.yaml
+inv_server_config_needs_a_yaml_extension --rationale[1.0]--> the tool decides format from the extension
+inv_store_object_carries_no_suffix --invariant[1.0]--> the shown store object is named by hash
+inv_store_object_carries_no_suffix --topic[1.0]--> enrollment
+inv_store_object_carries_no_suffix --governs[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_store_object_carries_no_suffix --located[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py:197
+inv_store_object_carries_no_suffix --rationale[1.0]--> an invocation pointed at it fails loading config
+inv_entry_config_path_is_namespace_local --invariant[1.0]--> the stated host path exists inside the namespace
+inv_entry_config_path_is_namespace_local --topic[1.0]--> enrollment
+inv_entry_config_path_is_namespace_local --governs[1.0]--> tests/e2e/friend-enrollment/deployment/modules/mesh/hub.nix
+inv_entry_config_path_is_namespace_local --located[1.0]--> tests/e2e/friend-enrollment/deployment/modules/mesh/hub.nix
+inv_entry_config_path_is_namespace_local --rationale[1.0]--> a copy is used and never that path
+inv_preauthkey_takes_a_numeric_user_id --invariant[1.0]--> minting takes a numeric user id
+inv_preauthkey_takes_a_numeric_user_id --topic[1.0]--> enrollment
+inv_preauthkey_takes_a_numeric_user_id --governs[1.0]--> tests/e2e/friend-enrollment/deployment/mint.sh
+inv_preauthkey_takes_a_numeric_user_id --located[1.0]--> tests/e2e/friend-enrollment/deployment/mint.sh:31
+inv_preauthkey_takes_a_numeric_user_id --located[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py:465
+inv_preauthkey_takes_a_numeric_user_id --names[1.0]--> preauthkeys
+inv_preauthkey_takes_a_numeric_user_id --rationale[1.0]--> the server database assigned that identifier
+inv_preauthkey_takes_a_numeric_user_id --enforced_in[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_preauthkey_takes_a_numeric_user_id --enforced_by_prefix[1.0]--> test_a_credential_is_minted_against_a_group_the_server_n
+inv_server_listing_masks_a_credential --invariant[1.0]--> a listing shows only the leading characters
+inv_server_listing_masks_a_credential --topic[1.0]--> enrollment
+inv_server_listing_masks_a_credential --governs[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_server_listing_masks_a_credential --located[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py:689
+inv_server_listing_masks_a_credential --figure[1.0]--> 12
+inv_server_listing_masks_a_credential --rationale[1.0]--> so a listing may be read verbatim
+inv_expiry_is_a_fact_about_the_nodes_map --invariant[1.0]--> a route goes when the map drops peer
+inv_expiry_is_a_fact_about_the_nodes_map --topic[1.0]--> enrollment
+inv_expiry_is_a_fact_about_the_nodes_map --governs[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_expiry_is_a_fact_about_the_nodes_map --located[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py:669
+inv_expiry_is_a_fact_about_the_nodes_map --rationale[1.0]--> the folder waits by asking its own node
+inv_expiry_is_a_fact_about_the_nodes_map --enforced_in[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_expiry_is_a_fact_about_the_nodes_map --enforced_by[1.0]--> test_a_key_past_its_expiry_admits_nobody
+inv_report_before_map_update_says_current --invariant[1.0]--> a report reads the route about to go
+inv_report_before_map_update_says_current --topic[1.0]--> enrollment
+inv_report_before_map_update_says_current --governs[0.6]--> cli/report.py
+inv_report_before_map_update_says_current --governs[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_report_before_map_update_says_current --located[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py:847
+inv_report_before_map_update_says_current --enforced_in[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_report_before_map_update_says_current --enforced_by[1.0]--> test_an_expired_node_reads_as_unreachable
+change_enroll_a_friend_machine --change_status[1.0]--> landed
+change_enroll_a_friend_machine --governs[1.0]--> openspec/changes/enroll-a-friend-machine/
+parked_decentralized_enrollment --dead_end[1.0]--> membership cards signed by an offline network key
+parked_decentralized_enrollment --revived_by[1.0]--> the operator requires that no server exist
+parked_decentralized_enrollment --governs[1.0]--> openspec/changes/PARKED.md
+parked_decentralized_enrollment --located[1.0]--> openspec/changes/PARKED.md:13
+parked_decentralized_enrollment --dead_end[1.0]--> automated card renewal puts the signing key online
+inv_folder_stage_is_a_cluster_cut --invariant[1.0]--> a folder stage boots and cuts every slot
+inv_folder_stage_is_a_cluster_cut --topic[1.0]--> snapshots
+inv_folder_stage_is_a_cluster_cut --governs[1.0]--> tests/e2e/delivery.py
+inv_folder_stage_is_a_cluster_cut --governs[1.0]--> tests/e2e/*/test_*.py
+inv_folder_stage_is_a_cluster_cut --located[1.0]--> tests/e2e/delivery.py:929
+inv_folder_stage_is_a_cluster_cut --names[1.0]--> cluster_stage
+inv_folder_stage_is_a_cluster_cut --prose_in[1.0]--> docs/cluster.md
+inv_single_vm_cut_resumes_as_slot_zero --invariant[1.0]--> a single machine cut resumes as slot zero
+inv_single_vm_cut_resumes_as_slot_zero --topic[1.0]--> snapshots
+inv_single_vm_cut_resumes_as_slot_zero --governs[1.0]--> tests/e2e/delivery.py
+inv_single_vm_cut_resumes_as_slot_zero --located[1.0]--> tests/e2e/delivery.py:891
+inv_single_vm_cut_resumes_as_slot_zero --names[1.0]--> snapshot_fixture
+inv_single_vm_cut_resumes_as_slot_zero --rationale[1.0]--> two such cuts share one address without route
+inv_preparation_declares_no_extra_inputs --invariant[1.0]--> a preparation declares no extra env or tools
+inv_preparation_declares_no_extra_inputs --topic[1.0]--> snapshots
+inv_preparation_declares_no_extra_inputs --governs[1.0]--> tests/e2e/delivery.py
+inv_preparation_declares_no_extra_inputs --located[1.0]--> tests/e2e/delivery.py:901
+inv_preparation_declares_no_extra_inputs --rationale[1.0]--> rookery scrubs the environment and confines the body
+inv_preparation_body_waits_and_yields --invariant[1.0]--> a preparation body reads nothing and runs nothing
+inv_preparation_body_waits_and_yields --topic[1.0]--> snapshots
+inv_preparation_body_waits_and_yields --governs[1.0]--> tests/e2e/delivery.py
+inv_preparation_body_waits_and_yields --located[1.0]--> tests/e2e/delivery.py:902
+inv_preparation_carries_no_delivery --invariant[1.0]--> never move delivery or activation into a preparation
+inv_preparation_carries_no_delivery --topic[1.0]--> snapshots
+inv_preparation_carries_no_delivery --governs[1.0]--> tests/e2e/delivery.py
+inv_preparation_carries_no_delivery --governs[1.0]--> tests/e2e/*/test_*.py
+inv_preparation_carries_no_delivery --located[1.0]--> tests/e2e/wired-pair/test_wired_pair.py:434
+inv_preparation_carries_no_delivery --rationale[1.0]--> the body does not run on cache hit
+inv_preparation_carries_no_delivery --enforced_in[1.0]--> tests/e2e/wired-pair/test_wired_pair.py
+inv_preparation_carries_no_delivery --enforced_by[1.0]--> test_a_cut_carries_no_delivery
+inv_cut_waits_to_the_default_target --invariant[1.0]--> each machine is waited to its default target
+inv_cut_waits_to_the_default_target --topic[1.0]--> snapshots
+inv_cut_waits_to_the_default_target --governs[1.0]--> tests/e2e/delivery.py
+inv_cut_waits_to_the_default_target --located[1.0]--> tests/e2e/delivery.py:960
+inv_cut_waits_to_the_default_target --names[1.0]--> multi-user.target
+inv_cut_waits_to_the_default_target --rationale[1.0]--> the vsock sshd answers before the login path
+inv_state_root_is_resolved_by_name --invariant[1.0]--> rookery resolves the state fixture by name
+inv_state_root_is_resolved_by_name --topic[1.0]--> snapshots
+inv_state_root_is_resolved_by_name --governs[1.0]--> tests/e2e/conftest.py
+inv_state_root_is_resolved_by_name --located[1.0]--> tests/e2e/conftest.py:29
+inv_state_root_is_resolved_by_name --located[1.0]--> tests/e2e/delivery.py:858
+inv_state_root_is_resolved_by_name --names[1.0]--> state_root
+inv_state_root_is_resolved_by_name --rationale[1.0]--> renaming it silently moves every run state
+inv_guest_edit_requires_a_snapshot_collection --invariant[1.0]--> collect every cut after editing the guest image
+inv_guest_edit_requires_a_snapshot_collection --topic[1.0]--> snapshots
+inv_guest_edit_requires_a_snapshot_collection --governs[1.0]--> tests/e2e/guest.nix
+inv_guest_edit_requires_a_snapshot_collection --located[1.0]--> tests/e2e/guest.nix
+inv_guest_edit_requires_a_snapshot_collection --rationale[1.0]--> a frozen image names an absent system generation
+inv_guest_edit_requires_a_snapshot_collection --prose_in[1.0]--> docs/cluster.md
+bug_stale_cut_reads_as_a_broken_write_script --bug[1.0]--> a resumed cut names a missing system generation
+bug_stale_cut_reads_as_a_broken_write_script --symptom[1.0]--> every remote command answers command not found
+bug_stale_cut_reads_as_a_broken_write_script --workaround[1.0]--> collect cuts before resuming an edited guest
+bug_stale_cut_reads_as_a_broken_write_script --governs[1.0]--> tests/e2e/guest.nix
+bug_stale_cut_reads_as_a_broken_write_script --governs[1.0]--> tests/e2e/*/test_*.py
+bug_stale_cut_reads_as_a_broken_write_script --host_path[1.0]--> /run/current-system/sw/bin
+bug_stale_cut_reads_as_a_broken_write_script --located[1.0]--> tests/e2e/guest.nix

@@ -1,0 +1,238 @@
+decision_tree_is_a_compiler --decision[1.0]--> the tree is structured as a compiler
+decision_tree_is_a_compiler --prior_art[1.0]--> compiler front end back ends and loader
+decision_tree_is_a_compiler --governs[1.0]--> lib/*.nix
+decision_tree_is_a_compiler --governs[1.0]--> image/*.nix
+decision_tree_is_a_compiler --governs[1.0]--> flakelet/*.nix
+decision_tree_is_a_compiler --governs[1.0]--> secrets/*.nix
+decision_tree_is_a_compiler --governs[1.0]--> cli/*.py
+decision_tree_is_a_compiler --located[1.0]--> lib/default.nix:1
+inv_front_end_recovers_from_errors --invariant[1.0]--> the front end reads on after a refusal
+inv_front_end_recovers_from_errors --topic[1.0]--> design_lineage
+inv_front_end_recovers_from_errors --governs[1.0]--> lib/*.nix
+inv_front_end_recovers_from_errors --located[1.0]--> lib/module.nix:4
+inv_front_end_recovers_from_errors --rationale[1.0]--> a front end recovers rather than stopping
+inv_plan_is_an_input_addressed_ir --invariant[1.0]--> the plan is an input-addressed intermediate representation
+inv_plan_is_an_input_addressed_ir --topic[1.0]--> design_lineage
+inv_plan_is_an_input_addressed_ir --governs[1.0]--> lib/plan.nix
+inv_plan_is_an_input_addressed_ir --located[1.0]--> lib/plan.nix:1058
+decision_row_follows_a_rustc_diagnostic --decision[1.0]--> a row carries the fields rustc diagnostics carry
+decision_row_follows_a_rustc_diagnostic --prior_art[1.0]--> rustc diagnostic identifier subject message note help
+decision_row_follows_a_rustc_diagnostic --governs[1.0]--> lib/diagnostics.nix
+decision_row_follows_a_rustc_diagnostic --located[1.0]--> lib/diagnostics.nix:45
+inv_row_carries_five_diagnostic_fields --invariant[1.0]--> a row carries identifier subject message note help
+inv_row_carries_five_diagnostic_fields --topic[1.0]--> design_lineage
+inv_row_carries_five_diagnostic_fields --governs[1.0]--> lib/diagnostics.nix
+inv_row_carries_five_diagnostic_fields --located[1.0]--> lib/diagnostics.nix:41
+inv_row_carries_five_diagnostic_fields --names[1.0]--> row
+decision_resolve_is_reference_grammar --decision[1.0]--> the resolver is a stratified reference attribute grammar
+decision_resolve_is_reference_grammar --prior_art[1.0]--> stratified reference attribute grammar
+decision_resolve_is_reference_grammar --governs[1.0]--> lib/resolve.nix
+decision_resolve_is_reference_grammar --located[1.0]--> lib/resolve.nix:2694
+inv_resolver_closes_as_a_lazy_knot --invariant[1.0]--> the resolver closes over itself lazily
+inv_resolver_closes_as_a_lazy_knot --topic[1.0]--> design_lineage
+inv_resolver_closes_as_a_lazy_knot --governs[1.0]--> lib/resolve.nix
+inv_resolver_closes_as_a_lazy_knot --located[1.0]--> lib/resolve.nix:2694
+inv_resolver_closes_as_a_lazy_knot --located[1.0]--> lib/resolve.nix:2716
+inv_resolver_closes_as_a_lazy_knot --names[1.0]--> resolved
+inv_key_is_computed_before_the_units --invariant[1.0]--> a key is computed in an earlier stratum
+inv_key_is_computed_before_the_units --topic[1.0]--> design_lineage
+inv_key_is_computed_before_the_units --governs[1.0]--> lib/plan.nix
+inv_key_is_computed_before_the_units --governs[1.0]--> lib/resolve.nix
+inv_key_is_computed_before_the_units --located[1.0]--> lib/plan.nix:85
+inv_key_is_computed_before_the_units --rationale[1.0]--> it keeps the attribute cycle from closing
+inv_downstream_unit_field_reopens_cycle --invariant[1.0]--> a field reading downstream units reopens the hazard
+inv_downstream_unit_field_reopens_cycle --topic[1.0]--> design_lineage
+inv_downstream_unit_field_reopens_cycle --governs[1.0]--> lib/resolve.nix
+inv_downstream_unit_field_reopens_cycle --located[1.0]--> lib/plan.nix:86
+inv_downstream_unit_field_reopens_cycle --rationale[1.0]--> the lazy knot admits an attribute cycle
+decision_diagnostics_is_an_applicative --prior_art[1.0]--> accumulating validation applicative
+decision_diagnostics_is_an_applicative --governs[1.0]--> lib/diagnostics.nix
+decision_diagnostics_is_an_applicative --located[1.0]--> lib/diagnostics.nix:45
+decision_guard_is_a_plugin_host_catch --decision[1.0]--> the guard wraps a module like a plugin
+decision_guard_is_a_plugin_host_catch --prior_art[1.0]--> a host try-catch around a plugin expression
+decision_guard_is_a_plugin_host_catch --governs[1.0]--> lib/diagnostics.nix
+decision_guard_is_a_plugin_host_catch --located[1.0]--> lib/diagnostics.nix:87
+decision_guard_is_a_plugin_host_catch --names[1.0]--> diag.guard
+decision_capability_routing_verbs --decision[1.0]--> the four wiring verbs are capability routing
+decision_capability_routing_verbs --prior_art[1.0]--> fuchsia component framework capability routing
+decision_capability_routing_verbs --governs[1.0]--> lib/module.nix
+decision_capability_routing_verbs --governs[1.0]--> lib/resolve.nix
+decision_capability_routing_verbs --governs[1.0]--> lib/interface.nix
+decision_capability_routing_verbs --located[1.0]--> lib/module.nix:31
+decision_capability_routing_verbs --located[1.0]--> lib/module.nix:161
+decision_capability_routing_verbs --located[1.0]--> lib/resolve.nix:43
+inv_routes_are_checked_before_running --invariant[1.0]--> every route is checked before anything runs
+inv_routes_are_checked_before_running --topic[1.0]--> design_lineage
+inv_routes_are_checked_before_running --governs[1.0]--> lib/resolve.nix
+inv_routes_are_checked_before_running --located[1.0]--> lib/resolve.nix:2255
+inv_routes_are_checked_before_running --located[1.0]--> lib/resolve.nix:1021
+decision_fold_is_an_aggregate_capability --decision[1.0]--> a fold is the aggregate capability analogue
+decision_fold_is_an_aggregate_capability --prior_art[1.0]--> fuchsia aggregate capability
+decision_fold_is_an_aggregate_capability --governs[1.0]--> lib/interface.nix
+decision_fold_is_an_aggregate_capability --located[1.0]--> lib/interface.nix:73
+decision_mutual_wire_is_a_weak_route --decision[1.0]--> the mutual wire is the weak route analogue
+decision_mutual_wire_is_a_weak_route --prior_art[1.0]--> fuchsia weak route
+decision_mutual_wire_is_a_weak_route --governs[1.0]--> lib/resolve.nix
+decision_domain_model_is_clan_inventory --decision[1.0]--> the domain model mirrors clan-core inventory
+decision_domain_model_is_clan_inventory --prior_art[1.0]--> clan-core inventory instances roles machines tags settings
+decision_domain_model_is_clan_inventory --governs[1.0]--> lib/module.nix
+decision_domain_model_is_clan_inventory --governs[1.0]--> lib/resolve.nix
+decision_domain_model_is_clan_inventory --located[1.0]--> lib/module.nix:31
+decision_slot_reach_is_a_role_constraint --decision[1.0]--> a slot reach is the clan-core role constraint
+decision_slot_reach_is_a_role_constraint --prior_art[1.0]--> clan-core role constraints on machine counts
+decision_slot_reach_is_a_role_constraint --names[1.0]--> minMachines
+decision_slot_reach_is_a_role_constraint --names[1.0]--> maxMachines
+decision_slot_reach_is_a_role_constraint --governs[1.0]--> lib/module.nix
+decision_slot_reach_is_a_role_constraint --located[1.0]--> lib/module.nix:204
+decision_slot_reach_is_a_role_constraint --names[1.0]--> reach
+decision_generator_per_is_clan_share --decision[1.0]--> a generator per is the clan-core share
+decision_generator_per_is_clan_share --prior_art[1.0]--> clan-core vars generators share and deploy
+decision_generator_per_is_clan_share --governs[1.0]--> lib/module.nix
+decision_generator_per_is_clan_share --located[1.0]--> lib/module.nix:692
+decision_generator_per_is_clan_share --names[1.0]--> per
+decision_library_adds_types_and_a_table --decision[1.0]--> adds a typed wire total table data plan
+decision_library_adds_types_and_a_table --prior_art[1.0]--> clan-core inventory without types or table
+decision_library_adds_types_and_a_table --governs[1.0]--> lib/plan.nix
+decision_library_adds_types_and_a_table --governs[1.0]--> lib/interface.nix
+decision_identity_is_a_nominal_brand --decision[1.0]--> a claimed identity is a nominal brand
+decision_identity_is_a_nominal_brand --prior_art[1.0]--> capnproto type ids and wit package identifiers
+decision_identity_is_a_nominal_brand --governs[1.0]--> lib/interface.nix
+decision_identity_is_a_nominal_brand --located[1.0]--> lib/interface.nix:111
+decision_identity_is_a_nominal_brand --names[1.0]--> identityOf
+decision_identity_is_a_nominal_brand --rationale[1.0]--> it fixes the diamond dependency failure
+inv_fingerprint_compares_korora_type_names --invariant[1.0]--> the fingerprint compares korora type names
+inv_fingerprint_compares_korora_type_names --topic[1.0]--> design_lineage
+inv_fingerprint_compares_korora_type_names --governs[1.0]--> lib/interface.nix
+inv_fingerprint_compares_korora_type_names --located[1.0]--> lib/interface.nix:378
+inv_fingerprint_compares_korora_type_names --rationale[1.0]--> a korora predicate cannot be hashed
+inv_two_predicates_claim_one_identity --invariant[1.0]--> two differing predicates claim one identity
+inv_two_predicates_claim_one_identity --topic[1.0]--> design_lineage
+inv_two_predicates_claim_one_identity --governs[1.0]--> lib/interface.nix
+inv_two_predicates_claim_one_identity --located[1.0]--> lib/interface.nix:149
+inv_two_predicates_claim_one_identity --rationale[1.0]--> nominal by name is the accepted trade
+decision_secrecy_is_a_two_point_lattice --decision[1.0]--> secrecy plane and deploy form a two-point lattice
+decision_secrecy_is_a_two_point_lattice --prior_art[1.0]--> information-flow lattice over a capability denial table
+decision_secrecy_is_a_two_point_lattice --governs[1.0]--> lib/atoms.nix
+decision_secrecy_is_a_two_point_lattice --governs[1.0]--> image/read.nix
+decision_secrecy_is_a_two_point_lattice --located[1.0]--> lib/atoms.nix:84
+decision_secrecy_is_a_two_point_lattice --located[1.0]--> lib/resolve.nix:2071
+decision_secrecy_is_a_two_point_lattice --located[1.0]--> image/read.nix:78
+inv_one_secrecy_rule_at_three_sites --invariant[1.0]--> one secrecy rule is checked at three sites
+inv_one_secrecy_rule_at_three_sites --topic[1.0]--> design_lineage
+inv_one_secrecy_rule_at_three_sites --governs[1.0]--> lib/resolve.nix
+inv_one_secrecy_rule_at_three_sites --governs[1.0]--> lib/plan.nix
+inv_one_secrecy_rule_at_three_sites --governs[1.0]--> image/read.nix
+inv_one_secrecy_rule_at_three_sites --located[1.0]--> lib/resolve.nix:2116
+inv_one_secrecy_rule_at_three_sites --located[1.0]--> lib/plan.nix:664
+inv_one_secrecy_rule_at_three_sites --located[1.0]--> image/read.nix:693
+inv_one_secrecy_rule_at_three_sites --row[1.0]--> export-secret-not-a-reference
+inv_one_secrecy_rule_at_three_sites --row[1.0]--> vars-not-deployed-opened
+inv_one_secrecy_rule_at_three_sites --names[1.0]--> imageReader.denials
+inv_one_secrecy_rule_at_three_sites --rationale[1.0]--> a fourth site is a place to forget
+decision_entry_key_is_input_addressed --decision[1.0]--> an entry key is hand-written input-addressed hashing
+decision_entry_key_is_input_addressed --prior_art[1.0]--> a nix derivation input-addressed hash
+decision_entry_key_is_input_addressed --governs[1.0]--> lib/plan.nix
+decision_entry_key_is_input_addressed --located[1.0]--> lib/plan.nix:1058
+decision_entry_key_is_input_addressed --rationale[1.0]--> the planner realises nothing
+inv_nothing_in_the_tree_searches --invariant[1.0]--> nothing in the tree searches
+inv_nothing_in_the_tree_searches --topic[1.0]--> no_solver
+inv_nothing_in_the_tree_searches --governs[1.0]--> lib/resolve.nix
+inv_nothing_in_the_tree_searches --governs[1.0]--> lib/plan.nix
+inv_nothing_in_the_tree_searches --located[1.0]--> lib/resolve.nix:502
+inv_nothing_in_the_tree_searches --located[1.0]--> lib/plan.nix:978
+inv_nothing_in_the_tree_searches --rationale[1.0]--> a stated declaration is filtered and checked
+inv_placement_filters_by_tag --invariant[1.0]--> placement filters by tag and never picks
+inv_placement_filters_by_tag --topic[1.0]--> no_solver
+inv_placement_filters_by_tag --governs[1.0]--> lib/resolve.nix
+inv_placement_filters_by_tag --located[1.0]--> lib/resolve.nix:502
+inv_placement_filters_by_tag --names[1.0]--> machinesByTag
+inv_alloc_records_fixed_port_claims --invariant[1.0]--> allocation records fixed port claims only
+inv_alloc_records_fixed_port_claims --topic[1.0]--> no_solver
+inv_alloc_records_fixed_port_claims --governs[1.0]--> lib/plan.nix
+inv_alloc_records_fixed_port_claims --located[1.0]--> lib/plan.nix:973
+inv_alloc_records_fixed_port_claims --located[1.0]--> lib/plan.nix:1163
+inv_alloc_records_fixed_port_claims --names[1.0]--> alloc.ports
+inv_a_wire_is_stated_then_checked --invariant[1.0]--> a wire is stated and then checked
+inv_a_wire_is_stated_then_checked --topic[1.0]--> no_solver
+inv_a_wire_is_stated_then_checked --governs[1.0]--> lib/resolve.nix
+inv_a_wire_is_stated_then_checked --located[1.0]--> lib/resolve.nix:2255
+inv_dynamic_placement_is_the_first_search --invariant[1.0]--> a picked placement or dynamic port begins searching
+inv_dynamic_placement_is_the_first_search --topic[1.0]--> no_solver
+inv_dynamic_placement_is_the_first_search --governs[1.0]--> lib/resolve.nix
+inv_dynamic_placement_is_the_first_search --governs[1.0]--> lib/plan.nix
+inv_dynamic_placement_is_the_first_search --names[1.0]--> placement.pick
+inv_a_solver_copies_pubgrub_tracking --invariant[1.0]--> a search arriving copies pubgrub incompatibility tracking
+inv_a_solver_copies_pubgrub_tracking --topic[1.0]--> no_solver
+inv_a_solver_copies_pubgrub_tracking --governs[1.0]--> lib/resolve.nix
+inv_a_solver_copies_pubgrub_tracking --governs[1.0]--> lib/plan.nix
+inv_a_solver_copies_pubgrub_tracking --rationale[1.0]--> the product is a sentence naming a declaration
+decision_pubgrub_over_a_sat_or_cp_solver --decision[1.0]--> prefer incompatibility tracking to a sat solver
+decision_pubgrub_over_a_sat_or_cp_solver --prior_art[1.0]--> pubgrub incompatibility tracking
+decision_pubgrub_over_a_sat_or_cp_solver --governs[1.0]--> lib/resolve.nix
+decision_pubgrub_over_a_sat_or_cp_solver --governs[1.0]--> lib/plan.nix
+inv_unsat_core_names_no_resolution --invariant[1.0]--> a minimal unsatisfiable core names no resolution
+inv_unsat_core_names_no_resolution --topic[1.0]--> no_solver
+inv_unsat_core_names_no_resolution --governs[1.0]--> lib/diagnostics.nix
+inv_unsat_core_names_no_resolution --located[1.0]--> lib/diagnostics.nix:41
+inv_unsat_core_names_no_resolution --rationale[1.0]--> a row must name the declaration to edit
+parked_datalog_engine_in_the_library --dead_end[1.0]--> a datalog engine replacing six grouping calls
+parked_datalog_engine_in_the_library --names[1.0]--> groupBy
+parked_datalog_engine_in_the_library --governs[1.0]--> lib/resolve.nix
+parked_datalog_engine_in_the_library --governs[1.0]--> lib/plan.nix
+parked_datalog_engine_in_the_library --governs[1.0]--> lib/module.nix
+parked_datalog_engine_in_the_library --located[1.0]--> lib/resolve.nix:502
+parked_datalog_engine_in_the_library --located[1.0]--> lib/resolve.nix:540
+parked_datalog_engine_in_the_library --located[1.0]--> lib/resolve.nix:556
+parked_datalog_engine_in_the_library --located[1.0]--> lib/plan.nix:83
+parked_datalog_engine_in_the_library --located[1.0]--> lib/plan.nix:187
+parked_datalog_engine_in_the_library --located[1.0]--> lib/module.nix:1065
+parked_prolog_with_unification --dead_end[1.0]--> prolog adds unification and backtracking
+parked_prolog_with_unification --governs[1.0]--> lib/resolve.nix
+parked_prolog_with_unification --governs[1.0]--> lib/plan.nix
+inv_engine_is_a_process_not_evaluation --invariant[1.0]--> an engine is a process not an evaluation
+inv_engine_is_a_process_not_evaluation --topic[1.0]--> no_solver
+inv_engine_is_a_process_not_evaluation --governs[1.0]--> lib/default.nix
+inv_engine_is_a_process_not_evaluation --governs[1.0]--> lib/plan.nix
+inv_engine_is_a_process_not_evaluation --located[1.0]--> lib/default.nix:1
+inv_engine_is_a_process_not_evaluation --located[1.0]--> lib/default.nix:108
+inv_engine_is_a_process_not_evaluation --names[1.0]--> mkPlan
+inv_engine_is_a_process_not_evaluation --rationale[1.0]--> the planner runs inside a consumer flake evaluation
+inv_a_relation_holds_only_ground_terms --invariant[1.0]--> a relation holds ground terms not functions
+inv_a_relation_holds_only_ground_terms --topic[1.0]--> no_solver
+inv_a_relation_holds_only_ground_terms --governs[1.0]--> lib/interface.nix
+inv_a_relation_holds_only_ground_terms --governs[1.0]--> lib/module.nix
+inv_a_relation_holds_only_ground_terms --located[1.0]--> lib/interface.nix:111
+inv_a_relation_holds_only_ground_terms --names[1.0]--> identityOf
+inv_a_relation_holds_only_ground_terms --rationale[1.0]--> impl predicates and folds are all functions
+inv_bottom_up_has_no_per_node_recovery --invariant[1.0]--> bottom-up evaluation has no per-node recovery
+inv_bottom_up_has_no_per_node_recovery --topic[1.0]--> no_solver
+inv_bottom_up_has_no_per_node_recovery --governs[1.0]--> lib/diagnostics.nix
+inv_bottom_up_has_no_per_node_recovery --located[1.0]--> lib/diagnostics.nix:87
+inv_bottom_up_has_no_per_node_recovery --names[1.0]--> diag.guard
+inv_only_recursion_is_a_generator_read --invariant[1.0]--> only recursion is a generator reading a sibling
+inv_only_recursion_is_a_generator_read --topic[1.0]--> no_solver
+inv_only_recursion_is_a_generator_read --governs[1.0]--> lib/module.nix
+inv_only_recursion_is_a_generator_read --located[1.0]--> lib/module.nix:708
+inv_only_recursion_is_a_generator_read --located[1.0]--> lib/module.nix:722
+inv_only_recursion_is_a_generator_read --names[1.0]--> reachableFrom
+inv_the_order_walk_is_iterative_tarjan --invariant[1.0]--> the order walk is an iterative tarjan
+inv_the_order_walk_is_iterative_tarjan --topic[1.0]--> no_solver
+inv_the_order_walk_is_iterative_tarjan --governs[1.0]--> cli/order.py
+inv_the_order_walk_is_iterative_tarjan --located[1.0]--> cli/order.py:164
+inv_the_order_walk_is_iterative_tarjan --located[1.0]--> cli/order.py:169
+inv_the_order_walk_is_iterative_tarjan --rationale[1.0]--> a fleet graph outgrows the interpreter stack
+inv_datalog_provenance_is_a_proof_tree --invariant[1.0]--> datalog provenance is a proof tree
+inv_datalog_provenance_is_a_proof_tree --topic[1.0]--> no_solver
+inv_datalog_provenance_is_a_proof_tree --governs[1.0]--> lib/diagnostics.nix
+inv_datalog_provenance_is_a_proof_tree --located[1.0]--> lib/diagnostics.nix:41
+inv_datalog_provenance_is_a_proof_tree --rationale[1.0]--> a proof tree names no resolution
+inv_ordered_table_over_first_solution --invariant[1.0]--> a deterministic ordered table beats first-solution semantics
+inv_ordered_table_over_first_solution --topic[1.0]--> no_solver
+inv_ordered_table_over_first_solution --governs[1.0]--> lib/diagnostics.nix
+inv_ordered_table_over_first_solution --located[1.0]--> lib/diagnostics.nix:45
+inv_a_spec_may_write_delivery_rules --invariant[1.0]--> a spec may write delivery rules
+inv_a_spec_may_write_delivery_rules --topic[1.0]--> no_solver
+inv_a_spec_may_write_delivery_rules --governs[1.0]--> openspec/specs/delivery/generated-values/spec.md
+inv_a_spec_may_write_delivery_rules --prose_in[1.0]--> openspec/specs/delivery/generated-values/spec.md
+inv_a_spec_may_write_delivery_rules --rationale[1.0]--> notation is the part worth borrowing
+decision_diagnostics_is_an_applicative --decision[1.0]--> diagnostics accumulates like a validation applicative

@@ -292,6 +292,35 @@ one that stays flat is not.
 re-run the gate. Do not widen a budget to make a regression pass - the point of
 the ratchet is that both directions are a decision.
 
+## The invariant index
+
+`CLAUDE.md` is the index of what this repository holds itself to, in prose.
+`docs/lemmalog/` is the same index as facts a Datalog engine answers about, so a
+question a reader would otherwise answer by reading the whole document is a
+query:
+
+```bash
+planner-lemmalog                                             # load it; --reload rebuilds
+lemmalog-cli query --goal 'governed_by("lib/plan.nix", I)'    # the rules that constrain one file
+lemmalog-cli query --goal 'unenforced(I)'                     # the rules no named check holds
+lemmalog-cli query --goal 'landmine(F, B, I)'                 # a file with a recorded bug and an unheld rule
+lemmalog-cli why --fact 'unenforced("inv_lib_never_raises")'  # the proof, down to the asserted edge
+```
+
+The corpus is the source and the store is derived, which is why the store is
+gitignored and `$LEMMALOG_MCP_PATH` names a path under `.direnv/`: the engine
+writes its own derived facts and its episodes back into that file on every load.
+A fact is one line, `subject --relation[confidence]--> object`, and an object is
+held to eight words and sixty characters by the engine itself, so a claim stays
+in words and a path rides `governs`, `located`, `host_path` or `names`.
+`docs/lemmalog/rules.dl` holds the analyses, one batch per paragraph, and
+`docs/lemmalog/schema.facts` states what every relation means - which is also
+queryable, as `current(R, describes, D)`.
+
+The index is not a check. Nothing fails when a fact goes stale, which is the
+trade: it answers questions a document cannot, and it is regenerated from the
+document rather than trusted against it.
+
 ## The other checks
 
 ```bash
@@ -358,7 +387,10 @@ Everything the flake exposes, so a reader can tell what runs where:
 | `planner-e2e-generated-secret-age` | the `age` the folder's store backend runs, so a run mints its identity with that one |
 | `planner-e2e-guest` | the guest image every machine boots |
 | `planner-e2e-env` | the script `nix develop` carries: the exports a manual `pytest` run needs |
-| `planner-e2e-env-paths` | those exports as a file, built when the script is called |
+| `planner-e2e-tool-paths` | the exports that name no guest, as a file, built when the script is called |
+| `planner-e2e-guest-paths` | the two that name the guest image, in a file of their own, so that printing the rest evaluates no disk image |
+| `planner-lemmalog` | loads `docs/lemmalog/` into the invariant index the shell exports `$LEMMALOG_MCP_PATH` for |
+| `lemmalog` | the engine that index is queried with, pinned by `lemmalog.nix` |
 | `planner-perf` | the ad-hoc measurement script |
 | `planner-perf-results` | the raw measurements the budgets are recorded from |
 

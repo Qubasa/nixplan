@@ -1,0 +1,216 @@
+bug_new_file_invisible_until_git_add --bug[1.0]--> a new file is invisible to the flake
+bug_new_file_invisible_until_git_add --topic[1.0]--> known_bugs
+bug_new_file_invisible_until_git_add --symptom[1.0]--> the cross-walk names the unreadable spec
+bug_new_file_invisible_until_git_add --workaround[1.0]--> stage the new file before evaluating
+bug_new_file_invisible_until_git_add --governs[1.0]--> tests/unit/coverage.nix
+bug_new_file_invisible_until_git_add --governs[1.0]--> flake.nix
+bug_new_file_invisible_until_git_add --located[1.0]--> tests/unit/coverage.nix
+bug_dash_k_wire_selects_wired_pair --bug[1.0]--> a pytest keyword matches the folder name
+bug_dash_k_wire_selects_wired_pair --topic[1.0]--> known_bugs
+bug_dash_k_wire_selects_wired_pair --symptom[1.0]--> selecting wire runs every wired-pair test
+bug_dash_k_wire_selects_wired_pair --workaround[0.6]--> name the test rather than a fragment
+bug_dash_k_wire_selects_wired_pair --governs[1.0]--> tests/e2e/wired-pair
+bug_deleted_comment_leaves_blank_line --bug[1.0]--> deleting a comment leaves its framing blank line
+bug_deleted_comment_leaves_blank_line --topic[1.0]--> known_bugs
+bug_deleted_comment_leaves_blank_line --symptom[1.0]--> treefmt fails on formatting rather than prose
+bug_deleted_comment_leaves_blank_line --workaround[1.0]--> run nix fmt after any comment removal
+bug_deleted_comment_leaves_blank_line --governs[1.0]--> treefmt.nix
+bug_comment_strip_cut_five_comments --bug[1.0]--> a blanket comment strip halved five comments
+bug_comment_strip_cut_five_comments --topic[1.0]--> known_bugs
+bug_comment_strip_cut_five_comments --symptom[1.0]--> a mid-sentence fragment above an argument list
+bug_comment_strip_cut_five_comments --workaround[1.0]--> check for a surviving comment-only line
+bug_comment_strip_cut_five_comments --governs[1.0]--> lib/interface.nix
+bug_comment_strip_cut_five_comments --governs[1.0]--> tests/unit/coverage.nix
+bug_comment_strip_cut_five_comments --governs[1.0]--> tests/unit/worked.nix
+bug_comment_strip_cut_five_comments --governs[1.0]--> fixtures/**
+bug_mypy_internal_error_in_e2e_root --bug[1.0]--> mypy strict answers an internal error intermittently
+bug_mypy_internal_error_in_e2e_root --topic[1.0]--> known_bugs
+bug_mypy_internal_error_in_e2e_root --symptom[1.0]--> a sandbox failure naming no file
+bug_mypy_internal_error_in_e2e_root --workaround[1.0]--> rerun before believing a mypy failure
+bug_mypy_internal_error_in_e2e_root --governs[1.0]--> treefmt.nix
+bug_mypy_internal_error_in_e2e_root --governs[1.0]--> tests/e2e/**
+bug_mypy_internal_error_in_e2e_root --located[1.0]--> treefmt.nix:79
+bug_mypy_internal_error_in_e2e_root --figure[1.0]--> 2.1.0
+bug_layers_scan_reads_comment_paths --bug[1.0]--> the layer scan reads comments as text
+bug_layers_scan_reads_comment_paths --topic[1.0]--> known_bugs
+bug_layers_scan_reads_comment_paths --symptom[1.0]--> a path written in a comment must resolve
+bug_layers_scan_reads_comment_paths --workaround[1.0]--> name a foreign file without a rooted prefix
+bug_layers_scan_reads_comment_paths --governs[1.0]--> tests/unit/layers.nix
+bug_layers_scan_reads_comment_paths --located[1.0]--> tests/unit/layers.nix:1071
+bug_external_generator_needs_python_314 --bug[1.0]--> the external generator writes an unparenthesized except
+bug_external_generator_needs_python_314 --topic[1.0]--> known_bugs
+bug_external_generator_needs_python_314 --symptom[1.0]--> it parses under no older python interpreter
+bug_external_generator_needs_python_314 --workaround[1.0]--> keep the pinned interpreter at that minor
+bug_external_generator_needs_python_314 --governs[0.6]--> flake.nix
+bug_external_generator_needs_python_314 --located[1.0]--> flake.nix:5
+bug_external_generator_needs_python_314 --figure[1.0]--> 3.14
+bug_derivation_handed_to_a_module_overflows --bug[1.0]--> a deployment hands a module a derivation
+bug_derivation_handed_to_a_module_overflows --topic[1.0]--> known_bugs
+bug_derivation_handed_to_a_module_overflows --symptom[1.0]--> stack overflow naming nothing of this tree
+bug_derivation_handed_to_a_module_overflows --workaround[1.0]--> interpolate the store path into a string
+bug_derivation_handed_to_a_module_overflows --governs[1.0]--> lib/util.nix
+bug_derivation_handed_to_a_module_overflows --governs[1.0]--> tests/e2e/*/deployment/**
+bug_derivation_handed_to_a_module_overflows --located[1.0]--> lib/util.nix:386
+bug_derivation_handed_to_a_module_overflows --located[1.0]--> lib/util.nix:282
+bug_null_artifact_path_read_as_omission --bug[1.0]--> a path stated null decodes as absent
+bug_null_artifact_path_read_as_omission --topic[1.0]--> known_bugs
+bug_null_artifact_path_read_as_omission --symptom[1.0]--> only an empty path string is refused
+bug_null_artifact_path_read_as_omission --governs[1.0]--> cli/manifest.py
+bug_null_artifact_path_read_as_omission --governs[1.0]--> operator/read.nix
+bug_null_artifact_path_read_as_omission --located[1.0]--> cli/manifest.py:575
+bug_purity_scan_matches_check_in_a_string --bug[1.0]--> the purity scan is substring matching
+bug_purity_scan_matches_check_in_a_string --topic[1.0]--> known_bugs
+bug_purity_scan_matches_check_in_a_string --symptom[1.0]--> a check needle matches inside a string
+bug_purity_scan_matches_check_in_a_string --governs[1.0]--> tests/unit/diagnostics.nix
+bug_purity_scan_matches_check_in_a_string --located[1.0]--> tests/unit/diagnostics.nix:481
+bug_purity_scan_misses_assert_without_space --bug[1.0]--> the assert needle carries a trailing space
+bug_purity_scan_misses_assert_without_space --topic[1.0]--> known_bugs
+bug_purity_scan_misses_assert_without_space --symptom[1.0]--> an assert spelled with no space is missed
+bug_purity_scan_misses_assert_without_space --governs[1.0]--> tests/unit/diagnostics.nix
+bug_purity_scan_misses_assert_without_space --located[1.0]--> tests/unit/diagnostics.nix:480
+bug_purity_scan_misses_check_bound_as_value --bug[1.0]--> korora check bound as a value is unseen
+bug_purity_scan_misses_check_bound_as_value --topic[1.0]--> known_bugs
+bug_purity_scan_misses_check_bound_as_value --symptom[1.0]--> a check ending a line escapes the scan
+bug_purity_scan_misses_check_bound_as_value --governs[1.0]--> tests/unit/diagnostics.nix
+bug_purity_scan_misses_check_bound_as_value --located[1.0]--> tests/unit/diagnostics.nix:483
+bug_purity_scan_sees_only_raising_calls --bug[1.0]--> the scan can only see a raising call
+bug_purity_scan_sees_only_raising_calls --topic[1.0]--> known_bugs
+bug_purity_scan_sees_only_raising_calls --symptom[1.0]--> a throw-free file is not a total file
+bug_purity_scan_sees_only_raising_calls --workaround[1.0]--> use ast-grep which is installed and parses
+bug_purity_scan_sees_only_raising_calls --governs[1.0]--> tests/unit/diagnostics.nix
+bug_purity_scan_sees_only_raising_calls --governs[1.0]--> tests/counterexamples/probes.nix
+bug_purity_scan_sees_only_raising_calls --located[1.0]--> tests/unit/diagnostics.nix:477
+bug_shorthash_context_reason_was_wrong --bug[1.0]--> the reason recorded beside the hash was wrong
+bug_shorthash_context_reason_was_wrong --topic[1.0]--> known_bugs
+bug_shorthash_context_reason_was_wrong --symptom[1.0]--> the hash builtin accepts a context-carrying string
+bug_shorthash_context_reason_was_wrong --names[1.0]--> builtins.hashString
+bug_shorthash_context_reason_was_wrong --workaround[1.0]--> keep the discard it stays load-bearing
+bug_shorthash_context_reason_was_wrong --governs[1.0]--> lib/util.nix
+bug_shorthash_context_reason_was_wrong --located[1.0]--> lib/util.nix:523
+bug_shorthash_context_reason_was_wrong --names[1.0]--> util.shortHash
+bug_shorthash_context_reason_was_wrong --figure[1.0]--> 2.34.8
+inv_cx_asserts_the_claim_not_behaviour --invariant[1.0]--> a counterexample asserts the claim not the behaviour
+inv_cx_asserts_the_claim_not_behaviour --topic[1.0]--> counterexamples
+inv_cx_asserts_the_claim_not_behaviour --rationale[1.0]--> each stays red until the claim holds
+inv_cx_asserts_the_claim_not_behaviour --governs[1.0]--> tests/unit/counterexamples.nix
+inv_cx_asserts_the_claim_not_behaviour --governs[1.0]--> tests/counterexamples/probes.nix
+inv_cx_asserts_the_claim_not_behaviour --governs[1.0]--> cli/counterexample_test.py
+inv_cx_asserts_the_claim_not_behaviour --located[1.0]--> tests/unit/counterexamples.nix:1
+inv_cx_home_is_decided_by_what_it_does --invariant[1.0]--> a counterexample home follows what it does
+inv_cx_home_is_decided_by_what_it_does --topic[1.0]--> counterexamples
+inv_cx_home_is_decided_by_what_it_does --governs[1.0]--> tests/unit/counterexamples.nix
+inv_cx_home_is_decided_by_what_it_does --governs[1.0]--> tests/counterexamples/probes.nix
+inv_cx_home_is_decided_by_what_it_does --governs[1.0]--> cli/counterexample_test.py
+inv_cx_evaluable_goes_in_the_unit_suite --invariant[1.0]--> an evaluable counterexample is a registered suite
+inv_cx_evaluable_goes_in_the_unit_suite --topic[1.0]--> counterexamples
+inv_cx_evaluable_goes_in_the_unit_suite --governs[1.0]--> tests/unit/counterexamples.nix
+inv_cx_evaluable_goes_in_the_unit_suite --located[1.0]--> tests/default.nix:38
+inv_cx_evaluable_goes_in_the_unit_suite --prose_in[1.0]--> docs/tooling.md
+inv_cx_ending_evaluation_goes_in_probes --invariant[1.0]--> a counterexample ending evaluation is a probe
+inv_cx_ending_evaluation_goes_in_probes --topic[1.0]--> counterexamples
+inv_cx_ending_evaluation_goes_in_probes --rationale[1.0]--> each probe is evaluated in its own process
+inv_cx_ending_evaluation_goes_in_probes --governs[1.0]--> tests/counterexamples/probes.nix
+inv_cx_ending_evaluation_goes_in_probes --enforced_by[1.0]--> checks.planner-counterexamples-eval
+inv_cx_ending_evaluation_goes_in_probes --located[1.0]--> flake-module.nix:319
+inv_nix_unit_expr_cannot_hold_a_raise --invariant[1.0]--> a nix-unit expr cannot hold an uncatchable raise
+inv_nix_unit_expr_cannot_hold_a_raise --topic[1.0]--> counterexamples
+inv_nix_unit_expr_cannot_hold_a_raise --rationale[1.0]--> the raise takes the run that reports
+inv_nix_unit_expr_cannot_hold_a_raise --governs[1.0]--> tests/unit/counterexamples.nix
+inv_nix_unit_expr_cannot_hold_a_raise --located[1.0]--> tests/unit/counterexamples.nix:7
+inv_probe_answering_ok_means_defect_fixed --invariant[1.0]--> a probe answering ok means the defect fixed
+inv_probe_answering_ok_means_defect_fixed --topic[1.0]--> counterexamples
+inv_probe_answering_ok_means_defect_fixed --rationale[1.0]--> the probe stays as the regression pin
+inv_probe_answering_ok_means_defect_fixed --governs[1.0]--> tests/counterexamples/probes.nix
+inv_probe_answering_ok_means_defect_fixed --enforced_by[1.0]--> checks.planner-counterexamples-eval
+inv_cx_about_the_command_goes_in_python --invariant[1.0]--> a counterexample about the command is python
+inv_cx_about_the_command_goes_in_python --topic[1.0]--> counterexamples
+inv_cx_about_the_command_goes_in_python --rationale[1.0]--> the command is run rather than evaluated
+inv_cx_about_the_command_goes_in_python --governs[1.0]--> cli/counterexample_test.py
+inv_cx_about_the_command_goes_in_python --enforced_by[1.0]--> checks.planner-counterexamples-cli
+inv_cx_about_the_command_goes_in_python --located[1.0]--> flake-module.nix:347
+inv_tests_holds_three_kinds_of_test --invariant[1.0]--> the test tree holds three kinds of test
+inv_tests_holds_three_kinds_of_test --topic[1.0]--> counterexamples
+inv_tests_holds_three_kinds_of_test --governs[1.0]--> tests/**
+inv_tests_holds_three_kinds_of_test --enforced_by[1.0]--> tests/unit/layers.nix%testTheTestTreeIsRead
+inv_tests_holds_three_kinds_of_test --located[1.0]--> tests/unit/layers.nix:977
+cx_impl_not_a_function_is_a_row --counterexample[1.0]--> a non-function impl earns a row
+cx_impl_not_a_function_is_a_row --home[1.0]--> tests/counterexamples/probes.nix
+cx_impl_not_a_function_is_a_row --status[1.0]--> red
+cx_impl_with_strict_formals_is_a_row --counterexample[1.0]--> an impl with strict formals earns a row
+cx_impl_with_strict_formals_is_a_row --home[1.0]--> tests/counterexamples/probes.nix
+cx_impl_with_strict_formals_is_a_row --status[1.0]--> red
+cx_impl_raising_inside_its_guard_is_a_row --counterexample[1.0]--> an impl raising inside its guard
+cx_impl_raising_inside_its_guard_is_a_row --home[1.0]--> tests/counterexamples/probes.nix
+cx_impl_raising_inside_its_guard_is_a_row --status[1.0]--> red
+cx_recipe_fragment_of_another_kind_is_a_row --counterexample[1.0]--> a recipe fragment of another kind
+cx_recipe_fragment_of_another_kind_is_a_row --home[1.0]--> tests/counterexamples/probes.nix
+cx_recipe_fragment_of_another_kind_is_a_row --status[1.0]--> red
+cx_settings_knob_holding_a_function_is_a_row --counterexample[1.0]--> a settings knob holding a function
+cx_settings_knob_holding_a_function_is_a_row --home[1.0]--> tests/counterexamples/probes.nix
+cx_settings_knob_holding_a_function_is_a_row --status[1.0]--> red
+cx_mkplan_arguments_of_another_kind_are_rows --counterexample[1.0]--> planner arguments of another kind earn rows
+cx_mkplan_arguments_of_another_kind_are_rows --home[1.0]--> tests/counterexamples/probes.nix
+cx_mkplan_arguments_of_another_kind_are_rows --status[1.0]--> red
+cx_varsstate_answer_of_another_kind_is_a_row --counterexample[1.0]--> a vars state answer of another kind
+cx_varsstate_answer_of_another_kind_is_a_row --home[1.0]--> tests/counterexamples/probes.nix
+cx_varsstate_answer_of_another_kind_is_a_row --status[1.0]--> red
+cx_two_entries_derive_one_unit_file_name --counterexample[1.0]--> two entries of one machine derive one name
+cx_two_entries_derive_one_unit_file_name --home[1.0]--> tests/unit/counterexamples.nix
+cx_two_entries_derive_one_unit_file_name --status[1.0]--> red
+cx_service_entry_replaces_a_machine_record --counterexample[1.0]--> a service entry replaces a machine record
+cx_service_entry_replaces_a_machine_record --home[1.0]--> tests/unit/counterexamples.nix
+cx_service_entry_replaces_a_machine_record --status[1.0]--> red
+cx_value_the_secrets_projection_cannot_see --counterexample[1.0]--> a value the secrets projection cannot see
+cx_value_the_secrets_projection_cannot_see --home[1.0]--> tests/unit/counterexamples.nix
+cx_value_the_secrets_projection_cannot_see --status[1.0]--> red
+cx_file_record_default_rekeys_the_value --counterexample[1.0]--> a file record stated at its default rekeys
+cx_file_record_default_rekeys_the_value --home[1.0]--> tests/unit/counterexamples.nix
+cx_file_record_default_rekeys_the_value --status[1.0]--> red
+cx_config_ownership_default_rekeys_entry --counterexample[1.0]--> a configuration ownership default rekeys the entry
+cx_config_ownership_default_rekeys_entry --home[1.0]--> tests/unit/counterexamples.nix
+cx_config_ownership_default_rekeys_entry --status[1.0]--> red
+cx_subject_carrying_a_line_break --counterexample[1.0]--> a subject carrying a line break
+cx_subject_carrying_a_line_break --home[1.0]--> tests/unit/counterexamples.nix
+cx_subject_carrying_a_line_break --status[1.0]--> red
+cx_name_key_grammar_admits_subject_refuses --counterexample[1.0]--> a name keys admit and subjects refuse
+cx_name_key_grammar_admits_subject_refuses --home[1.0]--> tests/unit/counterexamples.nix
+cx_name_key_grammar_admits_subject_refuses --status[1.0]--> red
+cx_two_rows_collapse_into_one --counterexample[1.0]--> two rows collapsing into one
+cx_two_rows_collapse_into_one --home[1.0]--> tests/unit/counterexamples.nix
+cx_two_rows_collapse_into_one --status[1.0]--> red
+cx_severity_outside_the_stated_domain --counterexample[1.0]--> a severity outside the stated domain
+cx_severity_outside_the_stated_domain --home[1.0]--> tests/unit/counterexamples.nix
+cx_severity_outside_the_stated_domain --status[1.0]--> red
+cx_fold_refusal_carrying_a_carriage_return --counterexample[1.0]--> a fold refusal carrying a carriage return
+cx_fold_refusal_carrying_a_carriage_return --home[1.0]--> tests/unit/counterexamples.nix
+cx_fold_refusal_carrying_a_carriage_return --status[1.0]--> red
+cx_secret_export_backed_by_a_public_file --counterexample[1.0]--> a secret export backed by a public file
+cx_secret_export_backed_by_a_public_file --home[1.0]--> tests/unit/counterexamples.nix
+cx_secret_export_backed_by_a_public_file --status[1.0]--> red
+cx_unit_cannot_open_its_own_value --counterexample[1.0]--> a unit that cannot open its own value
+cx_unit_cannot_open_its_own_value --home[1.0]--> tests/unit/counterexamples.nix
+cx_unit_cannot_open_its_own_value --status[1.0]--> red
+cx_value_path_named_outside_delivery_set --counterexample[1.0]--> a value path named outside its delivery set
+cx_value_path_named_outside_delivery_set --home[1.0]--> tests/unit/counterexamples.nix
+cx_value_path_named_outside_delivery_set --status[1.0]--> red
+cx_two_struct_schemas_under_one_claimed_id --counterexample[1.0]--> two struct schemas under one claimed identity
+cx_two_struct_schemas_under_one_claimed_id --home[1.0]--> tests/unit/counterexamples.nix
+cx_two_struct_schemas_under_one_claimed_id --status[1.0]--> red
+cx_attribution_decides_applicability --counterexample[1.0]--> attribution deciding applicability
+cx_attribution_decides_applicability --home[1.0]--> tests/unit/counterexamples.nix
+cx_attribution_decides_applicability --status[1.0]--> red
+cx_configdata_source_outside_the_store --counterexample[1.0]--> a configuration source outside the store
+cx_configdata_source_outside_the_store --home[1.0]--> tests/unit/counterexamples.nix
+cx_configdata_source_outside_the_store --status[1.0]--> red
+cx_two_shown_host_paths_that_nest --counterexample[1.0]--> two shown host paths of one entry nesting
+cx_two_shown_host_paths_that_nest --home[1.0]--> tests/unit/counterexamples.nix
+cx_two_shown_host_paths_that_nest --status[1.0]--> red
+cx_unit_name_that_forges_a_directive --counterexample[1.0]--> a unit name that forges a directive
+cx_unit_name_that_forges_a_directive --home[1.0]--> tests/unit/counterexamples.nix
+cx_unit_name_that_forges_a_directive --status[1.0]--> red
+cx_env_name_that_forges_a_directive --counterexample[1.0]--> an environment name that forges a directive
+cx_env_name_that_forges_a_directive --home[1.0]--> tests/unit/counterexamples.nix
+cx_env_name_that_forges_a_directive --status[1.0]--> red
+cx_version_digest_ignores_the_profile --counterexample[1.0]--> a version digest ignoring the confinement profile
+cx_version_digest_ignores_the_profile --home[1.0]--> tests/unit/counterexamples.nix
+cx_version_digest_ignores_the_profile --status[1.0]--> red

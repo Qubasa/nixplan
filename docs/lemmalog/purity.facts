@@ -1,0 +1,392 @@
+inv_library_never_raises --invariant[1.0]--> the library never raises and stays total
+inv_library_never_raises --topic[1.0]--> purity
+inv_library_never_raises --governs[1.0]--> lib/*.nix
+inv_library_never_raises --located[1.0]--> lib/diagnostics.nix:87
+inv_library_never_raises --rationale[1.0]--> every check returns a row instead
+inv_library_never_raises --prose_in[1.0]--> docs/diagnostics.md
+inv_library_never_raises --enforced_by[1.0]--> tests/unit/diagnostics.nix%testARaisingHelperIsIntroduced
+inv_raising_constructs_banned --invariant[1.0]--> five raising constructs are banned from the library
+inv_raising_constructs_banned --topic[1.0]--> purity
+inv_raising_constructs_banned --governs[1.0]--> lib/*.nix
+inv_raising_constructs_banned --located[1.0]--> tests/unit/diagnostics.nix:477
+inv_raising_constructs_banned --names[1.0]--> throw
+inv_raising_constructs_banned --names[1.0]--> abort
+inv_raising_constructs_banned --names[1.0]--> assert
+inv_raising_constructs_banned --names[1.0]--> .check
+inv_raising_constructs_banned --names[1.0]--> korora.check
+inv_raising_constructs_banned --enforced_by[1.0]--> tests/unit/diagnostics.nix%testARaisingHelperIsIntroduced
+inv_purity_scan_strips_comment_lines --invariant[1.0]--> the purity scan drops only whole comment lines
+inv_purity_scan_strips_comment_lines --topic[1.0]--> purity
+inv_purity_scan_strips_comment_lines --governs[1.0]--> lib/*.nix
+inv_purity_scan_strips_comment_lines --governs[1.0]--> tests/unit/diagnostics.nix
+inv_purity_scan_strips_comment_lines --located[1.0]--> tests/unit/diagnostics.nix:498
+inv_purity_scan_strips_comment_lines --rationale[1.0]--> a trailing comment counts as code
+inv_purity_scan_strips_comment_lines --enforced_by[1.0]--> tests/unit/diagnostics.nix%testARaisingHelperIsIntroduced
+inv_korora_verify_is_the_only_entry --invariant[1.0]--> korora verify is the only entry point used
+inv_korora_verify_is_the_only_entry --topic[1.0]--> purity
+inv_korora_verify_is_the_only_entry --governs[1.0]--> lib/atoms.nix
+inv_korora_verify_is_the_only_entry --located[1.0]--> lib/atoms.nix:2
+inv_korora_verify_is_the_only_entry --names[1.0]--> verify
+inv_korora_verify_is_the_only_entry --rationale[1.0]--> the raising validator would end evaluation
+inv_try_eval_catches_throw_and_assert --invariant[1.0]--> the guard catches a throw and an assert
+inv_try_eval_catches_throw_and_assert --topic[1.0]--> purity
+inv_try_eval_catches_throw_and_assert --governs[1.0]--> lib/diagnostics.nix
+inv_try_eval_catches_throw_and_assert --located[1.0]--> lib/diagnostics.nix:84
+inv_try_eval_catches_throw_and_assert --names[1.0]--> builtins.tryEval
+inv_try_eval_misses_three_failures --invariant[1.0]--> an abort or missing attribute escapes the guard
+inv_try_eval_misses_three_failures --topic[1.0]--> purity
+inv_try_eval_misses_three_failures --governs[1.0]--> lib/diagnostics.nix
+inv_try_eval_misses_three_failures --governs[1.0]--> lib/compose.nix
+inv_try_eval_misses_three_failures --located[1.0]--> lib/diagnostics.nix:85
+inv_try_eval_misses_three_failures --located[1.0]--> lib/compose.nix:68
+inv_try_eval_misses_three_failures --prose_in[1.0]--> docs/diagnostics.md
+inv_a_guard_is_not_a_check --invariant[1.0]--> a guard is not a kind check
+inv_a_guard_is_not_a_check --topic[1.0]--> purity
+inv_a_guard_is_not_a_check --governs[1.0]--> lib/module.nix
+inv_a_guard_is_not_a_check --governs[1.0]--> lib/resolve.nix
+inv_a_guard_is_not_a_check --rationale[1.0]--> a kind is read before the reading indexes
+inv_a_guard_is_not_a_check --names[1.0]--> diag.guard
+inv_declared_record_answers_value_and_rows --invariant[1.0]--> the record reading answers a value and rows
+inv_declared_record_answers_value_and_rows --topic[1.0]--> purity
+inv_declared_record_answers_value_and_rows --governs[1.0]--> lib/module.nix
+inv_declared_record_answers_value_and_rows --governs[1.0]--> lib/resolve.nix
+inv_declared_record_answers_value_and_rows --located[1.0]--> lib/module.nix:278
+inv_declared_record_answers_value_and_rows --located[1.0]--> lib/resolve.nix:175
+inv_declared_record_answers_value_and_rows --names[1.0]--> declaredRecord
+inv_declared_record_answers_value_and_rows --row[1.0]--> declaration-malformed
+inv_declared_record_answers_value_and_rows --enforced_in[1.0]--> tests/unit/diagnostics.nix
+inv_declared_record_answers_value_and_rows --enforced_by[1.0]--> testADeclarationIsNotTheKindTheReadingNeeds
+inv_a_raising_declaration_earns_two_rows --invariant[1.0]--> a raising declaration earns exactly two identifiers
+inv_a_raising_declaration_earns_two_rows --topic[1.0]--> purity
+inv_a_raising_declaration_earns_two_rows --governs[1.0]--> lib/compose.nix
+inv_a_raising_declaration_earns_two_rows --governs[1.0]--> lib/module.nix
+inv_a_raising_declaration_earns_two_rows --located[1.0]--> lib/compose.nix:66
+inv_a_raising_declaration_earns_two_rows --located[1.0]--> lib/module.nix:1566
+inv_a_raising_declaration_earns_two_rows --row[1.0]--> module-raised
+inv_a_raising_declaration_earns_two_rows --row[1.0]--> impl-missing
+inv_a_raising_declaration_earns_two_rows --enforced_in[1.0]--> tests/unit/diagnostics.nix
+inv_a_raising_declaration_earns_two_rows --enforced_by[1.0]--> testAModuleRaisesWhileComputingItsDeclaration
+inv_closed_impl_formals_are_not_applied --invariant[1.0]--> a closed implementation pattern is named not applied
+inv_closed_impl_formals_are_not_applied --topic[1.0]--> purity
+inv_closed_impl_formals_are_not_applied --governs[1.0]--> lib/resolve.nix
+inv_closed_impl_formals_are_not_applied --located[1.0]--> lib/resolve.nix:1944
+inv_closed_impl_formals_are_not_applied --row[1.0]--> implementation-formals-closed
+inv_closed_impl_formals_are_not_applied --enforced_in[1.0]--> tests/unit/diagnostics.nix
+inv_closed_impl_formals_are_not_applied --enforced_by[1.0]--> testAClosedSignatureIsNamedRatherThanContained
+inv_unwired_slot_leaves_impl_unapplied --invariant[1.0]--> an unwired slot leaves the implementation unapplied
+inv_unwired_slot_leaves_impl_unapplied --topic[1.0]--> purity
+inv_unwired_slot_leaves_impl_unapplied --governs[1.0]--> lib/resolve.nix
+inv_unwired_slot_leaves_impl_unapplied --located[1.0]--> lib/resolve.nix:1737
+inv_unwired_slot_leaves_impl_unapplied --rationale[1.0]--> the entry is planned with no units
+inv_unwired_slot_leaves_impl_unapplied --enforced_in[1.0]--> tests/unit/diagnostics.nix
+inv_unwired_slot_leaves_impl_unapplied --enforced_by[1.0]--> testAnUnwiredSlotReadByItsOwnModuleLeavesATableToPrint
+inv_mk_plan_realises_nothing --invariant[1.0]--> the planner realises nothing while planning
+inv_mk_plan_realises_nothing --topic[1.0]--> purity
+inv_mk_plan_realises_nothing --governs[1.0]--> lib/plan.nix
+inv_mk_plan_realises_nothing --governs[1.0]--> lib/resolve.nix
+inv_mk_plan_realises_nothing --names[1.0]--> mkPlan
+inv_generator_program_is_recorded_only --invariant[1.0]--> a generator program is recorded and never run
+inv_generator_program_is_recorded_only --topic[1.0]--> purity
+inv_generator_program_is_recorded_only --governs[1.0]--> lib/module.nix
+inv_generator_program_is_recorded_only --located[1.0]--> lib/module.nix:760
+inv_generator_program_is_recorded_only --row[1.0]--> vars-program-malformed
+inv_generator_program_is_recorded_only --rationale[1.0]--> anything but one store path is refused
+inv_program_is_no_closure_root --invariant[1.0]--> a recorded program roots and mentions nothing
+inv_program_is_no_closure_root --topic[1.0]--> purity
+inv_program_is_no_closure_root --governs[1.0]--> lib/plan.nix
+inv_program_is_no_closure_root --located[1.0]--> tests/unit/plan.nix:1171
+inv_program_is_no_closure_root --enforced_by[1.0]--> tests/unit/plan.nix%testTheFixtureElidesNothing
+inv_store_dir_is_an_argument --invariant[1.0]--> the store directory arrives as an argument
+inv_store_dir_is_an_argument --topic[1.0]--> purity
+inv_store_dir_is_an_argument --governs[1.0]--> lib/*.nix
+inv_store_dir_is_an_argument --located[1.0]--> lib/plan.nix:685
+inv_store_dir_is_an_argument --located[1.0]--> lib/resolve.nix:214
+inv_store_dir_is_an_argument --names[1.0]--> storeDir
+inv_store_dir_is_an_argument --host_path[1.0]--> /nix/store
+inv_store_dir_is_an_argument --row[1.0]--> closure-root-outside-store
+inv_short_hash_discards_string_context --invariant[1.0]--> the short hash discards string context
+inv_short_hash_discards_string_context --topic[1.0]--> purity
+inv_short_hash_discards_string_context --governs[1.0]--> lib/util.nix
+inv_short_hash_discards_string_context --located[1.0]--> lib/util.nix:523
+inv_short_hash_discards_string_context --names[1.0]--> util.shortHash
+inv_short_hash_discards_string_context --rationale[1.0]--> a key string carries no store reference
+inv_unique_strings_keeps_string_context --invariant[1.0]--> the unique strings helper keeps string context
+inv_unique_strings_keeps_string_context --topic[1.0]--> purity
+inv_unique_strings_keeps_string_context --governs[1.0]--> lib/util.nix
+inv_unique_strings_keeps_string_context --located[1.0]--> lib/util.nix:243
+inv_unique_strings_keeps_string_context --names[1.0]--> util.uniqueStrings
+inv_unique_strings_keeps_string_context --rationale[1.0]--> that context lets a consumer copy bytes
+inv_realisers_raise_on_an_unrecorded_fact --invariant[1.0]--> a realiser refuses a missing fact
+inv_realisers_raise_on_an_unrecorded_fact --topic[1.0]--> purity
+inv_realisers_raise_on_an_unrecorded_fact --governs[1.0]--> image/default.nix
+inv_realisers_raise_on_an_unrecorded_fact --governs[1.0]--> flakelet/default.nix
+inv_realisers_raise_on_an_unrecorded_fact --rationale[1.0]--> the refusal names the entry and the field
+inv_a_refusal_belongs_to_the_holding_layer --invariant[1.0]--> a refusal belongs to the holding layer
+inv_a_refusal_belongs_to_the_holding_layer --topic[1.0]--> purity
+inv_a_refusal_belongs_to_the_holding_layer --governs[1.0]--> lib/plan.nix
+inv_a_refusal_belongs_to_the_holding_layer --governs[1.0]--> operator/read.nix
+inv_a_refusal_belongs_to_the_holding_layer --governs[1.0]--> secrets/read.nix
+inv_a_refusal_belongs_to_the_holding_layer --prose_in[1.0]--> docs/diagnostics.md
+inv_realiser_refusals_are_cross_walked --invariant[1.0]--> each realiser refusal is paired with a row
+inv_realiser_refusals_are_cross_walked --topic[1.0]--> purity
+inv_realiser_refusals_are_cross_walked --governs[1.0]--> tests/unit/diagnostics.nix
+inv_realiser_refusals_are_cross_walked --located[1.0]--> tests/unit/diagnostics.nix:212
+inv_realiser_refusals_are_cross_walked --rationale[1.0]--> accounts pair rather than message fragments
+inv_realiser_refusals_are_cross_walked --enforced_in[1.0]--> tests/unit/diagnostics.nix
+inv_realiser_refusals_are_cross_walked --enforced_by[1.0]--> testARealiserRefusesAConditionNoRowReports
+inv_realiser_sources_are_handed_to_the_suite --invariant[1.0]--> the accounting reads the realiser sources handed it
+inv_realiser_sources_are_handed_to_the_suite --topic[1.0]--> purity
+inv_realiser_sources_are_handed_to_the_suite --governs[1.0]--> tests/unit/diagnostics.nix
+inv_realiser_sources_are_handed_to_the_suite --located[1.0]--> tests/unit/diagnostics.nix:116
+inv_realiser_sources_are_handed_to_the_suite --enforced_in[1.0]--> tests/unit/diagnostics.nix
+inv_realiser_sources_are_handed_to_the_suite --enforced_by[1.0]--> testARealiserIsAddedWithoutEditingTheAccounting
+inv_operator_reading_is_on_the_library_side --invariant[1.0]--> the operator reading is total
+inv_operator_reading_is_on_the_library_side --topic[1.0]--> purity
+inv_operator_reading_is_on_the_library_side --governs[1.0]--> operator/read.nix
+inv_operator_reading_is_on_the_library_side --prose_in[1.0]--> docs/operator.md
+inv_operator_derivations_raise --invariant[1.0]--> the derivations over the reading raise
+inv_operator_derivations_raise --topic[1.0]--> purity
+inv_operator_derivations_raise --governs[1.0]--> operator/default.nix
+inv_operator_derivations_raise --located[1.0]--> operator/default.nix:73
+inv_operator_derivations_raise --located[1.0]--> operator/default.nix:482
+inv_a_warning_only_table_builds --invariant[1.0]--> a table with warnings and no error builds
+inv_a_warning_only_table_builds --topic[1.0]--> purity
+inv_a_warning_only_table_builds --governs[1.0]--> operator/default.nix
+inv_a_warning_only_table_builds --located[1.0]--> lib/diagnostics.nix:171
+inv_a_warning_only_table_builds --enforced_by[1.0]--> tests/unit/diagnostics.nix%testAWarningDoesNotBlockTheApply
+inv_a_row_is_a_returned_value --invariant[1.0]--> a row is a value a caller returns
+inv_a_row_is_a_returned_value --topic[1.0]--> diagnostics
+inv_a_row_is_a_returned_value --governs[1.0]--> lib/diagnostics.nix
+inv_a_row_is_a_returned_value --governs[1.0]--> lib/*.nix
+inv_a_row_is_a_returned_value --rationale[1.0]--> no accumulator and no ambient list
+inv_a_row_is_a_returned_value --prose_in[1.0]--> docs/diagnostics.md
+inv_three_row_constructors_are_exported --invariant[1.0]--> three row constructors are exported from the library
+inv_three_row_constructors_are_exported --topic[1.0]--> diagnostics
+inv_three_row_constructors_are_exported --governs[1.0]--> lib/default.nix
+inv_three_row_constructors_are_exported --governs[1.0]--> lib/diagnostics.nix
+inv_three_row_constructors_are_exported --located[1.0]--> lib/default.nix:92
+inv_three_row_constructors_are_exported --located[1.0]--> lib/diagnostics.nix:81
+inv_three_row_constructors_are_exported --names[1.0]--> row
+inv_three_row_constructors_are_exported --names[1.0]--> error
+inv_three_row_constructors_are_exported --names[1.0]--> warning
+inv_three_row_constructors_are_exported --rationale[1.0]--> a producer never writes the six fields
+inv_three_row_constructors_are_exported --enforced_by[1.0]--> tests/unit/diagnostics.nix%testARowIsBuiltOutsideTheLibrary
+inv_constructors_flatten_every_field --invariant[1.0]--> a constructor flattens every field to one line
+inv_constructors_flatten_every_field --topic[1.0]--> diagnostics
+inv_constructors_flatten_every_field --governs[1.0]--> lib/diagnostics.nix
+inv_constructors_flatten_every_field --governs[1.0]--> lib/util.nix
+inv_constructors_flatten_every_field --located[1.0]--> lib/diagnostics.nix:59
+inv_constructors_flatten_every_field --located[1.0]--> lib/util.nix:563
+inv_constructors_flatten_every_field --names[1.0]--> util.oneLine
+inv_constructors_flatten_every_field --rationale[1.0]--> a deployment may interpolate a line break
+inv_constructors_flatten_every_field --enforced_by[1.0]--> tests/unit/diagnostics.nix%testAMemberNameCarriesALineBreak
+inv_a_rendered_table_shows_produced_rows_only --invariant[1.0]--> a rendered table cannot show an unproduced row
+inv_a_rendered_table_shows_produced_rows_only --topic[1.0]--> diagnostics
+inv_a_rendered_table_shows_produced_rows_only --governs[1.0]--> lib/diagnostics.nix
+inv_a_rendered_table_shows_produced_rows_only --enforced_in[1.0]--> tests/unit/diagnostics.nix
+inv_a_rendered_table_shows_produced_rows_only --enforced_by[1.0]--> testAnAccountedRowNobodyProducesFailsTheSuite
+inv_table_order_is_identifier_subject_message --invariant[1.0]--> table order is identifier then subject then message
+inv_table_order_is_identifier_subject_message --topic[1.0]--> diagnostics
+inv_table_order_is_identifier_subject_message --governs[1.0]--> lib/diagnostics.nix
+inv_table_order_is_identifier_subject_message --located[1.0]--> lib/diagnostics.nix:161
+inv_table_order_is_identifier_subject_message --prose_in[1.0]--> docs/diagnostics.md
+inv_rendered_fixture_compared_byte_for_byte --invariant[1.0]--> the rendered table is compared byte for byte
+inv_rendered_fixture_compared_byte_for_byte --topic[1.0]--> diagnostics
+inv_rendered_fixture_compared_byte_for_byte --governs[1.0]--> fixtures/minimal-typed-edge/plan/diagnostics.txt
+inv_rendered_fixture_compared_byte_for_byte --located[1.0]--> tests/unit/plan.nix:1167
+inv_rendered_fixture_compared_byte_for_byte --figure[1.0]--> 5
+inv_rendered_fixture_compared_byte_for_byte --enforced_by[1.0]--> tests/unit/plan.nix%testTheFoldersRowsAreProduced
+inv_a_subject_is_one_of_three_shapes --invariant[1.0]--> a subject is a key path or issue
+inv_a_subject_is_one_of_three_shapes --topic[1.0]--> diagnostics
+inv_a_subject_is_one_of_three_shapes --governs[1.0]--> lib/diagnostics.nix
+inv_a_subject_is_one_of_three_shapes --located[1.0]--> lib/diagnostics.nix:39
+inv_a_subject_is_one_of_three_shapes --names[1.0]--> isValidSubject
+inv_an_absolute_subject_is_refused --invariant[1.0]--> an absolute path subject is refused and repaired
+inv_an_absolute_subject_is_refused --topic[1.0]--> diagnostics
+inv_an_absolute_subject_is_refused --governs[1.0]--> lib/diagnostics.nix
+inv_an_absolute_subject_is_refused --located[1.0]--> lib/diagnostics.nix:119
+inv_an_absolute_subject_is_refused --row[1.0]--> diagnostic-subject-invalid
+inv_an_absolute_subject_is_refused --rationale[1.0]--> a message and a resolution keep their paths
+inv_an_absolute_subject_is_refused --enforced_in[1.0]--> tests/unit/diagnostics.nix
+inv_an_absolute_subject_is_refused --enforced_by[1.0]--> testARowWhoseSubjectIsAnAbsolutePath
+inv_dedup_keeps_the_first_row --invariant[1.0]--> the same fact produced twice is one row
+inv_dedup_keeps_the_first_row --topic[1.0]--> diagnostics
+inv_dedup_keeps_the_first_row --governs[1.0]--> lib/diagnostics.nix
+inv_dedup_keeps_the_first_row --located[1.0]--> lib/diagnostics.nix:128
+inv_dedup_keeps_the_first_row --names[1.0]--> dedup
+inv_dedup_keeps_the_first_row --enforced_by[1.0]--> tests/unit/diagnostics.nix%testTwoConsumersReportOneRow
+inv_a_refusal_is_recognised_by_its_marker --invariant[1.0]--> a refusal is recognised by its marker
+inv_a_refusal_is_recognised_by_its_marker --topic[1.0]--> diagnostics
+inv_a_refusal_is_recognised_by_its_marker --governs[1.0]--> lib/interface.nix
+inv_a_refusal_is_recognised_by_its_marker --located[1.0]--> lib/interface.nix:86
+inv_a_refusal_is_recognised_by_its_marker --names[1.0]--> refusalMarker
+inv_a_refusal_is_recognised_by_its_marker --rationale[1.0]--> a successful result may name a refused field
+inv_an_impl_gains_no_refusals_key --invariant[1.0]--> an implementation gains no refusals key
+inv_an_impl_gains_no_refusals_key --topic[1.0]--> diagnostics
+inv_an_impl_gains_no_refusals_key --governs[1.0]--> lib/resolve.nix
+inv_an_impl_gains_no_refusals_key --enforced_in[1.0]--> tests/unit/diagnostics.nix
+inv_an_impl_gains_no_refusals_key --enforced_by[1.0]--> testAnImplementationReturnsARefusalsField
+inv_a_module_may_not_tag_a_severity --invariant[1.0]--> a module may not tag a row severity
+inv_a_module_may_not_tag_a_severity --topic[1.0]--> diagnostics
+inv_a_module_may_not_tag_a_severity --governs[1.0]--> lib/diagnostics.nix
+inv_a_module_may_not_tag_a_severity --located[1.0]--> lib/diagnostics.nix:75
+inv_a_module_may_not_tag_a_severity --row[1.0]--> diagnostic-severity-invalid
+inv_a_module_may_not_tag_a_severity --enforced_in[1.0]--> tests/unit/diagnostics.nix
+inv_a_module_may_not_tag_a_severity --enforced_by[1.0]--> testAModuleAuthorCannotSetASeverity
+inv_a_module_may_not_tag_a_severity --enforced_by[1.0]--> tests/unit/diagnostics.nix%testAModuleDeclaresASeverity
+inv_the_suite_walks_two_file_lists --invariant[1.0]--> the suite walks two file lists not one
+inv_the_suite_walks_two_file_lists --topic[1.0]--> diagnostics
+inv_the_suite_walks_two_file_lists --governs[1.0]--> tests/unit/diagnostics.nix
+inv_the_suite_walks_two_file_lists --located[1.0]--> tests/unit/diagnostics.nix:494
+inv_the_suite_walks_two_file_lists --located[1.0]--> tests/unit/diagnostics.nix:538
+inv_the_suite_walks_two_file_lists --names[1.0]--> totalFiles
+inv_the_suite_walks_two_file_lists --names[1.0]--> producingFiles
+inv_the_suite_walks_two_file_lists --rationale[1.0]--> the secrets reading writes rows while raising
+inv_the_suite_walks_two_file_lists --enforced_by[1.0]--> tests/unit/diagnostics.nix%testTheLibraryGainsARow
+inv_three_user_scope_rows_in_the_placement --invariant[1.0]--> three user scope rows sit in the placement
+inv_three_user_scope_rows_in_the_placement --topic[1.0]--> diagnostics
+inv_three_user_scope_rows_in_the_placement --governs[1.0]--> lib/resolve.nix
+inv_three_user_scope_rows_in_the_placement --located[1.0]--> lib/resolve.nix:1466
+inv_three_user_scope_rows_in_the_placement --located[1.0]--> lib/resolve.nix:1882
+inv_three_user_scope_rows_in_the_placement --row[1.0]--> unit-account-in-user-scope
+inv_three_user_scope_rows_in_the_placement --row[1.0]--> unit-groups-in-user-scope
+inv_three_user_scope_rows_in_the_placement --row[1.0]--> port-privileged-in-user-scope
+inv_three_user_scope_rows_in_the_placement --rationale[1.0]--> two of them read the units produced there
+inv_entry_side_rows_sit_by_the_backend_row --invariant[1.0]--> the entry rows sit by the backend row
+inv_entry_side_rows_sit_by_the_backend_row --topic[1.0]--> diagnostics
+inv_entry_side_rows_sit_by_the_backend_row --governs[1.0]--> lib/resolve.nix
+inv_entry_side_rows_sit_by_the_backend_row --located[1.0]--> lib/resolve.nix:1859
+inv_entry_side_rows_sit_by_the_backend_row --row[1.0]--> unit-extension-backend-mismatch
+inv_value_ownership_row_is_the_plans_own --invariant[1.0]--> the value ownership row is the planner own
+inv_value_ownership_row_is_the_plans_own --topic[1.0]--> diagnostics
+inv_value_ownership_row_is_the_plans_own --governs[1.0]--> lib/plan.nix
+inv_value_ownership_row_is_the_plans_own --located[1.0]--> lib/plan.nix:1245
+inv_value_ownership_row_is_the_plans_own --row[1.0]--> value-ownership-in-user-scope
+inv_value_ownership_row_is_the_plans_own --rationale[1.0]--> its subject is the value entry
+inv_user_scope_rows_are_refusals_not_filters --invariant[1.0]--> each scope row refuses and keeps the entry
+inv_user_scope_rows_are_refusals_not_filters --topic[1.0]--> diagnostics
+inv_user_scope_rows_are_refusals_not_filters --governs[1.0]--> lib/resolve.nix
+inv_user_scope_rows_are_refusals_not_filters --governs[1.0]--> lib/plan.nix
+inv_user_scope_rows_are_refusals_not_filters --rationale[1.0]--> the entry stays in the plan
+inv_a_stated_ownership_reads_against_default --invariant[1.0]--> an ownership is read against the default unstated
+inv_a_stated_ownership_reads_against_default --topic[1.0]--> diagnostics
+inv_a_stated_ownership_reads_against_default --governs[1.0]--> lib/plan.nix
+inv_a_stated_ownership_reads_against_default --rationale[1.0]--> stating the default states nothing
+inv_a_stated_ownership_reads_against_default --names[1.0]--> ownershipDefaults
+inv_accounting_walk_has_no_notion_of_a_string --invariant[1.0]--> the accounting walk reads no nix string literal
+inv_accounting_walk_has_no_notion_of_a_string --topic[1.0]--> diagnostics
+inv_accounting_walk_has_no_notion_of_a_string --governs[1.0]--> tests/unit/diagnostics.nix
+inv_accounting_walk_has_no_notion_of_a_string --governs[1.0]--> image/default.nix
+inv_accounting_walk_has_no_notion_of_a_string --located[1.0]--> image/default.nix:213
+inv_accounting_walk_has_no_notion_of_a_string --figure[1.0]--> 6
+inv_accounting_walk_has_no_notion_of_a_string --rationale[1.0]--> a rendered shell failure reads as unaccounted
+inv_a_realiser_refusal_lives_in_its_reading --invariant[1.0]--> a realiser refusal lives in its own reading
+inv_a_realiser_refusal_lives_in_its_reading --topic[1.0]--> diagnostics
+inv_a_realiser_refusal_lives_in_its_reading --governs[1.0]--> image/read.nix
+inv_a_realiser_refusal_lives_in_its_reading --governs[1.0]--> flakelet/read.nix
+inv_a_realiser_refusal_lives_in_its_reading --governs[1.0]--> secrets/read.nix
+inv_host_resource_index_is_two_passes --invariant[1.0]--> the host resource index is two grouping passes
+inv_host_resource_index_is_two_passes --topic[1.0]--> diagnostics
+inv_host_resource_index_is_two_passes --governs[1.0]--> lib/plan.nix
+inv_host_resource_index_is_two_passes --located[1.0]--> lib/plan.nix:1055
+inv_host_resource_index_is_two_passes --names[1.0]--> builtins.groupBy
+inv_host_resource_index_is_two_passes --rationale[1.0]--> each claim carries the field it came from
+inv_a_machine_reservation_is_a_claimant --invariant[1.0]--> a machine reservation is a claimant
+inv_a_machine_reservation_is_a_claimant --topic[1.0]--> diagnostics
+inv_a_machine_reservation_is_a_claimant --governs[1.0]--> lib/plan.nix
+inv_a_machine_reservation_is_a_claimant --located[1.0]--> lib/plan.nix:921
+inv_a_machine_reservation_is_a_claimant --located[1.0]--> lib/plan.nix:963
+inv_a_machine_reservation_is_a_claimant --row[1.0]--> entry-host-path-claimed-twice
+inv_a_machine_reservation_is_a_claimant --rationale[1.0]--> it earns the entries own identifiers
+inv_a_port_claim_is_normalised_before_compare --invariant[1.0]--> a port claim is normalised before comparison
+inv_a_port_claim_is_normalised_before_compare --topic[1.0]--> diagnostics
+inv_a_port_claim_is_normalised_before_compare --governs[1.0]--> lib/plan.nix
+inv_a_port_claim_is_normalised_before_compare --governs[1.0]--> lib/module.nix
+inv_a_port_claim_is_normalised_before_compare --located[1.0]--> lib/plan.nix:839
+inv_a_port_claim_is_normalised_before_compare --located[1.0]--> lib/plan.nix:886
+inv_the_wildcard_address_has_no_spelling --invariant[1.0]--> the wildcard address has no admitted spelling
+inv_the_wildcard_address_has_no_spelling --topic[1.0]--> diagnostics
+inv_the_wildcard_address_has_no_spelling --governs[1.0]--> lib/atoms.nix
+inv_the_wildcard_address_has_no_spelling --located[1.0]--> lib/atoms.nix:161
+inv_the_wildcard_address_has_no_spelling --row[1.0]--> port-claim-address-malformed
+inv_the_wildcard_address_has_no_spelling --rationale[1.0]--> the absence of the key says it already
+inv_a_refused_claim_field_widens_the_claim --invariant[1.0]--> a refused protocol or address widens the claim
+inv_a_refused_claim_field_widens_the_claim --topic[1.0]--> diagnostics
+inv_a_refused_claim_field_widens_the_claim --governs[1.0]--> lib/module.nix
+inv_a_refused_claim_field_widens_the_claim --located[1.0]--> lib/module.nix:546
+inv_a_refused_claim_field_widens_the_claim --located[1.0]--> lib/module.nix:555
+inv_a_refused_claim_field_widens_the_claim --row[1.0]--> port-claim-protocol-unknown
+inv_a_refused_claim_field_widens_the_claim --row[1.0]--> port-claim-address-malformed
+inv_a_refused_port_number_drops_the_claim --invariant[1.0]--> a refused port number drops the claim entirely
+inv_a_refused_port_number_drops_the_claim --topic[1.0]--> diagnostics
+inv_a_refused_port_number_drops_the_claim --governs[1.0]--> lib/module.nix
+inv_a_refused_port_number_drops_the_claim --located[1.0]--> lib/module.nix:537
+inv_a_refused_port_number_drops_the_claim --row[1.0]--> port-claim-not-a-port
+inv_a_refused_port_number_drops_the_claim --row[1.0]--> port-claim-not-fixed
+inv_a_refused_port_number_drops_the_claim --rationale[1.0]--> neither refusal reaches the allocation index
+inv_one_claim_may_earn_several_rows --invariant[1.0]--> one claim may earn more than one row
+inv_one_claim_may_earn_several_rows --topic[1.0]--> diagnostics
+inv_one_claim_may_earn_several_rows --governs[1.0]--> lib/module.nix
+inv_one_claim_may_earn_several_rows --located[1.0]--> lib/module.nix:495
+inv_one_claim_may_earn_several_rows --enforced_by[1.0]--> tests/unit/diagnostics.nix%testAPortClaimIsNotARecord
+inv_impl_args_hand_over_the_member --invariant[1.0]--> an implementation is handed instance member and machine
+inv_impl_args_hand_over_the_member --topic[1.0]--> diagnostics
+inv_impl_args_hand_over_the_member --governs[1.0]--> lib/resolve.nix
+inv_impl_args_hand_over_the_member --located[1.0]--> lib/resolve.nix:1703
+inv_impl_args_hand_over_the_member --names[1.0]--> implArgs
+inv_impl_args_hand_over_the_member --rationale[1.0]--> a composed entry key was rejected there
+inv_unit_value_newline_walks_every_depth --invariant[1.0]--> one identifier covers every string a unit carries
+inv_unit_value_newline_walks_every_depth --topic[1.0]--> diagnostics
+inv_unit_value_newline_walks_every_depth --governs[1.0]--> lib/module.nix
+inv_unit_value_newline_walks_every_depth --located[1.0]--> lib/module.nix:1191
+inv_unit_value_newline_walks_every_depth --row[1.0]--> unit-value-newline
+inv_unit_value_newline_walks_every_depth --rationale[1.0]--> the row names the offending field path
+inv_an_attribute_name_is_in_newline_scope --invariant[1.0]--> an attribute name is in scan scope
+inv_an_attribute_name_is_in_newline_scope --topic[1.0]--> diagnostics
+inv_an_attribute_name_is_in_newline_scope --governs[1.0]--> image/read.nix
+inv_an_attribute_name_is_in_newline_scope --governs[1.0]--> lib/module.nix
+inv_an_attribute_name_is_in_newline_scope --rationale[1.0]--> the rendered environment key escapes nothing
+inv_the_line_break_gate_reads_names_too --invariant[1.0]--> the gate and walk read attribute names
+inv_the_line_break_gate_reads_names_too --topic[1.0]--> diagnostics
+inv_the_line_break_gate_reads_names_too --governs[1.0]--> lib/util.nix
+inv_the_line_break_gate_reads_names_too --located[1.0]--> lib/util.nix:435
+inv_the_line_break_gate_reads_names_too --located[1.0]--> lib/util.nix:386
+inv_the_line_break_gate_reads_names_too --names[1.0]--> util.anyLineBreak
+inv_the_line_break_gate_reads_names_too --names[1.0]--> util.stringsDeep
+inv_the_line_break_gate_reads_names_too --rationale[1.0]--> a missed name switches the check off silently
+inv_three_things_stop_the_bytes --invariant[1.0]--> three things stop the bytes of a deployment
+inv_three_things_stop_the_bytes --topic[1.0]--> diagnostics
+inv_three_things_stop_the_bytes --governs[1.0]--> lib/plan.nix
+inv_three_things_stop_the_bytes --governs[1.0]--> operator/default.nix
+inv_three_things_stop_the_bytes --names[1.0]--> applicable
+inv_three_things_stop_the_bytes --rationale[1.0]--> a row alone records and keeps reading
+inv_three_things_stop_the_bytes --enforced_by[1.0]--> tests/unit/diagnostics.nix%testAnErrorBlocksTheApply
+inv_a_config_host_path_is_held_to_one_word --invariant[1.0]--> a config host path is one shell word
+inv_a_config_host_path_is_held_to_one_word --topic[1.0]--> diagnostics
+inv_a_config_host_path_is_held_to_one_word --governs[1.0]--> lib/util.nix
+inv_a_config_host_path_is_held_to_one_word --governs[1.0]--> lib/module.nix
+inv_a_config_host_path_is_held_to_one_word --located[1.0]--> lib/util.nix:161
+inv_a_config_host_path_is_held_to_one_word --located[1.0]--> lib/module.nix:1367
+inv_a_config_host_path_is_held_to_one_word --names[1.0]--> util.wordRule
+inv_a_config_host_path_is_held_to_one_word --row[1.0]--> config-file-path-refused
+inv_a_config_host_path_is_held_to_one_word --rationale[1.0]--> every realiser and plan reader inherits it
+inv_a_config_host_path_is_held_to_one_word --enforced_in[1.0]--> tests/unit/diagnostics.nix
+inv_a_config_host_path_is_held_to_one_word --enforced_by[1.0]--> testOneGrammarAnswersForBothRenderedSteps
+inv_a_refused_path_is_left_out_of_the_record --invariant[1.0]--> a refused path leaves the record
+inv_a_refused_path_is_left_out_of_the_record --topic[1.0]--> diagnostics
+inv_a_refused_path_is_left_out_of_the_record --governs[1.0]--> lib/module.nix
+inv_a_refused_path_is_left_out_of_the_record --located[1.0]--> lib/module.nix:1367
+inv_the_key_separators_have_one_home --invariant[1.0]--> the key separators have one home
+inv_the_key_separators_have_one_home --topic[1.0]--> diagnostics
+inv_the_key_separators_have_one_home --governs[1.0]--> lib/util.nix
+inv_the_key_separators_have_one_home --located[1.0]--> lib/util.nix:111
+inv_the_key_separators_have_one_home --names[1.0]--> util.keySeparators
+inv_an_environment_name_is_held_to_its_rule --invariant[1.0]--> a unit environment name has one rule
+inv_an_environment_name_is_held_to_its_rule --topic[1.0]--> diagnostics
+inv_an_environment_name_is_held_to_its_rule --governs[1.0]--> lib/util.nix
+inv_an_environment_name_is_held_to_its_rule --governs[1.0]--> lib/module.nix
+inv_an_environment_name_is_held_to_its_rule --located[1.0]--> lib/util.nix:185
+inv_an_environment_name_is_held_to_its_rule --located[1.0]--> lib/module.nix:1201
+inv_an_environment_name_is_held_to_its_rule --names[1.0]--> util.envNameRule
+inv_an_environment_name_is_held_to_its_rule --row[1.0]--> unit-env-name-malformed
+inv_an_environment_name_is_held_to_its_rule --rationale[1.0]--> an assignment renders the name unescaped

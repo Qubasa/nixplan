@@ -1,0 +1,438 @@
+inv_apply_orders_by_resolved_reads --invariant[1.0]--> apply orders by every resolved read
+inv_apply_orders_by_resolved_reads --topic[1.0]--> operator_command
+inv_apply_orders_by_resolved_reads --governs[1.0]--> cli/order.py
+inv_apply_orders_by_resolved_reads --located[1.0]--> cli/order.py:3
+inv_apply_orders_by_resolved_reads --names[1.0]--> reads
+inv_apply_orders_by_resolved_reads --prose_in[1.0]--> docs/operator.md
+inv_order_never_uses_depends_on --invariant[1.0]--> ordering never reads dependsOn
+inv_order_never_uses_depends_on --topic[1.0]--> operator_command
+inv_order_never_uses_depends_on --governs[1.0]--> cli/order.py
+inv_order_never_uses_depends_on --located[1.0]--> cli/order.py:7
+inv_order_never_uses_depends_on --rationale[1.0]--> dependsOn carries key provenance not order
+inv_order_never_uses_depends_on --names[1.0]--> dependsOn
+inv_two_read_shapes_are_both_edges --invariant[1.0]--> single-valued and reach-all reads are both edges
+inv_two_read_shapes_are_both_edges --topic[1.0]--> operator_command
+inv_two_read_shapes_are_both_edges --governs[1.0]--> cli/order.py
+inv_two_read_shapes_are_both_edges --located[1.0]--> cli/order.py:316
+inv_two_read_shapes_are_both_edges --names[1.0]--> entries
+inv_two_read_shapes_are_both_edges --prose_in[1.0]--> docs/operator.md
+inv_unrecognised_read_shape_refused --invariant[1.0]--> a read shape neither known is refused
+inv_unrecognised_read_shape_refused --topic[1.0]--> operator_command
+inv_unrecognised_read_shape_refused --governs[1.0]--> cli/order.py
+inv_unrecognised_read_shape_refused --located[1.0]--> cli/order.py:328
+inv_unrecognised_read_shape_refused --rationale[1.0]--> a zero-edge shape stood unnoticed
+inv_values_written_before_any_activation --invariant[1.0]--> every value is written before any activation
+inv_values_written_before_any_activation --topic[1.0]--> operator_command
+inv_values_written_before_any_activation --governs[1.0]--> cli/apply.py
+inv_values_written_before_any_activation --located[1.0]--> cli/apply.py:19
+inv_values_written_before_any_activation --rationale[1.0]--> an activated unit reads its value immediately
+inv_values_written_before_any_activation --prose_in[1.0]--> docs/operator.md
+inv_entry_copied_before_it_is_activated --invariant[1.0]--> an entry is copied before it is activated
+inv_entry_copied_before_it_is_activated --topic[1.0]--> operator_command
+inv_entry_copied_before_it_is_activated --governs[1.0]--> cli/apply.py
+inv_entry_copied_before_it_is_activated --located[1.0]--> cli/apply.py:23
+inv_entry_copied_before_it_is_activated --rationale[1.0]--> an activation resolving anything activates something else
+inv_user_preflight_is_the_commands_refusal --invariant[1.0]--> a failed preflight fact is the commands error
+inv_user_preflight_is_the_commands_refusal --topic[1.0]--> operator_command
+inv_user_preflight_is_the_commands_refusal --governs[1.0]--> cli/remote.py
+inv_user_preflight_is_the_commands_refusal --governs[1.0]--> cli/apply.py
+inv_user_preflight_is_the_commands_refusal --located[1.0]--> cli/remote.py:768
+inv_user_preflight_is_the_commands_refusal --located[1.0]--> cli/apply.py:511
+inv_user_preflight_is_the_commands_refusal --rationale[1.0]--> the plan holds no fact about current permission
+inv_user_preflight_is_the_commands_refusal --names[1.0]--> ApplyError
+inv_user_preflight_is_the_commands_refusal --enforced_in[1.0]--> tests/e2e/test_harness.py
+inv_user_preflight_is_the_commands_refusal --enforced_by[1.0]--> test_a_failed_preflight_fact_is_the_runs_own_refusal
+inv_preflight_earns_no_diagnostics_row --invariant[1.0]--> the preflight earns no diagnostics row
+inv_preflight_earns_no_diagnostics_row --topic[1.0]--> operator_command
+inv_preflight_earns_no_diagnostics_row --governs[1.0]--> cli/remote.py
+inv_preflight_earns_no_diagnostics_row --located[1.0]--> cli/remote.py:670
+inv_preflight_earns_no_diagnostics_row --rationale[1.0]--> the answer is read where it was asked
+inv_one_preflight_question_per_machine --invariant[1.0]--> one folded preflight question per machine
+inv_one_preflight_question_per_machine --topic[1.0]--> operator_command
+inv_one_preflight_question_per_machine --governs[1.0]--> cli/apply.py
+inv_one_preflight_question_per_machine --located[1.0]--> cli/apply.py:84
+inv_one_preflight_question_per_machine --rationale[1.0]--> socket activated sshd has a trigger limit
+inv_one_preflight_question_per_machine --enforced_in[1.0]--> tests/e2e/test_harness.py
+inv_one_preflight_question_per_machine --enforced_by_prefix[1.0]--> test_a_user_scope_machine_is_asked_before_anything_is_wr
+inv_preflight_heads_the_on_machine_line --invariant[1.0]--> the preflight is the first on-machine step
+inv_preflight_heads_the_on_machine_line --topic[1.0]--> operator_command
+inv_preflight_heads_the_on_machine_line --governs[1.0]--> cli/apply.py
+inv_preflight_heads_the_on_machine_line --located[1.0]--> cli/apply.py:506
+inv_preflight_heads_the_on_machine_line --prose_in[1.0]--> openspec/changes/INTEGRATION.md
+inv_preflight_heads_the_on_machine_line --enforced_in[1.0]--> tests/e2e/test_harness.py
+inv_preflight_heads_the_on_machine_line --enforced_by_prefix[1.0]--> test_a_user_scope_machine_is_asked_before_anything_is_wr
+inv_dry_run_records_the_preflight_question --invariant[1.0]--> a dry run records the question unasked
+inv_dry_run_records_the_preflight_question --topic[1.0]--> operator_command
+inv_dry_run_records_the_preflight_question --governs[1.0]--> cli/apply.py
+inv_dry_run_records_the_preflight_question --located[1.0]--> cli/apply.py:510
+inv_dry_run_records_the_preflight_question --rationale[1.0]--> the question goes through the replaced channel
+inv_dry_run_records_the_preflight_question --names[1.0]--> --dry-run
+inv_dry_run_records_the_preflight_question --enforced_in[1.0]--> tests/e2e/test_harness.py
+inv_dry_run_records_the_preflight_question --enforced_by[1.0]--> test_a_dry_run_records_the_preflight_question
+inv_system_scope_machine_asked_nothing_new --invariant[1.0]--> a system scope machine is asked nothing new
+inv_system_scope_machine_asked_nothing_new --topic[1.0]--> operator_command
+inv_system_scope_machine_asked_nothing_new --governs[1.0]--> cli/apply.py
+inv_system_scope_machine_asked_nothing_new --located[1.0]--> cli/apply.py:118
+inv_root_only_at_provision_time --invariant[1.0]--> root at provision time never at deploy time
+inv_root_only_at_provision_time --topic[1.0]--> operator_command
+inv_root_only_at_provision_time --governs[1.0]--> cli/remote.py
+inv_root_only_at_provision_time --located[1.0]--> cli/remote.py:673
+inv_root_only_at_provision_time --rationale[1.0]--> the apply verifies rather than assumes
+inv_three_fixed_roots_stated_once --invariant[1.0]--> the three verified fixed roots are stated once
+inv_three_fixed_roots_stated_once --topic[1.0]--> operator_command
+inv_three_fixed_roots_stated_once --governs[1.0]--> cli/remote.py
+inv_three_fixed_roots_stated_once --located[1.0]--> cli/remote.py:86
+inv_three_fixed_roots_stated_once --host_path[1.0]--> /run/vars
+inv_three_fixed_roots_stated_once --host_path[1.0]--> /run/portable-planner
+inv_three_fixed_roots_stated_once --host_path[1.0]--> /var/lib/planner/sealed
+inv_three_fixed_roots_stated_once --names[1.0]--> SEALED_ROOT
+inv_sealed_root_is_that_files_constant --invariant[1.0]--> a later change adopts the sealed root constant
+inv_sealed_root_is_that_files_constant --topic[1.0]--> operator_command
+inv_sealed_root_is_that_files_constant --governs[1.0]--> cli/remote.py
+inv_sealed_root_is_that_files_constant --located[1.0]--> cli/remote.py:87
+inv_sealed_root_is_that_files_constant --rationale[1.0]--> a second statement of one root disagrees
+inv_two_preflight_facts_are_the_attachs_alone --invariant[1.0]--> two preflight facts are asked only for images
+inv_two_preflight_facts_are_the_attachs_alone --topic[1.0]--> operator_command
+inv_two_preflight_facts_are_the_attachs_alone --governs[1.0]--> cli/remote.py
+inv_two_preflight_facts_are_the_attachs_alone --located[1.0]--> cli/remote.py:710
+inv_two_preflight_facts_are_the_attachs_alone --located[1.0]--> cli/apply.py:115
+inv_two_preflight_facts_are_the_attachs_alone --names[1.0]--> user-portabled
+inv_two_preflight_facts_are_the_attachs_alone --rationale[1.0]--> a value write needs neither of them
+inv_traversal_stated_as_traversal_not_mode --invariant[1.0]--> the home question asks traversal not a mode
+inv_traversal_stated_as_traversal_not_mode --topic[1.0]--> operator_command
+inv_traversal_stated_as_traversal_not_mode --governs[1.0]--> cli/remote.py
+inv_traversal_stated_as_traversal_not_mode --located[1.0]--> cli/remote.py:656
+inv_traversal_stated_as_traversal_not_mode --rationale[1.0]--> every mode granting traversal answers ok
+inv_traversal_stated_as_traversal_not_mode --names[1.0]--> home-traversable
+inv_traversal_absence_is_unreadable --invariant[1.0]--> portabled reports access denied naming no path
+inv_traversal_absence_is_unreadable --topic[1.0]--> operator_command
+inv_traversal_absence_is_unreadable --governs[1.0]--> cli/remote.py
+inv_traversal_absence_is_unreadable --located[1.0]--> cli/remote.py:651
+inv_traversal_absence_is_unreadable --rationale[1.0]--> the extraction child holds a foreign uid
+inv_preflight_key_set_crossed_against_harness --invariant[1.0]--> a preflight fact added here is added there
+inv_preflight_key_set_crossed_against_harness --topic[1.0]--> operator_command
+inv_preflight_key_set_crossed_against_harness --governs[1.0]--> cli/remote.py
+inv_preflight_key_set_crossed_against_harness --governs[1.0]--> tests/e2e/test_harness.py
+inv_preflight_key_set_crossed_against_harness --located[1.0]--> tests/e2e/test_harness.py:3044
+inv_preflight_key_set_crossed_against_harness --enforced_in[1.0]--> tests/e2e/test_harness.py
+inv_preflight_key_set_crossed_against_harness --enforced_by_prefix[1.0]--> test_a_user_scope_machine_is_asked_before_anything_is_wr
+inv_user_manager_step_states_runtime_dir --invariant[1.0]--> every user manager step states the runtime directory
+inv_user_manager_step_states_runtime_dir --topic[1.0]--> operator_command
+inv_user_manager_step_states_runtime_dir --governs[1.0]--> cli/remote.py
+inv_user_manager_step_states_runtime_dir --located[1.0]--> cli/remote.py:135
+inv_user_manager_step_states_runtime_dir --names[1.0]--> XDG_RUNTIME_DIR
+inv_user_manager_step_states_runtime_dir --rationale[1.0]--> a non-interactive login has no session
+inv_user_flag_read_off_record_and_scopes --invariant[1.0]--> the user flag comes from record and scopes
+inv_user_flag_read_off_record_and_scopes --topic[1.0]--> operator_command
+inv_user_flag_read_off_record_and_scopes --governs[1.0]--> cli/remote.py
+inv_user_flag_read_off_record_and_scopes --governs[1.0]--> cli/manifest.py
+inv_user_flag_read_off_record_and_scopes --located[1.0]--> cli/manifest.py:422
+inv_user_flag_read_off_record_and_scopes --rationale[1.0]--> never read off the login that dialled
+inv_user_flag_read_off_record_and_scopes --names[1.0]--> scopes
+inv_unorderable_state_is_an_apply_error --invariant[1.0]--> an unorderable state is the commands own error
+inv_unorderable_state_is_an_apply_error --topic[1.0]--> operator_command
+inv_unorderable_state_is_an_apply_error --governs[1.0]--> cli/order.py
+inv_unorderable_state_is_an_apply_error --located[1.0]--> cli/order.py:141
+inv_unorderable_state_is_an_apply_error --located[1.0]--> cli/order.py:159
+inv_unorderable_state_is_an_apply_error --rationale[1.0]--> a condensation cannot reach that position
+inv_unorderable_refusal_names_reads --invariant[1.0]--> the refusal names the entries and the reads
+inv_unorderable_refusal_names_reads --topic[1.0]--> operator_command
+inv_unorderable_refusal_names_reads --governs[1.0]--> cli/order.py
+inv_unorderable_refusal_names_reads --located[1.0]--> cli/order.py:152
+inv_walk_replaces_an_unhandled_stop_iteration --invariant[1.0]--> the walk replaces an unhandled iterator exhaustion
+inv_walk_replaces_an_unhandled_stop_iteration --topic[1.0]--> operator_command
+inv_walk_replaces_an_unhandled_stop_iteration --governs[1.0]--> cli/order.py
+inv_walk_replaces_an_unhandled_stop_iteration --governs[1.0]--> cli/planner.py
+inv_walk_replaces_an_unhandled_stop_iteration --located[1.0]--> cli/order.py:117
+inv_walk_replaces_an_unhandled_stop_iteration --rationale[1.0]--> the command handles no iterator exhaustion
+inv_step_line_printed_before_the_step --invariant[1.0]--> a steps line is printed before the step
+inv_step_line_printed_before_the_step --topic[1.0]--> operator_command
+inv_step_line_printed_before_the_step --governs[1.0]--> cli/remote.py
+inv_step_line_printed_before_the_step --located[1.0]--> cli/remote.py:263
+inv_step_line_printed_before_the_step --rationale[1.0]--> the last line names the running step
+inv_step_line_printed_before_the_step --prose_in[1.0]--> docs/operator.md
+inv_machine_refusal_names_no_traceback --invariant[1.0]--> a machines refusal names entry machine and output
+inv_machine_refusal_names_no_traceback --topic[1.0]--> operator_command
+inv_machine_refusal_names_no_traceback --governs[1.0]--> cli/remote.py
+inv_machine_refusal_names_no_traceback --located[1.0]--> cli/remote.py:187
+inv_machine_refusal_names_no_traceback --rationale[1.0]--> never a traceback and never the argv
+inv_nothing_after_a_failed_step_is_attempted --invariant[1.0]--> nothing after the failed step is attempted
+inv_nothing_after_a_failed_step_is_attempted --topic[1.0]--> operator_command
+inv_nothing_after_a_failed_step_is_attempted --governs[1.0]--> cli/apply.py
+inv_nothing_after_a_failed_step_is_attempted --located[1.0]--> cli/apply.py:502
+inv_nothing_after_a_failed_step_is_attempted --rationale[1.0]--> the recovery is a second apply
+inv_absence_is_the_endpoints_own_answer --invariant[1.0]--> absence is the endpoints own answer alone
+inv_absence_is_the_endpoints_own_answer --topic[1.0]--> operator_command
+inv_absence_is_the_endpoints_own_answer --governs[1.0]--> cli/report.py
+inv_absence_is_the_endpoints_own_answer --located[1.0]--> cli/report.py:4
+inv_absence_is_the_endpoints_own_answer --located[1.0]--> cli/report.py:365
+inv_absence_is_the_endpoints_own_answer --prose_in[1.0]--> docs/operator.md
+inv_four_other_lines_are_not_absence --invariant[1.0]--> undialled unreachable and endpointless are other lines
+inv_four_other_lines_are_not_absence --topic[1.0]--> operator_command
+inv_four_other_lines_are_not_absence --governs[1.0]--> cli/report.py
+inv_four_other_lines_are_not_absence --located[1.0]--> cli/report.py:372
+inv_four_other_lines_are_not_absence --rationale[1.0]--> printing absence would claim nobody applied it
+inv_unasked_machine_exits_non_zero --invariant[1.0]--> a report that could not ask exits non-zero
+inv_unasked_machine_exits_non_zero --topic[1.0]--> operator_command
+inv_unasked_machine_exits_non_zero --governs[1.0]--> cli/report.py
+inv_unasked_machine_exits_non_zero --governs[1.0]--> cli/planner.py
+inv_unasked_machine_exits_non_zero --located[1.0]--> cli/report.py:145
+inv_only_detached_reads_as_detached --invariant[1.0]--> only detached is a detached image
+inv_only_detached_reads_as_detached --topic[1.0]--> operator_command
+inv_only_detached_reads_as_detached --governs[1.0]--> cli/report.py
+inv_only_detached_reads_as_detached --located[1.0]--> cli/report.py:543
+inv_only_detached_reads_as_detached --located[1.0]--> cli/report.py:514
+inv_image_names_the_identity_it_holds --invariant[1.0]--> an image comparison is identity equality
+inv_image_names_the_identity_it_holds --topic[1.0]--> operator_command
+inv_image_names_the_identity_it_holds --governs[1.0]--> cli/report.py
+inv_image_names_the_identity_it_holds --located[1.0]--> cli/report.py:490
+inv_image_names_the_identity_it_holds --located[1.0]--> cli/report.py:518
+inv_image_names_the_identity_it_holds --rationale[1.0]--> the image file name carries the digest
+inv_flakelet_half_compares_unit_files --invariant[1.0]--> a flakelet entry is compared by unit files
+inv_flakelet_half_compares_unit_files --topic[1.0]--> operator_command
+inv_flakelet_half_compares_unit_files --governs[1.0]--> cli/report.py
+inv_flakelet_half_compares_unit_files --governs[1.0]--> cli/manifest.py
+inv_flakelet_half_compares_unit_files --located[1.0]--> cli/report.py:474
+inv_flakelet_half_compares_unit_files --located[1.0]--> cli/manifest.py:472
+inv_flakelet_half_compares_unit_files --rationale[1.0]--> that endpoint publishes no artifact identity
+inv_placed_record_without_a_key_is_refused --invariant[1.0]--> a placed record publishing no key is refused
+inv_placed_record_without_a_key_is_refused --topic[1.0]--> operator_command
+inv_placed_record_without_a_key_is_refused --governs[1.0]--> cli/manifest.py
+inv_placed_record_without_a_key_is_refused --located[1.0]--> cli/manifest.py:586
+inv_placed_record_without_a_key_is_refused --rationale[1.0]--> do not delete the field as unused
+inv_endpoint_refusal_pins_the_field_set --invariant[1.0]--> the locked endpoints status field set is pinned
+inv_endpoint_refusal_pins_the_field_set --topic[1.0]--> operator_command
+inv_endpoint_refusal_pins_the_field_set --governs[1.0]--> tests/e2e/delivery.py
+inv_endpoint_refusal_pins_the_field_set --located[1.0]--> tests/e2e/delivery.py:304
+inv_endpoint_refusal_pins_the_field_set --names[1.0]--> endpoint_refusal
+inv_endpoint_refusal_pins_the_field_set --enforced_by[1.0]--> tests/e2e/delivery.py%endpoint_refusal
+inv_staleness_is_a_line_never_an_exit_status --invariant[1.0]--> staleness is a line never an exit status
+inv_staleness_is_a_line_never_an_exit_status --topic[1.0]--> operator_command
+inv_staleness_is_a_line_never_an_exit_status --governs[1.0]--> cli/report.py
+inv_staleness_is_a_line_never_an_exit_status --located[1.0]--> cli/report.py:27
+inv_staleness_is_a_line_never_an_exit_status --rationale[1.0]--> changing a stale entry is applys work
+inv_unsealer_before_first_value --invariant[1.0]--> a machines unsealer lands before its first value
+inv_unsealer_before_first_value --topic[1.0]--> operator_command
+inv_unsealer_before_first_value --governs[1.0]--> cli/apply.py
+inv_unsealer_before_first_value --located[1.0]--> cli/apply.py:527
+inv_unsealer_before_first_value --rationale[1.0]--> an interrupted run leaves openable copies
+inv_unsealer_for_sealing_machines_written --invariant[1.0]--> exactly the sealing machines this run writes to
+inv_unsealer_for_sealing_machines_written --topic[1.0]--> operator_command
+inv_unsealer_for_sealing_machines_written --governs[1.0]--> cli/apply.py
+inv_unsealer_for_sealing_machines_written --located[1.0]--> cli/apply.py:318
+inv_unsealer_for_sealing_machines_written --rationale[1.0]--> a restricted run contacts no extra machine
+inv_unsealer_unit_path_is_one_spelling --invariant[1.0]--> one unsealer unit path per scope
+inv_unsealer_unit_path_is_one_spelling --topic[1.0]--> operator_command
+inv_unsealer_unit_path_is_one_spelling --governs[1.0]--> cli/remote.py
+inv_unsealer_unit_path_is_one_spelling --located[1.0]--> cli/remote.py:115
+inv_unsealer_unit_path_is_one_spelling --host_path[1.0]--> /usr/local/lib/systemd/system
+inv_unsealer_unit_path_is_one_spelling --rationale[1.0]--> never a path chosen by testing the machine
+inv_etc_systemd_system_is_disqualified --invariant[1.0]--> the etc unit directory links read-only store
+inv_etc_systemd_system_is_disqualified --topic[1.0]--> operator_command
+inv_etc_systemd_system_is_disqualified --governs[1.0]--> cli/remote.py
+inv_etc_systemd_system_is_disqualified --located[1.0]--> cli/remote.py:106
+inv_etc_systemd_system_is_disqualified --host_path[1.0]--> /etc/systemd/system
+inv_etc_systemd_system_is_disqualified --rationale[1.0]--> systemctl enable writes into that directory
+inv_run_systemd_system_is_disqualified --invariant[1.0]--> a runtime unit directory is emptied by reboot
+inv_run_systemd_system_is_disqualified --topic[1.0]--> operator_command
+inv_run_systemd_system_is_disqualified --governs[1.0]--> cli/remote.py
+inv_run_systemd_system_is_disqualified --located[1.0]--> cli/remote.py:109
+inv_run_systemd_system_is_disqualified --host_path[1.0]--> /run/systemd/system
+inv_run_systemd_system_is_disqualified --rationale[1.0]--> a reboot is what the change exists for
+inv_unsealer_unit_started_by_a_wants_link --invariant[1.0]--> a wants link beside the unit starts it
+inv_unsealer_unit_started_by_a_wants_link --topic[1.0]--> operator_command
+inv_unsealer_unit_started_by_a_wants_link --governs[1.0]--> cli/remote.py
+inv_unsealer_unit_started_by_a_wants_link --located[1.0]--> cli/remote.py:574
+inv_unsealer_unit_started_by_a_wants_link --names[1.0]--> multi-user.target
+inv_unsealer_idempotence_compares_the_links --invariant[1.0]--> idempotence compares the two links themselves
+inv_unsealer_idempotence_compares_the_links --topic[1.0]--> operator_command
+inv_unsealer_idempotence_compares_the_links --governs[1.0]--> cli/remote.py
+inv_unsealer_idempotence_compares_the_links --located[1.0]--> cli/remote.py:580
+inv_unsealer_idempotence_compares_the_links --rationale[1.0]--> is-enabled answers alias there
+inv_unsealer_idempotence_compares_the_links --names[1.0]--> is-enabled
+inv_sealed_copy_written_on_every_apply --invariant[1.0]--> a sealed copy is written on every apply
+inv_sealed_copy_written_on_every_apply --topic[1.0]--> operator_command
+inv_sealed_copy_written_on_every_apply --governs[1.0]--> cli/apply.py
+inv_sealed_copy_written_on_every_apply --located[1.0]--> cli/apply.py:544
+inv_sealed_copy_written_on_every_apply --rationale[1.0]--> two sealings of one file differ
+inv_sealed_copy_has_no_changed_answer --invariant[1.0]--> the sealed step answers no changed or unchanged
+inv_sealed_copy_has_no_changed_answer --topic[1.0]--> operator_command
+inv_sealed_copy_has_no_changed_answer --governs[1.0]--> cli/apply.py
+inv_sealed_copy_has_no_changed_answer --located[1.0]--> cli/apply.py:542
+inv_sealed_copy_has_no_changed_answer --rationale[1.0]--> whether bytes moved stays the plaintext steps answer
+inv_sealed_copy_is_written_first --invariant[1.0]--> the sealed copy is written before the plaintext
+inv_sealed_copy_is_written_first --topic[1.0]--> operator_command
+inv_sealed_copy_is_written_first --governs[1.0]--> cli/apply.py
+inv_sealed_copy_is_written_first --located[1.0]--> cli/apply.py:540
+inv_sealed_copy_is_written_first --rationale[1.0]--> an interrupted run leaves no older sealed copy
+inv_ciphertext_travels_on_the_input_stream --invariant[1.0]--> the ciphertext travels on the steps input stream
+inv_ciphertext_travels_on_the_input_stream --topic[1.0]--> operator_command
+inv_ciphertext_travels_on_the_input_stream --governs[1.0]--> cli/apply.py
+inv_ciphertext_travels_on_the_input_stream --governs[1.0]--> cli/values.py
+inv_ciphertext_travels_on_the_input_stream --located[1.0]--> cli/apply.py:553
+inv_ciphertext_travels_on_the_input_stream --located[1.0]--> cli/values.py:149
+inv_ciphertext_travels_on_the_input_stream --rationale[1.0]--> no byte of a value enters an argv
+inv_recipient_is_a_public_word_in_argv --invariant[1.0]--> the recipient is one public word
+inv_recipient_is_a_public_word_in_argv --topic[1.0]--> operator_command
+inv_recipient_is_a_public_word_in_argv --governs[1.0]--> cli/values.py
+inv_recipient_is_a_public_word_in_argv --located[1.0]--> cli/values.py:151
+inv_value_write_compares_on_the_machine --invariant[1.0]--> a value write compares on the machine
+inv_value_write_compares_on_the_machine --topic[1.0]--> operator_command
+inv_value_write_compares_on_the_machine --governs[1.0]--> cli/remote.py
+inv_value_write_compares_on_the_machine --located[1.0]--> cli/remote.py:411
+inv_value_write_compares_on_the_machine --prose_in[1.0]--> docs/operator.md
+inv_value_bytes_never_printed_or_in_argv --invariant[1.0]--> neither the bytes nor a digest is printed
+inv_value_bytes_never_printed_or_in_argv --topic[1.0]--> operator_command
+inv_value_bytes_never_printed_or_in_argv --governs[1.0]--> cli/remote.py
+inv_value_bytes_never_printed_or_in_argv --located[1.0]--> cli/remote.py:145
+inv_moved_value_restarts_readers_last --invariant[1.0]--> a moved value restarts its readers last
+inv_moved_value_restarts_readers_last --topic[1.0]--> operator_command
+inv_moved_value_restarts_readers_last --governs[1.0]--> cli/apply.py
+inv_moved_value_restarts_readers_last --located[1.0]--> cli/apply.py:577
+inv_moved_value_restarts_readers_last --rationale[1.0]--> after every activation of this run
+inv_readers_derived_from_the_same_read_index --invariant[1.0]--> the readers come out of the ordering relation
+inv_readers_derived_from_the_same_read_index --topic[1.0]--> operator_command
+inv_readers_derived_from_the_same_read_index --governs[1.0]--> cli/apply.py
+inv_readers_derived_from_the_same_read_index --governs[1.0]--> cli/order.py
+inv_readers_derived_from_the_same_read_index --located[1.0]--> cli/apply.py:352
+inv_readers_derived_from_the_same_read_index --rationale[1.0]--> a read that orders also rotates
+inv_reader_restart_is_coarse_on_purpose --invariant[1.0]--> the whole entrys unit list is restarted
+inv_reader_restart_is_coarse_on_purpose --topic[1.0]--> operator_command
+inv_reader_restart_is_coarse_on_purpose --governs[1.0]--> cli/apply.py
+inv_reader_restart_is_coarse_on_purpose --located[1.0]--> cli/apply.py:355
+inv_reader_restart_is_coarse_on_purpose --rationale[1.0]--> the plan names no file-opening unit
+inv_reader_restart_uses_try_restart --invariant[1.0]--> readers are restarted with a try-restart
+inv_reader_restart_uses_try_restart --topic[1.0]--> operator_command
+inv_reader_restart_uses_try_restart --governs[1.0]--> cli/remote.py
+inv_reader_restart_uses_try_restart --located[1.0]--> cli/remote.py:492
+inv_reader_restart_uses_try_restart --rationale[1.0]--> whether a unit runs is the activations answer
+inv_reader_restart_uses_try_restart --names[1.0]--> try-restart
+inv_moved_value_does_not_rerun_a_probe --invariant[1.0]--> a moved value re-runs no probe
+inv_moved_value_does_not_rerun_a_probe --topic[1.0]--> operator_command
+inv_moved_value_does_not_rerun_a_probe --governs[1.0]--> cli/remote.py
+inv_moved_value_does_not_rerun_a_probe --located[1.0]--> cli/remote.py:483
+inv_moved_value_does_not_rerun_a_probe --rationale[1.0]--> try-restart skips a completed oneshot
+inv_unnamed_holding_is_a_line_every_run --invariant[1.0]--> every apply and report prints unnamed holdings
+inv_unnamed_holding_is_a_line_every_run --topic[1.0]--> operator_command
+inv_unnamed_holding_is_a_line_every_run --governs[1.0]--> cli/apply.py
+inv_unnamed_holding_is_a_line_every_run --governs[1.0]--> cli/report.py
+inv_unnamed_holding_is_a_line_every_run --located[1.0]--> cli/apply.py:205
+inv_unnamed_holding_is_a_line_every_run --located[1.0]--> cli/report.py:191
+inv_retirement_is_opt_in --invariant[1.0]--> removing an unnamed holding is opt-in
+inv_retirement_is_opt_in --topic[1.0]--> operator_command
+inv_retirement_is_opt_in --governs[1.0]--> cli/apply.py
+inv_retirement_is_opt_in --located[1.0]--> cli/apply.py:212
+inv_retirement_is_opt_in --names[1.0]--> --retire
+inv_retirement_is_opt_in --rationale[1.0]--> a plain apply previews a retiring one
+inv_one_holdings_question_before_any_write --invariant[1.0]--> one holdings question per machine before any write
+inv_one_holdings_question_before_any_write --topic[1.0]--> operator_command
+inv_one_holdings_question_before_any_write --governs[1.0]--> cli/apply.py
+inv_one_holdings_question_before_any_write --located[1.0]--> cli/apply.py:490
+inv_one_holdings_question_before_any_write --rationale[1.0]--> a run missing one answer changed nothing
+inv_retirement_is_the_endpoints_own_verb --invariant[1.0]--> retirement is the endpoints own removal verb
+inv_retirement_is_the_endpoints_own_verb --topic[1.0]--> operator_command
+inv_retirement_is_the_endpoints_own_verb --governs[1.0]--> cli/remote.py
+inv_retirement_is_the_endpoints_own_verb --governs[1.0]--> cli/apply.py
+inv_retirement_is_the_endpoints_own_verb --located[1.0]--> cli/apply.py:521
+inv_retirement_deletes_no_state --invariant[1.0]--> a retirement deletes no state
+inv_retirement_deletes_no_state --topic[1.0]--> operator_command
+inv_retirement_deletes_no_state --governs[1.0]--> cli/apply.py
+inv_retirement_deletes_no_state --located[1.0]--> cli/apply.py:13
+inv_retirement_deletes_no_state --rationale[1.0]--> nothing on the machine roots that artifact
+inv_retirement_precedes_the_first_write --invariant[1.0]--> retirement comes after preflight and before writing
+inv_retirement_precedes_the_first_write --topic[1.0]--> operator_command
+inv_retirement_precedes_the_first_write --governs[1.0]--> cli/apply.py
+inv_retirement_precedes_the_first_write --located[1.0]--> cli/apply.py:517
+inv_retirement_precedes_the_first_write --rationale[1.0]--> a renamed entry needs the host resources back
+inv_only_bounds_machines_not_unnamedness --invariant[1.0]--> the selection bounds machines asked and nothing else
+inv_only_bounds_machines_not_unnamedness --topic[1.0]--> operator_command
+inv_only_bounds_machines_not_unnamedness --governs[1.0]--> cli/report.py
+inv_only_bounds_machines_not_unnamedness --located[1.0]--> cli/report.py:195
+inv_only_bounds_machines_not_unnamedness --names[1.0]--> --only
+inv_only_bounds_machines_not_unnamedness --rationale[1.0]--> a restriction never makes an entry an orphan
+inv_recorder_keeps_argv_drops_payload --invariant[1.0]--> the harness recorder keeps argv and drops payloads
+inv_recorder_keeps_argv_drops_payload --topic[1.0]--> operator_command
+inv_recorder_keeps_argv_drops_payload --governs[1.0]--> tests/e2e/test_harness.py
+inv_recorder_keeps_argv_drops_payload --located[1.0]--> tests/e2e/test_harness.py:2990
+inv_recorder_keeps_argv_drops_payload --rationale[1.0]--> two payloads of one length produce equal vectors
+inv_value_source_measured_under_value_dirs --invariant[1.0]--> the source is measured under delivered value directories
+inv_value_source_measured_under_value_dirs --topic[1.0]--> operator_command
+inv_value_source_measured_under_value_dirs --governs[1.0]--> cli/values.py
+inv_value_source_measured_under_value_dirs --located[1.0]--> cli/values.py:194
+inv_value_source_measured_under_value_dirs --rationale[1.0]--> a file under none claims about no value
+inv_value_source_measured_under_value_dirs --prose_in[1.0]--> docs/operator.md
+inv_every_undeclared_file_inside_one_is_named --invariant[1.0]--> every undeclared file inside one is named
+inv_every_undeclared_file_inside_one_is_named --topic[1.0]--> operator_command
+inv_every_undeclared_file_inside_one_is_named --governs[1.0]--> cli/values.py
+inv_every_undeclared_file_inside_one_is_named --located[1.0]--> cli/values.py:284
+inv_every_undeclared_file_inside_one_is_named --rationale[1.0]--> never only the first of them
+inv_record_refused_by_version_and_store --invariant[1.0]--> version and store are refused first
+inv_record_refused_by_version_and_store --topic[1.0]--> operator_command
+inv_record_refused_by_version_and_store --governs[1.0]--> cli/manifest.py
+inv_record_refused_by_version_and_store --located[1.0]--> cli/manifest.py:511
+inv_record_refused_by_version_and_store --located[1.0]--> cli/manifest.py:516
+inv_record_refused_by_version_and_store --names[1.0]--> storeDir
+inv_absent_entries_table_is_refused --invariant[1.0]--> a record carrying no entries table is refused
+inv_absent_entries_table_is_refused --topic[1.0]--> operator_command
+inv_absent_entries_table_is_refused --governs[1.0]--> cli/manifest.py
+inv_absent_entries_table_is_refused --located[1.0]--> cli/manifest.py:520
+inv_absent_entries_table_is_refused --rationale[1.0]--> an absent table is not an empty one
+inv_manifest_resolves_artifact_paths --invariant[1.0]--> each artifact path resolves to a store path
+inv_manifest_resolves_artifact_paths --topic[1.0]--> operator_command
+inv_manifest_resolves_artifact_paths --governs[1.0]--> cli/manifest.py
+inv_manifest_resolves_artifact_paths --located[1.0]--> cli/manifest.py:634
+inv_manifest_resolves_artifact_paths --rationale[1.0]--> the build is a farm of symlinks
+inv_manifest_resolves_artifact_paths --prose_in[1.0]--> docs/operator.md
+inv_activation_names_the_copied_path --invariant[1.0]--> an activation names the copied path
+inv_activation_names_the_copied_path --topic[1.0]--> operator_command
+inv_activation_names_the_copied_path --governs[1.0]--> cli/manifest.py
+inv_activation_names_the_copied_path --located[1.0]--> cli/manifest.py:620
+inv_three_published_consumer_entry_points --invariant[1.0]--> three flake outputs are the whole consumer interface
+inv_three_published_consumer_entry_points --topic[1.0]--> operator_command
+inv_three_published_consumer_entry_points --governs[1.0]--> flake-module.nix
+inv_three_published_consumer_entry_points --located[1.0]--> flake-module.nix:51
+inv_three_published_consumer_entry_points --located[1.0]--> flake-module.nix:58
+inv_three_published_consumer_entry_points --located[1.0]--> flake-module.nix:70
+inv_three_published_consumer_entry_points --names[1.0]--> mkLib
+inv_realisers_are_published_as_nothing --invariant[1.0]--> the three realisers are published as nothing
+inv_realisers_are_published_as_nothing --topic[1.0]--> operator_command
+inv_realisers_are_published_as_nothing --governs[1.0]--> flake-module.nix
+inv_realisers_are_published_as_nothing --located[1.0]--> flake-module.nix:66
+inv_realisers_are_published_as_nothing --rationale[1.0]--> a path inside this flake is no interface
+inv_realisers_are_published_as_nothing --names[1.0]--> realise
+inv_debug_is_the_development_attrset --invariant[1.0]--> the development attrset is named debug
+inv_debug_is_the_development_attrset --topic[1.0]--> operator_command
+inv_debug_is_the_development_attrset --governs[1.0]--> flake-module.nix
+inv_debug_is_the_development_attrset --located[1.0]--> flake-module.nix:74
+inv_debug_is_the_development_attrset --rationale[1.0]--> no application and no package uses that name
+inv_planner_names_the_command_everywhere --invariant[1.0]--> the command is named planner in every namespace
+inv_planner_names_the_command_everywhere --topic[1.0]--> operator_command
+inv_planner_names_the_command_everywhere --governs[1.0]--> cli/flake-module.nix
+inv_planner_names_the_command_everywhere --located[1.0]--> cli/flake-module.nix:44
+inv_planner_names_the_command_everywhere --located[1.0]--> cli/flake-module.nix:47
+inv_planner_names_the_command_everywhere --located[1.0]--> cli/flake-module.nix:55
+inv_planner_names_the_command_everywhere --names[1.0]--> planner-src
+inv_flake_writes_its_systems_out --invariant[1.0]--> the flake writes its systems list out
+inv_flake_writes_its_systems_out --topic[1.0]--> operator_command
+inv_flake_writes_its_systems_out --governs[1.0]--> flake.nix
+inv_flake_writes_its_systems_out --located[1.0]--> flake.nix:37
+inv_flake_writes_its_systems_out --rationale[1.0]--> the pinned nixpkgs removed a named platform
+inv_flake_writes_its_systems_out --names[1.0]--> x86_64-darwin
+inv_newcomer_template_names_no_repo_path --invariant[1.0]--> the newcomer template writes no repository path
+inv_newcomer_template_names_no_repo_path --topic[1.0]--> operator_command
+inv_newcomer_template_names_no_repo_path --governs[1.0]--> tests/e2e/newcomer/template/**
+inv_newcomer_template_names_no_repo_path --located[1.0]--> tests/unit/layers.nix:386
+inv_newcomer_template_names_no_repo_path --rationale[1.0]--> a path is a host path or interpolation
+inv_newcomer_template_names_no_repo_path --enforced_by[1.0]--> tests/unit/layers.nix%testAFileNamesAPathThatIsNotThere
+inv_e2e_env_refuses_a_foreign_checkout --invariant[1.0]--> the env printer refuses outside this checkout
+inv_e2e_env_refuses_a_foreign_checkout --topic[1.0]--> operator_command
+inv_e2e_env_refuses_a_foreign_checkout --governs[1.0]--> flake-module.nix
+inv_e2e_env_refuses_a_foreign_checkout --located[1.0]--> flake-module.nix:245
+inv_e2e_env_refuses_a_foreign_checkout --located[1.0]--> flake-module.nix:250
+inv_e2e_env_refuses_a_foreign_checkout --rationale[1.0]--> it would export a foreign trees paths
+inv_e2e_env_refuses_a_foreign_checkout --names[1.0]--> planner-e2e-env
+inv_shell_root_comes_from_the_git_toplevel --invariant[1.0]--> the one shell takes its root from git
+inv_shell_root_comes_from_the_git_toplevel --topic[1.0]--> operator_command
+inv_shell_root_comes_from_the_git_toplevel --governs[1.0]--> devshells.nix
+inv_shell_root_comes_from_the_git_toplevel --located[1.0]--> devshells.nix:37
+inv_shell_root_comes_from_the_git_toplevel --rationale[1.0]--> the toplevel is compared against this flake

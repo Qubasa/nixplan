@@ -1,0 +1,35 @@
+% One batch per question. `planner-lemmalog` installs each paragraph as its own
+% batch, so an idea that dies is uninstalled by itself. An asserted fact is
+% `current(S, rel, O)`: a body matching `governs(X, Y)` installs cleanly and
+% derives nothing.
+
+unenforced(I) :- current(I, invariant, _), !current(I, enforced_by, _), !current(I, enforced_by_prefix, _).
+enforced(I) :- current(I, invariant, _), current(I, enforced_by, _).
+unanchored(I) :- current(I, invariant, _), !current(I, located, _).
+undocumented(I) :- current(I, invariant, _), !current(I, prose_in, _).
+topic_size(T, count(I)) :- current(I, topic, T).
+topic_unenforced(T, count(I)) :- current(I, topic, T), unenforced(I).
+
+governed_by(F, I) :- current(I, governs, F).
+file_rules(F, count(I)) :- current(I, governs, F).
+risky_file(F, I) :- current(I, governs, F), unenforced(I).
+file_unenforced(F, count(I)) :- current(I, governs, F), unenforced(I).
+check_guards(C, I) :- current(I, enforced_by, C).
+row_source(R, F) :- current(I, row, R), current(I, governs, F).
+
+bug_in(F, B) :- current(B, bug, _), current(B, governs, F).
+landmine(F, B, I) :- current(B, bug, _), current(B, governs, F), current(I, governs, F), unenforced(I).
+open_counterexample(C) :- current(C, counterexample, _), current(C, status, red).
+homeless_counterexample(C) :- current(C, counterexample, _), !current(C, home, _).
+cx_home_size(H, count(C)) :- current(C, home, H).
+
+open_change(C) :- current(C, change_status, open).
+landed_change(C) :- current(C, change_status, landed).
+parked_design(P) :- current(P, dead_end, _).
+orphan_park(P) :- current(P, dead_end, _), !current(P, revived_by, _).
+stale_reference(I, P) :- current(I, stale_anchor, P).
+prior_art_of(A, D) :- current(D, prior_art, A).
+
+closes(C, F) :- current(F, closed_by, C).
+open_finding(F) :- current(F, index_drift, _), !current(F, closed_by, _).
+change_load(C, count(F)) :- current(F, closed_by, C).

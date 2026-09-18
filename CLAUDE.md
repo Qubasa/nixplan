@@ -684,7 +684,9 @@ silently unobserved.
   reads `builtins.attrNames` of `tests/counterexamples/probes.nix` - and a directory beside
   `tests/unit/` and `tests/e2e/` goes in `layers.testTheTestTreeIsRead`.
 - A new top-level file or directory goes in `classOf` in `tests/unit/layers.nix`, and in
-  `scannedDirectories` there if its files should be held to the path scan.
+  `scannedDirectories` there if its files should be held to the path scan. `lemmalog.nix` is
+  classed with the flake for that reason, and the index's own corpus lives under `docs/` so that
+  carrying it adds no class.
 - A deliverable with its own flake wiring goes in the `imports` of `flake.nix`, the way
   `cli/flake-module.nix` and `devshells.nix` do. An end-to-end folder is the opposite case: it is
   discovered from `tests/e2e/*/deployment/default.nix`, and `flake-module.nix` naming one fails
@@ -824,6 +826,22 @@ hand".
   `eval "$(planner-e2e-env)"`. That file and the `planner-e2e` app are rendered from one attrset,
   `e2eArtifactPaths` in `flake-module.nix`, so a variable added to one is added to both, and the
   shell puts the checkout's `tests/e2e` and `cli` on `PYTHONPATH`.
+- That attrset is the union of two, and the split is what a shell being entered pays: the two rows
+  naming the guest force its own NixOS evaluation, measured at 8 of the 9 seconds an uncached
+  `planner-e2e-env` spends, so they are rendered into `planner-e2e-guest-paths` and the rest into
+  `planner-e2e-tool-paths`. `planner-e2e-env --without-guest` prints every row but those two, costs
+  1.1 seconds uncached, and says on stderr which two it left unset; the app and the argument-free
+  script still print every row. The eval cache misses on every edit, because the flake reference is
+  a dirty git tree, so this is the cost of `direnv reload` rather than of a cold checkout.
+- `docs/lemmalog/` is the invariant index as facts, and it is a corpus rather than a check: nothing
+  fails when a fact goes stale. The corpus is the source and the store `planner-lemmalog` loads it
+  into is derived, which is why `$LEMMALOG_MCP_PATH` names a path under `.direnv/` - the engine
+  writes its own derived facts and its episodes back into that file. `lemmalog.nix` pins the engine,
+  upstream publishing no flake, and the engine holds an object to eight words and sixty characters
+  (`src/agent.rs`, `entity_token_problem`), so a claim stays in words and a path rides `governs`,
+  `located`, `host_path` or `names`. A path too long for that is split into its parent and a
+  `names` row rather than truncated: a truncated repository-rooted path is a token
+  `testAFileNamesAPathThatIsNotThere` refuses.
 - `pytest.ini` keeps `-rs`, the skip reason being the only thing that tells an artifact-backed
   suite skipping itself apart from a run with nothing to say, and names `workdirs/` in
   `norecursedirs`, or `pytest .` collects two files called `test_harness.py`.

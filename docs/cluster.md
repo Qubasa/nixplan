@@ -641,16 +641,24 @@ from the working tree, because that is the point of running by hand.
 | `PLANNER_NEWCOMER_DEPLOYMENT` | the same, for that folder | app and `planner-e2e-env` |
 | `PLANNER_SHARED_POSTGRES_DEPLOYMENT` | the same, for that folder | app and `planner-e2e-env` |
 | `PLANNER_USER_SCOPE_DEPLOYMENT` | the same, for that folder | app and `planner-e2e-env` |
-| `PLANNER_E2E_GUEST_IMAGE` | the qcow2 every machine boots | app and `planner-e2e-env` |
+| `PLANNER_E2E_GUEST_IMAGE` | the qcow2 every machine boots | app and `planner-e2e-env`, but not under `--without-guest` |
 | `PLANNER_E2E` | the layer's root, on `PYTHONPATH` so a test can `import delivery` | app; the shell puts the working tree there instead |
 | `PLANNER_E2E_STATE` | the run's state root | `runner.py` |
-| `PLANNER_E2E_SSH_KEY` | the store file holding the key the image authorizes | app and `planner-e2e-env` |
+| `PLANNER_E2E_SSH_KEY` | the store file holding the key the image authorizes | app and `planner-e2e-env`, but not under `--without-guest` |
 
 One deployment row exists per folder, and the rows are written from the same discovery the packages
 are, so a folder gains its variable by existing. No variable names a built
 deployment: the machine layer builds one with the command, which keeps every link farm out of the
 app's closure and lets a folder's build failure be a test error. A folder skips itself when a
 variable it needs names nothing, and `-rs` in `../pytest.ini` is what prints the reason.
+
+Those two rows are the only ones that cost anything to print. Each names a path of the guest
+package, so printing either evaluates the guest's own NixOS configuration - 8 of the 9 seconds an
+uncached `planner-e2e-env` spends, measured. They are therefore a file of their own,
+`planner-e2e-guest-paths`, and `planner-e2e-env --without-guest` prints every other row without
+building it: that is the form a shell hook wants, where a full run is what a `pytest` invocation
+wants. The fast form says on stderr which two variables it left unset, because a folder whose
+`$PLANNER_E2E_GUEST_IMAGE` names nothing skips itself.
 
 The harness and the deployments being the working tree is the point of running by hand: an edit to
 any of them is what runs. A checkout where `$ROOKERY_FLAKE` cannot be fetched still opens its

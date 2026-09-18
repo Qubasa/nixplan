@@ -1,0 +1,303 @@
+inv_user_scope_is_an_explicit_project_goal --invariant[1.0]--> user scope deployments are an explicit project goal
+inv_user_scope_is_an_explicit_project_goal --topic[1.0]--> deployment_scope
+inv_user_scope_is_an_explicit_project_goal --governs[1.0]--> openspec/changes/run-an-entry-without-root
+inv_user_scope_is_an_explicit_project_goal --rationale[1.0]--> a third party spawns user services without root
+inv_deployment_is_an_account_never_a_mode --invariant[1.0]--> a deployment is made as an account
+inv_deployment_is_an_account_never_a_mode --topic[1.0]--> deployment_scope
+inv_deployment_is_an_account_never_a_mode --governs[1.0]--> lib/resolve.nix
+inv_deployment_is_an_account_never_a_mode --governs[1.0]--> cli/remote.py
+inv_deployment_is_an_account_never_a_mode --located[1.0]--> lib/resolve.nix:481
+inv_deployment_is_an_account_never_a_mode --rationale[1.0]--> root is the account every check admits
+inv_no_code_path_branches_on_root --invariant[1.0]--> nothing branches on root or not
+inv_no_code_path_branches_on_root --topic[1.0]--> deployment_scope
+inv_no_code_path_branches_on_root --governs[1.0]--> lib/resolve.nix
+inv_no_code_path_branches_on_root --governs[1.0]--> cli/remote.py
+inv_no_code_path_branches_on_root --rationale[1.0]--> ask instead whether this account can do it
+inv_scope_is_a_machine_registry_key --invariant[1.0]--> a machine registry key with two values
+inv_scope_is_a_machine_registry_key --topic[1.0]--> deployment_scope
+inv_scope_is_a_machine_registry_key --governs[1.0]--> lib/resolve.nix
+inv_scope_is_a_machine_registry_key --located[1.0]--> lib/resolve.nix:58
+inv_scope_is_a_machine_registry_key --names[1.0]--> scope
+inv_system_scope_is_the_unstated_default --invariant[1.0]--> stating the default scope re-keys nothing
+inv_system_scope_is_the_unstated_default --topic[1.0]--> deployment_scope
+inv_system_scope_is_the_unstated_default --governs[1.0]--> lib/resolve.nix
+inv_system_scope_is_the_unstated_default --located[1.0]--> lib/resolve.nix:637
+inv_system_scope_is_the_unstated_default --names[1.0]--> system
+inv_user_scope_enters_record_and_target --invariant[1.0]--> user enters the hashed machine record and target
+inv_user_scope_enters_record_and_target --topic[1.0]--> deployment_scope
+inv_user_scope_enters_record_and_target --governs[1.0]--> lib/resolve.nix
+inv_user_scope_enters_record_and_target --located[1.0]--> lib/resolve.nix:648
+inv_user_scope_enters_record_and_target --located[1.0]--> lib/resolve.nix:682
+inv_user_scope_enters_record_and_target --rationale[1.0]--> rendered units attach argv and profiles all differ
+inv_scope_domain_has_one_home_in_atoms --invariant[1.0]--> the scope domain has one home
+inv_scope_domain_has_one_home_in_atoms --topic[1.0]--> deployment_scope
+inv_scope_domain_has_one_home_in_atoms --governs[1.0]--> lib/atoms.nix
+inv_scope_domain_has_one_home_in_atoms --located[1.0]--> lib/atoms.nix:136
+inv_scope_domain_has_one_home_in_atoms --names[1.0]--> domains.scope
+inv_scope_declares_no_korora_typedef --invariant[1.0]--> the scope domain declares no korora typedef
+inv_scope_declares_no_korora_typedef --topic[1.0]--> deployment_scope
+inv_scope_declares_no_korora_typedef --governs[1.0]--> lib/atoms.nix
+inv_scope_declares_no_korora_typedef --located[1.0]--> lib/atoms.nix:133
+inv_scope_declares_no_korora_typedef --rationale[1.0]--> no module and no interface declares a scope
+inv_registry_alone_crosses_a_stated_scope --invariant[1.0]--> only the registry reading crosses a stated scope
+inv_registry_alone_crosses_a_stated_scope --topic[1.0]--> deployment_scope
+inv_registry_alone_crosses_a_stated_scope --governs[1.0]--> lib/resolve.nix
+inv_registry_alone_crosses_a_stated_scope --located[1.0]--> lib/resolve.nix:596
+inv_registry_alone_crosses_a_stated_scope --row[1.0]--> machine-scope-unknown
+inv_scope_rides_the_domains_attrset --invariant[1.0]--> the scope list rides an existing domains key
+inv_scope_rides_the_domains_attrset --topic[1.0]--> deployment_scope
+inv_scope_rides_the_domains_attrset --governs[1.0]--> lib/atoms.nix
+inv_scope_rides_the_domains_attrset --located[1.0]--> lib/atoms.nix:106
+inv_scope_rides_the_domains_attrset --rationale[1.0]--> a new top-level key costs a gated counter
+inv_privileged_port_boundary_rides_port_range --invariant[1.0]--> the privileged port boundary rides the port domain
+inv_privileged_port_boundary_rides_port_range --topic[1.0]--> deployment_scope
+inv_privileged_port_boundary_rides_port_range --governs[1.0]--> lib/atoms.nix
+inv_privileged_port_boundary_rides_port_range --located[1.0]--> lib/atoms.nix:57
+inv_privileged_port_boundary_rides_port_range --names[1.0]--> atoms.portRange.privilegedBelow
+inv_privileged_port_boundary_rides_port_range --figure[1.0]--> 1024
+inv_machine_scopes_is_one_memoised_table --invariant[1.0]--> the registry scope reading is one memoised table
+inv_machine_scopes_is_one_memoised_table --topic[1.0]--> deployment_scope
+inv_machine_scopes_is_one_memoised_table --governs[1.0]--> lib/resolve.nix
+inv_machine_scopes_is_one_memoised_table --located[1.0]--> lib/resolve.nix:481
+inv_machine_scopes_is_one_memoised_table --names[1.0]--> machineScopes
+inv_machine_scopes_answers_three_fields --invariant[1.0]--> the table answers refused usable and value
+inv_machine_scopes_answers_three_fields --topic[1.0]--> deployment_scope
+inv_machine_scopes_answers_three_fields --governs[1.0]--> lib/resolve.nix
+inv_machine_scopes_answers_three_fields --located[1.0]--> lib/resolve.nix:481
+inv_four_readings_ask_the_scope_table --invariant[1.0]--> placeable row machine record and target all ask
+inv_four_readings_ask_the_scope_table --topic[1.0]--> deployment_scope
+inv_four_readings_ask_the_scope_table --governs[1.0]--> lib/resolve.nix
+inv_four_readings_ask_the_scope_table --located[1.0]--> lib/resolve.nix:275
+inv_four_readings_ask_the_scope_table --located[1.0]--> lib/resolve.nix:636
+inv_four_readings_ask_the_scope_table --located[1.0]--> lib/resolve.nix:679
+inv_four_readings_ask_the_scope_table --rationale[1.0]--> memoised because four readings ask one question
+inv_optional_machine_fields_ride_one_update --invariant[1.0]--> both optional machine record fields ride one update
+inv_optional_machine_fields_ride_one_update --topic[1.0]--> deployment_scope
+inv_optional_machine_fields_ride_one_update --governs[1.0]--> lib/resolve.nix
+inv_optional_machine_fields_ride_one_update --located[1.0]--> lib/resolve.nix:637
+inv_optional_machine_fields_ride_one_update --names[1.0]--> microarchitecture
+inv_optional_machine_fields_ride_one_update --rationale[1.0]--> a plan counts the values an update copies
+inv_unit_account_in_user_scope_is_a_row --invariant[1.0]--> a unit account a user scope cannot honor
+inv_unit_account_in_user_scope_is_a_row --topic[1.0]--> deployment_scope
+inv_unit_account_in_user_scope_is_a_row --governs[1.0]--> lib/resolve.nix
+inv_unit_account_in_user_scope_is_a_row --located[1.0]--> lib/resolve.nix:1882
+inv_unit_account_in_user_scope_is_a_row --row[1.0]--> unit-account-in-user-scope
+inv_unit_groups_in_user_scope_is_a_row --invariant[1.0]--> declared supplementary groups are refused in user scope
+inv_unit_groups_in_user_scope_is_a_row --topic[1.0]--> deployment_scope
+inv_unit_groups_in_user_scope_is_a_row --governs[1.0]--> lib/resolve.nix
+inv_unit_groups_in_user_scope_is_a_row --located[1.0]--> lib/resolve.nix:1891
+inv_unit_groups_in_user_scope_is_a_row --row[1.0]--> unit-groups-in-user-scope
+inv_privileged_port_in_user_scope_is_a_row --invariant[1.0]--> a privileged fixed port claim is refused
+inv_privileged_port_in_user_scope_is_a_row --topic[1.0]--> deployment_scope
+inv_privileged_port_in_user_scope_is_a_row --governs[1.0]--> lib/resolve.nix
+inv_privileged_port_in_user_scope_is_a_row --located[1.0]--> lib/resolve.nix:1905
+inv_privileged_port_in_user_scope_is_a_row --row[1.0]--> port-privileged-in-user-scope
+inv_privileged_port_in_user_scope_is_a_row --figure[1.0]--> 1024
+inv_value_ownership_in_user_scope_is_a_row --invariant[1.0]--> a delivered file stated ownership is refused
+inv_value_ownership_in_user_scope_is_a_row --topic[1.0]--> deployment_scope
+inv_value_ownership_in_user_scope_is_a_row --governs[1.0]--> lib/plan.nix
+inv_value_ownership_in_user_scope_is_a_row --located[1.0]--> lib/plan.nix:1245
+inv_value_ownership_in_user_scope_is_a_row --row[1.0]--> value-ownership-in-user-scope
+inv_scope_refusal_is_never_a_silent_drop --invariant[1.0]--> never a silent drop nor a collapsed default
+inv_scope_refusal_is_never_a_silent_drop --topic[1.0]--> deployment_scope
+inv_scope_refusal_is_never_a_silent_drop --governs[1.0]--> lib/resolve.nix
+inv_scope_refusal_is_never_a_silent_drop --governs[1.0]--> lib/plan.nix
+inv_scope_refusal_is_never_a_silent_drop --located[1.0]--> lib/plan.nix:1247
+inv_unprivileged_confinement_is_not_degraded --invariant[1.0]--> confinement needing no privilege is not degraded
+inv_unprivileged_confinement_is_not_degraded --topic[1.0]--> deployment_scope
+inv_unprivileged_confinement_is_not_degraded --governs[1.0]--> image/read.nix
+inv_unprivileged_confinement_is_not_degraded --located[1.0]--> image/read.nix:86
+inv_unprivileged_confinement_is_not_degraded --names[1.0]--> PrivateUsers=yes
+inv_fixed_roots_do_not_move_with_scope --invariant[1.0]--> the three fixed roots are the same everywhere
+inv_fixed_roots_do_not_move_with_scope --topic[1.0]--> deployment_scope
+inv_fixed_roots_do_not_move_with_scope --governs[1.0]--> cli/remote.py
+inv_fixed_roots_do_not_move_with_scope --governs[1.0]--> lib/util.nix
+inv_fixed_roots_do_not_move_with_scope --located[1.0]--> cli/remote.py:86
+inv_fixed_roots_do_not_move_with_scope --located[1.0]--> lib/util.nix:345
+inv_fixed_roots_do_not_move_with_scope --host_path[1.0]--> /run/vars
+inv_fixed_roots_do_not_move_with_scope --host_path[1.0]--> /var/lib/planner/sealed
+inv_fixed_roots_do_not_move_with_scope --host_path[1.0]--> /run/portable-planner
+inv_no_uid_enters_a_plan --invariant[1.0]--> no uid enters a plan
+inv_no_uid_enters_a_plan --topic[1.0]--> deployment_scope
+inv_no_uid_enters_a_plan --governs[1.0]--> lib/plan.nix
+inv_no_uid_enters_a_plan --governs[1.0]--> lib/resolve.nix
+inv_no_uid_enters_a_plan --located[1.0]--> lib/resolve.nix:648
+inv_no_uid_enters_a_plan --rationale[1.0]--> a scope flip re-keys entries and not values
+inv_provisioning_makes_roots_writable --invariant[1.0]--> provisioning makes the fixed roots account-writable
+inv_provisioning_makes_roots_writable --topic[1.0]--> deployment_scope
+inv_provisioning_makes_roots_writable --governs[1.0]--> cli/remote.py
+inv_provisioning_makes_roots_writable --located[1.0]--> cli/remote.py:84
+inv_root_at_provision_time_never_deploy --invariant[1.0]--> root at provision time never at deploy time
+inv_root_at_provision_time_never_deploy --topic[1.0]--> deployment_scope
+inv_root_at_provision_time_never_deploy --governs[1.0]--> cli/remote.py
+inv_root_at_provision_time_never_deploy --located[1.0]--> cli/remote.py:670
+inv_preflight_verifies_rather_than_assumes --invariant[1.0]--> the apply preflight verifies rather than assumes
+inv_preflight_verifies_rather_than_assumes --topic[1.0]--> deployment_scope
+inv_preflight_verifies_rather_than_assumes --governs[1.0]--> cli/remote.py
+inv_preflight_verifies_rather_than_assumes --located[1.0]--> cli/remote.py:732
+inv_preflight_verifies_rather_than_assumes --names[1.0]--> preflight_script
+inv_a_realiser_publishes_its_scopes --invariant[1.0]--> a realiser publishes the scopes it can realise
+inv_a_realiser_publishes_its_scopes --topic[1.0]--> deployment_scope
+inv_a_realiser_publishes_its_scopes --governs[1.0]--> image/read.nix
+inv_a_realiser_publishes_its_scopes --governs[1.0]--> flakelet/read.nix
+inv_a_realiser_publishes_its_scopes --located[1.0]--> image/read.nix:346
+inv_a_realiser_publishes_its_scopes --located[1.0]--> flakelet/read.nix:86
+inv_a_realiser_publishes_its_scopes --names[1.0]--> scopes
+inv_reading_crosses_realiser_against_machine --invariant[1.0]--> crosses the stated realiser against the machine
+inv_reading_crosses_realiser_against_machine --topic[1.0]--> deployment_scope
+inv_reading_crosses_realiser_against_machine --governs[1.0]--> operator/read.nix
+inv_reading_crosses_realiser_against_machine --located[1.0]--> operator/read.nix:363
+inv_reading_crosses_realiser_against_machine --row[1.0]--> operator-entry-scope-unsupported
+inv_flakelet_is_system_scope_only --invariant[1.0]--> flakelet realises the system scope alone
+inv_flakelet_is_system_scope_only --topic[1.0]--> deployment_scope
+inv_flakelet_is_system_scope_only --governs[1.0]--> flakelet/read.nix
+inv_flakelet_is_system_scope_only --located[1.0]--> flakelet/read.nix:86
+inv_flakelet_is_system_scope_only --located[1.0]--> flakelet/read.nix:88
+inv_flakelet_is_system_scope_only --rationale[1.0]--> its core writes only system manager paths
+inv_flakelet_is_system_scope_only --host_path[1.0]--> /run/systemd/system
+inv_flakelet_is_system_scope_only --host_path[1.0]--> /var/lib/flakelet
+inv_portable_image_is_the_user_realiser --invariant[1.0]--> the portable image is the user scope realiser
+inv_portable_image_is_the_user_realiser --topic[1.0]--> deployment_scope
+inv_portable_image_is_the_user_realiser --governs[1.0]--> image/read.nix
+inv_portable_image_is_the_user_realiser --governs[1.0]--> image/default.nix
+inv_portable_image_is_the_user_realiser --located[1.0]--> image/read.nix:346
+inv_portable_image_is_the_user_realiser --rationale[1.0]--> systemd added a per-user portabled
+inv_portable_image_is_the_user_realiser --figure[1.0]--> 261.1
+inv_user_attach_needs_two_sockets --invariant[1.0]--> a user attach needs mountfsd and nsresourced
+inv_user_attach_needs_two_sockets --topic[1.0]--> deployment_scope
+inv_user_attach_needs_two_sockets --governs[1.0]--> cli/remote.py
+inv_user_attach_needs_two_sockets --located[1.0]--> cli/remote.py:89
+inv_user_attach_needs_two_sockets --names[1.0]--> systemd-mountfsd.socket
+inv_user_attach_needs_two_sockets --names[1.0]--> systemd-nsresourced.socket
+inv_user_attach_needs_unprivileged_userns --invariant[1.0]--> a user attach needs unprivileged user namespaces
+inv_user_attach_needs_unprivileged_userns --topic[1.0]--> deployment_scope
+inv_user_attach_needs_unprivileged_userns --governs[1.0]--> cli/remote.py
+inv_user_attach_needs_unprivileged_userns --located[1.0]--> cli/remote.py:91
+inv_user_attach_needs_unprivileged_userns --host_path[1.0]--> /proc/sys/user/max_user_namespaces
+inv_user_image_must_be_signed_dm_verity --invariant[1.0]--> an image outside trusted directories must be signed
+inv_user_image_must_be_signed_dm_verity --topic[1.0]--> deployment_scope
+inv_user_image_must_be_signed_dm_verity --governs[1.0]--> image/default.nix
+inv_user_image_must_be_signed_dm_verity --governs[1.0]--> image/read.nix
+inv_user_image_must_be_signed_dm_verity --located[1.0]--> image/default.nix:165
+inv_user_image_must_be_signed_dm_verity --located[1.0]--> image/read.nix:420
+inv_user_image_must_be_signed_dm_verity --rationale[1.0]--> an unsigned image escalates to interactive polkit
+inv_verity_public_key_installed_at_provision --invariant[1.0]--> the verity public key arrives at provision time
+inv_verity_public_key_installed_at_provision --topic[1.0]--> deployment_scope
+inv_verity_public_key_installed_at_provision --governs[1.0]--> tests/e2e/user-scope/verity.nix
+inv_verity_public_key_installed_at_provision --located[1.0]--> tests/e2e/user-scope/verity.nix:3
+inv_verity_public_key_installed_at_provision --host_path[1.0]--> /etc/verity.d
+inv_signing_is_an_argument_of_the_deployment --invariant[1.0]--> signing is an argument of the deployment
+inv_signing_is_an_argument_of_the_deployment --topic[1.0]--> deployment_scope
+inv_signing_is_an_argument_of_the_deployment --governs[1.0]--> operator/default.nix
+inv_signing_is_an_argument_of_the_deployment --located[1.0]--> operator/default.nix:33
+inv_signing_is_an_argument_of_the_deployment --names[1.0]--> signing
+inv_signing_key_is_one_per_operator --invariant[1.0]--> one signing key per operator never per entry
+inv_signing_key_is_one_per_operator --topic[1.0]--> deployment_scope
+inv_signing_key_is_one_per_operator --governs[1.0]--> operator/default.nix
+inv_signing_key_is_one_per_operator --governs[1.0]--> image/default.nix
+inv_signing_key_is_one_per_operator --located[1.0]--> operator/default.nix:27
+inv_signing_key_re_keys_nothing --invariant[1.0]--> no plan reading record or artifact carries it
+inv_signing_key_re_keys_nothing --topic[1.0]--> deployment_scope
+inv_signing_key_re_keys_nothing --governs[1.0]--> image/read.nix
+inv_signing_key_re_keys_nothing --governs[1.0]--> image/default.nix
+inv_signing_key_re_keys_nothing --located[1.0]--> image/read.nix:231
+inv_signing_key_re_keys_nothing --located[1.0]--> image/default.nix:33
+inv_signing_key_re_keys_nothing --rationale[1.0]--> rotating the signing key re-keys nothing
+inv_signature_is_a_sidecar_set --invariant[1.0]--> a sidecar set beside the squashfs
+inv_signature_is_a_sidecar_set --topic[1.0]--> deployment_scope
+inv_signature_is_a_sidecar_set --governs[1.0]--> image/read.nix
+inv_signature_is_a_sidecar_set --governs[1.0]--> image/default.nix
+inv_signature_is_a_sidecar_set --located[1.0]--> image/read.nix:409
+inv_signature_is_a_sidecar_set --located[1.0]--> image/default.nix:144
+inv_signature_is_a_sidecar_set --rationale[1.0]--> not a signed partition image
+inv_sidecar_names_drop_the_raw_suffix --invariant[1.0]--> sidecar names drop the image raw suffix
+inv_sidecar_names_drop_the_raw_suffix --topic[1.0]--> deployment_scope
+inv_sidecar_names_drop_the_raw_suffix --governs[1.0]--> image/read.nix
+inv_sidecar_names_drop_the_raw_suffix --located[1.0]--> image/read.nix:408
+inv_sidecar_names_drop_the_raw_suffix --names[1.0]--> sidecarsOf
+inv_sidecar_names_drop_the_raw_suffix --rationale[1.0]--> the naming rule the exec manual states
+inv_verity_step_is_format_then_sign --invariant[1.0]--> format the hash tree then sign it
+inv_verity_step_is_format_then_sign --topic[1.0]--> deployment_scope
+inv_verity_step_is_format_then_sign --governs[1.0]--> image/default.nix
+inv_verity_step_is_format_then_sign --located[1.0]--> image/default.nix:181
+inv_verity_step_is_format_then_sign --names[1.0]--> veritysetup
+inv_verity_step_is_format_then_sign --names[1.0]--> openssl
+parked_repart_ddi_image --dead_end[1.0]--> a repart disk image build was deleted
+parked_repart_ddi_image --revived_by[1.0]--> a systemd architecture name table gains another user
+inv_user_image_places_units_in_user_dir --invariant[1.0]--> user image units go to the user directory
+inv_user_image_places_units_in_user_dir --topic[1.0]--> deployment_scope
+inv_user_image_places_units_in_user_dir --governs[1.0]--> image/read.nix
+inv_user_image_places_units_in_user_dir --governs[1.0]--> image/default.nix
+inv_user_image_places_units_in_user_dir --located[1.0]--> image/read.nix:395
+inv_user_image_places_units_in_user_dir --located[1.0]--> image/default.nix:93
+inv_user_image_places_units_in_user_dir --names[1.0]--> unitDirectories
+inv_user_image_places_units_in_user_dir --host_path[1.0]--> /usr/lib/systemd/user
+inv_user_extraction_reads_only_the_user_dir --invariant[1.0]--> user mode extraction reads only that directory
+inv_user_extraction_reads_only_the_user_dir --topic[1.0]--> deployment_scope
+inv_user_extraction_reads_only_the_user_dir --governs[1.0]--> image/read.nix
+inv_user_extraction_reads_only_the_user_dir --located[1.0]--> image/read.nix:392
+inv_user_extraction_reads_only_the_user_dir --rationale[1.0]--> a system unit image matches no unit files
+inv_image_states_portable_scope_in_os_release --invariant[1.0]--> a user image states its scope in os-release
+inv_image_states_portable_scope_in_os_release --topic[1.0]--> deployment_scope
+inv_image_states_portable_scope_in_os_release --governs[1.0]--> image/default.nix
+inv_image_states_portable_scope_in_os_release --located[1.0]--> image/default.nix:88
+inv_image_states_portable_scope_in_os_release --names[1.0]--> PORTABLE_SCOPE
+inv_portable_scope_gates_attachment --invariant[1.0]--> the stated scope gates which manager may attach
+inv_portable_scope_gates_attachment --topic[1.0]--> deployment_scope
+inv_portable_scope_gates_attachment --governs[1.0]--> image/default.nix
+inv_portable_scope_gates_attachment --located[1.0]--> image/default.nix:88
+inv_portable_scope_gates_attachment --rationale[1.0]--> a mismatched runtime scope refuses the image
+inv_user_profiles_drop_two_statements --invariant[1.0]--> user profiles drop dynamic user and protected home
+inv_user_profiles_drop_two_statements --topic[1.0]--> deployment_scope
+inv_user_profiles_drop_two_statements --governs[1.0]--> image/read.nix
+inv_user_profiles_drop_two_statements --located[1.0]--> image/read.nix:73
+inv_user_profiles_drop_two_statements --names[1.0]--> droppedInUserScope
+inv_trusted_profile_is_scope_identical --invariant[1.0]--> the trusted profile is identical in both scopes
+inv_trusted_profile_is_scope_identical --topic[1.0]--> deployment_scope
+inv_trusted_profile_is_scope_identical --governs[1.0]--> image/read.nix
+inv_trusted_profile_is_scope_identical --located[1.0]--> image/read.nix:68
+inv_trusted_profile_is_scope_identical --rationale[1.0]--> trusted carries none of the three statements
+inv_denial_table_is_derived_per_scope --invariant[1.0]--> the denial table is derived per scope
+inv_denial_table_is_derived_per_scope --topic[1.0]--> deployment_scope
+inv_denial_table_is_derived_per_scope --governs[1.0]--> image/read.nix
+inv_denial_table_is_derived_per_scope --located[1.0]--> image/read.nix:79
+inv_denial_table_is_derived_per_scope --names[1.0]--> deniedBy
+inv_denial_table_is_derived_per_scope --rationale[1.0]--> never a second table written out twice
+inv_user_pool_is_under_xdg_state_home --invariant[1.0]--> image and sidecars are placed in the pool
+inv_user_pool_is_under_xdg_state_home --topic[1.0]--> deployment_scope
+inv_user_pool_is_under_xdg_state_home --governs[1.0]--> image/default.nix
+inv_user_pool_is_under_xdg_state_home --located[1.0]--> image/default.nix:412
+inv_user_pool_is_under_xdg_state_home --names[1.0]--> XDG_STATE_HOME
+inv_user_pool_is_under_xdg_state_home --host_path[1.0]--> $HOME/.local/state/portables
+inv_user_pool_is_under_xdg_state_home --figure[1.0]--> 0700
+inv_attach_by_name_never_by_path --invariant[1.0]--> attach by name rather than by path
+inv_attach_by_name_never_by_path --topic[1.0]--> deployment_scope
+inv_attach_by_name_never_by_path --governs[1.0]--> image/default.nix
+inv_attach_by_name_never_by_path --located[1.0]--> image/default.nix:406
+inv_attach_by_name_never_by_path --rationale[1.0]--> the search path never scans that copy
+inv_attach_by_name_never_by_path --host_path[0.6]--> $HOME/.config/portables
+inv_attach_does_not_deliver --invariant[1.0]--> an attach does not start a user unit
+inv_attach_does_not_deliver --topic[1.0]--> deployment_scope
+inv_attach_does_not_deliver --governs[1.0]--> image/default.nix
+inv_attach_does_not_deliver --located[1.0]--> image/default.nix:510
+inv_attach_does_not_deliver --located[1.0]--> image/default.nix:512
+inv_attach_does_not_deliver --rationale[1.0]--> the manager has not reloaded the new units
+inv_seal_recipient_is_an_age_key --invariant[1.0]--> the registry declares an age seal recipient
+inv_seal_recipient_is_an_age_key --topic[1.0]--> deployment_scope
+inv_seal_recipient_is_an_age_key --governs[1.0]--> lib/resolve.nix
+inv_seal_recipient_is_an_age_key --located[1.0]--> lib/resolve.nix:469
+inv_seal_recipient_is_an_age_key --names[1.0]--> sealRecipient
+inv_seal_recipient_is_an_age_key --row[1.0]--> machine-seal-recipient-malformed
+inv_seal_recipient_is_not_an_ssh_host_key --invariant[1.0]--> never the machine ssh host key
+inv_seal_recipient_is_not_an_ssh_host_key --topic[1.0]--> deployment_scope
+inv_seal_recipient_is_not_an_ssh_host_key --governs[1.0]--> lib/resolve.nix
+inv_seal_recipient_is_not_an_ssh_host_key --located[1.0]--> lib/resolve.nix:59
+inv_seal_recipient_is_not_an_ssh_host_key --rationale[1.0]--> an account cannot read the host keys
+inv_seal_recipient_is_not_an_ssh_host_key --host_path[1.0]--> /etc/ssh
+inv_private_half_stays_off_this_repository --invariant[1.0]--> nothing here holds or moves the private half
+inv_private_half_stays_off_this_repository --topic[1.0]--> deployment_scope
+inv_private_half_stays_off_this_repository --governs[1.0]--> cli/remote.py
+inv_private_half_stays_off_this_repository --located[1.0]--> cli/remote.py:495
+inv_private_half_stays_off_this_repository --rationale[1.0]--> the identity is minted at provision time
+parked_exported_bundle_no_run_can_dial --dead_end[1.0]--> exported bundle for a machine no run dials
+parked_exported_bundle_no_run_can_dial --revived_by[1.0]--> a later change owning the exported bundle

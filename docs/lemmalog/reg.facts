@@ -1,0 +1,431 @@
+reg_unit_suite_registration --registration_point[1.0]--> a new unit suite attribute
+reg_unit_suite_registration --register_in[1.0]--> tests/default.nix
+reg_unit_suite_registration --enforced_by[1.0]--> tests/unit/coverage.nix%testAScenarioGainsNoTest
+reg_unit_suite_registration --governs[1.0]--> tests/default.nix
+reg_unit_suite_registration --governs[1.0]--> tests/unit/*.nix
+reg_unit_suite_registration --located[1.0]--> tests/default.nix:34
+reg_unit_suite_registration --located[1.0]--> tests/default.nix:137
+inv_coverage_is_handed_its_own_suite_name --invariant[1.0]--> coverage is handed every suite name
+inv_coverage_is_handed_its_own_suite_name --topic[1.0]--> registration_points
+inv_coverage_is_handed_its_own_suite_name --governs[1.0]--> tests/default.nix
+inv_coverage_is_handed_its_own_suite_name --located[1.0]--> tests/default.nix:123
+inv_coverage_is_handed_its_own_suite_name --names[1.0]--> unitTestNames
+inv_coverage_is_handed_its_own_suite_name --rationale[1.0]--> reading its own names is not a cycle
+reg_counterexample_home --registration_point[1.0]--> a counterexample in the home its failure allows
+reg_counterexample_home --register_in[1.0]--> tests/counterexamples/probes.nix
+reg_counterexample_home --enforced_in[1.0]--> tests/unit/layers.nix
+reg_counterexample_home --enforced_by[1.0]--> testACounterexampleQuotesTheClaimItPins
+reg_counterexample_home --governs[1.0]--> tests/counterexamples/probes.nix
+reg_counterexample_home --governs[1.0]--> tests/unit/counterexamples.nix
+reg_counterexample_home --governs[1.0]--> cli/counterexample_test.py
+reg_counterexample_home --located[1.0]--> tests/unit/layers.nix:770
+reg_counterexample_home --located[1.0]--> flake-module.nix:40
+inv_a_probe_is_named_by_existing --invariant[1.0]--> a probe is registered by existing alone
+inv_a_probe_is_named_by_existing --topic[1.0]--> registration_points
+inv_a_probe_is_named_by_existing --governs[1.0]--> tests/counterexamples/probes.nix
+inv_a_probe_is_named_by_existing --governs[1.0]--> flake-module.nix
+inv_a_probe_is_named_by_existing --located[1.0]--> flake-module.nix:328
+inv_a_probe_is_named_by_existing --names[1.0]--> checks.planner-counterexamples-eval
+inv_a_probe_is_named_by_existing --rationale[1.0]--> the flake reads the attribute names
+reg_test_layer_directory --registration_point[1.0]--> a new directory of tests beside the layers
+reg_test_layer_directory --register_in[1.0]--> tests/unit/layers.nix
+reg_test_layer_directory --enforced_by[1.0]--> tests/unit/layers.nix%testTheTestTreeIsRead
+reg_test_layer_directory --governs[1.0]--> tests/unit
+reg_test_layer_directory --governs[1.0]--> tests/e2e
+reg_test_layer_directory --governs[1.0]--> tests/counterexamples
+reg_test_layer_directory --located[1.0]--> tests/unit/layers.nix:977
+reg_top_level_entry_class --registration_point[1.0]--> a new top-level entry and its class
+reg_top_level_entry_class --register_in[1.0]--> tests/unit/layers.nix
+reg_top_level_entry_class --enforced_in[1.0]--> tests/unit/layers.nix
+reg_top_level_entry_class --enforced_by[1.0]--> testATopLevelEntryBelongsToNoStatedClass
+reg_top_level_entry_class --governs[1.0]--> tests/unit/layers.nix
+reg_top_level_entry_class --located[1.0]--> tests/unit/layers.nix:56
+reg_top_level_entry_class --located[1.0]--> tests/unit/layers.nix:1106
+reg_path_scanned_directory --registration_point[1.0]--> a directory whose files the path scan reads
+reg_path_scanned_directory --register_in[1.0]--> tests/unit/layers.nix
+reg_path_scanned_directory --enforced_by[1.0]--> tests/unit/layers.nix%testAFileNamesAPathThatIsNotThere
+reg_path_scanned_directory --governs[1.0]--> tests/unit/layers.nix
+reg_path_scanned_directory --located[1.0]--> tests/unit/layers.nix:295
+reg_path_scanned_directory --located[1.0]--> tests/unit/layers.nix:1071
+reg_flake_deliverable_import --registration_point[1.0]--> a deliverable carrying its own flake wiring
+reg_flake_deliverable_import --register_in[1.0]--> flake.nix
+reg_flake_deliverable_import --governs[1.0]--> flake.nix
+reg_flake_deliverable_import --governs[1.0]--> cli/flake-module.nix
+reg_flake_deliverable_import --governs[1.0]--> devshells.nix
+reg_flake_deliverable_import --located[1.0]--> flake.nix:43
+reg_e2e_folder_discovery --registration_point[1.0]--> an end-to-end folder named nowhere in the flake
+reg_e2e_folder_discovery --register_in[1.0]--> tests/e2e/*/deployment/default.nix
+reg_e2e_folder_discovery --enforced_in[1.0]--> tests/unit/layers.nix
+reg_e2e_folder_discovery --enforced_by[1.0]--> testAnEndToEndFolderIsAddedWithoutEditingTheFlake
+reg_e2e_folder_discovery --governs[1.0]--> flake-module.nix
+reg_e2e_folder_discovery --governs[1.0]--> tests/e2e
+reg_e2e_folder_discovery --located[1.0]--> flake-module.nix:166
+reg_e2e_folder_discovery --located[1.0]--> tests/unit/layers.nix:1055
+reg_python_module_directory --registration_point[1.0]--> a new directory of top-level python modules
+reg_python_module_directory --register_in[1.0]--> treefmt.nix
+reg_python_module_directory --governs[1.0]--> treefmt.nix
+reg_python_module_directory --governs[1.0]--> ruff.toml
+reg_python_module_directory --located[1.0]--> treefmt.nix:74
+reg_python_module_directory --located[1.0]--> ruff.toml:4
+reg_spec_classification --registration_point[1.0]--> a new specification as accountable or excused
+reg_spec_classification --register_in[1.0]--> tests/unit/coverage.nix
+reg_spec_classification --enforced_by[1.0]--> tests/unit/coverage.nix%testEverySpecificationIsClassified
+reg_spec_classification --governs[1.0]--> tests/unit/coverage.nix
+reg_spec_classification --governs[1.0]--> openspec/specs/**
+reg_spec_classification --governs[1.0]--> openspec/changes/**
+reg_spec_classification --located[1.0]--> tests/unit/coverage.nix:57
+reg_spec_classification --located[1.0]--> tests/unit/coverage.nix:104
+inv_spec_path_shape_by_capability --invariant[1.0]--> one current specification path per capability
+inv_spec_path_shape_by_capability --topic[1.0]--> registration_points
+inv_spec_path_shape_by_capability --governs[1.0]--> openspec/specs/**
+inv_spec_path_shape_by_capability --governs[1.0]--> tests/unit/coverage.nix
+inv_spec_path_shape_by_capability --located[1.0]--> tests/unit/coverage.nix:57
+inv_coverage_root_is_the_openspec_tree --invariant[1.0]--> the suite is handed the whole openspec root
+inv_coverage_root_is_the_openspec_tree --topic[1.0]--> registration_points
+inv_coverage_root_is_the_openspec_tree --governs[1.0]--> tests/unit/coverage.nix
+inv_coverage_root_is_the_openspec_tree --governs[1.0]--> flake-module.nix
+inv_coverage_root_is_the_openspec_tree --located[1.0]--> flake-module.nix:12
+inv_coverage_root_is_the_openspec_tree --names[1.0]--> openspecRoot
+inv_coverage_root_is_the_openspec_tree --rationale[1.0]--> not the changes directory alone
+inv_archived_delta_is_not_read --invariant[1.0]--> the archive directory is deliberately not read
+inv_archived_delta_is_not_read --topic[1.0]--> registration_points
+inv_archived_delta_is_not_read --governs[1.0]--> tests/unit/coverage.nix
+inv_archived_delta_is_not_read --governs[1.0]--> openspec/changes/archive
+inv_archived_delta_is_not_read --located[1.0]--> tests/unit/coverage.nix:127
+inv_archived_delta_is_not_read --enforced_by[1.0]--> tests/unit/coverage.nix%testEverySpecificationIsClassified
+inv_archived_delta_is_not_read --rationale[1.0]--> an archived delta is in the current spec
+inv_an_excuse_expires_when_its_change_lands --invariant[1.0]--> an excuse expires when its change starts landing
+inv_an_excuse_expires_when_its_change_lands --topic[1.0]--> registration_points
+inv_an_excuse_expires_when_its_change_lands --governs[1.0]--> tests/unit/coverage.nix
+inv_an_excuse_expires_when_its_change_lands --governs[1.0]--> openspec/changes/**
+inv_an_excuse_expires_when_its_change_lands --located[1.0]--> tests/unit/coverage.nix:406
+inv_an_excuse_expires_when_its_change_lands --enforced_in[1.0]--> tests/unit/coverage.nix
+inv_an_excuse_expires_when_its_change_lands --enforced_by[1.0]--> testAnExcuseOutlivesTheStateItDescribes
+inv_an_excuse_names_the_change_it_rests_on --invariant[1.0]--> an excuse names the change it rests on
+inv_an_excuse_names_the_change_it_rests_on --topic[1.0]--> registration_points
+inv_an_excuse_names_the_change_it_rests_on --governs[1.0]--> tests/unit/coverage.nix
+inv_an_excuse_names_the_change_it_rests_on --located[1.0]--> tests/unit/coverage.nix:407
+inv_an_excuse_names_the_change_it_rests_on --enforced_by[1.0]--> tests/unit/coverage.nix%testAnExcuseOutlivesItsSpecification
+inv_a_landed_marker_is_read_line_anchored --invariant[1.0]--> a ticked task marker is read line anchored
+inv_a_landed_marker_is_read_line_anchored --topic[1.0]--> registration_points
+inv_a_landed_marker_is_read_line_anchored --governs[1.0]--> tests/unit/coverage.nix
+inv_a_landed_marker_is_read_line_anchored --governs[1.0]--> openspec/changes/**
+inv_a_landed_marker_is_read_line_anchored --located[1.0]--> tests/unit/coverage.nix:402
+inv_a_landed_marker_is_read_line_anchored --names[1.0]--> changeHasLanded
+inv_a_landed_marker_is_read_line_anchored --enforced_in[1.0]--> tests/unit/coverage.nix
+inv_a_landed_marker_is_read_line_anchored --enforced_by[1.0]--> testAnExcuseOutlivesTheStateItDescribes
+inv_a_landed_marker_is_read_line_anchored --rationale[1.0]--> a tasks file may name it in prose
+inv_landing_moves_delta_specs_to_accountable --invariant[1.0]--> landing moves a delta specification into accountable
+inv_landing_moves_delta_specs_to_accountable --topic[1.0]--> registration_points
+inv_landing_moves_delta_specs_to_accountable --governs[1.0]--> tests/unit/coverage.nix
+inv_landing_moves_delta_specs_to_accountable --governs[1.0]--> openspec/changes/**
+inv_landing_moves_delta_specs_to_accountable --located[1.0]--> tests/unit/coverage.nix:57
+inv_landing_moves_delta_specs_to_accountable --figure[1.0]--> 18
+inv_landing_moves_delta_specs_to_accountable --rationale[1.0]--> the edit that ticks the boxes moves them
+inv_archiving_moves_a_delta_out --invariant[1.0]--> archiving moves a delta out of accountable
+inv_archiving_moves_a_delta_out --topic[1.0]--> registration_points
+inv_archiving_moves_a_delta_out --governs[1.0]--> tests/unit/coverage.nix
+inv_archiving_moves_a_delta_out --governs[1.0]--> openspec/changes/**
+inv_archiving_moves_a_delta_out --located[1.0]--> tests/unit/coverage.nix:127
+inv_archiving_moves_a_delta_out --rationale[1.0]--> its content lands in the current spec
+reg_directory_kind --registration_point[1.0]--> a new directory kind and its mode
+reg_directory_kind --register_in[1.0]--> lib/module.nix
+reg_directory_kind --governs[1.0]--> lib/module.nix
+reg_directory_kind --governs[1.0]--> lib/plan.nix
+reg_directory_kind --located[1.0]--> lib/module.nix:63
+reg_directory_kind --located[1.0]--> lib/plan.nix:801
+inv_unit_vocabulary_derives_directory_kinds --invariant[1.0]--> the vocabulary derives both fields of a kind
+inv_unit_vocabulary_derives_directory_kinds --topic[1.0]--> registration_points
+inv_unit_vocabulary_derives_directory_kinds --governs[1.0]--> lib/module.nix
+inv_unit_vocabulary_derives_directory_kinds --located[1.0]--> lib/module.nix:69
+inv_unit_vocabulary_derives_directory_kinds --names[1.0]--> unitVocabulary
+inv_unit_vocabulary_derives_directory_kinds --row[1.0]--> unit-directory-declared-twice
+inv_unit_vocabulary_derives_directory_kinds --row[1.0]--> unit-directory-mode-without-directory
+inv_unit_vocabulary_derives_directory_kinds --rationale[1.0]--> a hand-written list let a kind stay inert
+parked_third_state_declaration_site --dead_end[1.0]--> a path-keyed state beyond a unit directory
+parked_third_state_declaration_site --revived_by[1.0]--> a shape deciding which site owns the fact
+parked_third_state_declaration_site --governs[1.0]--> openspec/changes/PARKED.md
+parked_third_state_declaration_site --located[1.0]--> openspec/changes/PARKED.md:75
+reg_excluded_construct --registration_point[1.0]--> a new excluded construct with row and trigger
+reg_excluded_construct --register_in[1.0]--> lib/excluded.nix
+reg_excluded_construct --enforced_by[1.0]--> tests/unit/exclusions.nix
+reg_excluded_construct --governs[1.0]--> lib/excluded.nix
+reg_excluded_construct --governs[1.0]--> tests/unit/exclusions.nix
+reg_excluded_construct --located[1.0]--> lib/excluded.nix:6
+reg_excluded_construct --located[1.0]--> lib/excluded.nix:15
+reg_excluded_construct --row[1.0]--> declaration-excluded-key
+reg_excluded_construct --row[1.0]--> export-atom-excluded-key
+reg_root_document_example --registration_point[1.0]--> the example the root document shows
+reg_root_document_example --register_in[1.0]--> tests/unit/layers.nix
+reg_root_document_example --enforced_in[1.0]--> tests/unit/layers.nix
+reg_root_document_example --enforced_by[1.0]--> testTheExampleADocumentShowsIsTheExampleAFolderHolds
+reg_root_document_example --governs[1.0]--> README.md
+reg_root_document_example --governs[1.0]--> tests/e2e/newcomer/template/**
+reg_root_document_example --located[1.0]--> tests/unit/layers.nix:404
+reg_root_document_example --located[1.0]--> tests/unit/layers.nix:1076
+reg_root_document_path_rule --registration_point[1.0]--> the paragraph stating how a path arrives
+reg_root_document_path_rule --register_in[1.0]--> tests/unit/layers.nix
+reg_root_document_path_rule --enforced_in[1.0]--> tests/unit/layers.nix
+reg_root_document_path_rule --enforced_by[1.0]--> testTheRootDocumentStatesHowAPathReachesAUnit
+reg_root_document_path_rule --governs[1.0]--> README.md
+reg_root_document_path_rule --located[1.0]--> README.md:35
+reg_root_document_path_rule --located[1.0]--> tests/unit/layers.nix:1292
+reg_scenario_test_name --registration_point[1.0]--> a scenario heading naming its test by construction
+reg_scenario_test_name --register_in[1.0]--> tests/unit/coverage.nix
+reg_scenario_test_name --enforced_by[1.0]--> tests/unit/coverage.nix%testATestNameIsDerivedFromAHeading
+reg_scenario_test_name --governs[1.0]--> openspec/**
+reg_scenario_test_name --governs[1.0]--> tests/unit/coverage.nix
+reg_scenario_test_name --located[1.0]--> tests/unit/coverage.nix:419
+reg_scenario_test_name --located[1.0]--> tests/unit/coverage.nix:137
+inv_one_behaviour_in_two_layers_fails --invariant[1.0]--> a test name present in both layers fails
+inv_one_behaviour_in_two_layers_fails --topic[1.0]--> registration_points
+inv_one_behaviour_in_two_layers_fails --governs[1.0]--> tests/unit/coverage.nix
+inv_one_behaviour_in_two_layers_fails --located[1.0]--> tests/unit/coverage.nix:499
+inv_one_behaviour_in_two_layers_fails --enforced_in[1.0]--> tests/unit/coverage.nix
+inv_one_behaviour_in_two_layers_fails --enforced_by[1.0]--> testOneBehaviourIsAssertedInBothLayers
+inv_one_behaviour_in_two_layers_fails --rationale[1.0]--> duplicate coverage is a failure not a bonus
+reg_openspec_path_scan_exemption --registration_point[1.0]--> the records exempt from the path scan
+reg_openspec_path_scan_exemption --register_in[1.0]--> tests/unit/layers.nix
+reg_openspec_path_scan_exemption --enforced_by[1.0]--> tests/unit/layers.nix%testARecordIsReadAsHistory
+reg_openspec_path_scan_exemption --governs[1.0]--> openspec/**
+reg_openspec_path_scan_exemption --governs[1.0]--> tests/unit/layers.nix
+reg_openspec_path_scan_exemption --located[1.0]--> tests/unit/layers.nix:1093
+inv_a_record_describes_the_past_repository --invariant[1.0]--> a record describes the repository as it was
+inv_a_record_describes_the_past_repository --topic[1.0]--> registration_points
+inv_a_record_describes_the_past_repository --governs[1.0]--> openspec/**
+inv_a_record_describes_the_past_repository --located[1.0]--> tests/unit/layers.nix:295
+inv_a_record_describes_the_past_repository --rationale[1.0]--> a stale path in a record is history
+inv_a_document_count_is_no_longer_crossed --invariant[1.0]--> a document figure is maintained by hand
+inv_a_document_count_is_no_longer_crossed --topic[1.0]--> registration_points
+inv_a_document_count_is_no_longer_crossed --governs[1.0]--> docs/tooling.md
+inv_a_document_count_is_no_longer_crossed --prose_in[1.0]--> docs/tooling.md
+inv_a_document_count_is_no_longer_crossed --rationale[1.0]--> the requirement is withdrawn rather than excused
+change_answer_whether_a_machine_is_current --change_status[1.0]--> open
+change_answer_whether_a_machine_is_current --located[1.0]--> openspec/changes/answer-whether-a-machine-is-current
+change_answer_whether_a_machine_is_current --names[1.0]--> tasks.md
+change_declare_service_state --change_status[1.0]--> struck
+change_declare_service_state --located[1.0]--> openspec/changes/PARKED.md:81
+change_deliver_a_secret_without_exposing_it --change_status[1.0]--> narrowed
+change_deliver_a_secret_without_exposing_it --located[1.0]--> openspec/changes/deliver-a-secret-without-exposing-it
+change_name_the_machine_a_run_dials --change_status[1.0]--> parked
+change_name_the_machine_a_run_dials --located[1.0]--> openspec/changes/name-the-machine-a-run-dials
+change_run_an_entry_without_root --change_status[1.0]--> landed
+change_run_an_entry_without_root --located[1.0]--> openspec/changes/run-an-entry-without-root
+change_retire_an_unnamed_entry --change_status[1.0]--> landed
+change_retire_an_unnamed_entry --located[1.0]--> openspec/changes/retire-an-entry-a-build-no-longer-names
+change_probe_a_service_before_live --change_status[1.0]--> landed
+change_probe_a_service_before_live --located[1.0]--> openspec/changes/probe-a-service-before-it-counts-as-live
+change_unseal_a_value_after_a_reboot --change_status[1.0]--> landed
+change_unseal_a_value_after_a_reboot --located[1.0]--> openspec/changes/unseal-a-value-after-a-reboot
+change_enroll_a_friend_machine --change_status[1.0]--> landed
+change_enroll_a_friend_machine --located[1.0]--> openspec/changes/enroll-a-friend-machine
+inv_eight_changes_stay_on_disk_until_archived --invariant[1.0]--> a change stays on disk until archived
+inv_eight_changes_stay_on_disk_until_archived --topic[1.0]--> registration_points
+inv_eight_changes_stay_on_disk_until_archived --governs[1.0]--> openspec/changes
+inv_eight_changes_stay_on_disk_until_archived --located[1.0]--> openspec/changes
+inv_eight_changes_stay_on_disk_until_archived --figure[1.0]--> 8
+inv_a_change_stays_open_when_ticking_lies --invariant[1.0]--> a task recorded not doable is never ticked
+inv_a_change_stays_open_when_ticking_lies --topic[1.0]--> registration_points
+inv_a_change_stays_open_when_ticking_lies --governs[1.0]--> openspec/changes/answer-whether-a-machine-is-current
+inv_a_change_stays_open_when_ticking_lies --enforced_in[1.0]--> tests/unit/coverage.nix
+inv_a_change_stays_open_when_ticking_lies --enforced_by[1.0]--> testAnExcuseOutlivesTheStateItDescribes
+inv_a_change_stays_open_when_ticking_lies --located[1.0]--> tests/unit/coverage.nix:533
+inv_a_change_stays_open_when_ticking_lies --rationale[1.0]--> its landed tasks are the synthetic probe
+inv_parked_delta_specs_stay_excused --invariant[1.0]--> the parked change keeps its delta specs excused
+inv_parked_delta_specs_stay_excused --topic[1.0]--> registration_points
+inv_parked_delta_specs_stay_excused --governs[1.0]--> tests/unit/coverage.nix
+inv_parked_delta_specs_stay_excused --governs[1.0]--> openspec/changes/name-the-machine-a-run-dials
+inv_parked_delta_specs_stay_excused --located[1.0]--> tests/unit/coverage.nix:104
+inv_parked_delta_specs_stay_excused --figure[1.0]--> 3
+inv_fixtures_are_excluded_from_the_formatter --invariant[1.0]--> the fixture tree is excluded from the formatter
+inv_fixtures_are_excluded_from_the_formatter --topic[1.0]--> fixtures
+inv_fixtures_are_excluded_from_the_formatter --governs[1.0]--> fixtures/**
+inv_fixtures_are_excluded_from_the_formatter --governs[1.0]--> treefmt.nix
+inv_fixtures_are_excluded_from_the_formatter --located[1.0]--> treefmt.nix:107
+inv_fixtures_are_excluded_from_the_formatter --enforced_by[1.0]--> tests/unit/plan.nix%testTheGoldenPlanMatches
+inv_fixtures_are_excluded_from_the_formatter --rationale[1.0]--> a formatter would edit a test subject
+inv_fixtures_are_excluded_from_the_formatter --prose_in[1.0]--> docs/plan.md
+inv_the_golden_plan_is_compared_by_equality --invariant[1.0]--> the golden plan is compared by equality
+inv_the_golden_plan_is_compared_by_equality --topic[1.0]--> fixtures
+inv_the_golden_plan_is_compared_by_equality --governs[1.0]--> fixtures/minimal-typed-edge/plan/backup.json
+inv_the_golden_plan_is_compared_by_equality --governs[1.0]--> tests/unit/plan.nix
+inv_the_golden_plan_is_compared_by_equality --located[1.0]--> tests/unit/plan.nix:1100
+inv_the_golden_plan_is_compared_by_equality --enforced_by[1.0]--> tests/unit/plan.nix%testTheGoldenPlanMatches
+inv_the_golden_plan_is_compared_by_equality --rationale[1.0]--> every field takes part in the comparison
+inv_the_golden_is_regenerated_by_hand --invariant[1.0]--> the golden fixture is regenerated by hand
+inv_the_golden_is_regenerated_by_hand --topic[1.0]--> fixtures
+inv_the_golden_is_regenerated_by_hand --governs[1.0]--> fixtures/minimal-typed-edge/plan/backup.json
+inv_the_golden_is_regenerated_by_hand --names[1.0]--> debug.worked.plan
+inv_the_golden_is_regenerated_by_hand --located[1.0]--> flake-module.nix:11
+inv_the_golden_is_regenerated_by_hand --rationale[1.0]--> the evaluating layer cannot write the tree
+inv_the_golden_is_regenerated_by_hand --prose_in[1.0]--> docs/tooling.md
+inv_the_fixture_renders_the_diagnostics_table --invariant[1.0]--> the committed table is what the debug prints
+inv_the_fixture_renders_the_diagnostics_table --topic[1.0]--> fixtures
+inv_the_fixture_renders_the_diagnostics_table --governs[1.0]--> fixtures/minimal-typed-edge/plan/diagnostics.txt
+inv_the_fixture_renders_the_diagnostics_table --located[1.0]--> fixtures/minimal-typed-edge/plan/diagnostics.txt:11
+inv_the_fixture_renders_the_diagnostics_table --names[1.0]--> debug.rendered
+inv_gamma_has_not_run_its_generator --invariant[1.0]--> one fixture machine deliberately lacks generated bytes
+inv_gamma_has_not_run_its_generator --topic[1.0]--> fixtures
+inv_gamma_has_not_run_its_generator --governs[1.0]--> fixtures/minimal-typed-edge/deployment/machines.nix
+inv_gamma_has_not_run_its_generator --governs[1.0]--> fixtures/minimal-typed-edge/plan/backup.json
+inv_gamma_has_not_run_its_generator --located[1.0]--> fixtures/minimal-typed-edge/deployment/machines.nix:33
+inv_gamma_has_not_run_its_generator --located[1.0]--> fixtures/minimal-typed-edge/plan/backup.json:359
+inv_gamma_has_not_run_its_generator --row[1.0]--> set-entry-absent
+inv_gamma_has_not_run_its_generator --rationale[1.0]--> the incomplete render and the absence marker
+inv_the_fixture_server_carries_no_client_tag --invariant[1.0]--> the fixture server carries no client tag
+inv_the_fixture_server_carries_no_client_tag --topic[1.0]--> fixtures
+inv_the_fixture_server_carries_no_client_tag --governs[1.0]--> fixtures/minimal-typed-edge/deployment/machines.nix
+inv_the_fixture_server_carries_no_client_tag --located[1.0]--> fixtures/minimal-typed-edge/deployment/machines.nix:6
+inv_the_fixture_server_carries_no_client_tag --rationale[1.0]--> a self-tagged server would authorize its own key
+inv_the_fixture_repo_port_is_fixed --invariant[1.0]--> the repository port is fixed and never defaulted
+inv_the_fixture_repo_port_is_fixed --topic[1.0]--> fixtures
+inv_the_fixture_repo_port_is_fixed --governs[1.0]--> fixtures/minimal-typed-edge/modules/borg-repo/default.nix
+inv_the_fixture_repo_port_is_fixed --governs[1.0]--> fixtures/minimal-typed-edge/modules/borg-repo/server.nix
+inv_the_fixture_repo_port_is_fixed --located[1.0]--> fixtures/minimal-typed-edge/modules/borg-repo/default.nix:15
+inv_the_fixture_repo_port_is_fixed --located[1.0]--> fixtures/minimal-typed-edge/modules/borg-repo/server.nix:16
+inv_the_fixture_repo_port_is_fixed --figure[1.0]--> 22
+inv_the_fixture_repo_port_is_fixed --rationale[1.0]--> the exported url is built from it
+inv_fixture_interface_has_two_exports --invariant[1.0]--> the repository interface declares two exports
+inv_fixture_interface_has_two_exports --topic[1.0]--> fixtures
+inv_fixture_interface_has_two_exports --governs[1.0]--> fixtures/minimal-typed-edge/interfaces/default.nix
+inv_fixture_interface_has_two_exports --located[1.0]--> fixtures/minimal-typed-edge/interfaces/default.nix:18
+inv_fixture_interface_has_two_exports --rationale[1.0]--> provider keyset equality needs something to compare
+inv_worked_package_defaults_are_literal_paths --invariant[1.0]--> the worked fixture defaults packages to literal paths
+inv_worked_package_defaults_are_literal_paths --topic[1.0]--> fixtures
+inv_worked_package_defaults_are_literal_paths --governs[1.0]--> tests/unit/worked.nix
+inv_worked_package_defaults_are_literal_paths --located[1.0]--> tests/unit/worked.nix:6
+inv_worked_package_defaults_are_literal_paths --names[1.0]--> packages
+inv_worked_package_defaults_are_literal_paths --rationale[1.0]--> the image check hands real packages
+inv_a_fixture_placeholder_voids_evidence --invariant[1.0]--> an elision or short hash voids evidence
+inv_a_fixture_placeholder_voids_evidence --topic[1.0]--> fixtures
+inv_a_fixture_placeholder_voids_evidence --governs[1.0]--> fixtures/minimal-typed-edge/plan/backup.json
+inv_a_fixture_placeholder_voids_evidence --governs[1.0]--> tests/unit/plan.nix
+inv_a_fixture_placeholder_voids_evidence --located[1.0]--> tests/unit/plan.nix:110
+inv_a_fixture_placeholder_voids_evidence --figure[1.0]--> 16
+inv_a_fixture_placeholder_voids_evidence --enforced_by[1.0]--> tests/unit/plan.nix%testAPlaceholderSurvivesIntoTheFixture
+inv_perf_eval_stays_a_plain_nix_file --invariant[1.0]--> the measured entry point stays plain nix
+inv_perf_eval_stays_a_plain_nix_file --topic[1.0]--> perf
+inv_perf_eval_stays_a_plain_nix_file --governs[1.0]--> perf/eval.nix
+inv_perf_eval_stays_a_plain_nix_file --located[1.0]--> perf/eval.nix:1
+inv_perf_eval_stays_a_plain_nix_file --figure[1.0]--> 9
+inv_perf_eval_stays_a_plain_nix_file --rationale[1.0]--> a flake attribute folds flake evaluation in
+inv_perf_eval_stays_a_plain_nix_file --prose_in[1.0]--> docs/tooling.md
+inv_fake_store_hashes_are_base_thirty_two --invariant[1.0]--> a fake store hash uses the store alphabet
+inv_fake_store_hashes_are_base_thirty_two --topic[1.0]--> perf
+inv_fake_store_hashes_are_base_thirty_two --governs[1.0]--> perf/fleet.nix
+inv_fake_store_hashes_are_base_thirty_two --governs[1.0]--> perf/mesh.nix
+inv_fake_store_hashes_are_base_thirty_two --located[1.0]--> perf/fleet.nix:13
+inv_fake_store_hashes_are_base_thirty_two --located[1.0]--> perf/mesh.nix:22
+inv_fake_store_hashes_are_base_thirty_two --located[1.0]--> lib/util.nix:282
+inv_fake_store_hashes_are_base_thirty_two --names[1.0]--> util.storePathsIn
+inv_fake_store_hashes_are_base_thirty_two --figure[1.0]--> 32
+inv_fake_store_hashes_are_base_thirty_two --enforced_by[1.0]--> tests/unit/perf.nix%testTheHarnessIsAskedToBuild
+inv_fake_store_hashes_are_base_thirty_two --rationale[1.0]--> an unrecognised path leaves the closure check vacuous
+inv_mesh_keeps_one_unit_per_peer --invariant[1.0]--> the mesh fixture keeps one unit per peer
+inv_mesh_keeps_one_unit_per_peer --topic[1.0]--> perf
+inv_mesh_keeps_one_unit_per_peer --governs[1.0]--> perf/mesh.nix
+inv_mesh_keeps_one_unit_per_peer --located[1.0]--> perf/mesh.nix:168
+inv_mesh_keeps_one_unit_per_peer --enforced_by[1.0]--> tests/unit/perf.nix%testTheMeshPlansOneFleetSizedEntry
+inv_mesh_keeps_one_unit_per_peer --rationale[1.0]--> the reference list is the quadratic path measured
+inv_mesh_peer_units_are_ordered_after_the_hub --invariant[1.0]--> every peer unit is ordered after the hub
+inv_mesh_peer_units_are_ordered_after_the_hub --topic[1.0]--> perf
+inv_mesh_peer_units_are_ordered_after_the_hub --governs[1.0]--> perf/mesh.nix
+inv_mesh_peer_units_are_ordered_after_the_hub --located[1.0]--> perf/mesh.nix:172
+inv_mesh_peer_units_are_ordered_after_the_hub --names[1.0]--> after
+inv_mesh_spells_placements_as_machine_lists --invariant[1.0]--> the mesh fixture spells placements as machine lists
+inv_mesh_spells_placements_as_machine_lists --topic[1.0]--> perf
+inv_mesh_spells_placements_as_machine_lists --governs[1.0]--> perf/mesh.nix
+inv_mesh_spells_placements_as_machine_lists --governs[1.0]--> perf/fleet.nix
+inv_mesh_spells_placements_as_machine_lists --located[1.0]--> perf/mesh.nix:268
+inv_mesh_spells_placements_as_machine_lists --rationale[1.0]--> the fleet fixture covers tags instead
+inv_measure_applies_arguments_explicitly --invariant[1.0]--> the measurement applies its arguments explicitly
+inv_measure_applies_arguments_explicitly --topic[1.0]--> perf
+inv_measure_applies_arguments_explicitly --governs[1.0]--> perf/measure.sh
+inv_measure_applies_arguments_explicitly --located[1.0]--> perf/measure.sh:134
+inv_measure_applies_arguments_explicitly --names[1.0]--> --apply
+inv_measure_applies_arguments_explicitly --rationale[1.0]--> a file evaluation auto-calls no function
+inv_a_budget_is_cost_per_plan_entry --invariant[1.0]--> a budget is a cost per plan entry
+inv_a_budget_is_cost_per_plan_entry --topic[1.0]--> perf
+inv_a_budget_is_cost_per_plan_entry --governs[1.0]--> perf/budgets.json
+inv_a_budget_is_cost_per_plan_entry --governs[1.0]--> perf/check.py
+inv_a_budget_is_cost_per_plan_entry --located[1.0]--> perf/budgets.json:16
+inv_a_budget_is_cost_per_plan_entry --prose_in[1.0]--> docs/tooling.md
+inv_the_budget_margin_is_one_sided --invariant[1.0]--> the margin is headroom below a budget only
+inv_the_budget_margin_is_one_sided --topic[1.0]--> perf
+inv_the_budget_margin_is_one_sided --governs[1.0]--> perf/budgets.json
+inv_the_budget_margin_is_one_sided --governs[1.0]--> perf/check.py
+inv_the_budget_margin_is_one_sided --located[1.0]--> perf/budgets.json:2
+inv_the_budget_margin_is_one_sided --figure[1.0]--> 0.15
+inv_the_budget_margin_is_one_sided --rationale[1.0]--> anything above a budget fails by any amount
+inv_the_growth_bound_holds_across_sizes --invariant[1.0]--> the growth bound holds across every measured size
+inv_the_growth_bound_holds_across_sizes --topic[1.0]--> perf
+inv_the_growth_bound_holds_across_sizes --governs[1.0]--> perf/budgets.json
+inv_the_growth_bound_holds_across_sizes --located[1.0]--> perf/budgets.json:6
+inv_the_growth_bound_holds_across_sizes --figure[1.0]--> 1.25
+inv_the_growth_bound_holds_across_sizes --figure[1.0]--> 4
+inv_the_growth_bound_holds_across_sizes --figure[1.0]--> 16
+inv_the_growth_bound_holds_across_sizes --figure[1.0]--> 64
+inv_the_growth_bound_holds_across_sizes --figure[1.0]--> 256
+inv_the_growth_bound_holds_across_sizes --rationale[1.0]--> cost per entry stays flat while growing
+inv_the_perf_gate_is_a_two_sided_ratchet --invariant[1.0]--> the gate is a two-sided ratchet
+inv_the_perf_gate_is_a_two_sided_ratchet --topic[1.0]--> perf
+inv_the_perf_gate_is_a_two_sided_ratchet --governs[1.0]--> perf/budgets.json
+inv_the_perf_gate_is_a_two_sided_ratchet --governs[1.0]--> perf/check.py
+inv_the_perf_gate_is_a_two_sided_ratchet --located[1.0]--> perf/budgets.json:2
+inv_the_perf_gate_is_a_two_sided_ratchet --prose_in[1.0]--> docs/tooling.md
+inv_a_refactor_pays_at_its_own_site --invariant[1.0]--> a refactor buying no fact moves no budget
+inv_a_refactor_pays_at_its_own_site --topic[1.0]--> perf
+inv_a_refactor_pays_at_its_own_site --governs[1.0]--> perf/budgets.json
+inv_a_refactor_pays_at_its_own_site --located[1.0]--> perf/budgets.json:5
+inv_a_recording_names_three_things --invariant[1.0]--> a recording names measurement cost and reading
+inv_a_recording_names_three_things --topic[1.0]--> perf
+inv_a_recording_names_three_things --governs[1.0]--> perf/budgets.json
+inv_a_recording_names_three_things --located[1.0]--> perf/budgets.json:5
+inv_a_recording_names_three_things --names[1.0]--> note
+inv_a_recording_names_three_things --rationale[1.0]--> a declared fact the planner reads
+inv_one_recording_covers_a_set_of_landings --invariant[1.0]--> one recording covers a whole set of landings
+inv_one_recording_covers_a_set_of_landings --topic[1.0]--> perf
+inv_one_recording_covers_a_set_of_landings --governs[1.0]--> perf/budgets.json
+inv_one_recording_covers_a_set_of_landings --located[1.0]--> perf/budgets.json:4
+inv_one_recording_covers_a_set_of_landings --figure[1.0]--> 2026-09-18
+inv_one_recording_covers_a_set_of_landings --figure[1.0]--> 4
+inv_one_recording_covers_a_set_of_landings --rationale[1.0]--> a later recording would measure the earlier ones
+inv_the_checker_compares_and_never_writes --invariant[1.0]--> the checker compares and never writes a budget
+inv_the_checker_compares_and_never_writes --topic[1.0]--> perf
+inv_the_checker_compares_and_never_writes --governs[1.0]--> perf/check.py
+inv_the_checker_compares_and_never_writes --governs[1.0]--> flake-module.nix
+inv_the_checker_compares_and_never_writes --located[1.0]--> flake-module.nix:392
+inv_the_checker_compares_and_never_writes --names[1.0]--> packages.planner-perf-results
+inv_the_update_copy_counter_is_sensitive --invariant[1.0]--> a new top-level atom key costs a copy
+inv_the_update_copy_counter_is_sensitive --topic[1.0]--> perf
+inv_the_update_copy_counter_is_sensitive --governs[1.0]--> lib/atoms.nix
+inv_the_update_copy_counter_is_sensitive --governs[1.0]--> perf/budgets.json
+inv_the_update_copy_counter_is_sensitive --located[1.0]--> perf/budgets.json:27
+inv_the_update_copy_counter_is_sensitive --names[1.0]--> nrOpUpdateValuesCopied
+inv_the_update_copy_counter_is_sensitive --rationale[1.0]--> the scope domain rides an existing record
+inv_an_extra_update_costs_per_machine --invariant[1.0]--> an extra update costs one copy per machine
+inv_an_extra_update_costs_per_machine --topic[1.0]--> perf
+inv_an_extra_update_costs_per_machine --governs[1.0]--> lib/resolve.nix
+inv_an_extra_update_costs_per_machine --governs[1.0]--> lib/atoms.nix
+inv_an_extra_update_costs_per_machine --names[1.0]--> nrOpUpdateValuesCopied
+inv_an_extra_update_costs_per_machine --rationale[1.0]--> both optional machine fields ride one update
+inv_env_bytes_grows_with_placement_bindings --invariant[1.0]--> a per-placement binding set grows the environment counter
+inv_env_bytes_grows_with_placement_bindings --topic[1.0]--> perf
+inv_env_bytes_grows_with_placement_bindings --governs[1.0]--> lib/resolve.nix
+inv_env_bytes_grows_with_placement_bindings --governs[1.0]--> perf/budgets.json
+inv_env_bytes_grows_with_placement_bindings --located[1.0]--> perf/budgets.json:25
+inv_env_bytes_grows_with_placement_bindings --names[1.0]--> envs.bytes
+inv_env_bytes_grows_with_placement_bindings --rationale[1.0]--> a reading asked twice is one memoised table
+inv_the_perf_suite_plans_sixty_four --invariant[1.0]--> the perf suite plans the middle size twice
+inv_the_perf_suite_plans_sixty_four --topic[1.0]--> perf
+inv_the_perf_suite_plans_sixty_four --governs[1.0]--> tests/unit/perf.nix
+inv_the_perf_suite_plans_sixty_four --located[1.0]--> tests/unit/perf.nix:72
+inv_the_perf_suite_plans_sixty_four --figure[1.0]--> 64
+inv_the_perf_suite_plans_sixty_four --enforced_by[1.0]--> tests/unit/perf.nix%testTheSyntheticFleetIsDeterministic
+inv_the_perf_suite_plans_sixty_four --rationale[1.0]--> the growth bound already measures the largest size
+inv_the_perf_suite_compares_plans --invariant[1.0]--> the perf suite compares plans and never deployments
+inv_the_perf_suite_compares_plans --topic[1.0]--> perf
+inv_the_perf_suite_compares_plans --governs[1.0]--> tests/unit/perf.nix
+inv_the_perf_suite_compares_plans --located[1.0]--> tests/unit/perf.nix:65
+inv_the_perf_suite_compares_plans --enforced_by[1.0]--> tests/unit/perf.nix%testTheSyntheticMeshIsDeterministic
+inv_the_perf_suite_compares_plans --rationale[1.0]--> a deployment carries module functions

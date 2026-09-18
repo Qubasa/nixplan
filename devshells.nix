@@ -17,6 +17,8 @@
           pytestEnv
           config.packages.planner
           config.packages.planner-e2e-env
+          config.packages.planner-lemmalog
+          config.packages.lemmalog
           pkgs.nix
           pkgs.openssh
         ];
@@ -51,7 +53,14 @@
               export PYTHONPATH="$planner_root/tests/e2e:$planner_root/cli''${PYTHONPATH:+:$PYTHONPATH}"
               ;;
           esac
+
+          # The invariant index the engine answers about. A path rather than a
+          # store reference: the store is written on every load, and the corpus it
+          # is loaded from is the checkout's.
+          export LEMMALOG_MCP_PATH="$planner_root/.direnv/lemmalog.store"
+
           echo 'planner: eval "$(planner-e2e-env)" before pytest tests/e2e/<folder>/test_<folder>.py' >&2
+          echo 'planner: planner-lemmalog loads the invariant index, and lemmalog-cli query --goal '"'"'governed_by("lib/plan.nix", I)'"'"' reads it' >&2
         '';
       };
     };

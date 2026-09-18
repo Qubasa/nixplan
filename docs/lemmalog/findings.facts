@@ -1,0 +1,126 @@
+drift_guest_spare_space_figure --index_drift[1.0]--> the index understates guest spare space
+drift_guest_spare_space_figure --index_line[1.0]--> CLAUDE.md:871
+drift_guest_spare_space_figure --index_says[1.0]--> 2048M
+drift_guest_spare_space_figure --tree_says[1.0]--> 6144M
+drift_guest_spare_space_figure --governs[1.0]--> tests/e2e/guest.nix
+drift_guest_spare_space_figure --located[1.0]--> tests/e2e/guest.nix:434
+drift_guest_spare_space_figure --closed_by[1.0]--> change_hold_the_index_to_the_tree
+drift_mypy_path_constructs_are_gone --index_drift[1.0]--> the index names two constructs nowhere present
+drift_mypy_path_constructs_are_gone --index_line[1.0]--> CLAUDE.md:817
+drift_mypy_path_constructs_are_gone --names[1.0]--> extraPythonPaths
+drift_mypy_path_constructs_are_gone --names[1.0]--> pythonRoot
+drift_mypy_path_constructs_are_gone --governs[1.0]--> treefmt.nix
+drift_mypy_path_constructs_are_gone --located[1.0]--> treefmt.nix:55
+drift_mypy_path_constructs_are_gone --tree_says[1.0]--> mypy_path
+drift_mypy_path_constructs_are_gone --closed_by[1.0]--> change_hold_the_index_to_the_tree
+drift_run_without_root_status_disagrees --index_drift[1.0]--> one section calls a landed change open
+drift_run_without_root_status_disagrees --index_line[1.0]--> CLAUDE.md:55
+drift_run_without_root_status_disagrees --governs[1.0]--> openspec/changes/run-an-entry-without-root
+drift_run_without_root_status_disagrees --index_says[1.0]--> open
+drift_run_without_root_status_disagrees --tree_says[1.0]--> landed
+drift_run_without_root_status_disagrees --closed_by[1.0]--> change_hold_the_index_to_the_tree
+drift_portable_image_deployment_count --index_drift[1.0]--> the folder builds four deployments not two
+drift_portable_image_deployment_count --index_line[1.0]--> CLAUDE.md:894
+drift_portable_image_deployment_count --governs[1.0]--> tests/e2e/portable-image
+drift_portable_image_deployment_count --located[1.0]--> tests/e2e/portable-image/test_portable_image.py:17
+drift_portable_image_deployment_count --index_says[1.0]--> 2
+drift_portable_image_deployment_count --tree_says[1.0]--> 4
+drift_portable_image_deployment_count --closed_by[1.0]--> change_hold_the_index_to_the_tree
+drift_compose_default_anchor_is_off --index_drift[1.0]--> the derived default anchor names wrong lines
+drift_compose_default_anchor_is_off --index_line[1.0]--> CLAUDE.md:858
+drift_compose_default_anchor_is_off --index_says[1.0]--> lib/compose.nix:30-31
+drift_compose_default_anchor_is_off --tree_says[1.0]--> lib/compose.nix:42
+drift_compose_default_anchor_is_off --governs[1.0]--> lib/compose.nix
+drift_compose_default_anchor_is_off --located[1.0]--> lib/compose.nix:42
+drift_compose_default_anchor_is_off --rationale[1.0]--> settings are read from name defaults fixed alone
+drift_compose_default_anchor_is_off --closed_by[1.0]--> change_hold_the_index_to_the_tree
+drift_escape_rule_is_unobservable_as_stated --index_drift[1.0]--> the escape rule cannot be checked as stated
+drift_escape_rule_is_unobservable_as_stated --index_line[1.0]--> CLAUDE.md:456
+drift_escape_rule_is_unobservable_as_stated --governs[1.0]--> lib/util.nix
+drift_escape_rule_is_unobservable_as_stated --located[1.0]--> lib/util.nix:190
+drift_escape_rule_is_unobservable_as_stated --rationale[1.0]--> a safe word escapes to identical bytes
+drift_escape_rule_is_unobservable_as_stated --closed_by[1.0]--> change_hold_the_attach_script_discipline
+drift_image_quoted_helper_is_stale --index_drift[1.0]--> the index names a helper nobody binds
+drift_image_quoted_helper_is_stale --index_line[1.0]--> CLAUDE.md:460
+drift_image_quoted_helper_is_stale --index_says[1.0]--> quoted
+drift_image_quoted_helper_is_stale --tree_says[1.0]--> escapedWord
+drift_image_quoted_helper_is_stale --governs[1.0]--> image/default.nix
+drift_image_quoted_helper_is_stale --located[1.0]--> image/default.nix:197
+drift_image_quoted_helper_is_stale --closed_by[1.0]--> change_hold_the_attach_script_discipline
+drift_staging_umask_reason_is_wrong --index_drift[1.0]--> the named component reason is wrong
+drift_staging_umask_reason_is_wrong --index_line[1.0]--> CLAUDE.md:453
+drift_staging_umask_reason_is_wrong --tree_says[1.0]--> 0755
+drift_staging_umask_reason_is_wrong --governs[1.0]--> image/default.nix
+drift_staging_umask_reason_is_wrong --rationale[1.0]--> install creates a parent at a fixed mode
+drift_staging_umask_reason_is_wrong --closed_by[1.0]--> change_hold_the_attach_script_discipline
+bug_attach_script_interpolates_bare_image_path --bug[1.0]--> the attach ref interpolates a path unescaped
+bug_attach_script_interpolates_bare_image_path --topic[1.0]--> known_bugs
+bug_attach_script_interpolates_bare_image_path --symptom[1.0]--> a suite pins the unescaped spelling
+bug_attach_script_interpolates_bare_image_path --workaround[1.0]--> spend the library shell quote at every site
+bug_attach_script_interpolates_bare_image_path --governs[1.0]--> image/default.nix
+bug_attach_script_interpolates_bare_image_path --located[1.0]--> image/default.nix:426
+bug_attach_script_interpolates_bare_image_path --located[1.0]--> image/default.nix:428
+bug_attach_script_interpolates_bare_image_path --located[1.0]--> image/default.nix:447
+bug_attach_script_interpolates_bare_image_path --located[1.0]--> tests/unit/image.nix:1707
+bug_attach_script_interpolates_bare_image_path --closed_by[1.0]--> change_hold_the_attach_script_discipline
+inv_root_documents_are_not_path_scanned --invariant[1.0]--> the root documents join no path scan
+inv_root_documents_are_not_path_scanned --topic[1.0]--> registration_points
+inv_root_documents_are_not_path_scanned --governs[1.0]--> tests/unit/layers.nix
+inv_root_documents_are_not_path_scanned --located[1.0]--> tests/unit/layers.nix:308
+inv_root_documents_are_not_path_scanned --rationale[1.0]--> the scan reads ten directories only
+inv_root_documents_are_not_path_scanned --closed_by[1.0]--> change_hold_the_index_to_the_tree
+inv_a_counterexample_pin_is_per_file --invariant[1.0]--> the pin check reads files not counterexamples
+inv_a_counterexample_pin_is_per_file --topic[1.0]--> counterexamples
+inv_a_counterexample_pin_is_per_file --governs[1.0]--> tests/unit/layers.nix
+inv_a_counterexample_pin_is_per_file --located[1.0]--> tests/unit/layers.nix:882
+inv_a_counterexample_pin_is_per_file --figure[1.0]--> 7
+inv_a_counterexample_pin_is_per_file --rationale[1.0]--> seven counterexamples carry no pinned sentence
+inv_a_counterexample_pin_is_per_file --closed_by[1.0]--> change_account_for_every_counterexample
+inv_cx_index_names_fewer_families_than_held --closed_by[1.0]--> change_account_for_every_counterexample
+decision_the_index_is_a_subject_not_a_corpus --decision[1.0]--> the index is checked not only searched
+decision_the_index_is_a_subject_not_a_corpus --governs[1.0]--> tests/unit/layers.nix
+decision_the_index_is_a_subject_not_a_corpus --located[1.0]--> tests/unit/layers.nix:790
+change_hold_the_index_to_the_tree --change_status[1.0]--> proposed
+change_hold_the_index_to_the_tree --owns_capability[1.0]--> tooling/repository-shape
+change_hold_the_index_to_the_tree --located[1.0]--> openspec/changes/hold-the-index-to-the-tree
+change_account_for_every_counterexample --change_status[1.0]--> proposed
+change_account_for_every_counterexample --owns_capability[1.0]--> tooling/test-layers
+change_account_for_every_counterexample --located[1.0]--> openspec/changes/account-for-every-counterexample
+change_hold_the_attach_script_discipline --change_status[1.0]--> proposed
+change_hold_the_attach_script_discipline --owns_capability[1.0]--> realiser/portable-service-image
+change_hold_the_attach_script_discipline --owns_capability[1.0]--> tooling/nix-unit-suite
+inv_env_rows_split_by_what_they_force --invariant[1.0]--> guest rows ride a file of their own
+inv_env_rows_split_by_what_they_force --topic[1.0]--> tooling
+inv_env_rows_split_by_what_they_force --governs[1.0]--> flake-module.nix
+inv_env_rows_split_by_what_they_force --located[1.0]--> flake-module.nix:209
+inv_env_rows_split_by_what_they_force --rationale[1.0]--> printing a guest row evaluates a disk image
+inv_env_rows_split_by_what_they_force --figure[1.0]--> 1.1
+inv_env_rows_split_by_what_they_force --names[1.0]--> planner-e2e-guest-paths
+inv_env_rows_split_by_what_they_force --names[1.0]--> planner-e2e-tool-paths
+inv_the_fast_env_mode_names_what_it_omits --invariant[1.0]--> the fast mode says which rows are unset
+inv_the_fast_env_mode_names_what_it_omits --topic[1.0]--> tooling
+inv_the_fast_env_mode_names_what_it_omits --governs[1.0]--> flake-module.nix
+inv_the_fast_env_mode_names_what_it_omits --located[1.0]--> flake-module.nix:294
+inv_the_fast_env_mode_names_what_it_omits --rationale[1.0]--> a folder with no guest image skips itself
+inv_the_index_corpus_is_the_source --invariant[1.0]--> the corpus is source and the store derived
+inv_the_index_corpus_is_the_source --topic[1.0]--> tooling
+inv_the_index_corpus_is_the_source --governs[1.0]--> docs/lemmalog
+inv_the_index_corpus_is_the_source --governs[1.0]--> flake-module.nix
+inv_the_index_corpus_is_the_source --prose_in[1.0]--> docs/tooling.md
+inv_the_index_corpus_is_the_source --rationale[1.0]--> the engine writes derived facts back
+inv_the_index_is_no_check --invariant[1.0]--> no check fails when a fact goes stale
+inv_the_index_is_no_check --topic[1.0]--> tooling
+inv_the_index_is_no_check --governs[1.0]--> docs/lemmalog
+inv_the_index_is_no_check --prose_in[1.0]--> docs/tooling.md
+inv_the_engine_is_pinned_by_the_tree --invariant[1.0]--> the engine is pinned not taken as input
+inv_the_engine_is_pinned_by_the_tree --topic[1.0]--> tooling
+inv_the_engine_is_pinned_by_the_tree --governs[1.0]--> lemmalog.nix
+inv_the_engine_is_pinned_by_the_tree --rationale[1.0]--> upstream publishes no flake
+inv_the_engine_is_pinned_by_the_tree --enforced_by[1.0]--> testATopLevelEntryBelongsToNoStatedClass
+inv_the_engine_is_pinned_by_the_tree --enforced_in[1.0]--> tests/unit/layers.nix
+inv_an_object_is_held_to_eight_words --invariant[1.0]--> the engine holds an object to eight words
+inv_an_object_is_held_to_eight_words --topic[1.0]--> tooling
+inv_an_object_is_held_to_eight_words --governs[1.0]--> docs/lemmalog
+inv_an_object_is_held_to_eight_words --figure[1.0]--> 60
+inv_an_object_is_held_to_eight_words --names[1.0]--> entity_token_problem
+inv_an_object_is_held_to_eight_words --rationale[1.0]--> a long path is split never truncated

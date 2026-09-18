@@ -1,0 +1,36 @@
+describes --describes[1.0]--> the meaning of a relation
+invariant --describes[1.0]--> a rule this repository holds
+topic --describes[1.0]--> which index section an invariant belongs to
+governs --describes[1.0]--> path whose edit the invariant constrains
+located --describes[1.0]--> evidence anchor for the construct
+located_in --describes[1.0]--> file holding the anchor
+enforced_by --describes[1.0]--> check that fails when invariant is violated
+enforced_by_prefix --describes[1.0]--> greppable prefix of a long check name
+enforced_in --describes[1.0]--> file holding the named check
+prose_in --describes[1.0]--> document carrying the full argument
+rationale --describes[1.0]--> why the invariant exists
+row --describes[1.0]--> diagnostics row identifier the invariant produces
+host_path --describes[1.0]--> a path on a machine the rule fixes
+figure --describes[1.0]--> a number or version the rule states
+names --describes[1.0]--> an identifier the rule names
+registration_point --describes[1.0]--> hand maintained list an addition must join
+register_in --describes[1.0]--> file holding the registration list
+bug --describes[1.0]--> a known defect recorded in the index
+symptom --describes[1.0]--> how the bug presents itself
+workaround --describes[1.0]--> what to do about the bug
+counterexample --describes[1.0]--> claim asserted against current behaviour
+home --describes[1.0]--> file holding a counterexample probe
+status --describes[1.0]--> lifecycle state of a counterexample
+dead_end --describes[1.0]--> design searched and ruled out
+revived_by --describes[1.0]--> trigger that reopens a parked design
+change_status --describes[1.0]--> landed or open or parked or struck
+prior_art --describes[1.0]--> external design this layer already is
+decision --describes[1.0]--> a choice this repository took
+stale_anchor --describes[1.0]--> a path the index names unresolved
+index_drift --describes[1.0]--> the index states what the tree contradicts
+index_line --describes[1.0]--> where the index states it
+index_says --describes[1.0]--> the value the index states
+tree_says --describes[1.0]--> the value the tree holds
+closed_by --describes[1.0]--> the change that closes this finding
+owns_capability --describes[1.0]--> capability delta the change may write
+located_line --describes[1.0]--> the line an anchor names

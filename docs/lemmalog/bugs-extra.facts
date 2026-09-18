@@ -1,0 +1,110 @@
+cx_root_returning_services_of_another_kind --counterexample[1.0]--> a root returning services of another kind
+cx_root_returning_services_of_another_kind --home[1.0]--> tests/counterexamples/probes.nix
+cx_root_returning_services_of_another_kind --status[1.0]--> red
+cx_root_returning_services_of_another_kind --located[1.0]--> tests/counterexamples/probes.nix:159
+cx_unwired_slot_still_leaves_a_table --counterexample[1.0]--> an unwired slot still leaves a table
+cx_unwired_slot_still_leaves_a_table --home[1.0]--> tests/counterexamples/probes.nix
+cx_unwired_slot_still_leaves_a_table --status[1.0]--> red
+cx_unwired_slot_still_leaves_a_table --located[1.0]--> tests/counterexamples/probes.nix:202
+cx_export_carrying_the_vars_file_marker --counterexample[1.0]--> an export carrying the vars file marker
+cx_export_carrying_the_vars_file_marker --home[1.0]--> tests/counterexamples/probes.nix
+cx_export_carrying_the_vars_file_marker --status[1.0]--> red
+cx_export_carrying_the_vars_file_marker --located[1.0]--> tests/counterexamples/probes.nix:299
+cx_config_file_with_no_mode_in_the_reading --counterexample[1.0]--> a configuration file with no mode
+cx_config_file_with_no_mode_in_the_reading --home[1.0]--> tests/counterexamples/probes.nix
+cx_config_file_with_no_mode_in_the_reading --status[1.0]--> red
+cx_config_file_with_no_mode_in_the_reading --located[1.0]--> tests/counterexamples/probes.nix:341
+cx_realiser_statement_of_another_kind --counterexample[1.0]--> a realiser statement of another kind
+cx_realiser_statement_of_another_kind --home[1.0]--> tests/counterexamples/probes.nix
+cx_realiser_statement_of_another_kind --status[1.0]--> red
+cx_realiser_statement_of_another_kind --located[1.0]--> tests/counterexamples/probes.nix:359
+cx_profile_statement_of_another_kind --counterexample[1.0]--> a profile statement of another kind
+cx_profile_statement_of_another_kind --home[1.0]--> tests/counterexamples/probes.nix
+cx_profile_statement_of_another_kind --status[1.0]--> red
+cx_profile_statement_of_another_kind --located[1.0]--> tests/counterexamples/probes.nix:371
+cx_secrets_reading_of_a_refused_plan --counterexample[1.0]--> a secrets reading of a refused plan
+cx_secrets_reading_of_a_refused_plan --home[1.0]--> tests/counterexamples/probes.nix
+cx_secrets_reading_of_a_refused_plan --status[1.0]--> red
+cx_secrets_reading_of_a_refused_plan --located[1.0]--> tests/counterexamples/probes.nix:393
+cx_every_placed_entry_is_read_or_named --counterexample[1.0]--> every placed entry is read or named
+cx_every_placed_entry_is_read_or_named --home[1.0]--> tests/unit/counterexamples.nix
+cx_every_placed_entry_is_read_or_named --status[1.0]--> red
+cx_every_placed_entry_is_read_or_named --located[1.0]--> tests/unit/counterexamples.nix:201
+cx_fold_may_return_an_attribute_refused --counterexample[1.0]--> a fold returning an attribute called refused
+cx_fold_may_return_an_attribute_refused --home[1.0]--> tests/unit/counterexamples.nix
+cx_fold_may_return_an_attribute_refused --status[1.0]--> red
+cx_fold_may_return_an_attribute_refused --located[1.0]--> tests/unit/counterexamples.nix:776
+cx_config_file_path_is_a_bindable_word --counterexample[1.0]--> a configuration path a unit file can bind
+cx_config_file_path_is_a_bindable_word --home[1.0]--> tests/unit/counterexamples.nix
+cx_config_file_path_is_a_bindable_word --status[1.0]--> red
+cx_config_file_path_is_a_bindable_word --located[1.0]--> tests/unit/counterexamples.nix:911
+cx_ownership_the_render_refuses_is_a_row --counterexample[1.0]--> an ownership the render refuses is a row
+cx_ownership_the_render_refuses_is_a_row --home[1.0]--> tests/unit/counterexamples.nix
+cx_ownership_the_render_refuses_is_a_row --status[1.0]--> red
+cx_ownership_the_render_refuses_is_a_row --located[1.0]--> tests/unit/counterexamples.nix:991
+cx_set_valued_read_rotates_its_consumer --counterexample[1.0]--> a set-valued read rotates its consumer
+cx_set_valued_read_rotates_its_consumer --home[1.0]--> cli/counterexample_test.py
+cx_set_valued_read_rotates_its_consumer --status[1.0]--> red
+cx_set_valued_read_rotates_its_consumer --located[1.0]--> cli/counterexample_test.py:191
+cx_reader_restarted_after_every_activation --counterexample[1.0]--> a rotation follows every activation
+cx_reader_restarted_after_every_activation --home[1.0]--> cli/counterexample_test.py
+cx_reader_restarted_after_every_activation --status[1.0]--> red
+cx_reader_restarted_after_every_activation --located[1.0]--> cli/counterexample_test.py:233
+cx_endpoint_answer_that_is_not_a_status --counterexample[1.0]--> an endpoint answer that is not a status
+cx_endpoint_answer_that_is_not_a_status --home[1.0]--> cli/counterexample_test.py
+cx_endpoint_answer_that_is_not_a_status --status[1.0]--> red
+cx_endpoint_answer_that_is_not_a_status --located[1.0]--> cli/counterexample_test.py:282
+cx_image_report_names_the_entrys_identity --counterexample[1.0]--> an image report names the entry identity
+cx_image_report_names_the_entrys_identity --home[1.0]--> cli/counterexample_test.py
+cx_image_report_names_the_entrys_identity --status[1.0]--> red
+cx_image_report_names_the_entrys_identity --located[1.0]--> cli/counterexample_test.py:322
+cx_leftover_attachment_of_another_build --counterexample[1.0]--> a leftover attachment of another build
+cx_leftover_attachment_of_another_build --home[1.0]--> cli/counterexample_test.py
+cx_leftover_attachment_of_another_build --status[1.0]--> red
+cx_leftover_attachment_of_another_build --located[1.0]--> cli/counterexample_test.py:351
+cx_artifact_path_that_leaves_the_build --counterexample[1.0]--> an artifact path that leaves the build
+cx_artifact_path_that_leaves_the_build --home[1.0]--> cli/counterexample_test.py
+cx_artifact_path_that_leaves_the_build --status[1.0]--> red
+cx_artifact_path_that_leaves_the_build --located[1.0]--> cli/counterexample_test.py:376
+cx_artifact_path_below_the_build --counterexample[1.0]--> an artifact path below the build is read
+cx_artifact_path_below_the_build --home[1.0]--> cli/counterexample_test.py
+cx_artifact_path_below_the_build --status[1.0]--> red
+cx_artifact_path_below_the_build --located[1.0]--> cli/counterexample_test.py:424
+cx_delivered_read_in_neither_shape --counterexample[1.0]--> a delivered read recorded in neither shape
+cx_delivered_read_in_neither_shape --home[1.0]--> cli/counterexample_test.py
+cx_delivered_read_in_neither_shape --status[1.0]--> red
+cx_delivered_read_in_neither_shape --located[1.0]--> cli/counterexample_test.py:472
+cx_resolved_read_that_is_not_a_record --counterexample[1.0]--> a resolved read that is not a record
+cx_resolved_read_that_is_not_a_record --home[1.0]--> cli/counterexample_test.py
+cx_resolved_read_that_is_not_a_record --status[1.0]--> red
+cx_resolved_read_that_is_not_a_record --located[1.0]--> cli/counterexample_test.py:507
+cx_absence_is_an_endpoints_own_answer --counterexample[1.0]--> absence is an endpoint own answer
+cx_absence_is_an_endpoints_own_answer --home[1.0]--> cli/counterexample_test.py
+cx_absence_is_an_endpoints_own_answer --status[1.0]--> red
+cx_absence_is_an_endpoints_own_answer --located[1.0]--> cli/counterexample_test.py:535
+cx_refusal_names_the_machine_not_an_option --counterexample[1.0]--> a refusal names the machine not an option
+cx_refusal_names_the_machine_not_an_option --home[1.0]--> cli/counterexample_test.py
+cx_refusal_names_the_machine_not_an_option --status[1.0]--> red
+cx_refusal_names_the_machine_not_an_option --located[1.0]--> cli/counterexample_test.py:563
+cx_undeclared_file_inside_a_value_directory --counterexample[1.0]--> every undeclared file inside a value directory
+cx_undeclared_file_inside_a_value_directory --home[1.0]--> cli/counterexample_test.py
+cx_undeclared_file_inside_a_value_directory --status[1.0]--> red
+cx_undeclared_file_inside_a_value_directory --located[1.0]--> cli/counterexample_test.py:597
+cx_run_that_must_seal_with_no_sealing_program --counterexample[1.0]--> a run that must seal and cannot
+cx_run_that_must_seal_with_no_sealing_program --home[1.0]--> cli/counterexample_test.py
+cx_run_that_must_seal_with_no_sealing_program --status[1.0]--> red
+cx_run_that_must_seal_with_no_sealing_program --located[1.0]--> cli/counterexample_test.py:636
+cx_record_carrying_no_table_of_machines --counterexample[1.0]--> a record carrying no table of machines
+cx_record_carrying_no_table_of_machines --home[1.0]--> cli/counterexample_test.py
+cx_record_carrying_no_table_of_machines --status[1.0]--> red
+cx_record_carrying_no_table_of_machines --located[1.0]--> cli/counterexample_test.py:675
+inv_cx_index_names_fewer_families_than_held --invariant[1.0]--> the index names fewer families than homes hold
+inv_cx_index_names_fewer_families_than_held --topic[1.0]--> counterexamples
+inv_cx_index_names_fewer_families_than_held --rationale[1.0]--> a home is the record not the index
+inv_cx_index_names_fewer_families_than_held --governs[1.0]--> tests/counterexamples/probes.nix
+inv_cx_index_names_fewer_families_than_held --governs[1.0]--> tests/unit/counterexamples.nix
+inv_cx_index_names_fewer_families_than_held --governs[1.0]--> cli/counterexample_test.py
+inv_cx_index_names_fewer_families_than_held --figure[1.0]--> 55
+inv_cx_index_names_fewer_families_than_held --figure[1.0]--> 17
+inv_cx_index_names_fewer_families_than_held --figure[1.0]--> 24
+inv_cx_index_names_fewer_families_than_held --figure[1.0]--> 14

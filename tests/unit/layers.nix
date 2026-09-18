@@ -76,6 +76,7 @@ let
     "flake-module.nix" = "the flake";
     "devshells.nix" = "the flake";
     "pytest-env.nix" = "the flake";
+    "lemmalog.nix" = "the flake";
     "ruff.toml" = "the formatter's own configuration";
     ".envrc" = "the checkout's own configuration";
     ".gitignore" = "the checkout's own configuration";

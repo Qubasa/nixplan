@@ -1,0 +1,604 @@
+inv_vale_wrapper_makes_an_alert_exit_one --topic[1.0]--> tooling
+inv_vale_wrapper_makes_an_alert_exit_one --governs[1.0]--> treefmt.nix
+inv_vale_wrapper_makes_an_alert_exit_one --located[1.0]--> treefmt.nix:36
+inv_vale_wrapper_makes_an_alert_exit_one --names[1.0]--> vale-lint
+inv_vale_wrapper_makes_an_alert_exit_one --rationale[1.0]--> vale itself exits zero for warning level rules
+inv_every_markdown_outside_excludes_linted --invariant[1.0]--> every markdown file outside the excludes is linted
+inv_every_markdown_outside_excludes_linted --topic[1.0]--> tooling
+inv_every_markdown_outside_excludes_linted --governs[1.0]--> treefmt.nix
+inv_every_markdown_outside_excludes_linted --located[1.0]--> treefmt.nix:117
+inv_every_markdown_outside_excludes_linted --prose_in[1.0]--> docs/tooling.md
+inv_mypy_runs_once_per_module_directory --invariant[1.0]--> mypy runs once per directory of top-level modules
+inv_mypy_runs_once_per_module_directory --topic[1.0]--> tooling
+inv_mypy_runs_once_per_module_directory --governs[1.0]--> treefmt.nix
+inv_mypy_runs_once_per_module_directory --located[1.0]--> treefmt.nix:74
+inv_mypy_runs_once_per_module_directory --names[1.0]--> programs.mypy.directories
+inv_mypy_runs_once_per_module_directory --rationale[1.0]--> that is what each import expects beside it
+inv_cli_source_root_is_a_mypy_path --topic[1.0]--> tooling
+inv_cli_source_root_is_a_mypy_path --governs[1.0]--> treefmt.nix
+inv_cli_source_root_is_a_mypy_path --located[1.0]--> treefmt.nix:55
+inv_cli_source_root_is_a_mypy_path --names[1.0]--> mypy_path
+inv_cli_source_root_is_a_mypy_path --rationale[1.0]--> an import path reading demands a marker file
+inv_mypy_path_is_not_written_out_by_hand --topic[1.0]--> tooling
+inv_mypy_path_is_not_written_out_by_hand --governs[1.0]--> treefmt.nix
+inv_mypy_path_is_not_written_out_by_hand --located[0.6]--> treefmt.nix:52
+inv_mypy_path_is_not_written_out_by_hand --enforced_by[1.0]--> tests/unit/layers.nix%testAFileNamesAPathThatIsNotThere
+inv_ruff_config_owns_the_python_rules --invariant[1.0]--> the ruff config carries the lint rules
+inv_ruff_config_owns_the_python_rules --topic[1.0]--> tooling
+inv_ruff_config_owns_the_python_rules --governs[1.0]--> ruff.toml
+inv_ruff_config_owns_the_python_rules --located[1.0]--> ruff.toml:11
+inv_ruff_config_owns_the_python_rules --rationale[1.0]--> this repository owns no python package
+inv_ruff_target_version_is_a_floor --topic[1.0]--> tooling
+inv_ruff_target_version_is_a_floor --governs[1.0]--> ruff.toml
+inv_ruff_target_version_is_a_floor --located[1.0]--> ruff.toml:8
+inv_ruff_target_version_is_a_floor --names[1.0]--> target-version
+inv_ruff_target_version_is_a_floor --figure[1.0]--> py313
+inv_devshell_names_no_built_artifact --invariant[1.0]--> the development shell names no built artifact
+inv_devshell_names_no_built_artifact --topic[1.0]--> tooling
+inv_devshell_names_no_built_artifact --governs[1.0]--> devshells.nix
+inv_devshell_names_no_built_artifact --located[1.0]--> devshells.nix:14
+inv_devshell_names_no_built_artifact --rationale[1.0]--> a store reference would build the guest image
+inv_machine_variables_are_printed_on_demand --invariant[1.0]--> the machine layer variables are printed on demand
+inv_machine_variables_are_printed_on_demand --topic[1.0]--> tooling
+inv_machine_variables_are_printed_on_demand --governs[1.0]--> devshells.nix
+inv_machine_variables_are_printed_on_demand --governs[1.0]--> flake-module.nix
+inv_machine_variables_are_printed_on_demand --located[1.0]--> flake-module.nix:234
+inv_machine_variables_are_printed_on_demand --names[1.0]--> planner-e2e-env
+inv_one_attrset_feeds_both_consumers --topic[1.0]--> tooling
+inv_one_attrset_feeds_both_consumers --governs[1.0]--> flake-module.nix
+inv_one_attrset_feeds_both_consumers --located[1.0]--> flake-module.nix:201
+inv_one_attrset_feeds_both_consumers --names[1.0]--> e2eArtifactPaths
+inv_one_attrset_feeds_both_consumers --rationale[1.0]--> neither may name an artifact the other misses
+inv_devshell_puts_the_checkout_on_import_path --invariant[1.0]--> the shell imports from the checkout
+inv_devshell_puts_the_checkout_on_import_path --topic[1.0]--> tooling
+inv_devshell_puts_the_checkout_on_import_path --governs[1.0]--> devshells.nix
+inv_devshell_puts_the_checkout_on_import_path --located[1.0]--> devshells.nix:51
+inv_devshell_puts_the_checkout_on_import_path --names[1.0]--> PYTHONPATH
+inv_pytest_always_reports_a_skip_reason --invariant[1.0]--> pytest always reports the skip reason
+inv_pytest_always_reports_a_skip_reason --topic[1.0]--> tooling
+inv_pytest_always_reports_a_skip_reason --governs[1.0]--> pytest.ini
+inv_pytest_always_reports_a_skip_reason --located[1.0]--> pytest.ini:5
+inv_pytest_always_reports_a_skip_reason --rationale[1.0]--> a skipping suite reads unlike a quiet run
+inv_nested_checkouts_are_not_collected --invariant[1.0]--> nested checkouts are excluded from collection
+inv_nested_checkouts_are_not_collected --topic[1.0]--> tooling
+inv_nested_checkouts_are_not_collected --governs[1.0]--> pytest.ini
+inv_nested_checkouts_are_not_collected --located[1.0]--> pytest.ini:10
+inv_nested_checkouts_are_not_collected --names[1.0]--> norecursedirs
+inv_nested_checkouts_are_not_collected --rationale[1.0]--> two files would share one harness module name
+inv_rookery_is_built_with_refresh --invariant[1.0]--> the runner builds its rookery with a refresh
+inv_rookery_is_built_with_refresh --topic[1.0]--> tooling
+inv_rookery_is_built_with_refresh --governs[1.0]--> tests/e2e/runner.py
+inv_rookery_is_built_with_refresh --located[1.0]--> tests/e2e/runner.py:164
+inv_rookery_is_built_with_refresh --names[1.0]--> resolve_rookery
+inv_rookery_is_built_with_refresh --rationale[1.0]--> a branch resolves through the tarball cache otherwise
+inv_runner_puts_both_roots_on_import_path --invariant[1.0]--> the runner imports from both built roots
+inv_runner_puts_both_roots_on_import_path --topic[1.0]--> tooling
+inv_runner_puts_both_roots_on_import_path --governs[1.0]--> tests/e2e/runner.py
+inv_runner_puts_both_roots_on_import_path --located[1.0]--> tests/e2e/runner.py:355
+inv_runner_puts_both_roots_on_import_path --names[1.0]--> import_path
+inv_conftest_edits_no_import_path --invariant[1.0]--> the shared conftest edits no import path
+inv_conftest_edits_no_import_path --topic[1.0]--> tooling
+inv_conftest_edits_no_import_path --governs[1.0]--> tests/e2e/conftest.py
+inv_conftest_edits_no_import_path --located[1.0]--> tests/e2e/conftest.py:14
+inv_conftest_edits_no_import_path --rationale[1.0]--> no conftest above the ini directory is loaded
+inv_vulture_and_harper_are_not_run --invariant[1.0]--> vulture and harper are deliberately not run
+inv_vulture_and_harper_are_not_run --topic[1.0]--> tooling
+inv_vulture_and_harper_are_not_run --governs[1.0]--> treefmt.nix
+inv_vulture_and_harper_are_not_run --located[1.0]--> treefmt.nix:122
+inv_vulture_and_harper_are_not_run --rationale[1.0]--> their only findings are interface and domain words
+inv_build_the_individual_check --invariant[1.0]--> build one check never the whole flake
+inv_build_the_individual_check --topic[1.0]--> tooling
+inv_build_the_individual_check --governs[1.0]--> flake.nix
+inv_build_the_individual_check --governs[1.0]--> flake-module.nix
+inv_build_the_individual_check --prose_in[1.0]--> docs/tooling.md
+inv_a_deployment_declares_intent_not_plumbing --invariant[1.0]--> a deployment declares intent and never plumbing
+inv_a_deployment_declares_intent_not_plumbing --topic[1.0]--> no_host_path
+inv_a_deployment_declares_intent_not_plumbing --governs[1.0]--> tests/e2e/*/deployment/**
+inv_a_deployment_declares_intent_not_plumbing --prose_in[1.0]--> README.md
+inv_a_deployment_declares_intent_not_plumbing --located[1.0]--> README.md:36
+inv_a_host_path_is_derived_by_its_own_module --invariant[1.0]--> the module needing a path derives it
+inv_a_host_path_is_derived_by_its_own_module --topic[1.0]--> no_host_path
+inv_a_host_path_is_derived_by_its_own_module --governs[1.0]--> tests/e2e/*/deployment/**
+inv_a_host_path_is_derived_by_its_own_module --located[1.0]--> README.md:36
+inv_a_host_path_reaches_a_module_by_a_wire --invariant[1.0]--> an export and a wire carry a path
+inv_a_host_path_reaches_a_module_by_a_wire --topic[1.0]--> no_host_path
+inv_a_host_path_reaches_a_module_by_a_wire --governs[1.0]--> tests/e2e/*/deployment/**
+inv_a_host_path_reaches_a_module_by_a_wire --prose_in[1.0]--> README.md
+inv_the_root_document_states_the_path_rule --invariant[1.0]--> four phrases are read back verbatim
+inv_the_root_document_states_the_path_rule --topic[1.0]--> no_host_path
+inv_the_root_document_states_the_path_rule --governs[1.0]--> README.md
+inv_the_root_document_states_the_path_rule --located[1.0]--> tests/unit/layers.nix:1292
+inv_the_root_document_states_the_path_rule --enforced_in[1.0]--> tests/unit/layers.nix
+inv_the_root_document_states_the_path_rule --enforced_by[1.0]--> testTheRootDocumentStatesHowAPathReachesAUnit
+inv_the_root_document_states_the_path_rule --rationale[1.0]--> the phrases are read with line breaks flattened
+inv_two_checks_hold_the_host_path_rule --invariant[1.0]--> two checks hold the rule under one report
+inv_two_checks_hold_the_host_path_rule --topic[1.0]--> no_host_path
+inv_two_checks_hold_the_host_path_rule --governs[1.0]--> tests/unit/layers.nix
+inv_two_checks_hold_the_host_path_rule --located[1.0]--> tests/unit/layers.nix:1211
+inv_two_checks_hold_the_host_path_rule --enforced_by[1.0]--> tests/unit/layers.nix%testADeploymentStatesAHostPath
+inv_the_scan_reads_every_deployment_nix_file --invariant[1.0]--> the scan reads every deployment file
+inv_the_scan_reads_every_deployment_nix_file --topic[1.0]--> no_host_path
+inv_the_scan_reads_every_deployment_nix_file --governs[1.0]--> tests/e2e/*/deployment/**
+inv_the_scan_reads_every_deployment_nix_file --governs[1.0]--> tests/e2e/*/template/deployment/**
+inv_the_scan_reads_every_deployment_nix_file --located[1.0]--> tests/unit/layers.nix:715
+inv_the_scan_splits_each_line_on_the_quote --invariant[1.0]--> each line is split on the quote character
+inv_the_scan_splits_each_line_on_the_quote --topic[1.0]--> no_host_path
+inv_the_scan_splits_each_line_on_the_quote --governs[1.0]--> tests/unit/layers.nix
+inv_the_scan_splits_each_line_on_the_quote --located[1.0]--> tests/unit/layers.nix:677
+inv_the_scan_splits_each_line_on_the_quote --names[1.0]--> fragmentsOf
+inv_the_scan_splits_each_line_on_the_quote --rationale[1.0]--> a quoted attribute name is a fragment too
+inv_first_segment_denylist_ten_roots --invariant[1.0]--> a machine root first segment fails
+inv_first_segment_denylist_ten_roots --topic[1.0]--> no_host_path
+inv_first_segment_denylist_ten_roots --governs[1.0]--> tests/unit/layers.nix
+inv_first_segment_denylist_ten_roots --located[1.0]--> tests/unit/layers.nix:660
+inv_first_segment_denylist_ten_roots --names[1.0]--> hostRoots
+inv_first_segment_denylist_ten_roots --figure[1.0]--> 10
+inv_an_interpolation_exempts_a_fragment --invariant[1.0]--> a fragment carrying an interpolation passes the scan
+inv_an_interpolation_exempts_a_fragment --topic[1.0]--> no_host_path
+inv_an_interpolation_exempts_a_fragment --governs[1.0]--> tests/unit/layers.nix
+inv_an_interpolation_exempts_a_fragment --located[1.0]--> tests/unit/layers.nix:690
+inv_an_interpolation_exempts_a_fragment --rationale[1.0]--> a derived path carries the interpolation
+inv_a_path_stated_twice_in_a_folder_fails --invariant[1.0]--> a path stated twice in one folder fails
+inv_a_path_stated_twice_in_a_folder_fails --topic[1.0]--> no_host_path
+inv_a_path_stated_twice_in_a_folder_fails --governs[1.0]--> tests/e2e/*/test_*.py
+inv_a_path_stated_twice_in_a_folder_fails --located[1.0]--> tests/unit/layers.nix:738
+inv_a_path_stated_twice_in_a_folder_fails --enforced_by[1.0]--> tests/unit/layers.nix%testADeploymentStatesAHostPath
+inv_a_derived_default_is_impossible --invariant[1.0]--> a derived default for a path is impossible
+inv_a_derived_default_is_impossible --topic[1.0]--> no_host_path
+inv_a_derived_default_is_impossible --governs[1.0]--> lib/compose.nix
+inv_a_derived_default_is_impossible --located[0.6]--> lib/compose.nix:30
+inv_a_derived_default_is_impossible --rationale[1.0]--> a composing root default is handed no instance
+inv_the_deleted_path_knobs_stay_deleted --invariant[1.0]--> the three path knobs stay deleted
+inv_the_deleted_path_knobs_stay_deleted --topic[1.0]--> no_host_path
+inv_the_deleted_path_knobs_stay_deleted --governs[1.0]--> tests/e2e/*/deployment/**
+inv_the_deleted_path_knobs_stay_deleted --names[1.0]--> greetingPath
+inv_the_deleted_path_knobs_stay_deleted --rationale[1.0]--> a path is built inside the implementation instead
+inv_two_host_path_exemptions_are_test_only --invariant[1.0]--> a path only a test knows stays exempt
+inv_two_host_path_exemptions_are_test_only --topic[1.0]--> no_host_path
+inv_two_host_path_exemptions_are_test_only --governs[1.0]--> tests/e2e/portable-image/**
+inv_two_host_path_exemptions_are_test_only --governs[1.0]--> tests/e2e/newcomer/**
+inv_two_host_path_exemptions_are_test_only --located[1.0]--> tests/unit/layers.nix:1281
+inv_two_host_path_exemptions_are_test_only --host_path[1.0]--> /run/planner-assembly
+inv_two_host_path_exemptions_are_test_only --host_path[1.0]--> /opt/vendor/greeter
+inv_golden_compared_deployments_are_exempt --invariant[1.0]--> golden compared deployments are outside the rule
+inv_golden_compared_deployments_are_exempt --topic[1.0]--> no_host_path
+inv_golden_compared_deployments_are_exempt --governs[1.0]--> fixtures/**
+inv_golden_compared_deployments_are_exempt --governs[1.0]--> tests/unit/*.nix
+inv_golden_compared_deployments_are_exempt --rationale[1.0]--> their paths are compared against goldens
+inv_the_host_path_scan_is_text_not_syntax --invariant[1.0]--> the scan is text and never a parse
+inv_the_host_path_scan_is_text_not_syntax --topic[1.0]--> no_host_path
+inv_the_host_path_scan_is_text_not_syntax --governs[1.0]--> tests/unit/layers.nix
+inv_the_host_path_scan_is_text_not_syntax --located[1.0]--> tests/unit/layers.nix:688
+inv_the_host_path_scan_is_text_not_syntax --rationale[1.0]--> the suite runs inside a pure evaluation
+inv_the_scan_reads_fragments_not_whole_lines --invariant[1.0]--> string fragments are read rather than whole lines
+inv_the_scan_reads_fragments_not_whole_lines --topic[1.0]--> no_host_path
+inv_the_scan_reads_fragments_not_whole_lines --governs[1.0]--> tests/unit/layers.nix
+inv_the_scan_reads_fragments_not_whole_lines --located[1.0]--> tests/unit/layers.nix:677
+inv_the_scan_reads_fragments_not_whole_lines --rationale[1.0]--> a comment naming a machine root would fail
+inv_guest_spare_space_holds_the_closures --invariant[1.0]--> guest spare space is room for delivered closures
+inv_guest_spare_space_holds_the_closures --topic[1.0]--> e2e
+inv_guest_spare_space_holds_the_closures --governs[1.0]--> tests/e2e/guest.nix
+inv_guest_spare_space_holds_the_closures --located[1.0]--> tests/e2e/guest.nix:434
+inv_guest_spare_space_holds_the_closures --names[1.0]--> additionalSpace
+inv_guest_spare_space_holds_the_closures --figure[1.0]--> 6144M
+inv_machine_addresses_are_static_leases --invariant[1.0]--> machine addresses are static leases keyed by hardware
+inv_machine_addresses_are_static_leases --topic[1.0]--> e2e
+inv_machine_addresses_are_static_leases --governs[1.0]--> tests/e2e/*/deployment/machines.nix
+inv_machine_addresses_are_static_leases --located[1.0]--> tests/e2e/friend-enrollment/deployment/machines.nix:11
+inv_machine_addresses_are_static_leases --prose_in[1.0]--> docs/cluster.md
+inv_a_served_unit_binds_the_wildcard --invariant[1.0]--> a served unit binds every local address
+inv_a_served_unit_binds_the_wildcard --topic[1.0]--> e2e
+inv_a_served_unit_binds_the_wildcard --governs[1.0]--> tests/e2e/*/deployment/**
+inv_a_served_unit_binds_the_wildcard --located[1.0]--> tests/e2e/secret-delivery/deployment/serve.py:40
+inv_a_served_unit_binds_the_wildcard --rationale[1.0]--> it starts before the lease exists
+inv_the_plan_is_held_to_the_exported_url --invariant[1.0]--> the exported url uses the target address
+inv_the_plan_is_held_to_the_exported_url --topic[1.0]--> e2e
+inv_the_plan_is_held_to_the_exported_url --governs[1.0]--> tests/e2e/*/deployment/**
+inv_the_plan_is_held_to_the_exported_url --located[1.0]--> tests/e2e/secret-delivery/deployment/modules/issuer/api.nix
+inv_the_plan_is_held_to_the_exported_url --names[1.0]--> target.address
+inv_probe_retry_is_for_boot_ordering --invariant[1.0]--> a probe retry exists for cross-machine boot ordering
+inv_probe_retry_is_for_boot_ordering --topic[1.0]--> e2e
+inv_probe_retry_is_for_boot_ordering --governs[1.0]--> tests/e2e/wired-pair/deployment/**
+inv_probe_retry_is_for_boot_ordering --located[1.0]--> tests/e2e/wired-pair/deployment/modules/probe/client.nix:33
+inv_probe_retry_is_for_boot_ordering --rationale[1.0]--> it is not headroom for flakiness
+inv_a_daily_schedule_keeps_the_elapse_future --invariant[1.0]--> a daily schedule elapses after the run
+inv_a_daily_schedule_keeps_the_elapse_future --topic[1.0]--> e2e
+inv_a_daily_schedule_keeps_the_elapse_future --governs[1.0]--> tests/e2e/wired-pair/deployment/**
+inv_a_daily_schedule_keeps_the_elapse_future --located[1.0]--> tests/e2e/wired-pair/deployment/modules/sweep/job.nix:15
+inv_a_daily_schedule_keeps_the_elapse_future --names[1.0]--> schedule
+inv_pytest_phases_are_session_scoped_ordered --invariant[1.0]--> the phases are session scoped and order dependent
+inv_pytest_phases_are_session_scoped_ordered --topic[1.0]--> e2e
+inv_pytest_phases_are_session_scoped_ordered --governs[1.0]--> tests/e2e/*/test_*.py
+inv_pytest_phases_are_session_scoped_ordered --located[1.0]--> tests/e2e/delivery.py:940
+inv_a_trailing_wait_restores_the_wire --invariant[1.0]--> a trailing wait restores the wire
+inv_a_trailing_wait_restores_the_wire --topic[1.0]--> e2e
+inv_a_trailing_wait_restores_the_wire --governs[1.0]--> tests/e2e/*/test_*.py
+inv_a_trailing_wait_restores_the_wire --located[0.6]--> tests/e2e/wired-pair/test_wired_pair.py:935
+inv_later_secret_phases_are_a_second_apply --invariant[1.0]--> the later phases are a second apply
+inv_later_secret_phases_are_a_second_apply --topic[1.0]--> e2e
+inv_later_secret_phases_are_a_second_apply --governs[1.0]--> tests/e2e/secret-delivery/test_secret_delivery.py
+inv_later_secret_phases_are_a_second_apply --located[1.0]--> tests/e2e/secret-delivery/test_secret_delivery.py:1010
+inv_later_secret_phases_are_a_second_apply --rationale[1.0]--> they run in file order and end rebooted
+inv_the_last_phase_proves_values_survive --invariant[1.0]--> the machine holds every value after a reboot
+inv_the_last_phase_proves_values_survive --topic[1.0]--> e2e
+inv_the_last_phase_proves_values_survive --governs[1.0]--> tests/e2e/secret-delivery/test_secret_delivery.py
+inv_the_last_phase_proves_values_survive --located[1.0]--> tests/e2e/secret-delivery/test_secret_delivery.py:1011
+inv_the_last_phase_proves_values_survive --rationale[1.0]--> no command is run against the machine
+inv_a_lost_value_needs_both_copies_cleared --invariant[1.0]--> losing a value means clearing both copies
+inv_a_lost_value_needs_both_copies_cleared --topic[1.0]--> e2e
+inv_a_lost_value_needs_both_copies_cleared --governs[1.0]--> tests/e2e/secret-delivery/test_secret_delivery.py
+inv_a_lost_value_needs_both_copies_cleared --located[1.0]--> tests/e2e/secret-delivery/test_secret_delivery.py:811
+inv_a_lost_value_needs_both_copies_cleared --rationale[1.0]--> a reboot no longer produces that condition
+inv_an_inactive_unit_answers_nonzero --invariant[1.0]--> an inactive unit answers with a nonzero status
+inv_an_inactive_unit_answers_nonzero --topic[1.0]--> e2e
+inv_an_inactive_unit_answers_nonzero --governs[1.0]--> tests/e2e/secret-delivery/test_secret_delivery.py
+inv_an_inactive_unit_answers_nonzero --located[1.0]--> tests/e2e/secret-delivery/test_secret_delivery.py:1003
+inv_an_inactive_unit_answers_nonzero --figure[1.0]--> 3
+inv_an_inactive_unit_answers_nonzero --rationale[1.0]--> the assertion uses the plain remote call instead
+inv_the_reboot_is_issued_inside_the_guest --invariant[1.0]--> the reboot is issued inside the guest
+inv_the_reboot_is_issued_inside_the_guest --topic[1.0]--> e2e
+inv_the_reboot_is_issued_inside_the_guest --governs[1.0]--> tests/e2e/secret-delivery/test_secret_delivery.py
+inv_the_reboot_is_issued_inside_the_guest --located[1.0]--> tests/e2e/secret-delivery/test_secret_delivery.py:1023
+inv_the_reboot_is_issued_inside_the_guest --rationale[1.0]--> a machine reset from outside is not that
+inv_provisioning_is_a_phase --invariant[1.0]--> provisioning runs as a phase never a preparation
+inv_provisioning_is_a_phase --topic[1.0]--> e2e
+inv_provisioning_is_a_phase --governs[1.0]--> tests/e2e/secret-delivery/test_secret_delivery.py
+inv_provisioning_is_a_phase --located[1.0]--> tests/e2e/secret-delivery/test_secret_delivery.py:299
+inv_provisioning_is_a_phase --host_path[1.0]--> /var/lib/planner/age.key
+inv_provisioning_is_a_phase --figure[1.0]--> 0400
+inv_provisioning_is_a_phase --figure[1.0]--> 0700
+inv_provisioning_is_a_phase --rationale[1.0]--> a preparation body skips on a cache hit
+inv_both_halves_of_the_identity_are_committed --invariant[1.0]--> both halves of the throwaway identity are committed
+inv_both_halves_of_the_identity_are_committed --topic[1.0]--> e2e
+inv_both_halves_of_the_identity_are_committed --governs[1.0]--> tests/e2e/secret-delivery/throwaway-age-identity.txt
+inv_both_halves_of_the_identity_are_committed --rationale[1.0]--> it opens only that folder tokens offline
+inv_unsealer_follows_the_delivery_set --invariant[1.0]--> a recipient receiving no value earns no unsealer
+inv_unsealer_follows_the_delivery_set --topic[1.0]--> e2e
+inv_unsealer_follows_the_delivery_set --governs[1.0]--> tests/e2e/secret-delivery/deployment/machines.nix
+inv_unsealer_follows_the_delivery_set --located[1.0]--> tests/e2e/secret-delivery/deployment/machines.nix:29
+inv_unsealer_follows_the_delivery_set --rationale[1.0]--> the unsealer follows the delivery set
+inv_one_folder_owns_every_portable_claim --invariant[1.0]--> one folder owns every portable tool claim
+inv_one_folder_owns_every_portable_claim --topic[1.0]--> e2e
+inv_one_folder_owns_every_portable_claim --governs[1.0]--> tests/e2e/portable-image/**
+inv_one_folder_owns_every_portable_claim --located[1.0]--> tests/e2e/portable-image/test_portable_image.py:1
+inv_the_attaching_entry_is_stated_strict --invariant[1.0]--> the attaching entry states the strictest profile
+inv_the_attaching_entry_is_stated_strict --topic[1.0]--> e2e
+inv_the_attaching_entry_is_stated_strict --governs[1.0]--> tests/e2e/portable-image/deployment/default.nix
+inv_the_attaching_entry_is_stated_strict --located[1.0]--> tests/e2e/portable-image/deployment/default.nix:102
+inv_the_attaching_entry_is_stated_strict --rationale[1.0]--> enforcement is the claim under test
+inv_only_detached_reads_as_absence --invariant[1.0]--> only a detached answer reads as absence
+inv_only_detached_reads_as_absence --topic[1.0]--> e2e
+inv_only_detached_reads_as_absence --governs[1.0]--> tests/e2e/portable-image/test_portable_image.py
+inv_only_detached_reads_as_absence --located[0.6]--> tests/e2e/portable-image/test_portable_image.py:532
+inv_only_detached_reads_as_absence --rationale[1.0]--> stopped units leave the image attached
+inv_the_folder_builds_one_deployment_twice --invariant[1.0]--> the folder builds the same deployment twice
+inv_the_folder_builds_one_deployment_twice --topic[1.0]--> e2e
+inv_the_folder_builds_one_deployment_twice --governs[1.0]--> tests/e2e/portable-image/test_portable_image.py
+inv_the_folder_builds_one_deployment_twice --located[0.6]--> tests/e2e/portable-image/test_portable_image.py:82
+inv_the_folder_builds_one_deployment_twice --rationale[1.0]--> nothing attaches with a changed answer
+inv_assembly_tests_run_the_attach_script --invariant[1.0]--> the assembly tests run the artifact attach script
+inv_assembly_tests_run_the_attach_script --topic[1.0]--> e2e
+inv_assembly_tests_run_the_attach_script --governs[1.0]--> tests/e2e/portable-image/test_portable_image.py
+inv_assembly_tests_run_the_attach_script --located[1.0]--> tests/e2e/portable-image/test_portable_image.py:1193
+inv_assembly_tests_run_the_attach_script --names[1.0]--> PORTABLE_PLANNER_ROOT
+inv_a_refusing_path_stops_the_script --invariant[1.0]--> a refusing path stops the script after assembly
+inv_a_refusing_path_stops_the_script --topic[1.0]--> e2e
+inv_a_refusing_path_stops_the_script --governs[1.0]--> tests/e2e/portable-image/test_portable_image.py
+inv_a_refusing_path_stops_the_script --located[1.0]--> tests/e2e/portable-image/test_portable_image.py:1118
+inv_a_refusing_path_stops_the_script --host_path[1.0]--> /run/planner-assembly
+inv_a_refusing_path_stops_the_script --rationale[1.0]--> only there does a half-written file exist
+inv_the_unreadable_listing_branch_has_no_test --invariant[1.0]--> the unreadable listing fallback carries no test
+inv_the_unreadable_listing_branch_has_no_test --topic[1.0]--> e2e
+inv_the_unreadable_listing_branch_has_no_test --governs[1.0]--> cli/report.py
+inv_the_unreadable_listing_branch_has_no_test --governs[1.0]--> cli/remote.py
+inv_the_unreadable_listing_branch_has_no_test --located[1.0]--> cli/report.py:496
+inv_the_unreadable_listing_branch_has_no_test --located[1.0]--> cli/remote.py:860
+inv_the_unreadable_listing_branch_has_no_test --rationale[1.0]--> no real tool prints such a listing
+inv_built_roots_precede_inherited_path --invariant[1.0]--> the built roots come before any inherited path
+inv_built_roots_precede_inherited_path --topic[1.0]--> e2e
+inv_built_roots_precede_inherited_path --governs[1.0]--> tests/e2e/runner.py
+inv_built_roots_precede_inherited_path --located[1.0]--> tests/e2e/runner.py:280
+inv_built_roots_precede_inherited_path --enforced_in[1.0]--> tests/e2e/test_harness.py
+inv_built_roots_precede_inherited_path --enforced_by_prefix[1.0]--> test_a_run_reads_the_built_layer_rather_than
+inv_built_roots_precede_inherited_path --rationale[1.0]--> a checkout would shadow the built copies
+inv_one_case_is_one_remote_command --invariant[1.0]--> one case is one remote shell command
+inv_one_case_is_one_remote_command --topic[1.0]--> e2e
+inv_one_case_is_one_remote_command --governs[1.0]--> tests/e2e/*/test_*.py
+inv_one_case_is_one_remote_command --rationale[1.0]--> many logins hit the socket trigger limit
+inv_observations_echoed_as_key_values --invariant[1.0]--> everything observed is echoed as key value lines
+inv_observations_echoed_as_key_values --topic[1.0]--> e2e
+inv_observations_echoed_as_key_values --governs[1.0]--> tests/e2e/*/test_*.py
+inv_observations_echoed_as_key_values --rationale[1.0]--> a value spanning lines cannot be parsed
+inv_file_bytes_are_compared_on_the_machine --invariant[1.0]--> a file bytes are compared on the machine
+inv_file_bytes_are_compared_on_the_machine --topic[1.0]--> e2e
+inv_file_bytes_are_compared_on_the_machine --governs[1.0]--> tests/e2e/*/test_*.py
+inv_file_bytes_are_compared_on_the_machine --rationale[1.0]--> the reader can parse no multi-line value
+inv_a_unit_runs_with_the_artifact_path --invariant[1.0]--> a unit runs with its artifact path
+inv_a_unit_runs_with_the_artifact_path --topic[1.0]--> e2e
+inv_a_unit_runs_with_the_artifact_path --governs[1.0]--> tests/e2e/newcomer/template/deployment/default.nix
+inv_a_unit_runs_with_the_artifact_path --located[1.0]--> tests/e2e/newcomer/template/deployment/default.nix:12
+inv_a_unit_runs_with_the_artifact_path --rationale[1.0]--> the machine own path is no plan fact
+inv_the_server_reads_two_config_files --invariant[1.0]--> the server reads two declared configuration files
+inv_the_server_reads_two_config_files --topic[1.0]--> e2e
+inv_the_server_reads_two_config_files --governs[1.0]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_the_server_reads_two_config_files --names[1.0]--> databases.nix
+inv_the_server_reads_two_config_files --located[1.0]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_the_server_reads_two_config_files --names[1.0]--> databases.nix
+inv_the_server_reads_two_config_files --located_line[1.0]--> 136
+inv_the_server_reads_two_config_files --located[1.0]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_the_server_reads_two_config_files --names[1.0]--> databases.nix
+inv_the_server_reads_two_config_files --located_line[1.0]--> 160
+inv_the_server_reads_two_config_files --names[1.0]--> hba_file
+inv_the_data_directory_is_declared_state --invariant[1.0]--> the data directory is declared state
+inv_the_data_directory_is_declared_state --topic[1.0]--> e2e
+inv_the_data_directory_is_declared_state --governs[1.0]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_the_data_directory_is_declared_state --names[1.0]--> databases.nix
+inv_the_data_directory_is_declared_state --located[1.0]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_the_data_directory_is_declared_state --names[1.0]--> databases.nix
+inv_the_data_directory_is_declared_state --located_line[1.0]--> 82
+inv_the_data_directory_is_declared_state --names[1.0]--> stateDirectory
+inv_the_data_directory_is_declared_state --figure[1.0]--> 0700
+inv_the_setup_is_three_units_not_guards --invariant[1.0]--> the setup is three units not three guards
+inv_the_setup_is_three_units_not_guards --topic[1.0]--> e2e
+inv_the_setup_is_three_units_not_guards --governs[1.0]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_the_setup_is_three_units_not_guards --names[1.0]--> databases.nix
+inv_the_setup_is_three_units_not_guards --located[1.0]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_the_setup_is_three_units_not_guards --names[1.0]--> databases.nix
+inv_the_setup_is_three_units_not_guards --located_line[1.0]--> 106
+inv_the_setup_is_three_units_not_guards --located[1.0]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_the_setup_is_three_units_not_guards --names[1.0]--> databases.nix
+inv_the_setup_is_three_units_not_guards --located_line[1.0]--> 180
+inv_bootstrap_starts_only_if_a_path_is_absent --invariant[1.0]--> bootstrap starts only where its file is absent
+inv_bootstrap_starts_only_if_a_path_is_absent --topic[1.0]--> e2e
+inv_bootstrap_starts_only_if_a_path_is_absent --governs[1.0]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_bootstrap_starts_only_if_a_path_is_absent --names[1.0]--> databases.nix
+inv_bootstrap_starts_only_if_a_path_is_absent --located[1.0]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_bootstrap_starts_only_if_a_path_is_absent --names[1.0]--> databases.nix
+inv_bootstrap_starts_only_if_a_path_is_absent --located_line[1.0]--> 111
+inv_bootstrap_starts_only_if_a_path_is_absent --names[1.0]--> startIfPathAbsent
+inv_the_init_unit_converges_every_apply --invariant[1.0]--> the init unit converges every role and database
+inv_the_init_unit_converges_every_apply --topic[1.0]--> e2e
+inv_the_init_unit_converges_every_apply --governs[1.0]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_the_init_unit_converges_every_apply --names[1.0]--> databases.nix
+inv_the_init_unit_converges_every_apply --located[1.0]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_the_init_unit_converges_every_apply --names[1.0]--> databases.nix
+inv_the_init_unit_converges_every_apply --located_line[1.0]--> 117
+inv_init_starts_a_private_server --invariant[1.0]--> init starts a private server where none runs
+inv_init_starts_a_private_server --topic[1.0]--> e2e
+inv_init_starts_a_private_server --governs[1.0]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_init_starts_a_private_server --names[1.0]--> databases.nix
+inv_init_starts_a_private_server --located[0.6]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_init_starts_a_private_server --names[0.6]--> databases.nix
+inv_init_starts_a_private_server --located_line[0.6]--> 117
+inv_init_starts_a_private_server --rationale[1.0]--> it reaches whichever server already holds it
+inv_the_cluster_creation_states_no_auth_flag --invariant[1.0]--> cluster creation states no authentication flag
+inv_the_cluster_creation_states_no_auth_flag --topic[1.0]--> e2e
+inv_the_cluster_creation_states_no_auth_flag --governs[1.0]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_the_cluster_creation_states_no_auth_flag --names[1.0]--> databases.nix
+inv_the_cluster_creation_states_no_auth_flag --located[0.6]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_the_cluster_creation_states_no_auth_flag --names[0.6]--> databases.nix
+inv_the_cluster_creation_states_no_auth_flag --located_line[0.6]--> 106
+inv_the_cluster_creation_states_no_auth_flag --rationale[1.0]--> both units read the declared configuration file
+inv_the_ddl_converges_rather_than_creates --invariant[1.0]--> the schema statements converge rather than create
+inv_the_ddl_converges_rather_than_creates --topic[1.0]--> e2e
+inv_the_ddl_converges_rather_than_creates --governs[1.0]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_the_ddl_converges_rather_than_creates --names[1.0]--> databases.nix
+inv_the_ddl_converges_rather_than_creates --located[0.6]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_the_ddl_converges_rather_than_creates --names[0.6]--> databases.nix
+inv_the_ddl_converges_rather_than_creates --located_line[0.6]--> 117
+inv_the_ddl_converges_rather_than_creates --rationale[1.0]--> an owner is stated after the database exists
+inv_an_unnamed_role_loses_only_its_login --invariant[1.0]--> an unnamed role keeps objects loses login
+inv_an_unnamed_role_loses_only_its_login --topic[1.0]--> e2e
+inv_an_unnamed_role_loses_only_its_login --governs[1.0]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_an_unnamed_role_loses_only_its_login --names[1.0]--> databases.nix
+inv_an_unnamed_role_loses_only_its_login --enforced_in[1.0]--> tests/e2e/shared-postgres/test_shared_postgres.py
+inv_an_unnamed_role_loses_only_its_login --enforced_by[1.0]--> test_a_changed_database_owner_takes_effect_on_a_second_apply
+inv_an_unnamed_role_loses_only_its_login --located[1.0]--> tests/e2e/shared-postgres/test_shared_postgres.py:1312
+inv_interpolation_escaped_at_its_site --invariant[1.0]--> every interpolation is escaped where it is written
+inv_interpolation_escaped_at_its_site --topic[1.0]--> e2e
+inv_interpolation_escaped_at_its_site --governs[1.0]--> tests/e2e/shared-postgres/deployment/**
+inv_interpolation_escaped_at_its_site --located[1.0]--> tests/e2e/shared-postgres/deployment/instances.nix:35
+inv_interpolation_escaped_at_its_site --rationale[1.0]--> no argument vector ever sees a password
+inv_no_unit_of_that_folder_runs_as_root --invariant[1.0]--> no unit of that folder runs as root
+inv_no_unit_of_that_folder_runs_as_root --topic[1.0]--> e2e
+inv_no_unit_of_that_folder_runs_as_root --governs[1.0]--> tests/e2e/shared-postgres/deployment/**
+inv_no_unit_of_that_folder_runs_as_root --located[1.0]--> tests/e2e/shared-postgres/deployment/modules/app
+inv_no_unit_of_that_folder_runs_as_root --names[1.0]--> client.nix
+inv_no_unit_of_that_folder_runs_as_root --located_line[1.0]--> 70
+inv_no_unit_of_that_folder_runs_as_root --figure[1.0]--> 0440
+inv_no_unit_of_that_folder_runs_as_root --rationale[1.0]--> the init script drops privilege nowhere
+inv_a_folder_account_is_the_guest_images --invariant[1.0]--> a folder unit account is the image own
+inv_a_folder_account_is_the_guest_images --topic[1.0]--> e2e
+inv_a_folder_account_is_the_guest_images --governs[1.0]--> tests/e2e/guest.nix
+inv_a_folder_account_is_the_guest_images --located[1.0]--> tests/e2e/guest.nix:305
+inv_a_folder_account_is_the_guest_images --located[1.0]--> tests/unit/layers.nix:537
+inv_a_folder_account_is_the_guest_images --enforced_in[1.0]--> tests/unit/layers.nix
+inv_a_folder_account_is_the_guest_images --enforced_by[1.0]--> testTheImageDeclaresTheAccountAFoldersServiceRunsAs
+inv_the_database_port_is_a_default --invariant[1.0]--> the database port is a default
+inv_the_database_port_is_a_default --topic[1.0]--> e2e
+inv_the_database_port_is_a_default --governs[1.0]--> tests/e2e/shared-postgres/deployment/**
+inv_the_database_port_is_a_default --located[1.0]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_the_database_port_is_a_default --names[1.0]--> default.nix
+inv_the_database_port_is_a_default --located_line[1.0]--> 26
+inv_the_database_port_is_a_default --located[1.0]--> tests/e2e/shared-postgres/deployment/instances.nix:64
+inv_the_database_port_is_a_default --figure[1.0]--> 5432
+inv_the_database_port_is_a_default --figure[1.0]--> 5433
+inv_the_database_port_is_a_default --rationale[1.0]--> two listeners on one machine need two numbers
+inv_folder_paths_derived_from_identity --invariant[1.0]--> a host path comes from instance and member
+inv_folder_paths_derived_from_identity --topic[1.0]--> e2e
+inv_folder_paths_derived_from_identity --governs[1.0]--> tests/e2e/shared-postgres/deployment/**
+inv_folder_paths_derived_from_identity --located[1.0]--> tests/e2e/shared-postgres/test_shared_postgres.py:94
+inv_folder_paths_derived_from_identity --rationale[1.0]--> a hyphen joins them because separators are refused
+inv_the_test_reads_each_path_off_the_plan --invariant[1.0]--> the test reads each path off the plan
+inv_the_test_reads_each_path_off_the_plan --topic[1.0]--> e2e
+inv_the_test_reads_each_path_off_the_plan --governs[1.0]--> tests/e2e/shared-postgres/test_shared_postgres.py
+inv_the_test_reads_each_path_off_the_plan --rationale[1.0]--> no constant is repeated in the test
+inv_one_consumer_lives_outside_a_delivery_set --invariant[1.0]--> one consumer sits outside the delivery set
+inv_one_consumer_lives_outside_a_delivery_set --topic[1.0]--> e2e
+inv_one_consumer_lives_outside_a_delivery_set --governs[1.0]--> tests/e2e/shared-postgres/deployment/instances.nix
+inv_one_consumer_lives_outside_a_delivery_set --located[1.0]--> tests/e2e/shared-postgres/deployment/instances.nix:33
+inv_one_consumer_lives_outside_a_delivery_set --rationale[1.0]--> the private value reaches one machine only
+inv_three_app_shapes_of_one_module --invariant[1.0]--> three instances are three shapes of one module
+inv_three_app_shapes_of_one_module --topic[1.0]--> e2e
+inv_three_app_shapes_of_one_module --governs[1.0]--> tests/e2e/shared-postgres/deployment/modules/app/default.nix
+inv_three_app_shapes_of_one_module --located[1.0]--> tests/e2e/shared-postgres/deployment/instances.nix:33
+inv_three_app_shapes_of_one_module --rationale[1.0]--> two cut the database and wire the slot
+inv_the_composition_rewrite_moved_no_plan_key --invariant[1.0]--> the rewrite moved no key and no record
+inv_the_composition_rewrite_moved_no_plan_key --topic[1.0]--> e2e
+inv_the_composition_rewrite_moved_no_plan_key --governs[1.0]--> tests/e2e/shared-postgres/**
+inv_the_composition_rewrite_moved_no_plan_key --located[0.6]--> tests/unit/layers.nix:1195
+inv_the_composition_rewrite_moved_no_plan_key --rationale[1.0]--> the folder is where that claim is proven
+inv_each_instance_owns_its_runtime_directory --invariant[1.0]--> each instance owns its own runtime directory
+inv_each_instance_owns_its_runtime_directory --topic[1.0]--> e2e
+inv_each_instance_owns_its_runtime_directory --governs[1.0]--> tests/e2e/shared-postgres/deployment/modules/app/client.nix
+inv_each_instance_owns_its_runtime_directory --located[1.0]--> tests/e2e/shared-postgres/deployment/modules/app
+inv_each_instance_owns_its_runtime_directory --names[1.0]--> client.nix
+inv_each_instance_owns_its_runtime_directory --located_line[1.0]--> 75
+inv_each_instance_owns_its_runtime_directory --rationale[1.0]--> a shared name loses the other records
+inv_server_restarts_on_failure --invariant[1.0]--> the server restarts on failure after a delay
+inv_server_restarts_on_failure --topic[1.0]--> e2e
+inv_server_restarts_on_failure --governs[1.0]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_server_restarts_on_failure --names[1.0]--> databases.nix
+inv_server_restarts_on_failure --located[1.0]--> tests/e2e/shared-postgres/deployment/modules/postgresql
+inv_server_restarts_on_failure --names[1.0]--> databases.nix
+inv_server_restarts_on_failure --located_line[1.0]--> 189
+inv_server_restarts_on_failure --rationale[1.0]--> recovery from a killed main process is asserted
+inv_that_folder_builds_two_deployments --invariant[1.0]--> the folder builds two deployments one owner apart
+inv_that_folder_builds_two_deployments --topic[1.0]--> e2e
+inv_that_folder_builds_two_deployments --governs[1.0]--> tests/e2e/shared-postgres/deployment/default.nix
+inv_that_folder_builds_two_deployments --located[1.0]--> tests/e2e/shared-postgres/deployment/default.nix:143
+inv_that_folder_builds_two_deployments --located[1.0]--> tests/e2e/shared-postgres/test_shared_postgres.py:94
+inv_disk_comes_from_the_stage_not_the_image --invariant[1.0]--> disk for state comes from the folder stage
+inv_disk_comes_from_the_stage_not_the_image --topic[1.0]--> e2e
+inv_disk_comes_from_the_stage_not_the_image --governs[1.0]--> tests/e2e/delivery.py
+inv_disk_comes_from_the_stage_not_the_image --located[1.0]--> tests/e2e/delivery.py:886
+inv_disk_comes_from_the_stage_not_the_image --names[1.0]--> disk_gib
+inv_disk_comes_from_the_stage_not_the_image --rationale[1.0]--> growing the image re-keys every other cut
+inv_a_state_writing_folder_is_recognised --invariant[1.0]--> a state writing folder is recognised by declarations
+inv_a_state_writing_folder_is_recognised --topic[1.0]--> e2e
+inv_a_state_writing_folder_is_recognised --governs[1.0]--> tests/unit/layers.nix
+inv_a_state_writing_folder_is_recognised --located[1.0]--> tests/unit/layers.nix:1162
+inv_a_state_writing_folder_is_recognised --enforced_in[1.0]--> tests/unit/layers.nix
+inv_a_state_writing_folder_is_recognised --enforced_by[1.0]--> testAFolderWritingStateIsRecognisedByWhatItDeclares
+inv_a_deleted_knob_names_no_state --invariant[1.0]--> a deleted knob is no declared state
+inv_a_deleted_knob_names_no_state --topic[1.0]--> e2e
+inv_a_deleted_knob_names_no_state --governs[1.0]--> tests/unit/layers.nix
+inv_a_deleted_knob_names_no_state --located[1.0]--> tests/unit/layers.nix:1165
+inv_a_deleted_knob_names_no_state --names[1.0]--> dataDir
+inv_a_deleted_knob_names_no_state --enforced_in[1.0]--> tests/unit/layers.nix
+inv_a_deleted_knob_names_no_state --enforced_by[1.0]--> testAFolderWritingStateIsRecognisedByWhatItDeclares
+inv_the_template_follows_the_library_pin --invariant[1.0]--> the newcomer template follows the library pin
+inv_the_template_follows_the_library_pin --topic[1.0]--> e2e
+inv_the_template_follows_the_library_pin --governs[1.0]--> tests/e2e/newcomer/template/**
+inv_the_template_follows_the_library_pin --rationale[1.0]--> a second pin evaluates against unseen packages
+inv_the_image_carries_flakes_and_spare_space --invariant[1.0]--> the image carries flake features and spare space
+inv_the_image_carries_flakes_and_spare_space --topic[1.0]--> e2e
+inv_the_image_carries_flakes_and_spare_space --governs[1.0]--> tests/e2e/guest.nix
+inv_the_image_carries_flakes_and_spare_space --located[1.0]--> tests/e2e/guest.nix:161
+inv_the_image_carries_flakes_and_spare_space --names[1.0]--> nix-command
+inv_the_image_carries_flakes_and_spare_space --figure[1.0]--> 6144M
+inv_the_image_carries_flakes_and_spare_space --rationale[1.0]--> changing one property re-keys every cut
+inv_the_user_scope_stack_is_six_properties --invariant[1.0]--> the user scope stack is six guest properties
+inv_the_user_scope_stack_is_six_properties --topic[1.0]--> e2e
+inv_the_user_scope_stack_is_six_properties --governs[1.0]--> tests/e2e/guest.nix
+inv_the_user_scope_stack_is_six_properties --figure[1.0]--> 6
+inv_the_user_scope_stack_is_six_properties --rationale[1.0]--> no plan can state any of them
+inv_the_mount_daemons_are_enabled_as_dropins --invariant[1.0]--> each mount daemon is enabled by a dropin
+inv_the_mount_daemons_are_enabled_as_dropins --topic[1.0]--> e2e
+inv_the_mount_daemons_are_enabled_as_dropins --governs[1.0]--> tests/e2e/guest.nix
+inv_the_mount_daemons_are_enabled_as_dropins --located[1.0]--> tests/e2e/guest.nix:370
+inv_the_mount_daemons_are_enabled_as_dropins --names[1.0]--> systemd.additionalUpstreamSystemUnits
+inv_the_mount_daemons_are_enabled_as_dropins --rationale[1.0]--> that option only copies a unit file
+inv_the_user_portabled_rides_upstream_units --invariant[1.0]--> the user daemon rides upstream units
+inv_the_user_portabled_rides_upstream_units --topic[1.0]--> e2e
+inv_the_user_portabled_rides_upstream_units --governs[1.0]--> tests/e2e/guest.nix
+inv_the_user_portabled_rides_upstream_units --located[1.0]--> tests/e2e/guest.nix:389
+inv_the_user_portabled_rides_upstream_units --names[1.0]--> systemd.additionalUpstreamUserUnits
+inv_systemd_is_rebuilt_with_a_provided_header --invariant[1.0]--> the image rebuilds systemd with a provided header
+inv_systemd_is_rebuilt_with_a_provided_header --topic[1.0]--> e2e
+inv_systemd_is_rebuilt_with_a_provided_header --governs[1.0]--> tests/e2e/guest.nix
+inv_systemd_is_rebuilt_with_a_provided_header --located[1.0]--> tests/e2e/guest.nix:95
+inv_systemd_is_rebuilt_with_a_provided_header --rationale[1.0]--> the stock build leaves the namespace interface off
+inv_polkit_admits_portable_actions --invariant[1.0]--> a polkit rule admits the account portable actions
+inv_polkit_admits_portable_actions --topic[1.0]--> e2e
+inv_polkit_admits_portable_actions --governs[1.0]--> tests/e2e/guest.nix
+inv_polkit_admits_portable_actions --located[1.0]--> tests/e2e/guest.nix:239
+inv_polkit_admits_portable_actions --rationale[1.0]--> a machine with no rule denies the attach
+inv_the_deploy_accounts_home_is_traversable --invariant[1.0]--> the deploy account home is traversable by others
+inv_the_deploy_accounts_home_is_traversable --topic[1.0]--> e2e
+inv_the_deploy_accounts_home_is_traversable --governs[1.0]--> tests/e2e/guest.nix
+inv_the_deploy_accounts_home_is_traversable --located[1.0]--> tests/e2e/guest.nix:326
+inv_the_deploy_accounts_home_is_traversable --names[1.0]--> homeMode
+inv_the_deploy_accounts_home_is_traversable --figure[1.0]--> 711
+inv_the_deploy_accounts_home_is_traversable --rationale[1.0]--> an extraction child holds a foreign account id
+inv_deploy_account_is_store_trusted --invariant[1.0]--> the machine store trusts the deploy account
+inv_deploy_account_is_store_trusted --topic[1.0]--> e2e
+inv_deploy_account_is_store_trusted --governs[1.0]--> tests/e2e/guest.nix
+inv_deploy_account_is_store_trusted --located[1.0]--> tests/e2e/guest.nix:335
+inv_deploy_account_is_store_trusted --names[1.0]--> nix.settings.trusted-users
+inv_deploy_account_is_store_trusted --rationale[1.0]--> a daemon refuses an unsigned path otherwise
+inv_one_verity_pair_serves_guest_and_folder --invariant[1.0]--> one throwaway signing pair serves guest and folder
+inv_one_verity_pair_serves_guest_and_folder --topic[1.0]--> e2e
+inv_one_verity_pair_serves_guest_and_folder --governs[1.0]--> tests/e2e/user-scope/verity.nix
+inv_one_verity_pair_serves_guest_and_folder --located[1.0]--> tests/e2e/user-scope/deployment/default.nix:48
+inv_one_verity_pair_serves_guest_and_folder --host_path[1.0]--> /etc/verity.d
+inv_one_verity_pair_serves_guest_and_folder --rationale[1.0]--> two copies of a pair can disagree
+inv_the_user_scope_folder_exercises_refusals --invariant[1.0]--> that folder exercises the scope own refusals
+inv_the_user_scope_folder_exercises_refusals --topic[1.0]--> e2e
+inv_the_user_scope_folder_exercises_refusals --governs[1.0]--> tests/e2e/user-scope/**
+inv_the_user_scope_folder_exercises_refusals --located[1.0]--> tests/e2e/user-scope/deployment/machines.nix:12
+inv_the_user_scope_folder_exercises_refusals --rationale[1.0]--> its entry declares each refused fact
+inv_every_step_of_that_run_is_the_logins --invariant[1.0]--> every step of that run is the login
+inv_every_step_of_that_run_is_the_logins --topic[1.0]--> e2e
+inv_every_step_of_that_run_is_the_logins --governs[1.0]--> tests/e2e/user-scope/test_user_scope.py
+inv_every_step_of_that_run_is_the_logins --located[1.0]--> tests/e2e/user-scope/test_user_scope.py:177
+inv_every_step_of_that_run_is_the_logins --rationale[1.0]--> preflight write copy activation are the account
+inv_the_value_is_read_from_the_runtime_dir --invariant[1.0]--> the value is read from the runtime directory
+inv_the_value_is_read_from_the_runtime_dir --topic[1.0]--> e2e
+inv_the_value_is_read_from_the_runtime_dir --governs[1.0]--> tests/e2e/user-scope/test_user_scope.py
+inv_the_value_is_read_from_the_runtime_dir --located[0.6]--> tests/e2e/user-scope/test_user_scope.py:270
+inv_the_value_is_read_from_the_runtime_dir --rationale[1.0]--> the account own manager created it
+inv_lingering_brings_the_manager_back --invariant[1.0]--> lingering brings the manager back after a reboot
+inv_lingering_brings_the_manager_back --topic[1.0]--> e2e
+inv_lingering_brings_the_manager_back --governs[1.0]--> tests/e2e/user-scope/test_user_scope.py
+inv_lingering_brings_the_manager_back --located[0.6]--> tests/e2e/user-scope/test_user_scope.py:262
+inv_lingering_brings_the_manager_back --rationale[1.0]--> the pool and unit files are account state
+inv_the_apply_after_a_reboot_starts_nothing --invariant[1.0]--> the apply after a reboot starts nothing
+inv_the_apply_after_a_reboot_starts_nothing --topic[1.0]--> e2e
+inv_the_apply_after_a_reboot_starts_nothing --governs[1.0]--> tests/e2e/user-scope/test_user_scope.py
+inv_the_apply_after_a_reboot_starts_nothing --rationale[1.0]--> the value step is a conditional restart
+inv_one_folder_reaches_a_machine_by_name --invariant[1.0]--> one folder reaches its machine by name
+inv_one_folder_reaches_a_machine_by_name --topic[1.0]--> e2e
+inv_one_folder_reaches_a_machine_by_name --governs[1.0]--> tests/e2e/friend-enrollment/deployment/machines.nix
+inv_one_folder_reaches_a_machine_by_name --located[1.0]--> tests/e2e/friend-enrollment/deployment/machines.nix:21
+inv_one_folder_reaches_a_machine_by_name --rationale[1.0]--> the lease it holds appears in no deployment
+inv_the_hub_runs_the_server_as_an_entry --invariant[1.0]--> the hub runs the server as an entry
+inv_the_hub_runs_the_server_as_an_entry --topic[1.0]--> e2e
+inv_the_hub_runs_the_server_as_an_entry --governs[1.0]--> tests/e2e/friend-enrollment/deployment/instances.nix
+inv_the_hub_runs_the_server_as_an_entry --located[1.0]--> tests/e2e/friend-enrollment/deployment/instances.nix:10
+inv_that_folder_disk_exceeds_the_image_size --invariant[1.0]--> the folder disk exceeds the image size
+inv_that_folder_disk_exceeds_the_image_size --topic[1.0]--> e2e
+inv_that_folder_disk_exceeds_the_image_size --governs[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_that_folder_disk_exceeds_the_image_size --located[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py:359
+inv_that_folder_disk_exceeds_the_image_size --names[1.0]--> disk_gib
+inv_that_folder_disk_exceeds_the_image_size --rationale[1.0]--> a resize refuses a shrink without a flag
+inv_a_credential_reaches_two_argument_vectors --invariant[1.0]--> a minted credential reaches two argument vectors
+inv_a_credential_reaches_two_argument_vectors --topic[1.0]--> e2e
+inv_a_credential_reaches_two_argument_vectors --governs[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_a_credential_reaches_two_argument_vectors --figure[1.0]--> 2
+inv_a_credential_reaches_two_argument_vectors --rationale[1.0]--> it is read from one login output
+inv_a_throwaway_node_keeps_its_own_state --invariant[1.0]--> a throwaway node keeps its own state
+inv_a_throwaway_node_keeps_its_own_state --topic[1.0]--> e2e
+inv_a_throwaway_node_keeps_its_own_state --governs[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_a_throwaway_node_keeps_its_own_state --located[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py:269
+inv_a_throwaway_node_keeps_its_own_state --rationale[1.0]--> the machine daemon already holds one membership
+inv_the_node_is_backgrounded_in_one_element --invariant[1.0]--> the node is backgrounded inside one command element
+inv_the_node_is_backgrounded_in_one_element --topic[1.0]--> e2e
+inv_the_node_is_backgrounded_in_one_element --governs[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_the_node_is_backgrounded_in_one_element --located[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py:270
+inv_the_node_is_backgrounded_in_one_element --rationale[1.0]--> a separator after the ampersand fails
+inv_cli_source_root_is_a_mypy_path --invariant[1.0]--> the command source root is a checked path
+inv_mypy_path_is_not_written_out_by_hand --invariant[0.6]--> the checked path is never hand written
+inv_one_attrset_feeds_both_consumers --invariant[1.0]--> one attrset feeds app and env script
+inv_ruff_target_version_is_a_floor --invariant[1.0]--> the target version is a floor
+inv_vale_wrapper_makes_an_alert_exit_one --invariant[1.0]--> a printed vale alert becomes a failure
