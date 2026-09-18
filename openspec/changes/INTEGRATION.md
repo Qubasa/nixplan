@@ -10,7 +10,8 @@ changes are not part of this set. `name-the-machine-a-run-dials` is parked, on d
 the user-scope redesign moved the seal recipient to an age key the registry states, so nothing
 consumes `hostKey` any more, and connection pinning is a separate, currently unowned concern -
 whether to delete the change or revive it around pinning alone is an open operator decision.
-`declare-service-state` is untouched, `answer-whether-a-machine-is-current` stays open for the
+`declare-service-state` was struck - `PARKED.md` beside this file holds its unbuilt half and the
+trigger that revives it - `answer-whether-a-machine-is-current` stays open for the
 reason `CLAUDE.md` records, `deliver-a-secret-without-exposing-it` stays narrowed for the reason
 `CLAUDE.md` records, and `enroll-a-friend-machine` is planned and ordered behind the four - the
 closing section names it.
@@ -67,10 +68,13 @@ every box of all four stays unchecked until its own.
 
 ## What this set does not close
 
-A service's mutable state has no declaration site: that is `declare-service-state`, 26 tasks, none
-done, and it is the reason nothing here can snapshot before an irreversible activation or know what
-to back up. No change here creates an account, opens a port, issues a certificate or routes a
-request. `rollback` still has no meaning for an entry realised as a portable-service image, which is
+A service's mutable state has no declaration site of its own beyond a unit's declared directories,
+which is why nothing here can snapshot before an irreversible activation or say what to back up.
+That is parked rather than planned: `declare-service-state` was struck once `directoryKinds` made
+its premise false, and "Declared state beyond a unit's own directories" in `PARKED.md` carries what
+is genuinely unbuilt. No change here creates an account, opens a port, issues a certificate or
+routes a request. `rollback` still has no meaning for an entry realised as a portable-service
+image, which is
 one of the reasons flakelet is the stated target. A machine nobody can dial is named and not
 designed: `build-a-bundle-for-a-machine-a-run-cannot-dial`, a named non-goal of
 `run-an-entry-without-root`'s proposal, would realise an unmanaged registry machine as one exported
