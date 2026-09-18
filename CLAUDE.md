@@ -874,17 +874,19 @@ silently unobserved.
   deliberately does not build are parked with their triggers in `openspec/changes/PARKED.md`.
   Five of the thirteen are the demo set, planned in parallel against one set of contracts the way
   the production four were, and `openspec/changes/INTEGRATION.md` carries a second section holding
-  their order and their seams: `bind-a-value-an-entry-did-not-generate` first, because it is the
-  set's only correctness defect and the demonstration's own shape is what trips it, then
-  `answer-a-machine-question-as-a-record`, whose record and whose six-field diagnostics decode two
-  of the remaining three consume, then `show-a-deployment-in-a-browser`,
-  `author-a-deployment-from-outside` and `enroll-a-friend-outside-the-harness` in any order. Their
-  fourteen delta specs are `excused` with the planning artifacts, and
-  `bind-a-value-an-entry-did-not-generate` narrows `deliver-a-secret-without-exposing-it` once
-  more by superseding its tasks 6.1 and 6.3. The three changes outside that set that carry no
-  ticked box - `account-for-every-counterexample`,
-  `hold-the-attach-script-to-its-own-discipline` and `hold-the-index-to-the-tree` - touch no
-  command, no vocabulary and no plan field, and are deferrable whole.
+  their order and their seams. All five have **landed**, in that order:
+  `bind-a-value-an-entry-did-not-generate` first, because it is the set's only correctness defect
+  and the demonstration's own shape is what trips it, then `answer-a-machine-question-as-a-record`,
+  whose record and whose six-field diagnostics decode two of the remaining three consume, then
+  `show-a-deployment-in-a-browser`, `author-a-deployment-from-outside` and
+  `enroll-a-friend-outside-the-harness`. Their fourteen delta specs are `accountable` with every
+  box ticked, and `bind-a-value-an-entry-did-not-generate` narrows
+  `deliver-a-secret-without-exposing-it` once more by superseding its tasks 6.1 and 6.3. Two facts
+  of the set are evaluated by `perf/eval.nix` and the budget is re-recorded for both, which is the
+  second recording on the file. The three changes outside that set that carry no ticked box -
+  `account-for-every-counterexample`, `hold-the-attach-script-to-its-own-discipline` and
+  `hold-the-index-to-the-tree` - touch no command, no vocabulary and no plan field, and are
+  deferrable whole.
 - A directory kind goes in `directoryKinds` in `lib/module.nix`, which is what `unitVocabulary`,
   the two rows about a directory, `directoriesOf` in `lib/plan.nix` and the claim index all read.
   `unitVocabulary` reads it by deriving the kind's own field and its mode field from it rather than
@@ -995,11 +997,18 @@ Prose: `docs/tooling.md`, under "The performance gate".
   declared fact the planner has to read is the other case, and it re-records with three things on
   the record: the measurement that shows the cheapest implementation does not fit, the figure it
   cost, and the reading that accounts for it. `perf/budgets.json`'s `note` is where that is written,
-  and one recording covers a whole set of landings rather than one per change: the 2026-09-18
+  and one recording covers a whole set of landings rather than one per change: the first 2026-09-18
   recording is four changes at once, because recording per change would have re-recorded the same
-  counters four times and the fourth would have measured the first three rather than itself.
-  `packages.planner-perf-results` is the measurement a recording is taken from; `check.py` compares
-  and never writes.
+  counters four times and the fourth would have measured the first three rather than itself, and
+  the second is the demo set, which carries two `lib/**` facts and no others. Publishing an
+  attribute allocates its slot, once per library import rather than per plan entry, so that figure
+  shrinks with fleet size and the slot is the cheapest implementation of a published value: the
+  delta is nrThunks +1, values.number +1, sets.bytes +96, envs.bytes +16 and nothing else. The
+  discard at `dedup`'s key is the other, and it is the third admitted cause beside a read fact and
+  beside nothing: a totality fix pays what totality costs, and the cheapest implementation is what
+  the note has to show - the same discard inside `util.oneLine` runs three to four times per row
+  and measured 45 figures over budget against the key's 33. `packages.planner-perf-results` is the
+  measurement a recording is taken from; `check.py` compares and never writes.
 - Two counters are sensitive in ways nothing else in the tree is. `nrOpUpdateValuesCopied` counts
   every value an `//` copies, so one new top-level key in the attrset on the right of
   `korora // { … }` in `lib/atoms.nix` costs one copy per plan and one extra `//` per machine

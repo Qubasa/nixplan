@@ -441,3 +441,16 @@ inv_image_realiser_has_no_document --governs[1.0]--> image/read.nix
 inv_image_realiser_has_no_document --prose_in[1.0]--> docs/flakelet.md
 inv_image_realiser_has_no_document --prose_in[1.0]--> docs/operator.md
 inv_image_realiser_has_no_document --prose_in[1.0]--> docs/secrets.md
+inv_an_artifact_references_declared_roots --invariant[1.0]--> an artifact references every declared root
+inv_an_artifact_references_declared_roots --topic[1.0]--> realisers
+inv_an_artifact_references_declared_roots --governs[1.0]--> flakelet/default.nix
+inv_an_artifact_references_declared_roots --governs[1.0]--> image/default.nix
+inv_an_artifact_references_declared_roots --located[1.0]--> flakelet/default.nix:66
+inv_an_artifact_references_declared_roots --rationale[1.0]--> a root no unit mentions never arrived
+inv_an_artifact_references_declared_roots --enforced_in[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_an_artifact_references_declared_roots --prose_in[1.0]--> CLAUDE.md
+bug_flakelet_farm_dropped_the_closure --bug[1.0]--> the flakelet farm carried no declared root
+bug_flakelet_farm_dropped_the_closure --topic[1.0]--> known_bugs
+bug_flakelet_farm_dropped_the_closure --governs[1.0]--> flakelet/default.nix
+bug_flakelet_farm_dropped_the_closure --symptom[1.0]--> error loading config file after a clean apply
+bug_flakelet_farm_dropped_the_closure --closed_by[1.0]--> change_enroll_a_friend_outside_the_harness

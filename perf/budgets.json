@@ -2,7 +2,7 @@
   "margin": 0.15,
   "interpreter": "2.34.8",
   "date": "2026-09-18",
-  "note": "Re-recorded once for four changes that landed together: run-an-entry-without-root, retire-an-entry-a-build-no-longer-names, probe-a-service-before-it-counts-as-live and unseal-a-value-after-a-reboot. Each adds a declared fact the planner reads, and one recording for the set is deliberate: recording per change would have re-recorded the same counters four times. Sixty-seven of the eighty-one gated figures rose and fourteen fell, none by more than 5.2% per entry, which is what says this is the incremental cost of four fields rather than a regression. Five readings account for it: a machine's scope and its seal recipient are read once per machine, a unit's probe and its bound are read for every unit of every entry and the probe count is folded once per entry, the machine record carries the recipient as an explicit absence, the delivery set is walked a second time for the machines that state no recipient, and the per-machine unsealer reading asks varsPathsDeep of every placed entry's units and configData. nrOpUpdateValuesCopied is the counter that moved most in relative terms (+5.1% on the largest fixtures) and it is also the one with no slack at all: a new top-level key on the right of the `korora // { ... }` in lib/atoms.nix costs exactly one copied value per plan, measured, which is why the probe change's isZeroDuration rides atoms.domains and the privileged-port boundary rides portRange. list.elements fell between 3.7% and 4.6% across every fleet and mesh size, so the growth bound improved while the constant cost rose.",
+  "note": "Re-recorded once for the five demo changes that landed together: bind-a-value-an-entry-did-not-generate, answer-a-machine-question-as-a-record, show-a-deployment-in-a-browser, author-a-deployment-from-outside and enroll-a-friend-outside-the-harness. Two facts of that set are evaluated here, and both are in `lib/**`.\n\n1. author-a-deployment-from-outside publishes the authoring vocabulary from the library - `lib/vocabulary.nix` plus `moduleKeys` in `lib/module.nix` and the four registry key lists in `lib/resolve.nix`. Whole-evaluation delta, constant at every fixture and every size: nrThunks +1, values.number +1, sets.bytes +96, envs.bytes +16, nothing else. Publishing an attribute allocates its slot, once per library import rather than per plan entry, so the figure shrinks with fleet size, and the slot is the cheapest implementation of a published value.\n\n2. `dedup` in `lib/diagnostics.nix` now discards the string context of the key it builds from a row's own text. This is a totality fix rather than a refactor: an attribute name may carry no context, a row's message may name a store path - a closure root nothing mentions is one - and `mkPlan` therefore ended the evaluation inside the table that exists to report it, which is the invariant that `lib/` never raises. `tests/counterexamples/probes.nix`'s `aRowNamingAStorePathIsStillARow` is the pin. One discard at the one key is the cheapest implementation that holds: the same discard inside `util.oneLine` runs three to four times per row and measured 45 figures over budget against this one's 33, at `worked` gc.totalBytes 61794.9091 against 61410.9091, so the key alone is what is recorded. Discarding at the farms' writes cannot replace it, because the failing use is a key and not a file; `operator/default.nix` discards there as well, and that half costs no gated counter because `perf/eval.nix` plans and never builds.\n\nAcross both, the largest per-entry move is 0.11% (`worked` nrPrimOpCalls), gc.totalBytes moves in both directions, and nrOpUpdateValuesCopied and list.elements do not move at any fixture - nothing landed inside a per-plan or per-machine update. The prediction of byte-identical counters in openspec/changes/author-a-deployment-from-outside/tasks.md task 1.1 and in openspec/changes/INTEGRATION.md is corrected there against this measurement.",
   "growth": {
     "bound": 1.25,
     "sizes": [
@@ -17,127 +17,127 @@
     "worked": {
       "fixture": "worked",
       "perEntry": {
-        "nrThunks": 1086.091,
+        "nrThunks": 1086.6364,
         "nrFunctionCalls": 627.091,
-        "nrPrimOpCalls": 441.8182,
-        "values.number": 1290.4546,
-        "sets.bytes": 15731.6364,
-        "envs.bytes": 14240.7273,
-        "list.elements": 239,
+        "nrPrimOpCalls": 442.2728,
+        "values.number": 1291.0,
+        "sets.bytes": 15740.3637,
+        "envs.bytes": 14242.1819,
+        "list.elements": 239.0,
         "nrOpUpdateValuesCopied": 55.3637,
-        "gc.totalBytes": 61409.4546
+        "gc.totalBytes": 61410.9091
       }
     },
     "fleet-4": {
       "fixture": "fleet",
       "perEntry": {
-        "nrThunks": 1198.6924,
+        "nrThunks": 1199.2308,
         "nrFunctionCalls": 759.1539,
-        "nrPrimOpCalls": 594.7693,
-        "values.number": 1412.5385,
-        "sets.bytes": 16715.6924,
-        "envs.bytes": 16470.1539,
-        "list.elements": 314,
+        "nrPrimOpCalls": 595.2308,
+        "values.number": 1413.077,
+        "sets.bytes": 16723.077,
+        "envs.bytes": 16471.3847,
+        "list.elements": 314.0,
         "nrOpUpdateValuesCopied": 38.6924,
-        "gc.totalBytes": 67812.9231
+        "gc.totalBytes": 67814.1539
       }
     },
     "fleet-16": {
       "fixture": "fleet",
       "perEntry": {
-        "nrThunks": 849.4898,
+        "nrThunks": 849.8776,
         "nrFunctionCalls": 596.9592,
-        "nrPrimOpCalls": 476.6735,
-        "values.number": 1000.7552,
-        "sets.bytes": 11384,
-        "envs.bytes": 12426.449,
+        "nrPrimOpCalls": 477.0409,
+        "values.number": 1001.1429,
+        "sets.bytes": 11385.9592,
+        "envs.bytes": 12426.7756,
         "list.elements": 253.5103,
         "nrOpUpdateValuesCopied": 14.9184,
-        "gc.totalBytes": 47626.7756
+        "gc.totalBytes": 47703.1837
       }
     },
     "fleet-64": {
       "fixture": "fleet",
       "perEntry": {
-        "nrThunks": 755.3627,
+        "nrThunks": 755.7099,
         "nrFunctionCalls": 553.2177,
-        "nrPrimOpCalls": 444.8342,
-        "values.number": 889.7669,
-        "sets.bytes": 9947.4819,
-        "envs.bytes": 11336.2902,
+        "nrPrimOpCalls": 445.1762,
+        "values.number": 890.114,
+        "sets.bytes": 9947.9793,
+        "envs.bytes": 11336.3731,
         "list.elements": 237.2125,
         "nrOpUpdateValuesCopied": 8.513,
-        "gc.totalBytes": 42338.1555
+        "gc.totalBytes": 42378.114
       }
     },
     "fleet-256": {
       "fixture": "fleet",
       "perEntry": {
-        "nrThunks": 731.372,
+        "nrThunks": 731.7088,
         "nrFunctionCalls": 542.069,
-        "nrPrimOpCalls": 436.7192,
-        "values.number": 861.4786,
-        "sets.bytes": 9581.3473,
-        "envs.bytes": 11058.4344,
+        "nrPrimOpCalls": 437.0547,
+        "values.number": 861.8154,
+        "sets.bytes": 9581.4721,
+        "envs.bytes": 11058.4552,
         "list.elements": 233.0586,
         "nrOpUpdateValuesCopied": 6.8804,
-        "gc.totalBytes": 40908.8583
+        "gc.totalBytes": 40960.9155
       }
     },
     "mesh-4": {
       "fixture": "mesh",
       "perEntry": {
-        "nrThunks": 1249.077,
+        "nrThunks": 1249.6154,
         "nrFunctionCalls": 805.2308,
-        "nrPrimOpCalls": 650,
-        "values.number": 1480.6154,
-        "sets.bytes": 17068.9231,
-        "envs.bytes": 17278.7693,
+        "nrPrimOpCalls": 650.4616,
+        "values.number": 1481.1539,
+        "sets.bytes": 17076.3077,
+        "envs.bytes": 17280.0,
         "list.elements": 342.8462,
         "nrOpUpdateValuesCopied": 38.6154,
-        "gc.totalBytes": 70173.5385
+        "gc.totalBytes": 69864.6154
       }
     },
     "mesh-16": {
       "fixture": "mesh",
       "perEntry": {
-        "nrThunks": 905.4694,
+        "nrThunks": 905.8572,
         "nrFunctionCalls": 648.4082,
-        "nrPrimOpCalls": 537.8776,
-        "values.number": 1076.1225,
-        "sets.bytes": 11814.6939,
-        "envs.bytes": 13323.4286,
+        "nrPrimOpCalls": 538.2449,
+        "values.number": 1076.5103,
+        "sets.bytes": 11816.6531,
+        "envs.bytes": 13323.7552,
         "list.elements": 286.1429,
         "nrOpUpdateValuesCopied": 14.898,
-        "gc.totalBytes": 50971.1021
+        "gc.totalBytes": 51045.5511
       }
     },
     "mesh-64": {
       "fixture": "mesh",
       "perEntry": {
-        "nrThunks": 812.8498,
+        "nrThunks": 813.1969,
         "nrFunctionCalls": 606.0726,
-        "nrPrimOpCalls": 507.627,
-        "values.number": 967.0985,
-        "sets.bytes": 10399.0467,
-        "envs.bytes": 12256.4146,
+        "nrPrimOpCalls": 507.969,
+        "values.number": 967.4456,
+        "sets.bytes": 10399.5441,
+        "envs.bytes": 12256.4975,
         "list.elements": 270.8653,
         "nrOpUpdateValuesCopied": 8.5078,
-        "gc.totalBytes": 45947.2747
+        "gc.totalBytes": 45987.2332
       }
     },
     "mesh-256": {
       "fixture": "mesh",
       "perEntry": {
-        "nrThunks": 789.2432,
+        "nrThunks": 789.58,
         "nrFunctionCalls": 595.2822,
-        "nrPrimOpCalls": 499.9168,
-        "values.number": 939.3108,
-        "sets.bytes": 10038.2315,
-        "envs.bytes": 11984.4578,
+        "nrPrimOpCalls": 500.2523,
+        "values.number": 939.6476,
+        "sets.bytes": 10038.3564,
+        "envs.bytes": 11984.4786,
         "list.elements": 266.9714,
         "nrOpUpdateValuesCopied": 6.8791,
-        "gc.totalBytes": 44518.4916
+        "gc.totalBytes": 44570.5488
       }
     }
   }

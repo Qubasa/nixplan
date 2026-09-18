@@ -429,3 +429,26 @@ inv_the_perf_suite_compares_plans --governs[1.0]--> tests/unit/perf.nix
 inv_the_perf_suite_compares_plans --located[1.0]--> tests/unit/perf.nix:65
 inv_the_perf_suite_compares_plans --enforced_by[1.0]--> tests/unit/perf.nix%testTheSyntheticMeshIsDeterministic
 inv_the_perf_suite_compares_plans --rationale[1.0]--> a deployment carries module functions
+inv_published_is_a_class_of_its_own --invariant[1.0]--> published modules are their own top-level class
+inv_published_is_a_class_of_its_own --topic[1.0]--> registration_points
+inv_published_is_a_class_of_its_own --governs[1.0]--> tests/unit/layers.nix
+inv_published_is_a_class_of_its_own --located[1.0]--> published/flake-module.nix
+inv_published_is_a_class_of_its_own --rationale[1.0]--> a top-level modules token breaks the path scan
+inv_published_is_a_class_of_its_own --enforced_by[1.0]--> testTheDirectoryOfPublishedModulesIsAClassOfItsOwn
+inv_the_view_is_registered_in_four_places --invariant[1.0]--> the view is classed typed linted and imported
+inv_the_view_is_registered_in_four_places --topic[1.0]--> registration_points
+inv_the_view_is_registered_in_four_places --governs[1.0]--> view/flake-module.nix
+inv_the_view_is_registered_in_four_places --located[1.0]--> tests/unit/layers.nix
+inv_the_view_is_registered_in_four_places --rationale[1.0]--> three of the four fail quietly
+inv_the_view_is_registered_in_four_places --enforced_by[1.0]--> testAClassifiedDirectoryOfModulesIsCheckedAsWellAsClassified
+inv_a_folder_receives_the_arguments_it_names --invariant[1.0]--> a folder receives the arguments it names
+inv_a_folder_receives_the_arguments_it_names --topic[1.0]--> registration_points
+inv_a_folder_receives_the_arguments_it_names --governs[1.0]--> flake-module.nix
+inv_a_folder_receives_the_arguments_it_names --located[1.0]--> flake-module.nix:191
+inv_a_folder_receives_the_arguments_it_names --rationale[1.0]--> functionArgs answers empty for a bare lambda
+inv_the_scaffold_is_published_as_a_template --invariant[1.0]--> the scaffold is published never copied
+inv_the_scaffold_is_published_as_a_template --topic[1.0]--> registration_points
+inv_the_scaffold_is_published_as_a_template --governs[1.0]--> flake.nix
+inv_the_scaffold_is_published_as_a_template --located[1.0]--> tests/e2e/newcomer/template
+inv_the_scaffold_is_published_as_a_template --rationale[1.0]--> a second text kept equal by hand drifts
+inv_the_scaffold_is_published_as_a_template --enforced_by[1.0]--> testTheExampleADocumentShowsIsTheExampleAFolderHolds

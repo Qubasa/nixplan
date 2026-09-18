@@ -436,3 +436,24 @@ inv_shell_root_comes_from_the_git_toplevel --topic[1.0]--> operator_command
 inv_shell_root_comes_from_the_git_toplevel --governs[1.0]--> devshells.nix
 inv_shell_root_comes_from_the_git_toplevel --located[1.0]--> devshells.nix:37
 inv_shell_root_comes_from_the_git_toplevel --rationale[1.0]--> the toplevel is compared against this flake
+inv_diagnose_realises_nothing --invariant[1.0]--> diagnose prints the table and realises nothing
+inv_diagnose_realises_nothing --topic[1.0]--> operator_command
+inv_diagnose_realises_nothing --governs[1.0]--> cli/diagnose.py
+inv_diagnose_realises_nothing --located[1.0]--> cli/diagnose.py
+inv_diagnose_realises_nothing --rationale[1.0]--> an author iterates on an inapplicable deployment
+inv_diagnose_realises_nothing --enforced_in[1.0]--> tests/e2e/newcomer/test_newcomer.py
+inv_diagnose_realises_nothing --prose_in[1.0]--> docs/operator.md
+inv_the_view_mutates_nothing --invariant[1.0]--> no route of the view changes a machine
+inv_the_view_mutates_nothing --topic[1.0]--> operator_command
+inv_the_view_mutates_nothing --governs[1.0]--> view/routes.py
+inv_the_view_mutates_nothing --located[1.0]--> view/server.py
+inv_the_view_mutates_nothing --rationale[1.0]--> a read-only surface binds the loopback interface
+inv_the_view_mutates_nothing --enforced_in[1.0]--> view/test_view.py
+inv_the_view_mutates_nothing --prose_in[1.0]--> docs/view.md
+inv_the_vocabulary_is_published_as_data --invariant[1.0]--> the library publishes the vocabulary as data
+inv_the_vocabulary_is_published_as_data --topic[1.0]--> interfaces
+inv_the_vocabulary_is_published_as_data --governs[1.0]--> lib/vocabulary.nix
+inv_the_vocabulary_is_published_as_data --located[1.0]--> lib/vocabulary.nix
+inv_the_vocabulary_is_published_as_data --rationale[1.0]--> a predicate is a function published nowhere
+inv_the_vocabulary_is_published_as_data --enforced_by[1.0]--> testThePublishedVocabularyNamesEveryKeyADeclarationMayCarry
+inv_the_vocabulary_is_published_as_data --measured[1.0]--> a published slot costs one thunk per evaluation

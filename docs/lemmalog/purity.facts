@@ -390,3 +390,24 @@ inv_an_environment_name_is_held_to_its_rule --located[1.0]--> lib/module.nix:120
 inv_an_environment_name_is_held_to_its_rule --names[1.0]--> util.envNameRule
 inv_an_environment_name_is_held_to_its_rule --row[1.0]--> unit-env-name-malformed
 inv_an_environment_name_is_held_to_its_rule --rationale[1.0]--> an assignment renders the name unescaped
+inv_a_written_string_carries_no_context --invariant[1.0]--> a string a derivation writes carries no context
+inv_a_written_string_carries_no_context --topic[1.0]--> purity
+inv_a_written_string_carries_no_context --governs[1.0]--> lib/diagnostics.nix
+inv_a_written_string_carries_no_context --governs[1.0]--> operator/default.nix
+inv_a_written_string_carries_no_context --governs[1.0]--> flakelet/default.nix
+inv_a_written_string_carries_no_context --located[1.0]--> lib/diagnostics.nix:135
+inv_a_written_string_carries_no_context --rationale[1.0]--> a path a copy follows keeps its context
+inv_a_written_string_carries_no_context --enforced_by[1.0]--> aRowNamingAStorePathIsStillARow
+inv_a_written_string_carries_no_context --prose_in[1.0]--> CLAUDE.md
+inv_a_row_key_discards_its_context --invariant[1.0]--> the dedup key discards the row text context
+inv_a_row_key_discards_its_context --topic[1.0]--> purity
+inv_a_row_key_discards_its_context --governs[1.0]--> lib/diagnostics.nix
+inv_a_row_key_discards_its_context --located[1.0]--> lib/diagnostics.nix:135
+inv_a_row_key_discards_its_context --rationale[1.0]--> an attribute name may carry no context
+inv_a_row_key_discards_its_context --enforced_by[1.0]--> aRowNamingAStorePathIsStillARow
+inv_a_row_key_discards_its_context --measured[1.0]--> one key discard costs 33 gated figures
+inv_the_table_write_discards_context --invariant[1.0]--> the farm writes the table without context
+inv_the_table_write_discards_context --topic[1.0]--> purity
+inv_the_table_write_discards_context --governs[1.0]--> operator/default.nix
+inv_the_table_write_discards_context --located[1.0]--> operator/default.nix:320
+inv_the_table_write_discards_context --rationale[1.0]--> writeText refuses a string with context
