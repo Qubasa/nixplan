@@ -16,7 +16,7 @@ only inside the cluster's net namespace.
 a state machine, so each test asserts the state it depends on rather than
 assuming it:
 
-1. both builds are produced by the operator's command, before a machine is dialled
+1. every build is produced by the operator's command, before a machine is dialled
 2. the participants are real (nothing has been applied yet)
 3. the whole deployment is applied by one command (the ``delivered`` fixture)
 4. the receiving machine evaluated nothing and can reach no other store
@@ -26,6 +26,12 @@ assuming it:
 7. both machines reboot, and the entries come back without a second apply
 8. a run broken between the two machines, and the second run that finishes it -
    which restores the route it cut
+9. the build that names ``sweep`` no longer, reported and then applied without
+   being asked to retire, so the machine still runs what no build names
+10. the same build applied with ``--retire``, which takes the holding away with
+    the endpoint's own removal verb and deletes nothing the job wrote
+11. the build whose probe the page does not answer, which the endpoint rolls
+    back, and then the build whose probe it does
 
 rookery is imported at run time rather than statically: it is resolved from
 ``$ROOKERY_FLAKE`` by the runner and is deliberately not an input of this flake
@@ -121,6 +127,13 @@ def _built(attribute: str) -> tuple[manifest.Deployment, tuple[str, ...]]:
 
 BUILT, BUILD_LOG = _built("planner-e2e-wired-pair")
 CHANGED, CHANGED_LOG = _built("planner-e2e-wired-pair-changed")
+# The three builds the phases at the end of the file are about, produced here
+# with the other two because a build needs no cluster: `retired` is the
+# folder's instances minus `sweep`, and the two probed builds differ in the one
+# request their probe fetches.
+RETIRED = _built("planner-e2e-wired-pair-retired")[0]
+PROBED = _built("planner-e2e-wired-pair-probed")[0]
+HEALTHY = _built("planner-e2e-wired-pair-healthy")[0]
 
 
 def _output_of(key: str, unit: str) -> str:
@@ -143,6 +156,21 @@ def _touched_by(key: str, unit: str) -> str:
 
 RECORD_PATH = _output_of(CLIENT_KEY, "fetch")
 SWEEP_MARKER = _touched_by(SWEEP_KEY, "rotate")
+
+
+def _probe_unit(deployment: manifest.Deployment) -> str:
+    """The unit file a probed build derived for the served entry, read off the build.
+
+    Derived rather than written out: the name is the realiser's own derivation
+    off the artifact's service name, so the entry's unit list is where it is
+    known.
+    """
+    derived = [unit for unit in deployment.entries[SERVER_KEY].units if unit != SERVER_UNIT]
+    assert len(derived) == 1, deployment.entries[SERVER_KEY].units
+    return derived[0]
+
+
+PROBE_UNIT = _probe_unit(PROBED)
 
 
 @dataclass
@@ -472,7 +500,8 @@ def test_the_unit_runs_from_the_delivered_directory(delivered: Run) -> None:
     server = delivered.vm(SERVER_MACHINE)
     assert server.ssh_succeed(f"systemctl is-active {SERVER_UNIT}").strip() == "active"
     reported = _reported(server, delivery.service_name(delivered.artifact(SERVER_KEY)))
-    assert reported["locked_url"] == delivery.locked_url(SERVER_KEY), reported
+    record = delivery.record_of(delivered.built.root)
+    assert reported["locked_url"] == delivery.locked_url(record, SERVER_KEY), reported
     assert reported["generation"] == 1, reported
     assert reported["last_error"] is None, reported
     assert SERVER_UNIT in reported["units"], reported
@@ -791,22 +820,23 @@ def test_the_endpoint_reports_the_identity_the_build_published(delivered: Run) -
     above applied, re-applied and rolled back, so what each machine holds here
     is the first build's artifact again.
     """
-    published = json.loads((delivered.built.root / "manifest.json").read_text())["entries"]
+    record = delivery.record_of(delivered.built.root)
+    published = record["entries"]
     holds = _command(delivered, "status", str(delivered.built.root))
 
     for key in (SERVER_KEY, CLIENT_KEY):
         entry = delivered.built.entries[key]
         vm = delivered.vm(entry.machine)
-        record = _reported(vm, delivery.service_name(manifest.artifact_of(entry)))
-        assert record["locked_url"] == delivery.locked_url(key), record
+        reported = _reported(vm, delivery.service_name(manifest.artifact_of(entry)))
+        assert reported["locked_url"] == delivery.locked_url(record, key), reported
         held = json.loads(vm.ssh_succeed(f"cat {manifest.artifact_of(entry)}/meta.json"))
         assert held["settings_hash"] == published[key]["key"], (held, published[key])
         assert published[key]["key"] != delivered.plan[key]["key"], published[key]
-        assert "settings_hash" not in record, record
+        assert "settings_hash" not in reported, reported
         line = [text for text in holds if text.startswith(f"{key} ")]
         assert line == [
-            f"{key} {entry.realiser} generation {record['generation']} of "
-            f"{record['locked_url']} runs this build's units"
+            f"{key} {entry.realiser} generation {reported['generation']} of "
+            f"{reported['locked_url']} runs this build's units"
         ], holds
 
 
@@ -917,3 +947,352 @@ def test_a_machine_the_broken_run_never_reached_holds_what_it_held_before(
 
     assert after == before, (before, after)
     assert after["last_error"] is None, after
+
+
+def _observed(vm: Any, *commands: str, timeout: int = 180) -> dict[str, str]:
+    """Run one ssh command on one machine and read back its ``key=value`` lines.
+
+    One case is one login: the guest's sshd is per-connection socket activated,
+    so a burst of short logins is answered by the socket's own trigger limit
+    rather than by the machine, and a value spanning lines is a parse this
+    cannot make.
+    """
+    reported = vm.ssh_succeed("; ".join(commands), timeout=timeout)
+    return dict(line.split("=", 1) for line in reported.splitlines() if "=" in line)
+
+
+def _held_line(machine: str, identity: str) -> str:
+    """The one line a report and an apply both name a holding with."""
+    return f"{machine} holds {identity}, which this build does not name"
+
+
+def _steps(printed: Sequence[str]) -> list[int]:
+    """The indexes of the lines that name a step a run took against a machine."""
+    return [
+        index
+        for index, line in enumerate(printed)
+        if line.startswith(("preflight ", "value ", "copy ", "activate ", "retire ", "restart "))
+    ]
+
+
+def _under(printed: Sequence[str], step: str) -> tuple[str, ...]:
+    """The lines one step's machine printed, which the command indents under it."""
+    assert step in printed, printed
+    after = printed[printed.index(step) + 1 :]
+    return tuple(itertools.takewhile(lambda line: line.startswith("  "), after))
+
+
+SWEEP_SERVICE = delivery.service_name(manifest.artifact_of(BUILT.entries[SWEEP_KEY]))
+
+
+@pytest.fixture(scope="session")
+def dropped(interrupted: Run) -> Run:
+    """Phase 9: the build that names `sweep` no longer, reported and then applied.
+
+    `retired` places `site` on the same tag, so the machine running the dropped
+    entry is still named and still reachable, which is what makes
+    `sweep:job@alpha` a holding rather than an unreachable machine.
+
+    The job's own unit is started by hand here: the folder's schedule is
+    `daily`, so the job fires during no run, and the file it writes has to
+    exist before the retirement for the phase after this one to read it back.
+    """
+    if interrupted.observed.get("dropped"):
+        return interrupted
+
+    server = interrupted.vm(SERVER_MACHINE)
+    server.ssh_succeed(f"systemctl start {SWEEP_UNIT}", timeout=120)
+    interrupted.observed["sweep_before"] = _reported(server, SWEEP_SERVICE)
+    interrupted.observed["dropped"] = _command(interrupted, "status", str(RETIRED.root))
+    interrupted.observed["dropped_applied"] = _command(interrupted, "apply", str(RETIRED.root))
+    return interrupted
+
+
+def test_a_machine_holds_what_no_build_names(dropped: Run) -> None:
+    """A report against the build that dropped one entry names what still runs.
+
+    The identity the line carries is read back off the machine's own endpoint
+    record rather than composed here: what the endpoint reports for the dropped
+    entry is the identity the realiser wrote, and the plan key the line names is
+    what follows the prefix the deployment record publishes.
+    """
+    server = dropped.vm(SERVER_MACHINE)
+    entry = dropped.built.entries[SERVER_KEY]
+    own = _reported(server, delivery.service_name(manifest.artifact_of(entry)))
+    held = _reported(server, SWEEP_SERVICE)
+    reported = dropped.observed["dropped"]
+
+    assert SWEEP_KEY not in RETIRED.entries, sorted(RETIRED.entries)
+    assert held["locked_url"] == delivery.locked_url(delivery.record_of(RETIRED.root), SWEEP_KEY)
+    assert _held_line(SERVER_MACHINE, SWEEP_KEY) in reported, reported
+
+    # The entry the build still names is reported as it was before: one line,
+    # the machine's own record, and the verdict over the unit files it names.
+    assert (
+        f"{SERVER_KEY} {entry.realiser} generation {own['generation']} of "
+        f"{own['locked_url']} runs this build's units"
+    ) in reported, reported
+    assert [line for line in reported if line.startswith(f"{CLIENT_MACHINE} holds ")] == []
+
+
+def test_an_apply_of_a_build_that_dropped_an_entry_announces_what_the_machine_still_runs(
+    dropped: Run,
+) -> None:
+    """The same line the report prints, printed before the run's first step."""
+    applied = dropped.observed["dropped_applied"]
+    announced = f"{_held_line(SERVER_MACHINE, SWEEP_KEY)}; not retired"
+
+    assert announced in applied, applied
+    steps = _steps(applied)
+    assert steps, applied
+    assert applied.index(announced) < steps[0], applied
+
+
+def test_an_apply_that_was_not_asked_to_retire_leaves_the_holding_running(dropped: Run) -> None:
+    """Nothing was removed, and the entry the build does name was applied."""
+    applied = dropped.observed["dropped_applied"]
+    before = dropped.observed["sweep_before"]
+    address = dropped.plan[f"machine:{SERVER_MACHINE}"]["address"]
+    held = _reported(dropped.vm(SERVER_MACHINE), SWEEP_SERVICE)
+
+    assert f"{_held_line(SERVER_MACHINE, SWEEP_KEY)}; not retired" in applied, applied
+    assert [line for line in applied if line.startswith("retire ")] == [], applied
+    assert f"activate {SERVER_KEY} (flakelet) on root@{address}" in applied, applied
+
+    observed = _observed(
+        dropped.vm(SERVER_MACHINE),
+        f"printf 'timer=%s\\n' \"$(systemctl is-active {SWEEP_TIMER} || true)\"",
+        f"printf 'marker=%s\\n' \"$(test -e {SWEEP_MARKER} && echo present || echo absent)\"",
+        f"printf 'serves=%s\\n' \"$(systemctl is-active {SERVER_UNIT} || true)\"",
+    )
+    assert held["generation"] == before["generation"], (before, held)
+    assert held["units"] == _built_units(dropped.built.entries[SWEEP_KEY]), held
+    assert observed["timer"] == "active", observed
+    assert observed["marker"] == "present", observed
+    assert observed["serves"] == "active", observed
+
+
+@pytest.fixture(scope="session")
+def retired(dropped: Run) -> Run:
+    """Phase 10: the same build applied once more, this time asked to retire.
+
+    The apply is the whole of the change: the holding is announced with no `;
+    not retired` and taken away with the endpoint's own removal verb before the
+    run copies or activates anything.
+    """
+    if dropped.observed.get("retired"):
+        return dropped
+
+    dropped.observed["retired"] = _command(dropped, "apply", str(RETIRED.root), "--retire")
+    return dropped
+
+
+def test_a_retired_entry_stops_running_and_the_endpoint_no_longer_registers_it(
+    retired: Run,
+) -> None:
+    """The units are gone, the endpoint knows nothing under the name, and the rest runs."""
+    applied = retired.observed["retired"]
+    address = retired.plan[f"machine:{SERVER_MACHINE}"]["address"]
+
+    assert f"retire {SWEEP_KEY} on root@{address} (no state deleted)" in applied, applied
+    assert [line for line in applied if line.startswith("failed ")] == [], applied
+
+    observed = _observed(
+        retired.vm(SERVER_MACHINE),
+        "printf 'registered=%s\\n' "
+        f'"$(flakelet status --json {SWEEP_SERVICE} > /dev/null 2>&1; echo $?)"',
+        f"printf 'unit=%s\\n' \"$(systemctl cat {SWEEP_UNIT} > /dev/null 2>&1; echo $?)\"",
+        f"printf 'timer=%s\\n' \"$(systemctl cat {SWEEP_TIMER} > /dev/null 2>&1; echo $?)\"",
+        f"printf 'rotate=%s\\n' \"$(systemctl is-active {SWEEP_UNIT} || true)\"",
+        f"printf 'armed=%s\\n' \"$(systemctl is-active {SWEEP_TIMER} || true)\"",
+        f"printf 'serves=%s\\n' \"$(systemctl is-active {SERVER_UNIT} || true)\"",
+    )
+
+    assert observed["registered"] != "0", observed
+    assert observed["unit"] != "0", observed
+    assert observed["timer"] != "0", observed
+    assert observed["rotate"] == "inactive", observed
+    assert observed["armed"] == "inactive", observed
+    assert observed["serves"] == "active", observed
+
+    client = retired.vm(CLIENT_MACHINE)
+    assert client.ssh_succeed(f"systemctl is-active {CLIENT_UNIT}").strip() == "active"
+
+
+def test_a_file_the_retired_entry_wrote_survives_its_retirement(retired: Run) -> None:
+    """The file the job wrote is the state a retirement does not delete.
+
+    It is why the step is `flakelet remove` and never `flakelet remove
+    --purge`: the bytes on the machine outlived the entry, and deleting them is
+    an operator's decision this command does not take.
+    """
+    applied = retired.observed["retired"]
+    address = retired.plan[f"machine:{SERVER_MACHINE}"]["address"]
+
+    observed = _observed(
+        retired.vm(SERVER_MACHINE),
+        f"printf 'marker=%s\\n' \"$(test -e {SWEEP_MARKER} && echo present || echo absent)\"",
+        f"printf 'written=%s\\n' \"$(stat -c %s {SWEEP_MARKER} 2>/dev/null || echo none)\"",
+    )
+
+    assert observed["marker"] == "present", observed
+    assert observed["written"] == "0", observed
+    assert f"retire {SWEEP_KEY} on root@{address} (no state deleted)" in applied, applied
+
+
+def test_the_line_of_a_retirement_says_what_it_kept(retired: Run) -> None:
+    """The step line says no state was deleted, and the endpoint's own words follow it.
+
+    What the endpoint prints for a removal it kept nothing for is one line
+    naming the entry it removed; it adds one `state left in ...` line per state
+    folder that still holds data, and the retired entry declares none, so the
+    absence of such a line is the endpoint reporting that there was nothing to
+    keep. Both are the machine's own output, indented under the step by the
+    command.
+    """
+    applied = retired.observed["retired"]
+    address = retired.plan[f"machine:{SERVER_MACHINE}"]["address"]
+    step = f"retire {SWEEP_KEY} on root@{address} (no state deleted)"
+
+    assert step in applied, applied
+    assert _under(applied, step) == (f"  {SWEEP_SERVICE}: removed",), applied
+    assert not any("purge" in line for line in applied), applied
+
+
+@pytest.fixture(scope="session")
+def probe_failed(retired: Run) -> Run:
+    """Phase 11: the build whose probe the page does not answer, applied.
+
+    Last but one in file order, and nothing after it may apply this build
+    again: a rolled-back activation records a hold keyed on the artifact, so a
+    second apply of the same artifact is refused for the hold rather than for
+    the probe. The run is restricted to the served entry, whose unit the probe
+    is declared on.
+    """
+    if retired.observed.get("probe_printed") is not None:
+        return retired
+
+    server = retired.vm(SERVER_MACHINE)
+    service = delivery.service_name(retired.artifact(SERVER_KEY))
+    assert service == delivery.service_name(retired.artifact(SERVER_KEY, of=PROBED))
+    before = _reported(server, service)
+
+    status, printed = _apply_however_it_ends(retired, str(PROBED.root), "--only", SERVER_KEY)
+
+    retired.observed["probe_before"] = before
+    retired.observed["probe_status"] = status
+    retired.observed["probe_printed"] = printed
+    retired.observed["probe_after"] = _reported(server, service)
+    return retired
+
+
+def test_a_failing_probe_leaves_the_previous_generation_running(probe_failed: Run) -> None:
+    """The endpoint kept the generation it was running, and its units are the ones running.
+
+    The comparison is the endpoint's own record before and after: a rollback
+    deletes the generation it had just created, so the generation number is the
+    one from before and the unit files it names are the previous artifact's,
+    which carry no probe file at all.
+    """
+    before = probe_failed.observed["probe_before"]
+    after = probe_failed.observed["probe_after"]
+
+    assert PROBE_UNIT in PROBED.entries[SERVER_KEY].units, PROBED.entries[SERVER_KEY].units
+    assert PROBE_UNIT not in probe_failed.built.entries[SERVER_KEY].units
+    assert after["generation"] == before["generation"], (before, after)
+    assert after["units"] == _built_units(probe_failed.built.entries[SERVER_KEY]), after
+
+    observed = _observed(
+        probe_failed.vm(SERVER_MACHINE),
+        f"printf 'serves=%s\\n' \"$(systemctl is-active {SERVER_UNIT} || true)\"",
+        f"printf 'probe=%s\\n' \"$(systemctl cat {PROBE_UNIT} > /dev/null 2>&1; echo $?)\"",
+        "printf 'fragment=%s\\n' "
+        f'"$(readlink -f "$(systemctl show -P FragmentPath {SERVER_UNIT})")"',
+    )
+
+    # The service manager's own view of which file it is running, beside the
+    # endpoint's record of it: the previous generation's unit file, not the one
+    # the rolled-back generation carried.
+    assert observed["serves"] == "active", observed
+    assert observed["probe"] != "0", observed
+    assert observed["fragment"] == _built_units(probe_failed.built.entries[SERVER_KEY])[SERVER_UNIT]
+
+
+def test_a_failing_probe_is_a_failed_apply(probe_failed: Run) -> None:
+    """The run failed on the activation, naming the entry, the machine and its words."""
+    printed = probe_failed.observed["probe_printed"]
+    address = probe_failed.plan[f"machine:{SERVER_MACHINE}"]["address"]
+    failed = [line for line in printed if line.startswith("failed ")]
+
+    assert probe_failed.observed["probe_status"] != 0, printed
+    assert f"activate {SERVER_KEY} (flakelet) on root@{address}" in printed, printed
+    assert len(failed) == 1, printed
+    assert SERVER_KEY in failed[0], failed
+    assert address in failed[0], failed
+
+    # What the machine printed follows the line that names the step, because a
+    # refusal carries it as its own message and the message spans lines: the
+    # endpoint names the probe unit it started and says what it did about the
+    # generation it had just created.
+    said = "\n".join(printed[printed.index(failed[0]) :])
+    assert PROBE_UNIT in said, printed
+    assert "rolled back" in said, printed
+
+    whole = "\n".join(printed)
+    assert "Traceback" not in whole, printed
+    assert "BatchMode" not in whole, printed
+    assert "flakelet activate" not in whole, printed
+
+
+def _page_of(deployment: manifest.Deployment) -> str:
+    """What the served entry of one build serves, read off that build's own plan.
+
+    `Run.page_text` reads the one unit file an artifact carries, and a probed
+    entry's artifact carries two, so the served directory is taken from the
+    plan record of the unit that serves it.
+    """
+    command = str(deployment.plan[SERVER_KEY]["units"]["serve"]["command"])
+    found = re.search(r"--directory (\S+)", command)
+    assert found is not None, command
+    return (Path(found.group(1)) / "index.html").read_text()
+
+
+def test_a_passing_probe_activates_the_new_generation(probe_failed: Run) -> None:
+    """The build whose probe the page answers is a generation, and the probe ran.
+
+    A build of its own rather than the folder's `default` gaining a probe: a
+    probe is a unit field, so it is in the entry's key, and an artifact carrying
+    one carries a second unit file - which every phase above reads the served
+    entry as not having. The artifact is also a different one than the failing
+    build's, which is what the endpoint's hold is keyed on.
+    """
+    run = probe_failed
+    server = run.vm(SERVER_MACHINE)
+    service = delivery.service_name(run.artifact(SERVER_KEY, of=HEALTHY))
+    held = run.observed["probe_after"]
+
+    applied = _command(run, "apply", str(HEALTHY.root), "--only", SERVER_KEY)
+
+    reported = _reported(server, service)
+    assert f"activate {SERVER_KEY} (flakelet) on root@{server.ip}" in applied, applied
+    assert [line for line in applied if line.startswith("failed ")] == [], applied
+    assert reported["generation"] > held["generation"], (held, reported)
+    assert reported["units"] == _built_units(HEALTHY.entries[SERVER_KEY]), reported
+    assert reported["last_error"] is None, reported
+
+    page = _page_of(HEALTHY)
+    observed = _observed(
+        server,
+        f"printf 'loaded=%s\\n' \"$(systemctl cat {PROBE_UNIT} > /dev/null 2>&1; echo $?)\"",
+        f"printf 'logged=%s\\n' \"$(journalctl -u {PROBE_UNIT} --no-pager -o cat"
+        ' | tr -s "[:space:]" " ")"',
+        f"printf 'serves=%s\\n' \"$(systemctl is-active {SERVER_UNIT} || true)\"",
+    )
+
+    # That the probe ran is read off its own output: the request's answer is in
+    # the unit's journal. A completed one-shot nothing references is unloaded
+    # again by the service manager, which then answers about it with the
+    # defaults of a unit that never ran, so its properties are no evidence.
+    assert observed["loaded"] == "0", observed
+    assert page.strip() in observed["logged"], observed
+    assert observed["serves"] == "active", observed
