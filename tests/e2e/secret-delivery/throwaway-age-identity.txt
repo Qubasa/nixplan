@@ -1,0 +1,16 @@
+# A throwaway age identity, committed here on purpose, both halves of it.
+#
+# It opens nothing but the test tokens this folder mints on an offline guest,
+# and the precedent is the credential the guest image already carries: nixpkgs'
+# published snakeoil ssh pair, commented in its own source as "NOT a security
+# issue", which tests/e2e/guest.nix authorizes for the same reason. A pair
+# minted per run would have to be minted on each machine, and the public line
+# of it pasted into a deployment the build has already read, so the recipient
+# would move under every run and could not be a committed declaration.
+#
+# The folder's first phase installs this file at /var/lib/planner/age.key on
+# every machine, where an operator's own age-keygen would have left it, and the
+# public line below is the sealRecipient of alpha, beta and gamma in
+# deployment/machines.nix. Nothing outside this folder reads either half.
+# public key: age1cdlaxew5ephl6zcwm3cxnzscwsgeqjmy7543alp33muctvd98uaq3x2ec3
+AGE-SECRET-KEY-1GDP6W9P63TT48PM5LY67PKPYEGJ48WMFR2SUY6UN7AGKN9H9WPUQW4FYC7
