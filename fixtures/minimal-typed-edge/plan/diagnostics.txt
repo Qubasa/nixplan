@@ -1,3 +1,18 @@
+  ! machine:alpha  machine `alpha` receives `nightly:vars/hostKey@alpha` and declares no `sealRecipient`
+      severity: warning
+      evidence: a delivered value lands under a root a reboot empties, and a machine declaring no recipient is handed no sealed copy to put it back from, so every value it holds is gone until an operator applies again
+      resolution: mint an identity on `alpha` and paste the public line at `sealRecipient` in its registry record, or accept that its values are restored by an apply
+
+  ! machine:beta  machine `beta` receives `nightly:vars/hostKey@beta` and declares no `sealRecipient`
+      severity: warning
+      evidence: a delivered value lands under a root a reboot empties, and a machine declaring no recipient is handed no sealed copy to put it back from, so every value it holds is gone until an operator applies again
+      resolution: mint an identity on `beta` and paste the public line at `sealRecipient` in its registry record, or accept that its values are restored by an apply
+
+  ! machine:gamma  machine `gamma` receives `nightly:vars/hostKey@gamma` and declares no `sealRecipient`
+      severity: warning
+      evidence: a delivered value lands under a root a reboot empties, and a machine declaring no recipient is handed no sealed copy to put it back from, so every value it holds is gone until an operator applies again
+      resolution: mint an identity on `gamma` and paste the public line at `sealRecipient` in its registry record, or accept that its values are restored by an apply
+
   ! vault-repo:server@vault  clients names three entries and `nightly:client@gamma` has no bytes
       severity: error
       evidence: the slot declares reach `all` over `nightly.identity`, and `publicKey` of that entry is declared and not generated
