@@ -45,6 +45,19 @@ let
 
   simple = support.serving "web";
 
+  # A machine deployed as an account rather than as root. `scope` enters the
+  # machine record only where it is `user`, so this registry is the whole fact
+  # the crossing reads.
+  userScoped = {
+    registry = support.machines // {
+      account = support.machines.one // {
+        address = "account.example:22";
+        scope = "user";
+      };
+    };
+    machine = "account";
+  };
+
   reloads = _: {
     closure = [ borgbackup ];
     units.web = {
@@ -143,6 +156,51 @@ let
       mode = "0440";
     };
   };
+
+  # One unit that says how it is probed. `extra` is what the probed unit
+  # declares beside the pair, so a test asking what the probe does and does not
+  # inherit states only that.
+  probing =
+    {
+      command ? "${borgbackup}/bin/borg check",
+      timeout ? "30s",
+      extra ? { },
+    }:
+    _: {
+      closure = [ borgbackup ];
+      units.web = {
+        command = "${borgbackup}/bin/borg serve";
+        probe = command;
+        probeTimeout = timeout;
+      }
+      // extra;
+    };
+
+  # Two members of one instance, one probed and one not, so an edit to the
+  # probe is asked of the artifact beside it as well.
+  pair =
+    command:
+    support.planOf {
+      instances.svc = {
+        module = support.root {
+          members.only.module = _: { impl = probing { inherit command; }; };
+          members.side.module = _: { impl = support.serving "web"; };
+        };
+        placement.every.only.machines = [ "one" ];
+        placement.every.side.machines = [ "one" ];
+      };
+    };
+
+  # The derived file's text among the ones a realiser publishes, read off the
+  # published set rather than off the renderer: what a test asserts is what a
+  # builder writes, which is the claim about the wrappers.
+  probeTextOf =
+    rendered: image:
+    builtins.head (
+      map (f: f.text) (filter (f: f.file == imageReader.probeFileName image.name) rendered)
+    );
+
+  probeOf = image: probeTextOf (reader.renderedUnits image) image;
 
   suffixOf =
     file:
@@ -514,6 +572,44 @@ in
       expected = {
         name = "svc-only";
         flake_url = "plan:svc:only@one";
+      };
+    };
+
+  # The prefix the record publishes and the url the artifact carries are one
+  # binding, so a command reading the record alone recognises an answer this
+  # endpoint gave and reads the plan key back out of it.
+  testThePublishedPrefixIsTheOneTheArtifactCarries =
+    let
+      image = readOf { } simple;
+      url = (reader.meta image).flake_url;
+      prefix = reader.holdings.urlPrefix;
+    in
+    {
+      expr = {
+        holdings = reader.holdings;
+        oneString = url == "${prefix}${image.key}";
+        theHeadOfTheUrl = builtins.substring 0 (builtins.stringLength prefix) url;
+        whatFollowsIt = builtins.substring (builtins.stringLength prefix) (builtins.stringLength url) url;
+        # Published beside the rules the deployment reading already asks this
+        # realiser for, which is how the record reaches it.
+        besideTheRules = {
+          nameRule = reader ? nameRule;
+          unitRule = reader ? unitRule;
+          holdings = reader ? holdings;
+        };
+      };
+      expected = {
+        holdings = {
+          urlPrefix = "plan:";
+        };
+        oneString = true;
+        theHeadOfTheUrl = "plan:";
+        whatFollowsIt = "svc:only@one";
+        besideTheRules = {
+          nameRule = true;
+          unitRule = true;
+          holdings = true;
+        };
       };
     };
 
@@ -929,6 +1025,402 @@ in
         isItsOwnSource = true;
         record = "postgres:postgres at mode 0440";
         recordIsAsked = true;
+      };
+    };
+
+  testThePublishedScopesNameTheSystemScopeAlone = {
+    expr = {
+      scopes = reader.scopes;
+      # Published beside the two rules the deployment reading already asks this
+      # realiser for, which is how the crossing above reaches it.
+      besideTheRules = {
+        nameRule = reader ? nameRule;
+        unitRule = reader ? unitRule;
+        scopes = reader ? scopes;
+      };
+      # The image realiser is the one that realises an account's deployment.
+      theOtherRealiser = imageReader.scopes;
+    };
+    expected = {
+      scopes = [ "system" ];
+      besideTheRules = {
+        nameRule = true;
+        unitRule = true;
+        scopes = true;
+      };
+      theOtherRealiser = [
+        "system"
+        "user"
+      ];
+    };
+  };
+
+  testAnEntryPlacedInUserScopeIsRefusedBeforeBytesExist =
+    let
+      rows = (build.read { plan = (planned userScoped simple).plan; }).rows;
+      row = builtins.head rows;
+    in
+    {
+      expr = {
+        refused = raises (readOf userScoped simple);
+        # The same entry on a machine stating nothing is the system scope, which
+        # this realiser realises.
+        systemScopeIsRealised = raises (readOf { } simple);
+        rowAbove = map (r: r.id) rows;
+        theAccountPairsThem = reader.accounts.scopeUnsupported.id;
+        names = map (needle: support.hasInfix needle row.message) [
+          "svc:only@account"
+          "`user`"
+        ];
+        # The sentence the raise prints is the realiser's published rule, so the
+        # upstream facts the limit rests on are read off it rather than off the
+        # row, which states the scopes.
+        theSentenceNamesTheUpstreamFacts = map (needle: support.hasInfix needle reader.scopeRule) [
+          "/run/systemd/system"
+          "systemd.rs:13"
+          "/var/lib/flakelet"
+        ];
+      };
+      expected = {
+        refused = true;
+        systemScopeIsRealised = false;
+        rowAbove = [ "operator-entry-scope-unsupported" ];
+        theAccountPairsThem = "operator-entry-scope-unsupported";
+        names = [
+          true
+          true
+        ];
+        theSentenceNamesTheUpstreamFacts = [
+          true
+          true
+          true
+        ];
+      };
+    };
+
+  testAProbedEntryCarriesOneMoreUnitFile =
+    let
+      image = readOf { } (probing { });
+      derived = imageReader.probeFileName image.name;
+    in
+    {
+      expr = {
+        files = map (f: f.file) (reader.renderedUnits image);
+        inherit derived;
+        theServiceNameAndTheSuffix = derived == "${image.name}-health.service";
+        unprobed = map (f: f.file) (reader.renderedUnits (readOf { } simple));
+      };
+      expected = {
+        files = [
+          "svc-only-web.service"
+          "svc-only-health.service"
+        ];
+        derived = "svc-only-health.service";
+        theServiceNameAndTheSuffix = true;
+        unprobed = [ "svc-only-web.service" ];
+      };
+    };
+
+  # `Requires=` beside `After=` is what makes starting the probe on a machine
+  # whose service is not active fail rather than report success, which is the
+  # whole gate.
+  testTheDerivedProbeUnitIsOrderedAgainstTheUnitItProbes =
+    let
+      text = probeOf (readOf { } (probing { }));
+    in
+    {
+      expr = {
+        inherit text;
+        runsOnce = support.hasInfix "\nType=oneshot\n" text;
+        ordered = support.hasInfix "\nAfter=svc-only-web.service\n" text;
+        required = support.hasInfix "\nRequires=svc-only-web.service\n" text;
+        bound = filter (l: support.hasInfix "TimeoutStartSec" l) (support.lines text);
+        # The bound is the plan's and nothing else's: a probe declaring another
+        # renders another, and no default is written where the plan states one.
+        anotherBound = filter (l: support.hasInfix "TimeoutStartSec" l) (
+          support.lines (
+            probeOf (
+              readOf { } (probing {
+                timeout = "2min";
+              })
+            )
+          )
+        );
+      };
+      expected = {
+        text = ''
+          [Unit]
+          Description=svc:only web probe
+          After=svc-only-web.service
+          Requires=svc-only-web.service
+
+          [Service]
+          ExecStart=${borgbackup}/bin/borg check
+          Type=oneshot
+          TimeoutStartSec=30s
+        '';
+        runsOnce = true;
+        ordered = true;
+        required = true;
+        bound = [ "TimeoutStartSec=30s" ];
+        anotherBound = [ "TimeoutStartSec=2min" ];
+      };
+    };
+
+  # A probe that reads what the service reads is the case the field exists for,
+  # so the derived unit is the probed unit's account and the readability
+  # question is the one already answered for it.
+  testTheDerivedProbeUnitTakesTheProbedUnitsAccount =
+    let
+      declaring = readOf { } (probing {
+        extra.user = "borg";
+      });
+      silent = readOf { } (probing { });
+      accounts = text: filter (l: support.hasInfix "User=" l) (support.lines text);
+    in
+    {
+      expr = {
+        declared = accounts (probeOf declaring);
+        theProbedUnitDeclaresIt = accounts (reader.renderUnit declaring "web");
+        undeclared = accounts (probeOf silent);
+        theProbedUnitDeclaresNone = accounts (reader.renderUnit silent "web");
+      };
+      expected = {
+        declared = [ "User=borg" ];
+        theProbedUnitDeclaresIt = [ "User=borg" ];
+        undeclared = [ ];
+        theProbedUnitDeclaresNone = [ ];
+      };
+    };
+
+  # The endpoint starts it by name after switching, and an `[Install]` would
+  # queue it at every boot and after `flakelet boot` as well - the reason a
+  # scheduled unit's service carries none either.
+  testTheDerivedProbeUnitCarriesNoInstallSection =
+    let
+      image = readOf { } (probing { });
+      text = probeOf image;
+    in
+    {
+      expr = {
+        sections = lastSection text;
+        install = support.hasInfix "[Install]" text;
+        wantedBy = support.hasInfix "WantedBy" text;
+        # The file this realiser publishes is the shared reading's own text, so
+        # neither of this realiser's two wrappers is in the probe's path.
+        renderedByNeitherWrapper = text == imageReader.renderProbe image;
+        theUnitItProbesIsWanted = support.hasInfix "\n[Install]\nWantedBy=multi-user.target\n" (
+          reader.renderUnit image "web"
+        );
+      };
+      expected = {
+        sections = [
+          "[Unit]"
+          "[Service]"
+        ];
+        install = false;
+        wantedBy = false;
+        renderedByNeitherWrapper = true;
+        theUnitItProbesIsWanted = true;
+      };
+    };
+
+  # A runtime directory declared on a job that exits is deleted when it exits,
+  # which would take the probed unit's own with it, and a directory a static
+  # account may read needs no declaration to be read.
+  testTheDerivedProbeUnitClaimsNoDirectory =
+    let
+      declaring = probing {
+        extra = {
+          runtimeDirectory = [ "web" ];
+          runtimeDirectoryMode = "0700";
+          stateDirectory = [ "web" ];
+          cacheDirectory = [ "web" ];
+        };
+      };
+      image = readOf { } declaring;
+      kinds =
+        text:
+        filter (needle: support.hasInfix needle text) [
+          "CacheDirectory"
+          "RuntimeDirectory"
+          "StateDirectory"
+        ];
+    in
+    {
+      expr = {
+        declaredByTheProbe = kinds (probeOf image);
+        declaredByTheUnitItProbes = kinds (reader.renderUnit image "web");
+        # And no claimant is added to the index the shared-directory row reads,
+        # so that row keeps meaning two declarations rather than one
+        # declaration and one derivation.
+        rows = map (r: r.id) (planned { } declaring).result.diagnostics;
+        rowAbove = rowsAbove { } declaring;
+      };
+      expected = {
+        declaredByTheProbe = [ ];
+        declaredByTheUnitItProbes = [
+          "CacheDirectory"
+          "RuntimeDirectory"
+          "StateDirectory"
+        ];
+        rows = [ ];
+        rowAbove = [ ];
+      };
+    };
+
+  # The derived name is held to the endpoint's unit rule by existing: it comes
+  # off the one derivation `read` refuses a name outside the rule off.
+  testTheDerivedNameIsOneTheEndpointAccepts =
+    let
+      probedUnits = {
+        web = {
+          command = "true";
+          probe = "true";
+          probeTimeout = "30s";
+        };
+      };
+      admitted = [
+        "svc-only"
+        "a"
+        "web_one-1"
+        "x0"
+      ];
+    in
+    {
+      expr = {
+        acceptedByTheEndpoint = reader.acceptsUnit "svc-only" "svc-only-health.service";
+        # Every service name the endpoint's own name rule admits derives a probe
+        # file its unit rule admits.
+        refusedOfAnAdmittedName = filter (
+          name: reader.acceptsName name && !(reader.acceptsUnit name (imageReader.probeFileName name))
+        ) admitted;
+        # And the list `read` holds to that rule is the one carrying it.
+        derivedFiles = imageReader.unitFilesOf "svc-only" probedUnits;
+        refusedAmongThem = filter (file: !(reader.acceptsUnit "svc-only" file)) (
+          imageReader.unitFilesOf "svc-only" probedUnits
+        );
+        # The image builder's stricter rule admits it too.
+        acceptedByTheOtherRealiser = imageReader.acceptsUnit "svc-only" "svc-only-health.service";
+        built = raises (readOf { } (probing { }));
+      };
+      expected = {
+        acceptedByTheEndpoint = true;
+        refusedOfAnAdmittedName = [ ];
+        derivedFiles = [
+          "svc-only-web.service"
+          "svc-only-health.service"
+        ];
+        refusedAmongThem = [ ];
+        acceptedByTheOtherRealiser = true;
+        built = false;
+      };
+    };
+
+  # A probe is a unit field, so it is in the entry's key and in the artifact's
+  # content-derived version: the endpoint activates the changed artifact as a
+  # new generation rather than reporting that there is nothing to do.
+  testAChangedProbeMovesTheArtifactsIdentity =
+    let
+      readAt =
+        command: key:
+        reader.read {
+          plan = (pair command).plan;
+          inherit key;
+        };
+      before = readAt "${borgbackup}/bin/borg check" "svc:only@one";
+      after = readAt "${borgbackup}/bin/borg check --repository-only" "svc:only@one";
+      keyAt = command: key: (pair command).plan.${key}.key;
+      beside = command: readAt command "svc:side@one";
+    in
+    {
+      expr = {
+        keyMoved =
+          keyAt "${borgbackup}/bin/borg check" "svc:only@one"
+          != keyAt "${borgbackup}/bin/borg check --repository-only" "svc:only@one";
+        versionMoved = before.version != after.version;
+        recordedInTheMetadata = (reader.meta before).settings_hash != (reader.meta after).settings_hash;
+        # No other entry's artifact moves: the fields are the probed unit's.
+        theOtherEntryStands =
+          (beside "${borgbackup}/bin/borg check").version
+          == (beside "${borgbackup}/bin/borg check --repository-only").version;
+        theOtherEntrysKeyStands =
+          keyAt "${borgbackup}/bin/borg check" "svc:side@one"
+          == keyAt "${borgbackup}/bin/borg check --repository-only" "svc:side@one";
+      };
+      expected = {
+        keyMoved = true;
+        versionMoved = true;
+        recordedInTheMetadata = true;
+        theOtherEntryStands = true;
+        theOtherEntrysKeyStands = true;
+      };
+    };
+
+  # What the deployment record publishes for the artifact, which is what an
+  # endpoint comparing the active generation's unit files against this build's
+  # compares: a generation built before the probe existed reads as not running
+  # this build's units.
+  testAProbeIsPublishedAmongTheArtifactsUnitFiles =
+    let
+      publishedOf =
+        implementation:
+        (build.read { plan = (planned { } implementation).plan; }).manifest.entries."svc:only@one".units;
+    in
+    {
+      expr = {
+        published = publishedOf (probing { });
+        unprobed = publishedOf simple;
+        # The published list and the files the artifact carries are one list.
+        carried = support.planner.util.sortStrings (
+          map (f: f.file) (reader.renderedUnits (readOf { } (probing { })))
+        );
+      };
+      expected = {
+        published = [
+          "svc-only-health.service"
+          "svc-only-web.service"
+        ];
+        unprobed = [ "svc-only-web.service" ];
+        carried = [
+          "svc-only-health.service"
+          "svc-only-web.service"
+        ];
+      };
+    };
+
+  # The one thing the two realisers differ about for a unit file is the install
+  # section, and the probe carries none, so it is rendered once and the two
+  # cannot drift about the file that decides an activation.
+  testTheProbeUnitIsTheOneFileBothRealisersRenderAlike =
+    let
+      p = planned { } (probing { });
+      asService = reader.read { inherit (p) plan key; };
+      asImage = imageReader.read {
+        inherit (p) plan key;
+        profile = "trusted";
+      };
+      served = probeTextOf (reader.renderedUnits asService) asService;
+      imaged = probeTextOf (imageReader.renderedUnits asImage) asImage;
+    in
+    {
+      expr = {
+        oneText = served == imaged;
+        neitherCarriesAnInstallSection = [
+          (support.hasInfix "[Install]" served)
+          (support.hasInfix "[Install]" imaged)
+        ];
+        # The probed unit's own file is where the two do differ, so the equality
+        # above is a property of the probe and not of the two readings.
+        andTheUnitFilesDiffer = reader.renderUnit asService "web" != imageReader.renderUnit asImage "web";
+      };
+      expected = {
+        oneText = true;
+        neitherCarriesAnInstallSection = [
+          false
+          false
+        ];
+        andTheUnitFilesDiffer = true;
       };
     };
 }
