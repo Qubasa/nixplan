@@ -2318,6 +2318,129 @@ in
       };
     };
 
+  # The reading computes the values an entry is shown once and hands them to
+  # every entry point, so a consumer of a value another entry generated is shown
+  # that value's path by the same reading that shows an owner its own.
+  testTheReadingShowsAConsumerAPeersValue =
+    let
+      result = support.peerValuePlan { };
+      reading = underImage "trusted" result;
+      shownTo =
+        key:
+        map (p: p.path) (
+          imageReader.hostPaths {
+            inherit key;
+            entry = result.plan.${key};
+            generated =
+              (imageReader.valuesOf {
+                index = imageReader.valueIndex result.plan;
+                inherit key;
+                entry = result.plan.${key};
+              }).generated;
+          }
+        );
+    in
+    {
+      expr = {
+        rows = idsOf reading;
+        consumer = shownTo "app:only@one";
+        owner = shownTo "holder:only@one";
+        # The digest the reading publishes is the one the entry point answers for
+        # the same list, which is what a report compares a machine against.
+        digestIsPublished =
+          reading.manifest.entries."app:only@one".key == reading.entries."app:only@one".digest;
+        andTheBuildIsApplicable = reading.refused;
+      };
+      expected = {
+        rows = [ ];
+        consumer = [ support.peerValuePath ];
+        owner = [ support.peerValuePath ];
+        digestIsPublished = true;
+        andTheBuildIsApplicable = false;
+      };
+    };
+
+  # A read naming a value path the plan's own value records deliver to another
+  # machine is a plan whose records disagree: the delivery set is derived from
+  # the reads that name a value, so the row is this reading's and not `mkPlan`'s.
+  testAReadNamingAValueThePlanDoesNotDeliverThere =
+    let
+      result = support.peerValuePlan { };
+      value = result.plan."holder:vars/token@one";
+      elsewhere = result.plan // {
+        "holder:vars/token@one" = value // {
+          delivery = [ "two" ];
+        };
+      };
+      reading = reader.read {
+        plan = elsewhere;
+        realise.default = {
+          realiser = "image";
+          profile = "trusted";
+        };
+      };
+      row = builtins.head (rowsById "operator-entry-value-unaccounted" reading);
+    in
+    {
+      expr = {
+        subjects = map (r: r.subject) (rowsById "operator-entry-value-unaccounted" reading);
+        namesTheSlot = hasInfix "`cred`" row.message;
+        namesThePath = hasInfix "`${support.peerValuePath}`" row.message;
+        namesTheMachine = hasInfix "`one`" row.message;
+        saysWhyTheRecordsDisagree = hasInfix "derived from the reads that name it" row.evidence;
+        refused = reading.refused;
+        # No artifact of that entry is built: the realiser refuses the same
+        # condition, which is what the account above it carries.
+        theRealiserRefuses =
+          !(forced imageReader.read {
+            plan = elsewhere;
+            key = "app:only@one";
+            profile = "trusted";
+          }).success;
+      };
+      expected = {
+        subjects = [ "app:only@one" ];
+        namesTheSlot = true;
+        namesThePath = true;
+        namesTheMachine = true;
+        saysWhyTheRecordsDisagree = true;
+        refused = true;
+        theRealiserRefuses = true;
+      };
+    };
+
+  testAReadNamingAPathNoValueRecordCarries =
+    let
+      result = support.peerValuePlan { };
+      without = builtins.removeAttrs result.plan [ "holder:vars/token@one" ];
+      reading = reader.read {
+        plan = without;
+        realise.default = {
+          realiser = "image";
+          profile = "trusted";
+        };
+      };
+      refusal = forced imageReader.read {
+        plan = without;
+        key = "app:only@one";
+        profile = "trusted";
+      };
+    in
+    {
+      expr = {
+        ids = idsOf reading;
+        subjects = map (r: r.subject) (rowsById "operator-entry-value-unaccounted" reading);
+        # A refusal and never a missing attribute: the index is total, so a path
+        # no value record carries is a sentence rather than an evaluation error.
+        refuses = !refusal.success;
+      };
+      expected = {
+        ids = [ "operator-entry-value-unaccounted" ];
+        subjects = [ "app:only@one" ];
+        refuses = true;
+      };
+    };
+
   # One entry claiming one name twice. The existing collision row's sentence is
   # about two entries, so the same-entry case earns a sentence of its own, and
   # the two-entry case is still the per-machine index's.

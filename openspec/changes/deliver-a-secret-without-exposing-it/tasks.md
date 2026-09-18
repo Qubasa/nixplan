@@ -122,23 +122,20 @@ appended option cannot undo one already given.
 
 ## 6. The image carries what its units name
 
-- [ ] 6.1 `image/read.nix:196-242`: the host paths of generated files come from the generated paths
-  the entry's units, configuration files, and resolved reads name, rather than from `entry.vars`
-  filtered to the files recorded as a reference. A generated path the entry names that matches no
-  value entry of the plan fails the build naming the entry, the unit, and the path. Verify a
-  consumer reading another instance's secret gets a mount point and a bind mount, that a public
-  delivered file gets one too, and that the unaccounted path fails.
+- [ ] 6.1 Superseded by `bind-a-value-an-entry-did-not-generate`, which holds the same claim in its
+  own terms: one reading answers the entry's own generated files and the ones its declared reads
+  name, every reading about a shown value asks that one list, and a shown value path the plan's
+  value records account for no delivered bytes of is `operator-entry-value-unaccounted` rather than
+  a path omitted without a word. The join is the path the read record already carries, because
+  `reads` is in the entry's key input and a peer's ownership there would re-key every consumer.
 - [ ] 6.2 `image/read.nix:301-318`: the denial names the units that name the file, rather than every
   unit of the entry. The raise follows the row `report-every-refusal-as-a-row` produces under "A
   confinement profile is checked against the entry it confines". Verify an entry with two units, one
   of which opens a root-only file, fails naming that unit alone, and that an entry whose units open
   no such file builds under the same profile.
-- [ ] 6.3 `tests/unit/image.nix`, one test per scenario of
-  `specs/realiser/portable-service-image/spec.md` this change adds:
-  `testAUnitNamesAValueAnotherInstanceOwns`, `testAUnitNamesAPublicDeliveredFile`,
-  `testAUnitNamesAGeneratedPathNoValueAccountsFor`, and `testOneUnitOfAnEntryNamesARootOnlyFile`.
-  The four restated scenarios keep the tests they have. Verify the suite is green and each new test
-  fails against the reader as it stands before 6.1.
+- [ ] 6.3 Superseded by `bind-a-value-an-entry-did-not-generate`, whose delta states the scenarios
+  its own reading answers for and whose tasks 5.1 and 5.2 give each one a test in
+  `tests/unit/image.nix`. The per-unit half of the denial is 6.2 above and keeps its own scenario.
 
 ## 7. The machine layer
 

@@ -63,8 +63,12 @@ _: {
         ];
       };
 
+      # The path the assembled file sits at, and the generated file this entry
+      # owns: a reader of the second is shown that path by the realiser and
+      # opens the bytes the delivery put there.
       provides.report.exports = {
         path = assembled;
+        secret = vars.upstream.secret;
       };
 
       units.report = {

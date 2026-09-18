@@ -97,6 +97,8 @@ let
     "changes/unseal-a-value-after-a-reboot/specs/operator/machine-report/spec.md"
     "changes/unseal-a-value-after-a-reboot/specs/planner/machine-platform/spec.md"
     "changes/unseal-a-value-after-a-reboot/specs/planner/secret-delivery/spec.md"
+    "changes/bind-a-value-an-entry-did-not-generate/specs/delivery/real-cluster/spec.md"
+    "changes/bind-a-value-an-entry-did-not-generate/specs/realiser/portable-service-image/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -126,10 +128,6 @@ let
       "an unimplemented change: no task of name-the-machine-a-run-dials has been done, so nothing in this package claims to satisfy it yet";
     "changes/name-the-machine-a-run-dials/specs/planner/secret-delivery/spec.md" =
       "an unimplemented change: no task of name-the-machine-a-run-dials has been done, so nothing in this package claims to satisfy it yet";
-    "changes/bind-a-value-an-entry-did-not-generate/specs/delivery/real-cluster/spec.md" =
-      "an unimplemented change: no task of bind-a-value-an-entry-did-not-generate has been done, so nothing in this package claims to satisfy it yet";
-    "changes/bind-a-value-an-entry-did-not-generate/specs/realiser/portable-service-image/spec.md" =
-      "an unimplemented change: no task of bind-a-value-an-entry-did-not-generate has been done, so nothing in this package claims to satisfy it yet";
     "changes/answer-a-machine-question-as-a-record/specs/operator/deployment-build/spec.md" =
       "an unimplemented change: no task of answer-a-machine-question-as-a-record has been done, so nothing in this package claims to satisfy it yet";
     "changes/answer-a-machine-question-as-a-record/specs/operator/machine-report/spec.md" =

@@ -30,6 +30,7 @@ let
     carriesLineBreak
     envNameAdmits
     escapeRegex
+    indexBy
     mapAttrsToList
     oneLine
     quote
@@ -42,6 +43,7 @@ let
     subtractList
     unassignable
     uniqueStrings
+    varsPathsDeep
     ;
 
   # systemd's portable profiles, by the statements of each drop-in this reading
@@ -210,6 +212,7 @@ let
     closureRootOutsideStore.id = "closure-root-outside-store";
     closureRootIsReference.id = "closure-root-is-delivered";
     accessDenied.id = "operator-entry-access-denied";
+    valueUnaccounted.id = "operator-entry-value-unaccounted";
     unitValueNewline.id = "unit-value-newline";
     envNameRefused.id = "unit-env-name-malformed";
     nameRefused.id = "operator-entry-name-refused";
@@ -432,26 +435,144 @@ let
   # What an entry records about its own files, and what a profile denies of it.
   # Read here rather than inside the reading below, so a caller that must not
   # raise can ask the same functions the refusals are written over.
+  #
+  # One field set whichever statement reached a record, because a reader of the
+  # list may index any field of it and a half-shaped element is what `required`
+  # refuses. The provenance a refusal names is the other statement's, null where
+  # the one that reached the record carries none.
+  provenance = {
+    gen = null;
+    fname = null;
+    slot = null;
+    valueEntry = null;
+  };
+
+  valueRecord =
+    named: file:
+    {
+      inherit (file)
+        path
+        secrecy
+        deploy
+        owner
+        group
+        mode
+        inPlan
+        ;
+      present = !(file ? bytes);
+    }
+    // provenance
+    // named;
+
   generatedOf =
     entry:
     concatLists (
-      mapAttrsToList (
-        gen: g:
-        mapAttrsToList (fname: file: {
-          inherit gen fname;
-          inherit (file)
-            path
-            secrecy
-            deploy
-            owner
-            group
-            mode
-            ;
-          inPlan = file.inPlan;
-          present = !(file ? bytes);
-        }) g.files
-      ) (entry.vars or { })
+      mapAttrsToList (gen: g: mapAttrsToList (fname: valueRecord { inherit gen fname; }) g.files) (
+        entry.vars or { }
+      )
     );
+
+  # What a file of a value record has to carry for this reading to index it. A
+  # record missing one of them is in no index, so it reaches the refusal about
+  # an unaccounted path rather than an evaluation error inside a reading that
+  # may not raise.
+  valueFileFields = {
+    path = isString;
+    secrecy = isString;
+    deploy = isBool;
+    owner = isString;
+    group = isString;
+    mode = isString;
+    inPlan = isString;
+  };
+
+  declaresAFile =
+    file:
+    isAttrs file
+    && all (field: file ? ${field} && valueFileFields.${field} file.${field}) (
+      attrNames valueFileFields
+    );
+
+  # One index over a plan's value records, keyed by the path each declared file
+  # records: a declared read names a value by the path its own record already
+  # carries and by nothing else, so the join is that path and no plan field is
+  # added. A record is recognised by what it records - `delivery` beside
+  # `files` - and never by the text of its key, and the first record for a path
+  # is the one kept.
+  valueIndex =
+    plan:
+    let
+      isValue =
+        record:
+        isAttrs record
+        && record ? delivery
+        && isList record.delivery
+        && record ? files
+        && isAttrs record.files;
+      claimsOf =
+        key:
+        let
+          record = plan.${key};
+        in
+        map (fname: {
+          inherit key fname;
+          file = record.files.${fname};
+          inherit (record.files.${fname}) path;
+          delivery = filter isString record.delivery;
+        }) (filter (fname: declaresAFile record.files.${fname}) (sortStrings (attrNames record.files)));
+    in
+    indexBy (claim: claim.path) (claim: claim) (
+      concatLists (map claimsOf (filter (key: isValue plan.${key}) (sortStrings (attrNames plan))))
+    );
+
+  # The first record for a path, in the order the statements reached them: a
+  # value two reads name, or one a read and the entry's own generator both
+  # reach, is one record and so one bind, one mount point and one denial.
+  firstByPath =
+    records:
+    let
+      index = indexBy (r: r.path) (r: r) records;
+    in
+    map (path: index.${path}) (uniqueStrings (map (r: r.path) records));
+
+  # The values one entry is shown: the ones its own declaration generates and
+  # the ones its declared reads name. A read names a value by a path at any
+  # depth of the slot's own record, which is the library's own recogniser asked
+  # one slot at a time so the answer carries the slot that named it.
+  valuesOf =
+    {
+      index,
+      key,
+      entry,
+    }:
+    let
+      parts = keyParts key;
+      machine = if parts == null then null else parts.machine;
+      claims = concatLists (
+        mapAttrsToList (
+          slot: record: map (path: { inherit slot path; }) (uniqueStrings (varsPathsDeep record))
+        ) (entry.reads or { })
+      );
+      # An undeployed value is on no machine and is shown at no path by the rule
+      # that governs the shown set, so it is not a plan whose records disagree.
+      accounted =
+        claim:
+        index ? ${claim.path}
+        && (!index.${claim.path}.file.deploy || elem machine index.${claim.path}.delivery);
+    in
+    {
+      generated = firstByPath (
+        generatedOf entry
+        ++ map (
+          claim:
+          valueRecord {
+            inherit (claim) slot;
+            valueEntry = index.${claim.path}.key;
+          } index.${claim.path}.file
+        ) (filter accounted claims)
+      );
+      unaccounted = filter (claim: !(accounted claim)) claims;
+    };
 
   # The one record a store object carries. A bind shows the source's ownership and
   # mode, so a configuration file stating anything else is a file this realiser
@@ -559,8 +680,15 @@ let
     else
       (if assemble == null then null else assemble (assembledName name f.path) (literalsOf f));
 
+  # The shown set, over the values the entry is shown rather than over its own
+  # declaration: a value a declared read names reaches the unit at a host path
+  # the same way one the entry generated does.
   hostPathsOf =
-    { name, entry }:
+    {
+      name,
+      entry,
+      generated,
+    }:
     map (
       f:
       {
@@ -588,7 +716,7 @@ let
       kind = "generated-file";
       inherit (g) secrecy;
       disposition = g.inPlan;
-    }) (filter (g: g.deploy && g.inPlan == reference) (generatedOf entry));
+    }) (filter (g: g.deploy && g.inPlan == reference) generated);
 
   # The same rule the planner asks, with the other answer to its one policy: a
   # confining profile imposes the account and never imposes root, so a unit
@@ -678,20 +806,33 @@ rec {
     scopes
     holdings
     accounts
+    valueIndex
+    valuesOf
     ;
 
   # A caller that holds an entry and a stated profile, and may not raise, asks
-  # these. An unknown profile answers no denial, because the statement that named
-  # it is refused by the layer that read it.
+  # these. Each takes the values the entry is shown, because one list is what
+  # every reading about a shown value asks and a second walk of the entry's own
+  # declaration would answer about half of them. An unknown profile answers no
+  # denial, because the statement that named it is refused by the layer that
+  # read it.
   hostPaths =
-    { key, entry }:
+    {
+      key,
+      entry,
+      generated,
+    }:
     hostPathsOf {
       name = nameOf (parseKey key);
-      inherit entry;
+      inherit entry generated;
     };
 
   denials =
-    { entry, profile }:
+    {
+      entry,
+      profile,
+      generated,
+    }:
     let
       scoped = profilesFor (scopeOf entry);
     in
@@ -701,7 +842,7 @@ rec {
       denialsOf {
         inherit (scoped.${profile}) denies;
         units = entry.units or { };
-        generated = generatedOf entry;
+        inherit generated;
         configFiles = configRecordsOf entry;
       };
 
@@ -715,6 +856,7 @@ rec {
       key,
       entry,
       profile,
+      generated,
     }:
     let
       parts = parseKey key;
@@ -743,7 +885,7 @@ rec {
               )
             )
             (hostPathsOf {
-              inherit name entry;
+              inherit name entry generated;
             });
         inherit (parts) instance service machine;
         platform = target.system or null;
@@ -802,7 +944,15 @@ rec {
         else
           fail accounts.profileUnknown "confinement profile ${quote profile} is not one of ${quoteList profileNames}; the profile is stated rather than inferred";
 
-      generated = generatedOf entry;
+      # The values this entry is shown, one record per path: its own and the
+      # ones its declared reads name. The index is built from the plan this
+      # reading already has, so the join costs one pass over it.
+      values = valuesOf {
+        index = valueIndex plan;
+        inherit key entry;
+      };
+
+      inherit (values) generated unaccounted;
 
       configFiles = configFilesOf name entry;
 
@@ -816,9 +966,16 @@ rec {
       # A path is shown only where bytes arrive at it. An undeployed value is on
       # no machine, so a mount of its path would be a mount of nothing: the unit
       # then fails at NAMESPACE rather than at anything an operator can read.
-      hostPaths = hostPathsOf { inherit name entry; };
+      hostPaths = hostPathsOf { inherit name entry generated; };
 
-      version = versionFor { inherit key entry profile; };
+      version = versionFor {
+        inherit
+          key
+          entry
+          profile
+          generated
+          ;
+      };
 
       mentions = unit: uniqueStrings (storePathsDeep storeDir (removeAttrs unit [ "extends" ]));
 
@@ -927,6 +1084,11 @@ rec {
       fail accounts.closureRootOutsideStore "entry ${quote key} declares closure root ${quote (builtins.head rootsOutsideTheStore)}, which is not a path under the store directory ${quote storeDir} the plan records"
     else if rootsThatAreReferences != [ ] then
       fail accounts.closureRootIsReference "entry ${quote key} declares closure root ${quote (builtins.head rootsThatAreReferences)}, which the plan records as a reference: its bytes reach the units from the host and never through an image"
+    else if unaccounted != [ ] then
+      let
+        first = builtins.head unaccounted;
+      in
+      fail accounts.valueUnaccounted "entry ${quote key} declares a read at ${quote first.slot} naming the generated value ${quote first.path}, and no value record of this plan accounts for bytes delivered to machine ${quote parts.machine} at it"
     else if denied != [ ] then
       let
         first = builtins.head denied;

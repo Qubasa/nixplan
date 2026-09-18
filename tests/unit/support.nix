@@ -440,6 +440,135 @@ rec {
       };
     };
 
+  # An interface whose exports are references to generated files, which is the
+  # one shape a value another entry generated reaches a consumer through: the
+  # read record carries the path and the secrecy and nothing else.
+  credential = planner.interface {
+    name = "credential";
+    exports.secret = secretFile;
+  };
+
+  # Two exports of one generated file, which is how one value is reached twice.
+  credentials = planner.interface {
+    name = "credentials";
+    exports = {
+      first = secretFile;
+      second = secretFile;
+    };
+  };
+
+  peerValuePath = "/run/vars/holder/token/secret";
+
+  peerHolder =
+    {
+      interface,
+      exports,
+      fileArgs,
+      deploy,
+      uses ? { },
+    }:
+    soleRoot {
+      provides = [ "cred" ];
+      module = _: {
+        vars.token = {
+          files."secret" = {
+            secrecy = "secret";
+          }
+          // fileArgs;
+        }
+        // (if deploy then { } else { deploy = false; });
+        provides.cred.interface = interface;
+        inherit uses;
+        impl =
+          { vars, ... }:
+          {
+            closure = [ worked.borgbackup ];
+            provides.cred.exports = exports vars;
+            units.only = {
+              command = "${worked.borgbackup}/bin/borg serve";
+              env.OWN = vars.token."secret".path;
+            };
+          };
+      };
+    };
+
+  peerConsumer =
+    {
+      interface,
+      reads,
+      unitArgs,
+      extra,
+    }:
+    soleRoot {
+      module = _: {
+        uses.cred = { inherit interface reads; };
+        impl =
+          { results, ... }:
+          {
+            closure = [ worked.borgbackup ];
+            units.only = {
+              command = "${worked.borgbackup}/bin/borg serve";
+              env = builtins.listToAttrs (
+                map (name: {
+                  name = "READ_${name}";
+                  value = results.cred.${name}.path;
+                }) reads
+              );
+            }
+            // unitArgs;
+          }
+          // extra;
+      };
+    };
+
+  # One entry generating a value and publishing it as a secret export, and one
+  # entry declaring a read of that export and naming the value's own path: the
+  # deployment every reading of a value an entry did not generate is read over.
+  # A declared read is what puts the value on the reading entry's machine, so
+  # the bytes are there whether or not a reading shows the path.
+  peerValuePlan =
+    {
+      interface ? credential,
+      exports ? (vars: { secret = vars.token."secret"; }),
+      reads ? [ "secret" ],
+      fileArgs ? { },
+      deploy ? true,
+      unitArgs ? { },
+      extra ? { },
+    }:
+    planOf {
+      instances = {
+        holder = {
+          module = peerHolder {
+            inherit
+              interface
+              exports
+              fileArgs
+              deploy
+              ;
+          };
+          placement.every.only.machines = [ "one" ];
+          exposes = [ "cred" ];
+        };
+        app = {
+          module = peerConsumer {
+            inherit
+              interface
+              reads
+              unitArgs
+              extra
+              ;
+          };
+          placement.every.only.machines = [ "one" ];
+          wire.cred = {
+            instance = "holder";
+            provides = "cred";
+          };
+        };
+      };
+      varsState."holder:vars/token@one"."secret".present = true;
+    };
+
   # Every realiser reading and the ladder over it. The evaluating layer holds
   # each realiser directory as its own store path, so a relative import out of
   # one would resolve outside the store and the sources arrive as arguments the

@@ -129,6 +129,80 @@ let
       path = "/etc/thing.conf";
     };
 
+  # The values an entry is shown, which is what every reading about one is
+  # handed: the entry's own generated files and the ones its declared reads
+  # name, one record per path.
+  shownValues =
+    plan: key:
+    (reader.valuesOf {
+      index = reader.valueIndex plan;
+      inherit key;
+      entry = plan.${key};
+    }).generated;
+
+  denialsFor =
+    {
+      plan,
+      profile,
+      key ? "svc:only@one",
+    }:
+    reader.denials {
+      entry = plan.${key};
+      inherit profile;
+      generated = shownValues plan key;
+    };
+
+  # The cross-entry read the shared harness builds, read as an image: one entry
+  # generates the value and publishes it, the other declares a read of that
+  # export and names the value's path in its own unit.
+  inherit (support)
+    credential
+    credentials
+    peerHolder
+    ;
+
+  peerRead = support.peerValuePlan;
+
+  peerPath = support.peerValuePath;
+
+  peerImage =
+    {
+      key ? "app:only@one",
+      profile ? "trusted",
+    }:
+    result:
+    reader.read {
+      inherit (result) plan;
+      inherit key profile;
+    };
+
+  peerBuild =
+    {
+      key ? "app:only@one",
+      profile ? "trusted",
+    }:
+    result:
+    builder.build {
+      inherit (result) plan;
+      inherit key profile;
+    };
+
+  # A deployed value of a third instance, hand-written: the reading is handed a
+  # plan, so a value no statement of the entry reaches is a record it meets and
+  # has to answer nothing about.
+  strayValue = {
+    delivery = [ "one" ];
+    files."key" = {
+      path = "/run/vars/other/spare/key";
+      secrecy = "secret";
+      deploy = true;
+      inPlan = "reference";
+      owner = "root";
+      group = "root";
+      mode = "0400";
+    };
+  };
+
   readOf = args: realiser.readOf ({ profile = "trusted"; } // args);
 
   # A platform string no rule has reached: `image/read.nix` accepts
@@ -1399,6 +1473,564 @@ in
       };
     };
 
+  # The index is keyed by the path a value record declares, because that path is
+  # the whole of what a read record carries: a record of another shape is in no
+  # index, and a value record whose file states none of what the reading indexes
+  # contributes nothing rather than raising inside a reading that may not raise.
+  testTheValueIndexAnswersForADeclaredFileAlone =
+    let
+      result = peerRead { };
+      index = reader.valueIndex result.plan;
+      answered = index.${peerPath};
+      fabricated = reader.valueIndex (
+        result.plan
+        // {
+          "holder:vars/half@one" = {
+            delivery = [ "one" ];
+            files."key".path = "/run/vars/holder/half/key";
+          };
+        }
+      );
+    in
+    {
+      expr = {
+        paths = attrNames index;
+        entry = answered.key;
+        file = answered.fname;
+        record = reader.recordOf answered.file;
+        delivery = answered.delivery;
+        # A machine record and a service entry record no `delivery` beside
+        # `files`, so a plan holding only those two is indexed as nothing.
+        withoutTheValueRecord = attrNames (reader.valueIndex (removeAttrs result.plan [ answered.key ]));
+        malformed = attrNames fabricated;
+      };
+      expected = {
+        paths = [ peerPath ];
+        entry = "holder:vars/token@one";
+        file = "secret";
+        record = "root:root at mode 0400";
+        delivery = [ "one" ];
+        withoutTheValueRecord = [ ];
+        malformed = [ peerPath ];
+      };
+    };
+
+  # Every reader of the shown list may index any field of it, so a read-derived
+  # record carries the field set the entry's own walk carries, and the two
+  # differ only in the provenance a refusal names.
+  testAReadDerivedValueRecordCarriesTheSameFieldSet =
+    let
+      result = peerRead { };
+      own = builtins.head (peerImage { key = "holder:only@one"; } result).generated;
+      read = builtins.head (peerImage { } result).generated;
+      provenance = [
+        "gen"
+        "fname"
+        "slot"
+        "valueEntry"
+      ];
+    in
+    {
+      expr = {
+        fields = attrNames read;
+        sameFields = attrNames own == attrNames read;
+        ownProvenance = {
+          inherit (own)
+            gen
+            fname
+            slot
+            valueEntry
+            ;
+        };
+        readProvenance = {
+          inherit (read)
+            gen
+            fname
+            slot
+            valueEntry
+            ;
+        };
+        oneFile = removeAttrs own provenance == removeAttrs read provenance;
+      };
+      expected = {
+        fields = [
+          "deploy"
+          "fname"
+          "gen"
+          "group"
+          "inPlan"
+          "mode"
+          "owner"
+          "path"
+          "present"
+          "secrecy"
+          "slot"
+          "valueEntry"
+        ];
+        sameFields = true;
+        ownProvenance = {
+          gen = "token";
+          fname = "secret";
+          slot = null;
+          valueEntry = null;
+        };
+        readProvenance = {
+          gen = null;
+          fname = null;
+          slot = "cred";
+          valueEntry = "holder:vars/token@one";
+        };
+        oneFile = true;
+      };
+    };
+
+  testAValueAnotherEntryGeneratedIsShownAtItsPath =
+    let
+      result = peerRead { };
+      image = peerImage { } result;
+      built = peerBuild { } result;
+    in
+    {
+      expr = {
+        rows = map (row: row.id) result.diagnostics;
+        delivery = result.plan."holder:vars/token@one".delivery;
+        # The consumer's own declaration generates nothing: every path below is
+        # one a declared read named.
+        ownVars = attrNames (result.plan."app:only@one".vars or { });
+        shown = map (p: p.path) image.hostPaths;
+        kinds = map (p: p.kind) image.hostPaths;
+        record = map reader.recordOf image.generated;
+        binds = occurrences "BindReadOnlyPaths=${peerPath}:${peerPath}" built.units."app-only-only.service";
+        # The image root creates one empty file per shown path, so one record is
+        # one mount point.
+        mountPoints = length (filter (p: p.path == peerPath) built.image.hostPaths);
+      };
+      expected = {
+        rows = [ ];
+        delivery = [ "one" ];
+        ownVars = [ ];
+        shown = [ peerPath ];
+        kinds = [ "generated-file" ];
+        record = [ "root:root at mode 0400" ];
+        binds = 1;
+        mountPoints = 1;
+      };
+    };
+
+  testAReadOfAnUndeployedValueIsShownAtNoPath =
+    let
+      result = peerRead {
+        deploy = false;
+        extra.configData."/etc/app.conf" = {
+          mode = "0444";
+          reload = [ ];
+          render = [ { text = "value\n"; } ];
+        };
+      };
+      image = peerImage { } result;
+    in
+    {
+      expr = {
+        # The planner's own row for declaring a read of a value no machine
+        # receives, which is what an operator acts on.
+        namesTheUndeployedRead = elem "slot-reads-undeployed-value" (map (row: row.id) result.diagnostics);
+        shown = map (p: p.path) image.hostPaths;
+        stillInThePlan = result.plan."app:only@one".reads.cred.values.secret.path;
+      };
+      expected = {
+        namesTheUndeployedRead = true;
+        shown = [ "/etc/app.conf" ];
+        stillInThePlan = peerPath;
+      };
+    };
+
+  testAValueTheEntryNeitherGeneratedNorReadIsShownAtNoPath =
+    let
+      result = peerRead { };
+      withStray = result.plan // {
+        "other:vars/spare@one" = strayValue;
+      };
+      shownOf =
+        plan:
+        map (p: p.path)
+          (reader.read {
+            inherit plan;
+            key = "app:only@one";
+            profile = "trusted";
+          }).hostPaths;
+    in
+    {
+      expr = {
+        withoutIt = shownOf result.plan;
+        withIt = shownOf withStray;
+        # The index answers for it, so the entry is shown nothing for it because
+        # no statement of the entry reaches it and not because it is unknown.
+        indexed = elem "/run/vars/other/spare/key" (attrNames (reader.valueIndex withStray));
+      };
+      expected = {
+        withoutIt = [ peerPath ];
+        withIt = [ peerPath ];
+        indexed = true;
+      };
+    };
+
+  testAValueTwoReadsNameIsShownOnce =
+    let
+      result = peerRead {
+        interface = credentials;
+        exports = vars: {
+          first = vars.token."secret";
+          second = vars.token."secret";
+        };
+        reads = [
+          "first"
+          "second"
+        ];
+      };
+      image = peerImage { } result;
+      built = peerBuild { } result;
+    in
+    {
+      expr = {
+        rows = map (row: row.id) result.diagnostics;
+        namedTwice = attrNames result.plan."app:only@one".reads.cred.values;
+        shown = map (p: p.path) image.hostPaths;
+        described = map (g: g.path) (reader.attachment image).generated;
+        binds = occurrences "BindReadOnlyPaths=${peerPath}:${peerPath}" built.units."app-only-only.service";
+        mountPoints = length (filter (p: p.path == peerPath) built.image.hostPaths);
+      };
+      expected = {
+        rows = [ ];
+        namedTwice = [
+          "first"
+          "second"
+        ];
+        shown = [ peerPath ];
+        described = [ peerPath ];
+        binds = 1;
+        mountPoints = 1;
+      };
+    };
+
+  # The owner of a value declaring a read of its own export: two statements of
+  # one entry reach one file, and the record shown is the one the value's own
+  # entry states either way.
+  testAValueAnEntryBothGeneratedAndReadIsShownOnce =
+    let
+      result = planOf {
+        instances.holder = {
+          module = peerHolder {
+            interface = credential;
+            exports = vars: { secret = vars.token."secret"; };
+            fileArgs = { };
+            deploy = true;
+            uses.cred = {
+              interface = credential;
+              reads = [ "secret" ];
+            };
+          };
+          placement.every.only.machines = [ "one" ];
+          exposes = [ "cred" ];
+          wire.cred = {
+            instance = "holder";
+            provides = "cred";
+          };
+        };
+        varsState."holder:vars/token@one"."secret".present = true;
+      };
+      image = peerImage { key = "holder:only@one"; } result;
+      record = builtins.head image.generated;
+    in
+    {
+      expr = {
+        rows = map (row: row.id) result.diagnostics;
+        readsItsOwn = attrNames result.plan."holder:only@one".reads.cred.values;
+        shown = map (p: p.path) image.hostPaths;
+        count = length image.generated;
+        record = reader.recordOf record;
+        reachedByItsOwnDeclaration = record.gen;
+      };
+      expected = {
+        rows = [ ];
+        readsItsOwn = [ "secret" ];
+        shown = [ peerPath ];
+        count = 1;
+        record = "root:root at mode 0400";
+        reachedByItsOwnDeclaration = "token";
+      };
+    };
+
+  testEveryReadingOfAShownValueAsksOneList =
+    let
+      result = peerRead { };
+      image = peerImage { } result;
+      withStray = reader.read {
+        plan = result.plan // {
+          "other:vars/spare@one" = strayValue;
+        };
+        key = "app:only@one";
+        profile = "trusted";
+      };
+    in
+    {
+      expr = {
+        shown = map (p: p.path) image.hostPaths;
+        denied = map (d: d.path or null) (denialsFor {
+          inherit (result) plan;
+          key = "app:only@one";
+          profile = "strict";
+        });
+        references = image.referencePaths;
+        described = map (g: g.path) (reader.attachment image).generated;
+        theStrayValueIsInNoneOfThem = hasInfix "/run/vars/other/spare/key" (
+          builtins.toJSON (reader.attachment withStray)
+        );
+      };
+      expected = {
+        shown = [ peerPath ];
+        denied = [ peerPath ];
+        references = [ peerPath ];
+        described = [ peerPath ];
+        theStrayValueIsInNoneOfThem = false;
+      };
+    };
+
+  # A value path is a reference whichever statement of the entry reached it, so
+  # declaring one as a closure root is refused: its bytes reach the units from
+  # the machine and never through an image.
+  testAPeersValuePathIsAReferenceRatherThanAClosureRoot =
+    let
+      result = peerRead { };
+      entry = result.plan."app:only@one";
+    in
+    {
+      expr = {
+        references = (peerImage { } result).referencePaths;
+        declaringItRaises = raises (
+          reader.read {
+            plan = result.plan // {
+              "app:only@one" = entry // {
+                closure = entry.closure ++ [ peerPath ];
+              };
+            };
+            key = "app:only@one";
+            profile = "trusted";
+          }
+        );
+      };
+      expected = {
+        references = [ peerPath ];
+        declaringItRaises = true;
+      };
+    };
+
+  # The three published entry points and the whole reading answer about one
+  # list, which is why each takes it rather than walking the entry again.
+  testThePublishedReadingsAgreeAboutTheShownPaths =
+    let
+      result = peerRead { };
+      entry = result.plan."app:only@one";
+      generated = shownValues result.plan "app:only@one";
+      image = peerImage { } result;
+    in
+    {
+      expr = {
+        throughTheEntryPoint = map (p: p.path) (
+          reader.hostPaths {
+            key = "app:only@one";
+            inherit entry generated;
+          }
+        );
+        throughTheReading = map (p: p.path) image.hostPaths;
+        digestsAgree =
+          reader.versionFor {
+            key = "app:only@one";
+            inherit entry generated;
+            profile = "trusted";
+          } == image.version;
+        denials = reader.denials {
+          inherit entry generated;
+          profile = "trusted";
+        };
+      };
+      expected = {
+        throughTheEntryPoint = [ peerPath ];
+        throughTheReading = [ peerPath ];
+        digestsAgree = true;
+        denials = [ ];
+      };
+    };
+
+  # The attach refuses before it writes anything where a shown generated path is
+  # not on the machine yet, and that guard is one per shown path.
+  testAPeersValueIsGuardedBeforeTheAttachWritesAnything =
+    let
+      built = peerBuild { } (peerRead { });
+    in
+    {
+      expr = {
+        # `lib.escapeShellArg` leaves a word of safe characters bare, which a
+        # value's path is, so the guard reads the path with no quoting of its own.
+        guards = occurrences "-e \"$root\"${peerPath} ]" built.attach;
+        namesTheValue = hasInfix "is not on this machine yet" built.attach;
+      };
+      expected = {
+        guards = 1;
+        namesTheValue = true;
+      };
+    };
+
+  # The digest is taken over the host paths the entry is shown, so widening the
+  # shown set widens the digest with no edit to the digest: one apply replaces
+  # those artifacts and the next reports nothing changed.
+  testAReadOfAPeersValueMovesTheEntrysVersionDigest =
+    let
+      withTheRead = peerRead { unitArgs.env.CONST = "x"; };
+      withoutIt = peerRead {
+        reads = [ ];
+        unitArgs.env.CONST = "x";
+      };
+      imageOf = result: peerImage { } result;
+      fileOf = result: (reader.attachment (imageOf result)).image;
+    in
+    {
+      expr = {
+        # The two units are byte-identical, so what moves the digest is the
+        # shown path and nothing else.
+        oneUnitText =
+          reader.renderUnit (imageOf withTheRead) "only" == reader.renderUnit (imageOf withoutIt) "only";
+        shownWithTheRead = map (p: p.path) (imageOf withTheRead).hostPaths;
+        shownWithoutIt = map (p: p.path) (imageOf withoutIt).hostPaths;
+        digestsDiffer = (imageOf withTheRead).version != (imageOf withoutIt).version;
+        fileNamesDiffer = fileOf withTheRead != fileOf withoutIt;
+        # And a second reading of the same deployment answers the first's
+        # digest, which is what makes the next apply a no-op.
+        twiceIsOneDigest = (imageOf withTheRead).version == (peerImage { } withTheRead).version;
+      };
+      expected = {
+        oneUnitText = false;
+        shownWithTheRead = [ peerPath ];
+        shownWithoutIt = [ ];
+        digestsDiffer = true;
+        fileNamesDiffer = true;
+        twiceIsOneDigest = true;
+      };
+    };
+
+  testAPeersValueOnlyItsOwnerMayReadIsDeniedToItsReader =
+    let
+      result = peerRead { };
+      denialsOn =
+        key:
+        denialsFor {
+          inherit (result) plan;
+          inherit key;
+          profile = "strict";
+        };
+      denied = builtins.head (denialsOn "app:only@one");
+    in
+    {
+      expr = {
+        count = length (denialsOn "app:only@one");
+        inherit (denied)
+          unit
+          path
+          record
+          account
+          access
+          ;
+        # The reader earns the denial the owner earns for that file: one record,
+        # one comparison, one answer.
+        theOwnersOwnDenial = denialsOn "holder:only@one" == denialsOn "app:only@one";
+        refused = raises (peerImage { profile = "strict"; } result);
+      };
+      expected = {
+        count = 1;
+        unit = "only";
+        path = peerPath;
+        record = "root:root at mode 0400";
+        account = "a transient account";
+        access = "a host file only root may read";
+        theOwnersOwnDenial = true;
+        refused = true;
+      };
+    };
+
+  testAPeersValueAReadersGroupMayReadIsNotDenied =
+    let
+      result = peerRead {
+        fileArgs = {
+          owner = "nobody";
+          group = "app";
+          mode = "0440";
+        };
+        unitArgs.extends = [
+          {
+            extension = groupedUnit;
+            values.supplementaryGroups = [ "app" ];
+          }
+        ];
+      };
+      image = peerImage { profile = "strict"; } result;
+    in
+    {
+      expr = {
+        denials = denialsFor {
+          inherit (result) plan;
+          key = "app:only@one";
+          profile = "strict";
+        };
+        shown = map (p: p.path) image.hostPaths;
+        record = map reader.recordOf image.generated;
+      };
+      expected = {
+        denials = [ ];
+        shown = [ peerPath ];
+        record = [ "nobody:app at mode 0440" ];
+      };
+    };
+
+  # A read naming a path the plan's value records account for no delivered bytes
+  # of is a refusal carrying the identifier of the row the layer holding the
+  # whole plan produces, and never a path omitted without a word.
+  testTheUnaccountedRefusalIsPrecededByItsRow =
+    let
+      result = peerRead { };
+      value = result.plan."holder:vars/token@one";
+      readOfPlan =
+        plan:
+        reader.read {
+          inherit plan;
+          key = "app:only@one";
+          profile = "trusted";
+        };
+    in
+    {
+      expr = {
+        accounted = reader.accounts.valueUnaccounted.id;
+        excused = reader.accounts.valueUnaccounted ? because;
+        deliveredElsewhere = raises (
+          readOfPlan (
+            result.plan
+            // {
+              "holder:vars/token@one" = value // {
+                delivery = [ "two" ];
+              };
+            }
+          )
+        );
+        noValueRecord = raises (readOfPlan (removeAttrs result.plan [ "holder:vars/token@one" ]));
+        andTheUnedittedPlanIsRead = map (p: p.path) (readOfPlan result.plan).hostPaths;
+      };
+      expected = {
+        accounted = "operator-entry-value-unaccounted";
+        excused = false;
+        deliveredElsewhere = true;
+        noValueRecord = true;
+        andTheUnedittedPlanIsRead = [ peerPath ];
+      };
+    };
+
   testARenderRecipeIsAssembledOnTheHost =
     let
       result = support.valuePlan {
@@ -2126,12 +2758,10 @@ in
     let
       denials =
         profile:
-        filter (d: d ? path) (
-          reader.denials {
-            entry = (planned { } (shownAt { })).plan."svc:only@one";
-            inherit profile;
-          }
-        );
+        filter (d: d ? path) (denialsFor {
+          plan = (planned { } (shownAt { })).plan;
+          inherit profile;
+        });
       denied = builtins.head (denials "strict");
     in
     {
@@ -2170,8 +2800,8 @@ in
     in
     {
       expr = {
-        denials = reader.denials {
-          entry = (planned { } grouped).plan."svc:only@one";
+        denials = denialsFor {
+          plan = (planned { } grouped).plan;
           profile = "strict";
         };
         built = raises (readOf { profile = "strict"; } grouped);
@@ -2184,8 +2814,8 @@ in
 
   testAConfigurationFileUnderTheUnconfinedProfile = {
     expr = {
-      denials = reader.denials {
-        entry = (planned { } (shownAt { })).plan."svc:only@one";
+      denials = denialsFor {
+        plan = (planned { } (shownAt { })).plan;
         profile = "trusted";
       };
       built = raises (readOf { profile = "trusted"; } (shownAt { }));
@@ -2723,8 +3353,8 @@ in
         let
           p = planned { inherit registry; } needsAnAccount;
         in
-        reader.denials {
-          entry = p.plan.${p.key};
+        denialsFor {
+          inherit (p) plan key;
           profile = "trusted";
         };
     in
@@ -2762,8 +3392,8 @@ in
         let
           p = planned { inherit registry; } needsAnAccount;
         in
-        reader.denials {
-          entry = p.plan.${p.key};
+        denialsFor {
+          inherit (p) plan key;
           profile = "default";
         };
       readUnder =

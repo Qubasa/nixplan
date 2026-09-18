@@ -298,6 +298,7 @@ therefore reached only by a caller that never asked the reading:
 | `operator-entry-scope-unsupported` | the entry's machine declares a scope the stated realiser does not publish, flakelet realising the system scope alone | state `image` for that key, or place the entry on a machine whose scope the realiser admits |
 | `operator-entry-name-refused` | the stated realiser's endpoint refuses a name the entry derives | rename the instance or the service |
 | `operator-entry-access-denied` | a unit needs an access the stated profile denies | state a profile that allows it, or stop needing it |
+| `operator-entry-value-unaccounted` | a declared read names a generated value's path this plan delivers to no machine of that entry | inspect the value entry that declares the path and the placements of the reading entry, and replan |
 
 A record carrying `delivery` is a generated value, one carrying `placement` is a service entry, and
 one carrying neither is a machine record. Nothing is classified by the text of a key: `machine` is a
@@ -305,6 +306,33 @@ legal instance name and `vars/x` a legal member name. A placed entry that declar
 realised into nothing - it is named in `manifest.json` with its machine and no `path`, the key is
 omitted rather than stated as `null`, and only a statement naming it is a refusal. A command that
 needs an artifact for such an entry refuses naming that entry, and one that does not proceeds.
+
+## Which values an entry is shown
+
+An entry is shown the generated values its own declaration produces and the ones its declared reads
+name, deployed, and nothing else. The two halves are one list with one record per path, so a value
+two reads of one entry name, or one an entry both generates and reads, is one record and one bind.
+Every reading about a shown value asks that one list - the host paths the image carries, the denial
+the confinement profile imposes, the reference paths the declared closure is checked against, and
+the table the attachment describes. A path a unit is shown is therefore a path the refusals
+reasoned about.
+
+The join is by the path a read record already carries. A read records the value's path and its
+secrecy and nothing else, which is deliberate: `reads` is in an entry's key input, so a peer's
+ownership or mode recorded there would re-key every consumer the moment the value's own record
+moved. Who may open the file stays the value entry's answer, looked up by that path while the
+entry is read.
+
+A shown path the plan's own value records account for no delivered bytes at - a read naming a value
+the plan delivers to another machine, or a path no value record carries at all - is
+`operator-entry-value-unaccounted`, and it refuses the deployment naming the entry, the slot and
+the path. An undeployed value is a different answer: it is shown at no path, and the planner has
+already said so with `slot-reads-undeployed-value`.
+
+The consequence for a running fleet is one-time and visible. A consumer of a peer's value is shown
+a host path it was not shown before, so its version digest moves: the first apply after this change
+replaces those images and writes one new flakelet generation for each such entry, and the next
+reports nothing changed. No value is rewritten by it, the bytes being on those machines already.
 
 ## Why the build layer raises
 

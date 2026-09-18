@@ -125,7 +125,11 @@ let
   unitFilesOf = name: units: sortStrings (uniqueStrings (imageReader.unitFilesOf name units));
 
   readEntry =
-    { plan, realise }:
+    {
+      plan,
+      realise,
+      index,
+    }:
     key:
     let
       # Every row below is about this entry, so the subject is the reading's and
@@ -168,7 +172,12 @@ let
       imposed = if confinement == null then "" else confinement;
       emits = if known then endpoint.backend else readers.${defaultRealiser}.backend;
       runs = (entry.target or { }).serviceManager or null;
-      hostPaths = imageReader.hostPaths { inherit key entry; };
+      # The values this entry is shown, which is its own declaration's and the
+      # ones its declared reads name, computed once here and handed to each of
+      # the three entry points rather than walked again inside them.
+      values = imageReader.valuesOf { inherit index key entry; };
+      inherit (values) generated unaccounted;
+      hostPaths = imageReader.hostPaths { inherit key entry generated; };
       recordFields = [
         "owner"
         "group"
@@ -239,7 +248,7 @@ let
           [ ]
         else
           imageReader.denials {
-            inherit entry;
+            inherit entry generated;
             profile = confinement;
           };
 
@@ -278,7 +287,7 @@ let
       # The identity the endpoint records for the artifact, so a report can
       # compare a machine against a build. The plan entry key stays in the plan.
       digest = imageReader.versionFor {
-        inherit key entry;
+        inherit key entry generated;
         profile = imposed;
       };
       rows =
@@ -397,6 +406,15 @@ let
                 resolution = "state a profile that allows ${denial.access} for ${quote key}, or stop needing it in unit ${quote denial.unit}";
               }
             ) denials
+            ++ map (
+              claim:
+              row {
+                id = "operator-entry-value-unaccounted";
+                message = "entry ${quote key} declares a read at ${quote claim.slot} naming the generated value ${quote claim.path}, and no value record of this plan accounts for bytes delivered to machine ${quote parts.machine} at it";
+                evidence = "a value's delivery set is derived from the reads that name it, so a read naming a value this plan delivers nowhere near the reading entry is a plan whose records disagree with each other";
+                resolution = "inspect the value entry that declares ${quote claim.path} and the placements of ${quote key}, and replan: a path a unit is shown with no bytes behind it is a unit that fails naming neither the value nor the declaration";
+              }
+            ) unaccounted
         );
     };
 
@@ -702,10 +720,15 @@ in
             filter (stated: stated != "default" && !(elem stated addressable)) (sortStrings (attrNames realise))
           );
 
+      # One index over the plan's value records, built once for the whole
+      # reading: every entry's shown values are looked up in it, and a
+      # `groupBy` inside each entry would walk the fleet's values per entry for
+      # one relation.
+      index = imageReader.valueIndex plan;
       entries = builtins.listToAttrs (
         map (key: {
           name = key;
-          value = readEntry { inherit plan realise; } key;
+          value = readEntry { inherit plan realise index; } key;
         }) placedKeys
       );
 

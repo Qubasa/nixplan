@@ -42,6 +42,16 @@ let
     exec ${pkgs.coreutils}/bin/sleep infinity
   '';
 
+  # The unit of `opener:read`, which opens the value the watching entry
+  # generates and writes what it read where its own module derives: the proof
+  # is a file on the machine and never a record in the plan. It exits, so the
+  # activation that started it is what puts the file there and reading it is no
+  # race against a unit that is still starting.
+  openerScript = pkgs.writeShellScript "planner-portable-opener" ''
+    set -eu
+    ${pkgs.coreutils}/bin/cat "$SECRET" > "$1"
+  '';
+
   # The probe of the `probed` build below, which refuses whatever it reads: the
   # failure is what that build is for, and a probe that could pass would make
   # the phase's evidence a race with the unit it probes.
@@ -87,6 +97,13 @@ let
     };
   };
 
+  openerModule = {
+    services.default = import ./modules/opener/default.nix {
+      opener = "${openerScript}";
+      inherit reportFile grouped;
+    };
+  };
+
   registry = import ./machines.nix;
 
   # One statement per instance rather than one table, so a build that drops an
@@ -94,8 +111,10 @@ let
   # not carry is a row of its own.
   #
   # `watch:file` is stated strict because the enforcement is the claim under
-  # test. `mirror:copy` is never attached and `beacon:ping` is attached and then
-  # retired, so both take the default profile.
+  # test, and `opener:read` for the same reason: a value only its group may read
+  # is what a confining profile is asked about. `mirror:copy` is never attached
+  # and `beacon:ping` is attached and then retired, so both take the default
+  # profile.
   statements = {
     watch."watch:file" = {
       realiser = "image";
@@ -108,6 +127,10 @@ let
     beacon."beacon:ping" = {
       realiser = "image";
       profile = "default";
+    };
+    opener."opener:read" = {
+      realiser = "image";
+      profile = "strict";
     };
   };
 
@@ -130,6 +153,7 @@ let
             report = reportModuleOf delivery;
             mirror = mirrorModule;
             beacon = beaconModuleOf probeCommand;
+            opener = openerModule;
           };
         in
         {
@@ -149,11 +173,13 @@ let
               watch = "report/default.nix";
               mirror = "mirror/default.nix";
               beacon = "beacon/default.nix";
+              opener = "opener/default.nix";
             };
             leaves = {
               watch.file = "report/watch.nix";
               mirror.copy = "mirror/copy.nix";
               beacon.ping = "beacon/ping.nix";
+              opener.read = "opener/read.nix";
             };
           };
         };

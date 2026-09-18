@@ -12,7 +12,9 @@ the image scenario of
 ``openspec/changes/retire-an-entry-a-build-no-longer-names/specs/operator/machine-report/spec.md``
 and that change's retired-image scenario of its own ``apply-command`` delta, and
 the failing-probe scenario of
-``openspec/changes/probe-a-service-before-it-counts-as-live/specs/realiser/portable-service-image/spec.md``.
+``openspec/changes/probe-a-service-before-it-counts-as-live/specs/realiser/portable-service-image/spec.md``,
+and the cross-entry scenarios of
+``openspec/changes/bind-a-value-an-entry-did-not-generate/specs/delivery/real-cluster/spec.md``.
 
 It builds that deployment four times. The second build,
 ``planner-e2e-portable-image-changed``, is attached by nothing and exists so
@@ -32,13 +34,14 @@ cluster's own net namespace.
 1. the command applies the confined entry, and that is what attaches it
 2. the image is attached by the script the artifact carries, and its unit runs
 3. the profile the entry was stated under is the one the machine enforces
-4. an image built for another architecture is refused by its own script
-5. a report says what this machine holds, against this build and against another
-6. the units are stopped, the image stays attached, and a report says so
-7. detaching removes what attaching made, and leaves what it was shown
-8. an image the machine holds for no entry of the build is named as the machine
+4. an entry that generated none of it opens the value a peer entry generated
+5. an image built for another architecture is refused by its own script
+6. a report says what this machine holds, against this build and against another
+7. the units are stopped, the image stays attached, and a report says so
+8. detaching removes what attaching made, and leaves what it was shown
+9. an image the machine holds for no entry of the build is named as the machine
    listed it, and retiring it is the endpoint's own removal verb
-9. a probe that refuses is a failed apply step, and the image stays attached
+10. a probe that refuses is a failed apply step, and the image stays attached
 
 rookery is imported at run time rather than statically: it is resolved from
 ``$ROOKERY_FLAKE`` by the runner and is deliberately not an input of this flake
@@ -76,6 +79,7 @@ USER = "root"
 CONFINED_KEY = "watch:file@alpha"
 SECRET_VALUE = "watch:vars/upstream"
 FOREIGN_KEY = "mirror:copy@elsewhere"
+OPENER_KEY = "opener:read@alpha"
 BEACON_KEY = "beacon:ping@alpha"
 SHOWN_TEXT = "upstream says so\n"
 EDITED_TEXT = "upstream changed its mind\n"
@@ -145,6 +149,21 @@ def _configured() -> tuple[str, str]:
 
 
 WATCHED, QUIET = _configured()
+
+
+def _opened_copy() -> str:
+    """Where the consuming entry writes what it read, off its own unit's command.
+
+    The module derives that path inside `impl` from the identity of its entry,
+    so it is read out of the plan rather than restated here.
+    """
+    units = DEPLOYMENT.plan[OPENER_KEY]["units"]
+    assert len(units) == 1, units
+    command = str(next(iter(units.values()))["command"])
+    return command.split()[-1]
+
+
+_OPENED_COPY = _opened_copy()
 
 
 def _value_source(root: Path, deployment: manifest.Deployment, secret: str) -> Path:
@@ -580,6 +599,124 @@ def test_a_confined_image_reads_a_group_readable_delivered_secret(attached: Run)
 
     logged = attached.vm.ssh_succeed(f"journalctl -u {unit} --no-pager -o cat")
     assert attached.reported(logged, "secret-read:") == f"succeeded with {attached.secret}"
+
+
+@pytest.fixture(scope="session")
+def opened(attached: Run) -> Run:
+    """The entry that opens a value a different entry generated.
+
+    One `planner apply` restricted to that entry writes every value its machine
+    receives, copies the artifact and runs the attach script the artifact
+    carries, which is the statement that shows the peer's value to a unit whose
+    own declaration generates nothing. Everything the machine is asked about it
+    is asked in one login, and every answer is one `key=value` line.
+
+    The image is detached again once those answers are recorded, so this phase
+    leaves the machine as it found it and the phases below are read over the
+    state they were written against. The three tests read the recorded answers.
+    """
+    if attached.observed.get("opened"):
+        return attached
+
+    attached.observed["opened"] = str(
+        attached.cluster.run(
+            [
+                str(CLI),
+                "apply",
+                str(BUILT),
+                "--only",
+                OPENER_KEY,
+                "--values",
+                str(attached.source),
+            ],
+            env=delivery.command_env(dict(os.environ), attached.key),
+        ).stdout
+    )
+
+    unit = attached.units_of(OPENER_KEY)[0]
+    owning = attached.units_of(CONFINED_KEY)[0]
+    value = attached.deployment.values[SECRET_VALUE].files[0].path
+    attached.observed["opened-answers"] = _asked(
+        attached,
+        f'echo "state=$(systemctl is-active {shlex.quote(unit)})"',
+        f'echo "copy=$(cat {shlex.quote(_OPENED_COPY)} 2>&1)"',
+        f'echo "host=$(cat {shlex.quote(value)} 2>&1)"',
+        f'echo "record=$(stat -c %U:%G:%a {shlex.quote(value)})"',
+        f'echo "files=$(ls -1 {shlex.quote(value)} | wc -l)"',
+        f'echo "owner=$(journalctl -u {shlex.quote(owning)} --no-pager -o cat'
+        f" | grep -c 'secret-read: succeeded')\"",
+    )
+    attached.observed["opened-unit-file"] = str(
+        attached.vm.ssh_succeed(f"systemctl cat {shlex.quote(unit)}")
+    )
+    attached.vm.ssh_succeed(f"{attached.artifact(OPENER_KEY)}/bin/detach", timeout=180)
+    return attached
+
+
+def test_the_consumers_unit_opens_the_peers_value_on_the_machine(opened: Run) -> None:
+    """The unit read the peer's value and wrote what it read, on the machine.
+
+    The consuming entry generates nothing: the value is the watching entry's,
+    and this entry's declared read is what puts it on this machine. The copy the
+    unit wrote is the reading taken inside the unit's own mount namespace: the
+    image carries an empty file at that path, so bytes there are the bind's and a
+    copy equal to what this run generated cannot come from anywhere else.
+    """
+    answered = _pairs(opened.observed["opened-answers"])
+    entry = opened.entry(OPENER_KEY)
+    address = manifest.address_of(entry)
+    steps = _steps(opened.observed["opened"])
+
+    assert opened.plan[OPENER_KEY].get("vars", {}) == {}, opened.plan[OPENER_KEY]
+    assert f"activate {OPENER_KEY} (image) on {USER}@{address}" in steps, steps
+    assert answered["state"] == "active", answered
+    assert answered["copy"] == opened.secret, answered
+    assert answered["host"] == opened.secret, answered
+
+
+def test_the_bind_comes_from_the_artifacts_own_unit_file(opened: Run) -> None:
+    """The statement that shows the value is the realiser's, not the harness's.
+
+    The unit file is read off the machine, where `portablectl` put the copy it
+    took out of the delivered image, so nothing here constructed it. The bind is
+    one line among the statements the attachment carries, the profile's own
+    drop-in adding binds of its own, and the mount point it needs is the image's:
+    the image root is a read-only squashfs, so a bind onto a path the image does
+    not carry is a unit that cannot start at all.
+    """
+    value = opened.deployment.values[SECRET_VALUE].files[0].path
+    answered = _pairs(opened.observed["opened-answers"])
+    lines = [line.strip() for line in opened.observed["opened-unit-file"].splitlines()]
+    described = opened.attachment(OPENER_KEY)["hostPaths"]
+
+    assert f"BindReadOnlyPaths={value}:{value}" in lines, lines
+    assert [(shown["path"], shown["kind"]) for shown in described] == [(value, "generated-file")], (
+        described
+    )
+    assert answered["state"] == "active", answered
+
+
+def test_one_file_on_the_machine_serves_both_entries(opened: Run) -> None:
+    """One value is one file, and the owner and the reader are shown that one path.
+
+    The delivery writes the path the value's own entry records, so neither entry
+    is shown a copy of its own, and the record on the machine is the record the
+    value entry states rather than anything either reading chose.
+    """
+    value = opened.deployment.values[SECRET_VALUE].files[0]
+    answered = _pairs(opened.observed["opened-answers"])
+    owning = opened.attachment(CONFINED_KEY)["hostPaths"]
+    reading = opened.attachment(OPENER_KEY)["hostPaths"]
+
+    assert answered["files"] == "1", answered
+    assert answered["record"] == f"{value.owner}:{value.group}:440", answered
+    # The owner's unit read it, and the reader's copy is those same bytes.
+    assert answered["owner"] != "0", answered
+    assert answered["copy"] == opened.secret, answered
+    assert [shown["path"] for shown in owning if shown["kind"] == "generated-file"] == [
+        value.path
+    ], owning
+    assert [shown["path"] for shown in reading] == [value.path], reading
 
 
 def test_an_image_built_for_another_architecture_is_refused(attached: Run) -> None:
