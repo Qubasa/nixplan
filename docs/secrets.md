@@ -131,6 +131,26 @@ is not the fix: that is the one path `set -eu` never reaches, and a machine that
 reason an operator reruns the step. Only a signal no process can trap gets past it, and what
 survives that is one file rather than one per delivery.
 
+**The sealed copy is written first.** For a machine whose plan record declares a `sealRecipient`,
+the step seals the plaintext it has just fetched to that recipient and sends the ciphertext with a
+second `ssh`, which writes it at the file's persistent path, `0400` under a `0700` parent, before
+the `deliver` that writes the plaintext. Sealed copy first, so that a run interrupted between the
+two never leaves a machine whose sealed copy is older than the plaintext beside it. The ciphertext
+is a second temporary of the run, removed by the `trap` that removes the first. A machine whose
+record declares no recipient keeps the single `deliver`.
+
+**The recipient is an ordinary word of the step.** One age native recipient is `age1` and 58
+characters of the bech32 alphabet, which is alphanumeric throughout and inside the class a rendered
+word may carry, so the recipient joins the table of words the step is rendered from and
+`secrets-rendered-word-refused` is the row about it by construction. It is read off the plan's own
+`machine:<name>` record rather than handed to the step beside the plan, because a second copy of
+one line is a second thing that can disagree. The sealed path and its parent join that same table,
+both derived from the path the plan fixed.
+
+**The sealing program is the caller's argument**, beside the store backend's `get`. The plan holds
+no store path to a tool, and a program found on the `PATH` of whoever ran the step would make what
+a delivery seals with a fact of that login rather than of the build.
+
 `$PLANNER_SECRETS_SSH_OPTS` reaches `ssh` unquoted, and the word splitting is the point: the
 contract says a deploy step takes whatever else it needs from the environment, and reaching a guest
 whose host key nobody has accepted yet is exactly that.
@@ -143,6 +163,41 @@ is one boolean, `deploy`, and `path` exists only as a NixOS option a backend set
 configuration passed with `--json` never reaches. The rendered step is therefore the only thing that
 ever states a path, and the path it states is `/run/vars/<instance>/<generator>/<file>`, the one the
 plan fixed. The external side never learns a path and never has to agree about one.
+
+## What a delivery leaves on a machine
+
+Both layers that write a generated value - the step above, and the operator command's own write -
+leave the same two files on a machine whose plan record declares a recipient.
+
+The plaintext is where it was: `/run/vars/<instance>/<generator>/<file>`, at the owner, the group
+and the mode the value's record states, behind `0711` directories, written through a temporary and
+moved into place, and answering `changed` or `unchanged` about its bytes. Nothing of that write
+moves.
+
+Beside it is one sealed copy, at a path derived from the value's own path by replacing `/run/vars`
+with `/var/lib/planner/sealed` and appending the extension age publishes for its own files. It is
+`0400` under `0700` directories owned by the account that opens it - root on a system-scope
+machine, the deploying account on a user-scope one - whatever the record says about the plaintext:
+the copy is ciphertext, its one reader is the step that restores the plaintext, and a listable
+directory would publish the value file names of every entry on the machine for no gain.
+
+A reboot clears `/run` and leaves `/var/lib`, which is why the second path exists: a machine
+holding the copy puts its own values back before the entries that read them start, with no operator
+and no network. What opens the copy, and what an apply installs to run that at boot, is in
+[operator.md](operator.md).
+
+The recipient is a public word - one age native recipient, declared in the machine registry as
+`sealRecipient` and recorded on the plan's `machine:<name>` record. The identity file that opens the
+copies is minted on the machine at provision time, and nothing in this repository holds, reads or
+transports its private half. Rotating it re-keys nothing, for the reason
+[plan.md](plan.md) gives, and costs one registry edit and one apply: a seal is rewritten on every
+delivery anyway, because two sealings of one file differ, so a run has nothing to compare and
+nothing to skip.
+
+A machine whose registry record declares no recipient is delivered to exactly as it was before any
+of this: the plaintext, no second file, no unsealer of its own and no recovery from a reboot. The
+planner says so in the table rather than leaving it to be noticed - one
+`machine-receives-a-value-unsealed` warning per such machine, naming the values delivered there.
 
 ## The table a generation carries
 
