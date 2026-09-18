@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "lemmalog": {
+      "command": "lemmalog-mcp",
+      "args": [],
+      "env": {}
+    }
+  }
+}

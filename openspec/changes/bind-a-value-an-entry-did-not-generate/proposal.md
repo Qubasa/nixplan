@@ -18,14 +18,14 @@ missing is the statement that shows it to the unit.
 two-member deployment - a provider declaring `vars.token.files.secret` and publishing it as a
 secret export, a consumer declaring `uses.cred.reads = [ "token" ]` and naming
 `results.cred.token.path` in its unit's environment, both placed on one machine - `mkPlan` answers
-`applicable = true` with an empty error list, the value entry records
-`delivery = [ "one" ]` and `deliveryDerivedFrom = [ "app:only@one named token in uses.cred.reads"
-… ]`, the consumer's unit records `TOKEN = /run/vars/vault/token/secret`, and the consumer records
-no `vars` at all. Asked about that consumer, `imageReader.hostPaths` answers `[ ]`, the attachment
+`applicable = true` with an empty error list, the value entry records `delivery = [ "one" ]` and
+`deliveryDerivedFrom = [ "app:only@one named token in uses.cred.reads", "vault:only@one owns it" ]`,
+the consumer's unit records `TOKEN = /run/vars/vault/token/secret`, and the consumer records no
+`vars` at all. Asked about that consumer, `imageReader.hostPaths` answers `[ ]`, the attachment
 description `imageReader.attachment` produces carries `hostPaths = [ ]` and `generated = [ ]`, and
-`imageReader.denials` under `strict` answers `[ ]` - while the same file, on the same machine, under
-the same profile, earns the owning entry one denial naming
-`root:root at mode 0400` and `a transient account`. One record, two readings, opposite answers.
+`imageReader.denials` under `strict` answers `[ ]` - while the same file, on the same machine,
+under the same profile, earns the owning entry one denial naming `root:root at mode 0400` and
+`a transient account`. One record, two readings, opposite answers.
 
 Three consequences follow from the one omission, and none of them is reported anywhere:
 

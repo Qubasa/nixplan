@@ -317,6 +317,13 @@ in words and a path rides `governs`, `located`, `host_path` or `names`.
 `docs/lemmalog/schema.facts` states what every relation means - which is also
 queryable, as `current(R, describes, D)`.
 
+`.mcp.json` registers the engine's own server, `lemmalog-mcp`, for an agent CLI
+started inside this checkout: it names the command and nothing else, so the
+server inherits `$LEMMALOG_MCP_PATH` and `$PATH` from the shell that started the
+agent. That is deliberate - it answers about this checkout's index when it is run
+from this checkout's shell, and it is not there at all otherwise. An agent
+already running does not pick the file up; restart it.
+
 The index is not a check. Nothing fails when a fact goes stale, which is the
 trade: it answers questions a document cannot, and it is regenerated from the
 document rather than trusted against it.

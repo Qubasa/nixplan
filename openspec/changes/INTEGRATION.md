@@ -155,12 +155,15 @@ provisioning module rather than a second copy of it. An edit there re-keys every
 `rookery snapshot gc --all` runs before anything else or a folder resumes a cut whose frozen RAM
 names a system generation the new disk does not carry.
 
-**The perf gate.** No change of this set is expected to edit `lib/**`, so each carries a task 1.1
-recording that and naming what it does edit instead. The one that could is
-`author-a-deployment-from-outside`, if it makes the authoring schema an attribute inside `mkPlan`
-rather than a projection read at build time. It decides that in its own design, and if it decides
-the former it carries the baseline-and-check task the production set carried, for the reason
-`CLAUDE.md` records under Perf harness about one new top-level key in `lib/atoms.nix`.
+**The perf gate.** Four of the five edit no `lib/**` and each carries a task 1.1 recording that and
+naming what it edits instead. The fifth does: `author-a-deployment-from-outside` publishes the
+authoring vocabulary as data out of a new `lib/vocabulary.nix` projecting the tables `lib/atoms.nix`
+and `lib/module.nix` already hold, and touches `lib/default.nix`, `lib/module.nix` and
+`lib/resolve.nix` for the key lists it exports. All of it is outside `mkPlan` and outside the right
+side of the `korora // { … }` update in `lib/atoms.nix`, which is the one place a new top-level key
+costs a copy per plan, so that change carries the `bash perf/measure.sh` baseline and expects every
+counter byte-identical rather than merely inside the 0.15 margin. A counter that moves there is a
+task to fix and never a re-recorded budget.
 
 **`tests/unit/coverage.nix`.** Every delta spec of the five is registered in `excused` with the
 planning artifacts, so the tree is green before any implementation starts. Each change's tasks file

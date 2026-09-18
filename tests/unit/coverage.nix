@@ -126,6 +126,34 @@ let
       "an unimplemented change: no task of name-the-machine-a-run-dials has been done, so nothing in this package claims to satisfy it yet";
     "changes/name-the-machine-a-run-dials/specs/planner/secret-delivery/spec.md" =
       "an unimplemented change: no task of name-the-machine-a-run-dials has been done, so nothing in this package claims to satisfy it yet";
+    "changes/bind-a-value-an-entry-did-not-generate/specs/delivery/real-cluster/spec.md" =
+      "an unimplemented change: no task of bind-a-value-an-entry-did-not-generate has been done, so nothing in this package claims to satisfy it yet";
+    "changes/bind-a-value-an-entry-did-not-generate/specs/realiser/portable-service-image/spec.md" =
+      "an unimplemented change: no task of bind-a-value-an-entry-did-not-generate has been done, so nothing in this package claims to satisfy it yet";
+    "changes/answer-a-machine-question-as-a-record/specs/operator/deployment-build/spec.md" =
+      "an unimplemented change: no task of answer-a-machine-question-as-a-record has been done, so nothing in this package claims to satisfy it yet";
+    "changes/answer-a-machine-question-as-a-record/specs/operator/machine-report/spec.md" =
+      "an unimplemented change: no task of answer-a-machine-question-as-a-record has been done, so nothing in this package claims to satisfy it yet";
+    "changes/show-a-deployment-in-a-browser/specs/operator/deployment-view/spec.md" =
+      "an unimplemented change: no task of show-a-deployment-in-a-browser has been done, so nothing in this package claims to satisfy it yet";
+    "changes/show-a-deployment-in-a-browser/specs/tooling/consumer-surface/spec.md" =
+      "an unimplemented change: no task of show-a-deployment-in-a-browser has been done, so nothing in this package claims to satisfy it yet";
+    "changes/show-a-deployment-in-a-browser/specs/tooling/repository-shape/spec.md" =
+      "an unimplemented change: no task of show-a-deployment-in-a-browser has been done, so nothing in this package claims to satisfy it yet";
+    "changes/author-a-deployment-from-outside/specs/operator/deployment-build/spec.md" =
+      "an unimplemented change: no task of author-a-deployment-from-outside has been done, so nothing in this package claims to satisfy it yet";
+    "changes/author-a-deployment-from-outside/specs/tooling/consumer-surface/spec.md" =
+      "an unimplemented change: no task of author-a-deployment-from-outside has been done, so nothing in this package claims to satisfy it yet";
+    "changes/enroll-a-friend-outside-the-harness/specs/delivery/real-cluster/spec.md" =
+      "an unimplemented change: no task of enroll-a-friend-outside-the-harness has been done, so nothing in this package claims to satisfy it yet";
+    "changes/enroll-a-friend-outside-the-harness/specs/operator/enrollment-command/spec.md" =
+      "an unimplemented change: no task of enroll-a-friend-outside-the-harness has been done, so nothing in this package claims to satisfy it yet";
+    "changes/enroll-a-friend-outside-the-harness/specs/operator/machine-provisioning/spec.md" =
+      "an unimplemented change: no task of enroll-a-friend-outside-the-harness has been done, so nothing in this package claims to satisfy it yet";
+    "changes/enroll-a-friend-outside-the-harness/specs/tooling/consumer-surface/spec.md" =
+      "an unimplemented change: no task of enroll-a-friend-outside-the-harness has been done, so nothing in this package claims to satisfy it yet";
+    "changes/enroll-a-friend-outside-the-harness/specs/tooling/repository-shape/spec.md" =
+      "an unimplemented change: no task of enroll-a-friend-outside-the-harness has been done, so nothing in this package claims to satisfy it yet";
   };
 
   isSpecFile = path: match ".*/spec\\.md" path != null;

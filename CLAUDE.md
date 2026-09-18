@@ -702,7 +702,7 @@ silently unobserved.
   tasks file states `- [x]` at the start of a line and may name the marker in prose: the reading
   anchors it, and every one of the four production changes documents the trap in prose and would
   have read as landed under an unanchored match.
-- Eight changes are open. `answer-whether-a-machine-is-current` stays open because its tasks 1.1
+- Thirteen changes are open. `answer-whether-a-machine-is-current` stays open because its tasks 1.1
   and 1.2 record themselves as not doable and superseded by `tests/e2e/test_harness.py`, so marking
   them done would falsify the record, and its 21 landed tasks are what the synthetic half of
   `testAnExcuseOutlivesTheStateItDescribes` reads: archiving it moves that probe.
@@ -724,6 +724,19 @@ silently unobserved.
   three delta specs are still `excused`, and archiving a landed change moves its delta specs out of
   `accountable` and its content into the current spec. The designs `enroll-a-friend-machine`
   deliberately does not build are parked with their triggers in `openspec/changes/PARKED.md`.
+  Five of the thirteen are the demo set, planned in parallel against one set of contracts the way
+  the production four were, and `openspec/changes/INTEGRATION.md` carries a second section holding
+  their order and their seams: `bind-a-value-an-entry-did-not-generate` first, because it is the
+  set's only correctness defect and the demonstration's own shape is what trips it, then
+  `answer-a-machine-question-as-a-record`, whose record and whose six-field diagnostics decode two
+  of the remaining three consume, then `show-a-deployment-in-a-browser`,
+  `author-a-deployment-from-outside` and `enroll-a-friend-outside-the-harness` in any order. Their
+  fourteen delta specs are `excused` with the planning artifacts, and
+  `bind-a-value-an-entry-did-not-generate` narrows `deliver-a-secret-without-exposing-it` once
+  more by superseding its tasks 6.1 and 6.3. The three changes outside that set that carry no
+  ticked box - `account-for-every-counterexample`,
+  `hold-the-attach-script-to-its-own-discipline` and `hold-the-index-to-the-tree` - touch no
+  command, no vocabulary and no plan field, and are deferrable whole.
 - A directory kind goes in `directoryKinds` in `lib/module.nix`, which is what `unitVocabulary`,
   the two rows about a directory, `directoriesOf` in `lib/plan.nix` and the claim index all read.
   `unitVocabulary` reads it by deriving the kind's own field and its mode field from it rather than
