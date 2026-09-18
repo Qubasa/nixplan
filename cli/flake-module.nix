@@ -19,6 +19,12 @@
 
       src = pkgs.runCommandLocal "planner-src" { } "cp -r ${source} $out";
 
+      # The program a run seals a delivered value with. Named here, off this
+      # module's own attribute, so that what a run seals with is the build's
+      # answer and never whatever the caller's `PATH` resolves - and so that a
+      # run which must seal and finds nothing refuses before it dials.
+      sealing = pkgs.age;
+
       cli = pkgs.writeShellApplication {
         name = "planner";
         runtimeInputs = [
@@ -26,6 +32,7 @@
           pkgs.openssh
         ];
         text = ''
+          export PLANNER_AGE=${pkgs.lib.getExe' sealing "age"}
           exec ${pkgs.python3}/bin/python3 ${src}/planner.py "$@"
         '';
       };
