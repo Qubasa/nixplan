@@ -115,14 +115,26 @@ the exported bundle for a machine no run can dial.
   ssh host key: an account cannot read `/etc/ssh` host keys, sshd refuses looser modes, and age
   supports no agent. The identity file is minted at provision time and its public line pasted
   into the registry; nothing in this repository holds or moves the private half.
+- The published provisioning module carries the one-time root work a machine needs before a run can
+  write to it as the account it deploys as, and it is the declaration `preflight` in
+  `cli/remote.py` verifies per run - the same six facts, which is also the limit on which machines
+  can receive a user-scope entry. It asserts two things a plan cannot state: the service manager is
+  built `withPortabled`, and the package set's systemd resolved a `vmlinux.h` or the machine
+  vouches for the interface itself, because nsresourced compiled without BPF refuses the userns
+  API. `tests/e2e/guest.nix` imports it rather than holding a second copy, which is why editing it
+  re-keys every folder's snapshot cut.
 
 ## Enrollment and the mesh
 
 How a machine becomes a member is `openspec/changes/enroll-a-friend-machine`, **landed** behind the
-four production changes: no registry key, no plan field and no library rule, so the whole of it is
+four production changes: no registry key, no plan field and no library rule, so that half of it is
 a row convention, a credential's handling discipline and the proof in
-`tests/e2e/friend-enrollment/`. The decentralized alternative was designed, red-teamed and parked:
-it is in `openspec/changes/PARKED.md` with the trigger that revives it.
+`tests/e2e/friend-enrollment/`. `enroll-a-friend-outside-the-harness` took it out of the harness
+and is **landed** too: the acts are three verbs of the command, which entry coordinates is a
+statement beside the deployment, and the server and the provisioning are modules under
+`published/` a consumer composes rather than a folder's own text. The decentralized alternative was
+designed, red-teamed and parked: it is in `openspec/changes/PARKED.md` with the trigger that
+revives it.
 
 - Enrollment is centralized on purpose: a coordination server the operator runs is the membership
   authority. The registry declares, the server admits and expels, and the sync is one-way,
@@ -162,6 +174,17 @@ it is in `openspec/changes/PARKED.md` with the trigger that revives it.
   the server answers immediately and the route goes when the node is handed a map without that
   peer, so the folder waits by asking its own node and never by sleeping. A report run in between
   reads the route that is about to go and answers `current`.
+- The published coordination module renders the configuration once and is shown twice: the declared
+  `configData` file the realiser binds, and a store object named `planner-coordination.yaml` that
+  the operator's verbs read out of the entry's own closure, because the server decides a format
+  from the extension and a store object is named by a digest with no suffix. No step installs a
+  copy at a host path, and `coordinate` is what names the two objects to the command.
+- Every cluster choice the module takes is a settings knob defaulting to what it can defend outside
+  a cluster - a loopback listener, clients verified, no embedded relay, an expiry that is not
+  forever - and `clientUrl`, `policy` and `domain` are arguments it refuses to default, because a
+  deployment that states none of them has no working mesh and should not be told that it has one.
+  `tests/e2e/friend-enrollment/` states the cluster's own answers as settings, which is what makes
+  it a consumer of the module rather than a second copy of it.
 
 ## No solver, no Datalog, no Prolog
 
@@ -749,6 +772,28 @@ Prose: `docs/operator.md`, under "The command", "Where the bytes of a generated 
   `ApplyError` naming the target and both attributes, never an empty table and never a row of the
   command's own. `cli/diagnose.py` owns that reading and decodes no row itself: the built-directory
   branch spends `manifest.read`, whose `_rows` stays the one decode.
+- A membership act is a verb of the command - `invite`, `members`, `expel` - and never a shell
+  string a test composes. Each is one step on the machine of the entry the deployment states as its
+  coordination server, addressed by that machine's own scope, and a machine that does not hold the
+  program this build names is refused naming the entry and the path rather than having one
+  reconstructed. `--only` is deliberately not theirs: the selection bounds which machines a run
+  asks, and a membership act is about one entry the deployment named.
+- Which entry coordinates a mesh is stated beside the deployment as `coordinate`, an argument of
+  `mkDeployment` beside `realise` defaulting to `{ }`, and inferred from
+  nothing - not a module's identity, not a package in a closure, not the text of a plan key. An
+  unstated statement is no statement: no row and no record key, and every verb refuses on that
+  absence naming what to add. A statement naming no record of the kind the field is about is
+  `operator-coordination-names-nothing`, and a program or configuration object outside the stated
+  entry's own closure is `operator-coordination-object-unheld`.
+- `invite` mints with the generated value's own declared program, run where the server answers
+  under the contract the external backend already runs a generator under (`out` set, the files read
+  back off the step's stream), so the deployment stays the one place a credential's expiry, file
+  name and secrecy are declared and the command chooses none of the three. The bytes reach no
+  argument vector and no line the verb prints; the expiry rides beside the key as a public file,
+  because what a credential was minted under is a fact the operator is told. `members` prints the
+  server's own answer verbatim, a reformatted listing being a second format to keep equal, and
+  `expel` takes the node identifier out of that listing and refuses a registry machine name in its
+  place.
 - The view reads a build and mutates nothing: no route applies, retires, rolls back, builds or
   writes, every method but `GET` and `HEAD` is refused, and it binds the loopback interface, an
   instruction to listen elsewhere being refused naming the reason. The target is resolved once
@@ -770,6 +815,18 @@ silently unobserved.
 - A new unit suite goes in `suites` in `tests/default.nix`. That attrset is the only registration
   point, and its key names feed the coverage cross-walk. `coverage` is passed its own name too;
   that is not a cycle.
+- `tests/unit/published.nix` is the suite for the modules under `published/` and for their
+  consumers inside this repository. It is handed `planner`, `support`, `nixpkgsLib`, `imageSource`
+  and `repoSource` - no `publishedSource`, because `repoSource + "/published"` reaches it and a
+  sixth source argument is a second edit in `flake-module.nix` for every suite that wants one. A
+  unit suite instantiates no package set, so that one stands one in: every builder answers a store
+  object named by the bytes it was handed, which is load-bearing rather than incidental - two
+  objects rendered from one text are one path, and that is how the suite proves the bound
+  `configData` file and the `planner-coordination.yaml` object are one rendering rather than two
+  that agree today. The three roots the provisioning declaration makes account-writable are crossed
+  against the layers that own them - `planner.util.varsRoot`, `planner.util.sealedRoot` and the
+  parent of the image reader's staging path - and written out nowhere, so a path that changes
+  changes in one place.
 - A counterexample goes where its own failure allows: the suite, the probe file or the command's
   test file, under "Counterexamples on record". A probe is named by existing - `flake-module.nix`
   reads `builtins.attrNames` of `tests/counterexamples/probes.nix` - and a directory beside
@@ -866,6 +923,19 @@ silently unobserved.
   when its first segment is a real top-level entry, so `/documents/...` and `/page.css` are routes
   and `docs/...` would be a path the scan demands resolve. `view/routes.py` is the one home of the
   route set and `layers.testAServedDocumentNamesARouteRatherThanAPath` reads it there.
+- A module this repository publishes for a consumer to compose goes under `published/`, classed
+  there in `classOf` and in `scannedDirectories`, with its outputs registered by
+  `published/flake-module.nix` in the `imports` of `flake.nix`. The directory is not called
+  `modules/` for a reason a rename would re-break: `testAFileNamesAPathThatIsNotThere` scans raw
+  text including comments, so a top-level `modules/` turns every `modules/...` token already
+  written in `docs/`, `tests/unit/diagnostics.nix` and eight folder deployments into a repository
+  path that must resolve.
+- Every end-to-end folder is offered one argument set and receives the arguments it names, because
+  `buildsOf` applies `builtins.intersectAttrs (builtins.functionArgs …)` in `flake-module.nix`: a
+  published module is handed to every folder without widening the closed pattern of a folder that
+  composes none. `builtins.functionArgs` answers `{ }` for a lambda with no attribute pattern, so
+  such a folder is handed the base set instead: `tests/e2e/newcomer/deployment/default.nix` is
+  `args: …` on purpose, and narrowing it by the intersection hands it nothing.
 - The scaffold is published as `flake.templates.default` naming `./tests/e2e/newcomer/template` and
   never as a copy of it: a second text kept equal by hand is what "the example a document shows is
   the example a test builds" exists to refuse. It is in `flake.nix` rather than in

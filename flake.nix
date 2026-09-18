@@ -45,11 +45,39 @@
         ./flake-module.nix
         ./cli/flake-module.nix
         ./view/flake-module.nix
+        ./published/flake-module.nix
         ./devshells.nix
       ];
 
       perSystem = {
         treefmt = import ./treefmt.nix;
+      };
+
+      # The scaffold under a name, so a reader initialises it rather than reading a
+      # path inside this source. It names the one directory two documents show and a
+      # machine of the end-to-end layer proves, because a published copy would be the
+      # second text kept equal by hand that the shown-example check exists to refuse.
+      # It is here rather than in `flake-module.nix`, whose text may name no
+      # end-to-end folder: a folder is discovered there and never listed.
+      flake.templates.default = {
+        path = ./tests/e2e/newcomer/template;
+        description = "two machines and one greeting: the smallest deployment that works";
+        welcomeText = ''
+          Two entry points over one deployment text. `deployment/args.nix` states the
+          declarations and takes the packages it interpolates; `deployment/default.nix`
+          composes it with your own package set and builds it.
+
+          What the declarations earn, with no package set instantiated:
+
+              nix eval --raw .#diagnostics.rendered
+
+          An empty table is a deployment the planner accepts. `nix build .#default` is
+          the authority for a row about the store path a package resolves to.
+
+          Four conditions end an evaluation instead of earning a row. Each is named
+          with what the interpreter prints and the edit that resolves it, under "What
+          ends an evaluation" in the planner's docs/authoring.md.
+        '';
       };
     };
 }

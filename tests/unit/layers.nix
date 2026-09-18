@@ -61,6 +61,7 @@ let
     "cli" = "the operator's command";
     "view" = "the read-only view of a built deployment";
     "secrets" = "a realiser";
+    "published" = "a module this repository publishes for a consumer to compose";
     "tests" = "the tests";
     "pytest.ini" = "the tests";
     "fixtures" = "the fixtures the tests read";
@@ -312,6 +313,7 @@ let
     "cli"
     "view"
     "secrets"
+    "published"
     "perf"
     "tests"
     "fixtures"
@@ -630,8 +632,32 @@ let
   declaresAStateDirectory =
     folder: builtins.any (rel: hasInfix "stateDirectory" (textOf folder rel)) (nixFilesOf folder);
 
+  # The third way, which is a module's declaration and the folder's machine: a
+  # published module a folder composes declares on that folder's behalf, so a
+  # folder is as stateful as the modules it names are. The published module's
+  # own text is where the state directory is, and it is the folder's stage that
+  # has to hold the bytes.
+  publishedRoot = repoRoot + "/published";
+
+  publishedNames = directoriesIn publishedRoot;
+
+  publishedDeclaringState = filter (
+    name:
+    builtins.any (rel: hasInfix "stateDirectory" (readFile (publishedRoot + "/${name}/${rel}"))) (
+      filter (rel: match ".*\\.nix" rel != null) (filesUnder (publishedRoot + "/${name}"))
+    )
+  ) publishedNames;
+
+  composesAStatefulModule =
+    folder:
+    builtins.any (
+      name: builtins.any (rel: hasInfix name (textOf folder rel)) (nixFilesOf folder)
+    ) publishedDeclaringState;
+
   statefulFolders = sorted (
-    filter (folder: writesUnderAHome folder || declaresAStateDirectory folder) e2eNames
+    filter (
+      folder: writesUnderAHome folder || declaresAStateDirectory folder || composesAStatefulModule folder
+    ) e2eNames
   );
 
   statefulByADeletedKnob = sorted (
@@ -1231,6 +1257,32 @@ in
   testATopLevelEntryBelongsToNoStatedClass = {
     expr = unowned;
     expected = [ ];
+  };
+
+  # A module a consumer composes has to be nameable, and a file of an end-to-end
+  # folder may be named by nothing outside that folder, so the published modules
+  # are a top-level directory with a class of its own rather than a copy inside
+  # the tests. Its files are inside the same path scan the library's are, so a
+  # path one of them names resolves in this repository.
+  testTheDirectoryOfPublishedModulesIsAClassOfItsOwn = {
+    expr = {
+      directory = elem "published" (directoriesIn repoRoot);
+      class = classOf.published or null;
+      scanned = elem "published" scannedDirectories;
+      read = filter (rel: match "published/.*" rel != null) scannedFiles != [ ];
+      unresolved = sorted (
+        map (p: "${p.rel}: ${p.token}") (
+          filter (p: match "published/.*" p.rel != null && !(pathExists p.resolved)) repoNamedPaths
+        )
+      );
+    };
+    expected = {
+      directory = true;
+      class = "a module this repository publishes for a consumer to compose";
+      scanned = true;
+      read = true;
+      unresolved = [ ];
+    };
   };
 
   testACommandTheRootAdvertisesNeedsSomethingThisRepositoryCannotProvide = {

@@ -371,6 +371,10 @@ planner build    <target>
 planner apply    <target> [--dry-run] [--retire] [--values DIR] [--only KEY]... [--ssh-key PATH] [--user USER]
 planner status   <target> [--only KEY]... [--ssh-key PATH] [--user USER]
 planner rollback <target> --only KEY [--ssh-key PATH] [--user USER]
+planner diagnose <target> [--json]
+planner invite   <target> --values DIR [--ssh-key PATH] [--user USER]
+planner members  <target> [--ssh-key PATH] [--user USER]
+planner expel    <target> NODE [--ssh-key PATH] [--user USER]
 ```
 
 A `<target>` is either a built deployment directory or a flake reference. A directory is read as it
@@ -387,7 +391,7 @@ answer about commit hashes. Name the flake attribute that builds the folder
 Build the command, or run it out of the flake:
 
 ```bash
-nix run .#planner -- --help                             # the five subcommands
+nix run .#planner -- --help                             # the nine subcommands
 nix build .#planner                                     # result/bin/planner
 nix run .#planner -- build .#planner-e2e-secret-delivery
 ```
@@ -416,6 +420,50 @@ After those lines comes the diagnostics table the build wrote, rendered as the p
 A build whose rows are all warnings prints them and exits zero; a build whose rows carry an error
 prints the table and exits non-zero, because that refusal is the planner's own rather than a second
 one the command invents.
+
+**`diagnose`** prints that same table and realises nothing, which is what makes it the subcommand
+of an authoring loop. A `<target>` that is a built directory is read from the two files that build
+wrote, with no evaluation and no build at all; any other target is evaluated once for the two
+attributes `mkDeployment` publishes the table under, `diagnostics` and `rendered`. The record as a
+whole is never evaluated: every entry and machine attribute of an inapplicable deployment is the
+refusal carrying the table, and an inapplicable deployment is the one an author is iterating on. A
+target answering neither attribute is the command's own refusal naming the target and both
+attributes, rather than an empty table.
+
+Its exit status is `build`'s: 1 where a row carries an error and 0 otherwise, whatever else the
+table holds. `--json` prints the rows themselves instead of the text, in the order the table put
+them and with every field a row carries: the identifier, the subject, the severity, the message,
+the evidence and the resolution. A program reads that answer and a person reads the other, and
+neither is a re-rendering of the other.
+
+A consumer with the scaffold and no `planner` on their PATH reaches the same two attributes through
+their own flake: `nix eval --raw .#diagnostics.rendered` is the recipe, and what the subcommand
+adds is the target resolution, the exit status and the choice of rendering.
+
+**`invite`**, **`members`** and **`expel`** are the membership acts, and each is one step on the
+machine of the entry the deployment states as its coordination server. Which entry that is, and
+which object in its closure is the server's own tool and which its configuration, is stated beside
+the deployment as `coordinate` and inferred from nothing: not a module's identity, not a package in
+a closure, not the text of a plan key. An unstated statement is no statement, so a deployment that
+coordinates nothing earns no row and no record key, and all three verbs refuse on that absence
+naming what to add.
+
+`invite` mints a join credential with the generated value's own declared program, run where the
+server answers, under the contract the external secrets backend already runs a generator under: the
+program is handed `$out`, and the files it wrote come back on the step's own stream. The
+deployment therefore stays the one place a credential's file name, its secrecy and its expiry are
+declared, and the command chooses none of the three: a file set the plan does not name is refused
+before anything is written. Each file lands in the value source the run would read it from, at
+`0600` where the record says secret and `0644` where it does not, and the verb prints where the
+bytes are and the public expiry beside them - never a byte of the key, in a line or in an argument
+vector.
+
+`members` prints the server's own answer verbatim, because a listing this command reformatted
+would be a second format to keep equal to the server's. `expel` takes the node identifier out of
+that listing and refuses a registry machine name handed in its place: the mesh's own name for a
+node is the server's fact, and a machine name is this tree's. A machine that does not hold the
+program this build names is refused naming the entry and the path rather than having one
+reconstructed - apply the deployment first.
 
 **`apply`** prints one line per step, in the order the steps happened:
 
@@ -927,6 +975,16 @@ account is the whole privilege a run has there. No step of an apply is root, and
 privilege the account was not given. What root does on such a machine is provision it, once, before
 the first apply, and everything below is that work.
 
+On a NixOS machine none of it is typed twice: this repository publishes that work as
+`flake.nixosModules.provisioning`, the module under `published/provisioning`, and it declares
+exactly the facts the run's own preflight question verifies - the roots and their modes, the
+account's traversable home, the user portabled, `systemd-mountfsd` and `systemd-nsresourced`,
+unprivileged user namespaces and the verity certificate. The module is the declaration and the
+preflight is the reading of it: a machine the module never configured is refused at its first step
+naming every fact that does not hold, and a machine it did configure is a machine an operator
+configured rather than one that merely exists. On any other distribution the sections below are the
+order of work by hand.
+
 Three roots are what a deployment writes under, and none of them moves with the scope: `/run/vars`,
 where every generated value lands, the image staging root `/run/portable-planner`, where an attach
 assembles what it installs, and `/var/lib/planner`, where a machine's sealed copies and the
@@ -1014,7 +1072,8 @@ publishes.
 A friend's machine - behind NAT, on an address that moves, never root - is declared like any other
 machine, and a mesh is what makes the declaration true. The coordination server the operator runs
 is the membership authority: it admits a machine, names it, and expires it. Enrollment is the order
-of work around that server, and it adds no registry key, no plan field and no subcommand. After
+of work around that server, and it adds no registry key and no plan field: what it adds is the
+`coordinate` statement beside the deployment and three verbs of the command that spend it. After
 admission the machine is an ordinary machine of its scope, and no step of an apply or a report
 knows that it was enrolled.
 
@@ -1022,17 +1081,21 @@ knows that it was enrolled.
    below the registry can tell that name from any other address, an `address` being an opaque name
    handed to ssh, and every export built from `target.address` carries the name rather than a
    number the mesh may reassign.
-2. **Generate the credential.** The entry that runs the coordination server declares a generator
+2. **State the server and mint.** The entry that runs the coordination server declares a generator
    minting the join key single-use and with an expiry. Its file record states `secrecy = "secret"`
    and `deploy = false`, so the key is delivered to no machine and arrives only in
    [the directory a generator hands bytes over in](#where-the-bytes-of-a-generated-value-come-from).
+   The deployment states that entry as its `coordinate`, and `planner invite <target> --values DIR`
+   runs the value's own program where the server answers and writes its files into that directory.
 3. **Hand it over outside the tree.** The operator reads the key out of the value source and gives
    it to the friend over whatever channel the two of them trust. Its bytes enter no plan field and
    no argv of a run, the discipline every secret value already has: the plan records the value's
-   path and its delivery facts, never its bytes.
+   path and its delivery facts, never its bytes, and the verb prints the path and the expiry rather
+   than the key.
 4. **Verify the node list.** The friend joins with the key and reports success, and the operator
-   then reads the server's own node list and expires the node if the answer is not the machine that
-   was meant. That check is the admission, and the tree automates no part of it.
+   then reads the server's own node list with `planner members` and expires the node with `planner
+   expel <node>` if the answer is not the machine that was meant. That check is the admission: the
+   command carries it out and decides no part of it.
 5. **Apply.** Everything after admission is the existing walk, dialing a name the mesh resolves:
    the user-scope preflight question first
    ([root at provision time](#root-at-provision-time-never-at-deploy-time)), then the retirement,

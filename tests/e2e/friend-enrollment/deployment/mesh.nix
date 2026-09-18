@@ -20,12 +20,22 @@ rec {
   # The name the server groups admitted machines under. The credential this
   # deployment declares belongs to it, which is what makes the node list the
   # operator reads after a join the answer about one group of machines.
-  owner = "friends";
+  group = "friends";
 
   # How long a minted credential admits anybody. Stated here because it is a
-  # declaration and not an operator's whim at mint time: the generator's own
-  # program carries this figure, and the server refuses a key past it.
-  expiry = "1h";
+  # declaration and not an operator's whim at mint time: every credential
+  # `planner invite` mints carries this figure, so the deployment and not the
+  # invocation decides it.
+  #
+  # Two minutes, because this folder spends both halves of that one figure. A
+  # credential has to outlive its own handover - minted by the verb, read out
+  # of the value source, presented on the other machine, and then presented a
+  # second time by a throwaway node so the server can refuse a spent key - and
+  # the folder also has to outlive one, presenting a credential the server
+  # refuses for being past it. A cluster declaring an hour could prove the
+  # first and would have to sleep an hour to prove the second; one declaring a
+  # handful of seconds would be racing its own handover.
+  expiry = "120s";
 
   nameOf = machine: "${machine}.${domain}";
 }

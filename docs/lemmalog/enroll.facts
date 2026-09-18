@@ -1,7 +1,7 @@
 inv_enrollment_is_centralized --invariant[1.0]--> a server the operator runs is membership authority
 inv_enrollment_is_centralized --topic[1.0]--> enrollment
 inv_enrollment_is_centralized --governs[1.0]--> tests/e2e/friend-enrollment/**
-inv_enrollment_is_centralized --located[1.0]--> tests/e2e/friend-enrollment/deployment/modules/mesh/hub.nix
+inv_enrollment_is_centralized --located[1.0]--> published/coordination/server.nix
 inv_enrollment_is_centralized --rationale[1.0]--> the registry declares and the server admits
 inv_enrollment_is_centralized --enforced_in[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
 inv_enrollment_is_centralized --enforced_by_prefix[1.0]--> test_the_coordination_server_is_a_planned_entry_that_ans
@@ -37,15 +37,15 @@ inv_friend_lease_is_absent_from_deployment --governs[1.0]--> tests/e2e/friend-en
 inv_friend_lease_is_absent_from_deployment --located[1.0]--> tests/e2e/friend-enrollment/deployment/machines.nix:13
 inv_join_credential_is_a_generated_secret --invariant[1.0]--> the join key is minted single-use and expiring
 inv_join_credential_is_a_generated_secret --topic[1.0]--> enrollment
-inv_join_credential_is_a_generated_secret --governs[1.0]--> tests/e2e/friend-enrollment/deployment/mint.sh
-inv_join_credential_is_a_generated_secret --located[1.0]--> tests/e2e/friend-enrollment/deployment/mint.sh:47
+inv_join_credential_is_a_generated_secret --governs[1.0]--> published/coordination/default.nix
+inv_join_credential_is_a_generated_secret --located[1.0]--> published/coordination/server.nix:58
 inv_join_credential_is_a_generated_secret --rationale[1.0]--> its bytes enter no plan field or argv
 inv_join_credential_is_a_generated_secret --enforced_in[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
 inv_join_credential_is_a_generated_secret --enforced_by[1.0]--> test_a_second_join_with_a_spent_key_is_refused
 inv_join_credential_reaches_no_machine --invariant[1.0]--> the credential is handed over outside the tree
 inv_join_credential_reaches_no_machine --topic[1.0]--> enrollment
-inv_join_credential_reaches_no_machine --governs[1.0]--> tests/e2e/friend-enrollment/deployment/mint.sh
-inv_join_credential_reaches_no_machine --located[1.0]--> tests/e2e/friend-enrollment/deployment/mint.sh:44
+inv_join_credential_reaches_no_machine --governs[1.0]--> published/coordination/default.nix
+inv_join_credential_reaches_no_machine --located[1.0]--> published/coordination/server.nix:50
 inv_join_credential_reaches_no_machine --rationale[1.0]--> a single-use handover is visible when intercepted
 inv_operator_machine_is_a_mesh_member --invariant[1.0]--> a run dials a mesh name from anywhere
 inv_operator_machine_is_a_mesh_member --topic[1.0]--> enrollment
@@ -74,8 +74,8 @@ inv_mesh_node_runs_in_the_cluster_namespace --located[1.0]--> tests/e2e/delivery
 inv_mesh_node_runs_in_the_cluster_namespace --names[1.0]--> namespace_prefix
 inv_coordination_server_is_a_placed_entry --invariant[1.0]--> the plan places the server as an entry
 inv_coordination_server_is_a_placed_entry --topic[1.0]--> enrollment
-inv_coordination_server_is_a_placed_entry --governs[1.0]--> tests/e2e/friend-enrollment/deployment/modules/mesh/hub.nix
-inv_coordination_server_is_a_placed_entry --located[1.0]--> tests/e2e/friend-enrollment/deployment/modules/mesh/hub.nix
+inv_coordination_server_is_a_placed_entry --governs[1.0]--> published/coordination/server.nix
+inv_coordination_server_is_a_placed_entry --located[1.0]--> published/coordination/server.nix
 inv_coordination_server_is_a_placed_entry --rationale[1.0]--> the guest image carries only the client daemon
 inv_coordination_server_is_a_placed_entry --enforced_in[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
 inv_coordination_server_is_a_placed_entry --enforced_by_prefix[1.0]--> test_the_coordination_server_is_a_planned_entry_that_ans
@@ -97,18 +97,18 @@ inv_store_object_carries_no_suffix --located[1.0]--> tests/e2e/friend-enrollment
 inv_store_object_carries_no_suffix --rationale[1.0]--> an invocation pointed at it fails loading config
 inv_entry_config_path_is_namespace_local --invariant[1.0]--> the stated host path exists inside the namespace
 inv_entry_config_path_is_namespace_local --topic[1.0]--> enrollment
-inv_entry_config_path_is_namespace_local --governs[1.0]--> tests/e2e/friend-enrollment/deployment/modules/mesh/hub.nix
-inv_entry_config_path_is_namespace_local --located[1.0]--> tests/e2e/friend-enrollment/deployment/modules/mesh/hub.nix
+inv_entry_config_path_is_namespace_local --governs[1.0]--> published/coordination/server.nix
+inv_entry_config_path_is_namespace_local --located[1.0]--> published/coordination/server.nix
 inv_entry_config_path_is_namespace_local --rationale[1.0]--> a copy is used and never that path
 inv_preauthkey_takes_a_numeric_user_id --invariant[1.0]--> minting takes a numeric user id
 inv_preauthkey_takes_a_numeric_user_id --topic[1.0]--> enrollment
-inv_preauthkey_takes_a_numeric_user_id --governs[1.0]--> tests/e2e/friend-enrollment/deployment/mint.sh
-inv_preauthkey_takes_a_numeric_user_id --located[1.0]--> tests/e2e/friend-enrollment/deployment/mint.sh:31
+inv_preauthkey_takes_a_numeric_user_id --governs[1.0]--> published/coordination/default.nix
+inv_preauthkey_takes_a_numeric_user_id --located[1.0]--> published/coordination/default.nix:261
 inv_preauthkey_takes_a_numeric_user_id --located[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py:465
 inv_preauthkey_takes_a_numeric_user_id --names[1.0]--> preauthkeys
 inv_preauthkey_takes_a_numeric_user_id --rationale[1.0]--> the server database assigned that identifier
 inv_preauthkey_takes_a_numeric_user_id --enforced_in[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
-inv_preauthkey_takes_a_numeric_user_id --enforced_by_prefix[1.0]--> test_a_credential_is_minted_against_a_group_the_server_n
+inv_preauthkey_takes_a_numeric_user_id --enforced_by_prefix[1.0]--> test_a_credential_is_minted_by
 inv_server_listing_masks_a_credential --invariant[1.0]--> a listing shows only the leading characters
 inv_server_listing_masks_a_credential --topic[1.0]--> enrollment
 inv_server_listing_masks_a_credential --governs[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
@@ -192,3 +192,35 @@ bug_stale_cut_reads_as_a_broken_write_script --governs[1.0]--> tests/e2e/guest.n
 bug_stale_cut_reads_as_a_broken_write_script --governs[1.0]--> tests/e2e/*/test_*.py
 bug_stale_cut_reads_as_a_broken_write_script --host_path[1.0]--> /run/current-system/sw/bin
 bug_stale_cut_reads_as_a_broken_write_script --located[1.0]--> tests/e2e/guest.nix
+inv_a_membership_act_is_a_verb --invariant[1.0]--> a membership act is a command verb
+inv_a_membership_act_is_a_verb --topic[1.0]--> enrollment
+inv_a_membership_act_is_a_verb --governs[1.0]--> cli/enrollment.py
+inv_a_membership_act_is_a_verb --located[1.0]--> cli/planner.py
+inv_a_membership_act_is_a_verb --rationale[1.0]--> a composed shell string is no interface
+inv_a_membership_act_is_a_verb --enforced_in[1.0]--> tests/e2e/test_harness.py
+inv_a_membership_act_is_a_verb --prose_in[1.0]--> docs/operator.md
+inv_which_entry_coordinates_is_stated --invariant[1.0]--> the coordinating entry is stated never inferred
+inv_which_entry_coordinates_is_stated --topic[1.0]--> enrollment
+inv_which_entry_coordinates_is_stated --governs[1.0]--> operator/read.nix
+inv_which_entry_coordinates_is_stated --located[1.0]--> operator/default.nix
+inv_which_entry_coordinates_is_stated --rationale[1.0]--> an unstated statement is no statement
+inv_which_entry_coordinates_is_stated --row[1.0]--> operator-coordination-names-nothing
+inv_which_entry_coordinates_is_stated --row[1.0]--> operator-coordination-object-unheld
+inv_which_entry_coordinates_is_stated --enforced_by[1.0]--> testACoordinationStatementNamesNoPlacedEntry
+inv_invite_mints_with_the_declared_program --invariant[1.0]--> invite runs the value's own declared program
+inv_invite_mints_with_the_declared_program --topic[1.0]--> enrollment
+inv_invite_mints_with_the_declared_program --governs[1.0]--> cli/enrollment.py
+inv_invite_mints_with_the_declared_program --located[1.0]--> cli/remote.py
+inv_invite_mints_with_the_declared_program --rationale[1.0]--> the deployment declares expiry name and secrecy
+inv_invite_mints_with_the_declared_program --enforced_in[1.0]--> tests/e2e/friend-enrollment/test_friend_enrollment.py
+inv_the_module_program_decides_argument_order --invariant[1.0]--> the module's program decides the argument order
+inv_the_module_program_decides_argument_order --topic[1.0]--> enrollment
+inv_the_module_program_decides_argument_order --governs[1.0]--> cli/remote.py
+inv_the_module_program_decides_argument_order --located[1.0]--> published/coordination/default.nix
+inv_the_module_program_decides_argument_order --rationale[1.0]--> a listing verb hides an order defect
+inv_a_published_module_is_composed --invariant[1.0]--> a cluster composes the published server module
+inv_a_published_module_is_composed --topic[1.0]--> enrollment
+inv_a_published_module_is_composed --governs[1.0]--> tests/e2e/friend-enrollment/deployment/instances.nix
+inv_a_published_module_is_composed --located[1.0]--> published/coordination/default.nix
+inv_a_published_module_is_composed --rationale[1.0]--> a second copy of a module can disagree
+inv_a_published_module_is_composed --enforced_by[1.0]--> testAPublishedModuleIsReachedByAnOutputName

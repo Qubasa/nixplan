@@ -9,30 +9,36 @@ server, placed on the operator's own machine as an entry of this deployment, the
 client is the guest image's own daemon, and what this tree owns is a registry
 row, a generated credential and this proof.
 
+The server is the module this repository publishes, composed by this folder's
+own deployment, and every act against it is a verb of the operator's command:
+`planner invite` mints, `planner members` reads back what the server admits and
+`planner expel` ends one membership. This file composes no invocation of the
+server's own verbs and installs no copy of its configuration anywhere - the
+object an administrative invocation reads is a store object of the entry's own
+closure, which the apply already put on the machine, and the deployment's
+`coordinate` statement is what names it.
+
 The credential is a generated value like any other - minted single-use and
-expiring, `secrecy = "secret"`, delivered to no machine - and the two refusals
-that make it safe are the server's and never this tree's: a second presentation
-of a spent key and a presentation past the expiry. The operator's own acts
-against the server are `headscale` invocations made over ssh, which is why the
-guest carries the tool; no unit of this deployment performs them and no plan
-records their arguments.
+expiring by the generator the deployment declared, `secrecy = "secret"`,
+delivered to no machine - and the two refusals that make it safe are the
+server's and never this tree's: a second presentation of a spent key and a
+presentation past the expiry.
 
 Where each credential's bytes go is worth stating once, because the discipline
 this folder proves is about exactly that. The deployment declares a generator
 and states its program, and planning runs nothing, so the plan carries the
 file's path and the sentence "its bytes are not here". Every credential a phase
-below presents is minted against the running server and read into this process
-on the standard output of one ssh, and from there it enters exactly two argument
-vectors, both of them a presenter's own: the guest's client, and the host-side
-node this run dials the mesh through. No `planner` invocation, no step line, no
-observation line and no assertion message carries one - the server's own
-listings mask a key it has minted to its first twelve characters, which is why
-the listings may be read back verbatim.
+below presents is minted by the verb, travels to this process on that step's own
+output stream and is written into the value source the verb was handed; it is
+read from there and enters exactly two argument vectors, both of them a
+presenter's own: the guest's client, and the host-side node this run dials the
+mesh through. No `planner` invocation, no step line, no observation line and no
+assertion message carries one.
 
 The phases are session-scoped and order-dependent: the server, the operator's
-two acts, an apply against a machine that has not joined, the join, the two
-refusals, the apply over the mesh, and last of all the expiry - which takes the
-wire every phase above it stands on.
+own credential, an apply against a machine that has not joined, the join, the
+two refusals, the apply over the mesh, and last of all the expulsion - which
+takes the wire every phase above it stands on.
 """
 
 from __future__ import annotations
@@ -64,15 +70,12 @@ FRIEND = "friend"
 # in the deployment, which is the point - nothing there can dial it by a number.
 MACHINES = (HUB, FRIEND)
 # The login every step against the friend machine is taken as. It is the account
-# tests/e2e/guest.nix declares; no plan names it.
+# the published provisioning declaration creates on every machine of this
+# cluster; no plan names it.
 ACCOUNT = "deployer"
 HUB_KEY = "mesh:hub@hub"
 RUN_KEY = "guestapp:run@friend"
 VALUE = "mesh:vars/enrollment"
-# The group the server files admitted machines under, which the deployment's
-# own `mesh.nix` states. It is a fact of the server's database and of no plan,
-# so it is this test's word and read off nothing.
-OWNER = "friends"
 # The host-side node this run dials the mesh through. It is not the friend: a
 # single-use credential admits one node, and the operator's own machine is a
 # second member with a credential of its own.
@@ -83,18 +86,14 @@ OPERATOR = "operator"
 # image's own virtual size: a smaller figure is a shrink and qemu-img refuses
 # one without `--shrink`.
 DISK_GIB = 16
-# Each credential this run mints, and how long the server admits anybody with
-# it. The third is the expiry case: a figure small enough that it is already
-# past by the time that phase runs, which the phase establishes by asking the
-# server rather than by sleeping.
-CREDENTIALS = (
-    (FRIEND, "1h"),
-    (OPERATOR, "1h"),
-    ("expiring", "5s"),
-)
 # Long enough for a daemon to answer its own socket and for a join to be refused
 # by a server one hop away.
 PATIENCE = 240
+# The bound on the one wait this folder makes against a clock rather than
+# against an answer: the expiry the deployment declares, plus room. It is its
+# own figure and not PATIENCE, because what it waits out is a declaration of
+# `deployment/mesh.nix` and not the responsiveness of a daemon.
+OUTLIVES = 600
 
 
 def _env_path(variable: str) -> Path:
@@ -137,21 +136,24 @@ HUB_ADDRESS = manifest.address_of(HUB_ENTRY)
 FRIEND_ADDRESS = manifest.address_of(RUN_ENTRY)
 HUB_UNIT = HUB_ENTRY.units[0]
 RUN_UNIT = RUN_ENTRY.units[0]
+# What the deployment stated about the entry that coordinates this mesh. The
+# verbs read it off the built deployment, and so does this file: which entry,
+# which generated value is its join credential, and the two store objects a
+# verb spends, each resolved by the build against that entry's own closure.
+COORDINATION = DEPLOYMENT.coordination
 
 
-def _configuration() -> tuple[str, Path]:
-    """The server's configuration: the path it reads it at, and the object holding it.
+def _configuration() -> Path:
+    """The store object holding the bytes the serving unit reads.
 
     The entry states a file of literals, so its bytes are the plan's and the
     artifact carries them; the realiser binds that store object into the unit's
     own namespace, so the host path exists for the server and for nobody else.
     Which store object holds those bytes is read off the unit file the artifact
-    carries, because that file is the thing that names it, and the operator's own
-    invocations are pointed at the object rather than at the path only a unit can
-    see.
+    carries, because that file is the thing that names it.
 
     Returns:
-        The host path the entry is shown, and the store object bound there.
+        The store object bound at the path the entry is shown.
     """
     declared = sorted(DEPLOYMENT.plan[HUB_KEY]["configData"])
     assert len(declared) == 1, declared
@@ -164,10 +166,10 @@ def _configuration() -> tuple[str, Path]:
     ]
     holding = [shown.partition(":")[0] for shown in bound if shown.partition(":")[2] == path]
     assert len(holding) == 1, (bound, path)
-    return path, Path(holding[0])
+    return Path(holding[0])
 
 
-CONFIG_PATH, CONFIG = _configuration()
+CONFIG = _configuration()
 
 
 def _stated(field_name: str) -> str:
@@ -189,18 +191,6 @@ def _stated(field_name: str) -> str:
 LOGIN_SERVER = _stated("server_url")
 SOCKET = _stated("unix_socket")
 DOMAIN = _stated("base_domain")
-# Where the operator's own invocations read the configuration. Not the store
-# object the unit is shown and not the host path it is shown it at: the path the
-# entry states exists inside that unit's namespace alone, and the store object
-# is named by its hash with no suffix, which the server's own configuration
-# reader refuses - `error loading config file <store path>`, because it decides
-# the format from the file extension. So one copy of the same bytes under a name
-# ending in `.yaml`, made on the machine by the phase that starts the server,
-# under a directory of this test's own: the paths inside the file are absolute,
-# so a copy answers about the same database and the same socket.
-OPERATOR_CONFIG = "/run/planner-friend-enrollment/config.yaml"
-HEADSCALE = f"headscale --config {shlex.quote(OPERATOR_CONFIG)}"
-INSTALL_CONFIG = f"install -D -m 0444 {shlex.quote(str(CONFIG))} {shlex.quote(OPERATOR_CONFIG)}"
 
 
 def _unit_record() -> dict[str, Any]:
@@ -224,25 +214,15 @@ DIALLED_NAME = UNIT_RECORD["env"]["DIALLED_NAME"]
 def _answered(reported: str) -> dict[str, str]:
     """One case's `key=value` lines, as a mapping.
 
-    Everything a case observes is echoed in that shape by the one command it
-    runs, because a value spanning lines is a parse this reader cannot make.
+    Everything a case observes on a machine is echoed in that shape by the one
+    command it runs, because a value spanning lines is a parse this reader
+    cannot make.
     """
     return {
         key: said.strip()
         for key, _, said in (line.partition("=") for line in reported.splitlines())
         if key and said
     }
-
-
-def _node_script() -> str:
-    """The one question the server is asked about the machines it has admitted.
-
-    The listing is handed back whole and read in this process, because the guest
-    carries no JSON tool and a shape parsed by a shell is a shape parsed twice.
-    A credential the server minted appears in it masked to its first twelve
-    characters, so the listing carries no bearer authority.
-    """
-    return f"printf 'nodes=%s\\n' \"$({HEADSCALE} nodes list --output json | tr -d '\\n')\""
 
 
 def _presentation(authkey: str, hostname: str) -> str:
@@ -283,11 +263,14 @@ def _presentation(authkey: str, hostname: str) -> str:
 
 @dataclass
 class Run:
-    """The machines, and what each phase observed on them."""
+    """The machines, the value source the verbs mint into, and what was observed."""
 
     cluster: Any
+    source: Path
     observed: dict[str, str] = field(default_factory=dict)
-    credentials: dict[str, dict[str, Any]] = field(default_factory=dict)
+    credentials: dict[str, str] = field(default_factory=dict)
+    expiries: dict[str, int] = field(default_factory=dict)
+    verbs: list[list[str]] = field(default_factory=list)
 
     def vm(self, machine: str) -> Any:
         return self.cluster.vm(machine)
@@ -296,9 +279,9 @@ class Run:
         """Run one script as root on one machine, over the harness's own channel.
 
         This channel is the harness's and never the operator's: it is how the
-        machines' own owners act - the operator minting against the server on the
-        hub, the third party joining the mesh on their own machine - and none of
-        it goes through a name the mesh has to answer.
+        machines' own owners act - the third party joining the mesh on their own
+        machine, a throwaway presenter spending a spent key - and none of it
+        goes through a name the mesh has to answer.
         """
         return str(self.vm(machine).ssh_succeed(script, timeout=PATIENCE))
 
@@ -335,24 +318,61 @@ class Run:
         A machine's address exists only in the cluster's own network namespace,
         and the friend machine's exists only in the mesh, so the command runs
         there and reaches the second one through the membership this run holds.
+        Every invocation is recorded, because what this folder claims about its
+        own membership acts is that each of them is one of these.
         """
+        self.verbs.append(list(argv))
         return self.cluster.run(
             [str(CLI), *argv],
             env=delivery.command_env(dict(os.environ), SSH_KEY, mesh=mesh),
             check=check,
         )
 
+    def invite(self, name: str) -> str:
+        """Mint one credential with the operator's own verb, and read it where it was put.
+
+        The verb writes the files the declared generator wrote into the value
+        source it was handed, at the paths the plan names for that value, so the
+        bytes are read out of the source here exactly the way an operator reads
+        them before handing one over. The verb prints neither.
+        """
+        printed = self.planner(["invite", str(BUILT), "--values", str(self.source)])
+        self.observed[f"invited-{name}"] = str(printed.stdout)
+        written = self.source / VALUE
+        self.credentials[name] = (written / "preauthkey").read_text().strip()
+        self.expiries[name] = int((written / "expiry").read_text().strip())
+        return self.credentials[name]
+
+    def members(self) -> list[dict[str, Any]]:
+        """Read back what the coordination server admits, with the operator's own verb."""
+        printed = self.planner(["members", str(BUILT)])
+        self.observed["members"] = str(printed.stdout)
+        return self.nodes(str(printed.stdout))
+
+    def expel(self, identifier: str) -> str:
+        """End one membership at the server, by the identifier the listing printed."""
+        printed = self.planner(["expel", str(BUILT), identifier])
+        self.observed["expelled"] = str(printed.stdout)
+        return str(printed.stdout)
+
     def steps(self, which: str) -> list[str]:
         """The step lines of one run, in the order the steps happened."""
         return [line for line in self.observed[which].splitlines() if not line.startswith(" ")]
 
-    def nodes(self, reported: str) -> list[dict[str, Any]]:
-        """The machines the server has admitted, as it listed them.
+    @staticmethod
+    def nodes(printed: str) -> list[dict[str, Any]]:
+        """The machines the server admitted, out of what the listing verb printed.
 
-        The tool answers `null` rather than an empty list for a server that has
-        admitted nobody, so that answer is read as the empty list it means.
+        The verb echoes the server's answer under its step line, two spaces to
+        the left of it the way every machine's answer is echoed, so the answer
+        is the indented half and is parsed here rather than on the machine: the
+        guest carries no JSON tool and a shape parsed by a shell is a shape
+        parsed twice. The tool answers `null` rather than an empty list for a
+        server that has admitted nobody, so that answer is read as the empty
+        list it means.
         """
-        listed = json.loads(_answered(reported)["nodes"])
+        said = "\n".join(line[2:] for line in printed.splitlines() if line.startswith("  "))
+        listed = json.loads(said) if said.strip() else None
         return [] if listed is None else [node for node in listed if isinstance(node, dict)]
 
 
@@ -371,9 +391,15 @@ def booted(cluster: Any) -> Iterator[Any]:
 
 
 @pytest.fixture(scope="session")
-def run(booted: Any) -> Run:
-    """The two machines this run acts against."""
-    return Run(cluster=booted.cluster)
+def run(booted: Any, tmp_path_factory: pytest.TempPathFactory) -> Run:
+    """The two machines this run acts against, and the source it mints into.
+
+    The value source is this run's own directory and not the deployment: a verb
+    writes the bytes it minted there and nothing else anywhere, which is what
+    keeps the only gate from the mesh back into evaluation an operator's own
+    declaration edit.
+    """
+    return Run(cluster=booted.cluster, source=tmp_path_factory.mktemp("values"))
 
 
 @pytest.fixture(scope="session")
@@ -384,13 +410,12 @@ def served(run: Run) -> Run:
     the operator's own machine, realised as a service artifact - so the run that
     puts the membership authority there is `planner apply` and nothing else. It
     is restricted to that entry because the other one is placed on a machine that
-    is not a member yet, which is the phase after next. The one act beside the
-    apply is the operator's own copy of the configuration, which every later
-    invocation of the server's tool reads: `OPERATOR_CONFIG` says why it exists.
+    is not a member yet, which is the phase after next. Nothing is installed
+    beside it: the object the operator's verbs read is a store object of this
+    entry's own closure, which this apply copied.
     """
     if not run.observed.get("served"):
         run.observed["served"] = str(run.planner(["apply", str(BUILT), "--only", HUB_KEY]).stdout)
-        run.hub(INSTALL_CONFIG)
     return run
 
 
@@ -402,7 +427,7 @@ def test_the_coordination_server_is_a_planned_entry_that_answers_its_own_tool(
     The socket is waited for rather than read in the same breath: the activation
     returns when the manager has started the unit, and the server binds its
     socket when it is ready. That it answers at all is the evidence the operator's
-    later acts have something to act against, and the answer itself is that no
+    later verbs have something to act against, and the answer itself is that no
     machine has been admitted, which is where this folder starts.
     """
     steps = served.steps("served")
@@ -420,91 +445,50 @@ def test_the_coordination_server_is_a_planned_entry_that_answers_its_own_tool(
                     f"printf 'active=%s\\n' \"$(systemctl is-active {shlex.quote(HUB_UNIT)})\"",
                     f"printf 'socket=%s\\n' \"$(test -S {shlex.quote(SOCKET)}"
                     ' && echo present || echo absent)"',
-                    f"printf 'asked=%s\\n' \"$({HEADSCALE} nodes list --output json > /dev/null"
-                    ' 2>&1 && echo answered || echo refused)"',
-                    f"printf 'why=%s\\n' \"$({HEADSCALE} nodes list --output json 2>&1"
-                    " >/dev/null | tr '\\n' ' ' | cut -c 1-200)\"",
-                    _node_script(),
                 ]
             )
         )
     )
     assert answered["active"] == "active", answered
     assert answered["socket"] == "present", answered
-    assert answered["asked"] == "answered", answered.get("why", answered)
-    assert served.nodes(f"nodes={answered['nodes']}") == [], answered["nodes"]
+    assert served.members() == [], served.observed["members"]
 
 
 @pytest.fixture(scope="session")
 def credentials(served: Run) -> Run:
-    """Phase 2: the operator's two acts against the server.
+    """Phase 2: the operator mints the credential their own node joins with.
 
-    The group first, because the tool that mints a credential takes the number
-    the server's own database assigned it and never the name, and that number is
-    read back off the server. Then three credentials: one for the friend machine,
-    one for the operator's own node - a single-use key admits one node, and the
-    operator's machine is not the friend - and one that expires in seconds, for
-    the phase about a key past its expiry.
-
-    Two logins rather than one, because the second act needs the answer of the
-    first in its own argument vector. What comes back is read in this process and
-    goes into no observation line: the mint's answer carries the bytes.
+    One `planner invite`, against the server this run just applied, whose
+    database has never held the group the deployment names: the declared
+    generator creates it and reads back the number the database assigned, which
+    is what the server's own flag takes. A single-use key admits one node, and
+    the operator's machine is not the friend, so the friend's own credential is
+    minted in its own phase immediately before it is spent.
     """
-    if credentials_are_minted(served):
-        return served
-
-    created = served.hub(
-        f"{HEADSCALE} users create {shlex.quote(OWNER)} > /dev/null; "
-        f"{HEADSCALE} users list --output json | tr -d '\\n'"
-    )
-    named = [user for user in json.loads(created) if user.get("name") == OWNER]
-    assert len(named) == 1, created
-    owner = named[0]["id"]
-    minted = served.hub(
-        "; ".join(
-            f"{HEADSCALE} preauthkeys create --user {shlex.quote(str(owner))}"
-            f" --expiration {shlex.quote(expiry)} --output json | tr -d '\\n'; echo"
-            for _, expiry in CREDENTIALS
-        )
-    )
-    answers = [json.loads(line) for line in minted.splitlines() if line.strip()]
-    assert len(answers) == len(CREDENTIALS), len(answers)
-    served.credentials = {
-        name: answer for (name, _), answer in zip(CREDENTIALS, answers, strict=True)
-    }
-    served.observed["owner"] = str(owner)
-    served.observed["ownerkind"] = type(owner).__name__
+    if OPERATOR not in served.credentials:
+        served.invite(OPERATOR)
     return served
 
 
-def credentials_are_minted(run: Run) -> bool:
-    """Whether this run has already taken the operator's minting act."""
-    return bool(run.credentials)
+def test_a_credential_is_minted_by_the_declared_generator(credentials: Run) -> None:
+    """The bytes are in the value source, the expiry is the declaration's, neither is printed.
 
-
-def test_a_credential_is_minted_against_a_group_the_server_numbered(
-    credentials: Run,
-) -> None:
-    """The group's identifier is a number, and each credential is its own bytes.
-
-    The number is the fact the minting script's comment states: the tool's flag
-    is `-u, --user uint`, so a name would be refused and the identifier has to be
-    read back off the server's own answer. That the three credentials differ is
-    what single-use means on this side of the handover - one of them admits the
-    friend machine and no other presenter can spend it.
+    Minting against a server whose database holds no such group is the whole of
+    what says the generator reads the group's number back rather than naming it:
+    the server's flag is `--user uint`, so a program handing it a name is
+    refused, and this one answered. What the verb printed is where the bytes are
+    and what they expire at, and no byte of the key: a verb that printed one
+    would put it in a terminal's scrollback and in whatever captures a run.
     """
-    assert credentials.observed["ownerkind"] == "int", credentials.observed
-    assert credentials.observed["owner"].isdigit(), credentials.observed
+    written = credentials.source / VALUE
+    key = (written / "preauthkey").read_bytes()
+    assert key, written
+    assert credentials.expiries[OPERATOR] > 0, credentials.expiries
 
-    minted = [credentials.credentials[name] for name, _ in CREDENTIALS]
-    assert len(minted) == len(CREDENTIALS), len(minted)
-    for answer in minted:
-        assert answer["key"], sorted(answer)
-        assert isinstance(answer["expiration"]["seconds"], int), sorted(answer["expiration"])
-    assert len({answer["key"] for answer in minted}) == len(CREDENTIALS)
-    # The one that carries the expiry case expires before the ones that do not.
-    expiries = [answer["expiration"]["seconds"] for answer in minted]
-    assert expiries[-1] < min(expiries[:-1]), expiries
+    printed = credentials.observed[f"invited-{OPERATOR}"]
+    assert str(written / "preauthkey") in printed, printed
+    assert str(credentials.expiries[OPERATOR]) in printed, printed
+    assert key.decode() not in printed, "the verb printed the credential"
 
 
 @pytest.fixture(scope="session")
@@ -520,7 +504,7 @@ def mesh(credentials: Run) -> Iterator[Any]:
         delivery.state_root(),
         key=SSH_KEY,
         login_server=LOGIN_SERVER,
-        authkey=credentials.credentials[OPERATOR]["key"],
+        authkey=credentials.credentials[OPERATOR],
         hostname=OPERATOR,
         prefix=delivery.namespace_prefix(credentials.cluster),
     ) as membership:
@@ -601,18 +585,22 @@ def test_a_machine_that_never_joined_receives_nothing(unenrolled: Run) -> None:
 def joined(unenrolled: Run) -> Run:
     """Phase 4: the friend machine joins, with the credential handed to it.
 
-    Taken on that machine by its own owner, over the harness's own channel: the
-    handover happens outside this tree and the join is the third party's act,
-    not a step of any run. The client is the guest image's own daemon, inert
-    until this moment.
+    The credential is minted here rather than with the operator's own, because a
+    credential expires: the deployment declares how long one admits anybody, and
+    a key minted three phases before it is spent would be a key this folder was
+    racing. The join itself is taken on that machine by its own owner, over the
+    harness's own channel - the handover happens outside this tree and the join
+    is the third party's act, not a step of any run. The client is the guest
+    image's own daemon, inert until this moment.
     """
     if not unenrolled.observed.get("joined"):
+        authkey = unenrolled.invite(FRIEND)
         unenrolled.observed["joined"] = unenrolled.root(
             FRIEND,
             "; ".join(
                 [
                     f"tailscale up --login-server {shlex.quote(LOGIN_SERVER)}"
-                    f" --authkey {shlex.quote(unenrolled.credentials[FRIEND]['key'])}"
+                    f" --authkey {shlex.quote(authkey)}"
                     f" --hostname {shlex.quote(FRIEND)}"
                     " --accept-dns=false --accept-routes=false",
                     "printf 'address=%s\\n' \"$(tailscale ip -4 | head -1)\"",
@@ -621,7 +609,7 @@ def joined(unenrolled: Run) -> Run:
                 ]
             ),
         )
-        unenrolled.observed["listed"] = unenrolled.hub(_node_script())
+        unenrolled.observed["listed"] = str(unenrolled.members())
     return unenrolled
 
 
@@ -637,7 +625,7 @@ def test_the_servers_node_list_names_the_machine_the_registry_declared(joined: R
     answered = _answered(joined.observed["joined"])
     assert answered["address"].startswith("100."), answered
 
-    nodes = joined.nodes(joined.observed["listed"])
+    nodes = joined.members()
     mine = [node for node in nodes if node.get("given_name") == FRIEND]
     assert len(mine) == 1, nodes
     assert f"{mine[0]['given_name']}.{DOMAIN}" == FRIEND_ADDRESS, (mine[0], DOMAIN)
@@ -645,6 +633,41 @@ def test_the_servers_node_list_names_the_machine_the_registry_declared(joined: R
     assert manifest.machine_scope(DEPLOYMENT, FRIEND) == "user"
     # The operator's own node is the other member, and no third one exists.
     assert sorted(node["given_name"] for node in nodes) == sorted((FRIEND, OPERATOR)), nodes
+
+
+def test_a_membership_act_is_a_verb_of_the_command(joined: Run) -> None:
+    """Every act this folder took against the server was a verb of the command.
+
+    Three of them by the time this runs - the mint of the operator's credential,
+    the mint of the friend's and the listings read back - and each is a `planner`
+    invocation against the deployment the build produced. The other half is what
+    is absent: this folder composes no invocation of the coordination server's
+    own verbs and installs no copy of its configuration at a host path, so the
+    only thing that ever names the server's tool is the program the entry's own
+    closure carries, which the deployment's `coordinate` statement names and the
+    verbs resolve off the record.
+    """
+    taken = [argv[0] for argv in joined.verbs]
+    assert taken.count("invite") == 2, joined.verbs
+    assert taken.count("members") >= 1, joined.verbs
+    assert all(argv[1] == str(BUILT) for argv in joined.verbs), joined.verbs
+
+    # No act of this folder is the server's own verb, and no act of it installs a
+    # configuration anywhere: both are things the command does or nobody does.
+    spoken = [word for argv in joined.verbs for word in argv]
+    assert not [word for word in spoken if "headscale" in word], joined.verbs
+    assert not [word for word in spoken if "install" in word], joined.verbs
+
+    # What a verb spends is what the build published, resolved against the
+    # entry's own closure: the command reproduces no rule of the module's and
+    # neither does this file.
+    assert COORDINATION is not None
+    assert COORDINATION.entry == HUB_KEY
+    assert COORDINATION.credential == VALUE
+    closure = DEPLOYMENT.plan[HUB_KEY]["closure"]
+    assert COORDINATION.program in closure, closure
+    assert COORDINATION.configuration in closure, closure
+    assert DEPLOYMENT.plan[VALUE]["program"] in closure, closure
 
 
 def test_a_second_join_with_a_spent_key_is_refused(joined: Run) -> None:
@@ -656,12 +679,12 @@ def test_a_second_join_with_a_spent_key_is_refused(joined: Run) -> None:
     server will refuse twice - so what is asserted is the server's own sentence
     and the list it kept.
     """
-    before = joined.nodes(joined.observed["listed"])
-    answered = _answered(joined.hub(_presentation(joined.credentials[FRIEND]["key"], "second")))
+    before = joined.members()
+    answered = _answered(joined.hub(_presentation(joined.credentials[FRIEND], "second")))
     assert answered["presented"] != "0", answered
     assert "authkey already used" in answered["said"], answered["said"]
 
-    after = joined.nodes(joined.hub(_node_script()))
+    after = joined.members()
     assert [node["id"] for node in after] == [node["id"] for node in before], (before, after)
     assert [node["given_name"] for node in after if node["given_name"] == FRIEND] == [FRIEND]
 
@@ -669,40 +692,38 @@ def test_a_second_join_with_a_spent_key_is_refused(joined: Run) -> None:
 def test_a_key_past_its_expiry_admits_nobody(joined: Run) -> None:
     """A credential the server has outlived admits nobody, and the server says so.
 
-    The expiry is waited on by asking rather than by sleeping: the server states
-    a credential's expiry when it mints it and lists the same figure back, and
-    the machine running the server is the clock that figure is against, so the
-    wait is a comparison of the two on that machine. The listing is read back
-    whole and carries no bearer authority - the server masks a key it minted to
-    its first twelve characters.
+    The expiry is the deployment's declaration and the verb writes it beside the
+    key, so the figure this waits for is read out of the value source rather than
+    asked of the server. It is waited on by comparing it against the clock of the
+    machine the server runs on, because that is the clock the figure is against,
+    and never by sleeping a guess.
     """
-    expiring = joined.credentials["expiring"]
-    stated = expiring["expiration"]["seconds"]
-    before = joined.nodes(joined.hub(_node_script()))
+    before = joined.members()
+    joined.invite("expiring")
+    stated = joined.expiries["expiring"]
     answered = _answered(
         joined.hub(
             "; ".join(
                 [
-                    f"for _ in $(seq 1 {PATIENCE});"
-                    f' do test "$(date -u +%s)" -gt {stated} && break; sleep 0.5; done',
+                    f"for _ in $(seq 1 {OUTLIVES});"
+                    f' do test "$(date -u +%s)" -gt {stated} && break; sleep 1; done',
                     "printf 'clock=%s\\n' \"$(date -u +%s)\"",
-                    f"printf 'keys=%s\\n' \"$({HEADSCALE} preauthkeys list --output json"
-                    " | tr -d '\\n')\"",
-                    _presentation(expiring["key"], "late"),
+                    _presentation(joined.credentials["expiring"], "late"),
                 ]
             )
         )
     )
-    listed = [key for key in json.loads(answered["keys"]) if key.get("id") == expiring["id"]]
-    assert len(listed) == 1, answered["keys"]
-    assert listed[0]["expiration"]["seconds"] == stated, listed[0]
-    assert int(answered["clock"]) > stated, answered["clock"]
-    assert listed[0]["key"].endswith("***"), listed[0]["key"]
-
+    assert int(answered["clock"]) > stated, (answered["clock"], stated)
     assert answered["presented"] != "0", answered
     assert "authkey expired" in answered["said"], answered["said"]
-    after = joined.nodes(joined.hub(_node_script()))
+
+    after = joined.members()
     assert [node["id"] for node in after] == [node["id"] for node in before], (before, after)
+    # A listing may be read back whole because it carries no bearer authority:
+    # the server masks a credential it minted, and no key this run holds is in
+    # what the verb printed.
+    for name, key in joined.credentials.items():
+        assert key not in joined.observed["members"], name
 
 
 @pytest.fixture(scope="session")
@@ -783,12 +804,17 @@ def test_a_user_scope_entry_is_applied_over_the_mesh(applied: Run, mesh: Any) ->
 
 
 def _routed(mesh: Any, cluster: Any) -> list[str]:
-    """The mesh names the operator's own node currently has a route to.
+    """The mesh names the operator's own node currently carries a peer for.
 
     Read off that node rather than off the server, because what a report can
     reach is a fact about the dialling node's own map of the mesh and not about
     what the server's database says. The client is asked inside the cluster's
     namespace for the reason the node was started there.
+
+    A name is listed here while the peer is on the map at all, expelled or not,
+    so this is what the wait below is bounded by and never what an assertion is
+    made of: whether the route is gone is the report's own answer, and the
+    report is the thing that has to dial.
     """
     asked = subprocess.run(
         [
@@ -811,25 +837,25 @@ def _routed(mesh: Any, cluster: Any) -> list[str]:
 
 @pytest.fixture(scope="session")
 def expired(applied: Run, mesh: Any) -> Run:
-    """Phase 8, last of all: the operator expires the friend machine's node.
+    """Phase 8, last of all: the operator expels the friend machine's node.
 
-    It is last because it takes the wire every phase above it stands on. Nothing
-    of this tree does it: expiring a node is an act against the server, which is
-    how membership ends, and what follows is the report reading a machine it
-    cannot reach.
+    It is last because it takes the wire every phase above it stands on. It is
+    one verb of the command taking the identifier the listing verb printed - a
+    node is the server's own fact and the registry's name for a machine is not
+    the server's name for a node - and what follows is the report reading a
+    machine it cannot reach.
     """
-    if not applied.observed.get("expired"):
-        nodes = applied.nodes(applied.hub(_node_script()))
+    if not applied.observed.get("expelled"):
+        nodes = applied.members()
         mine = [node for node in nodes if node.get("given_name") == FRIEND]
         assert len(mine) == 1, nodes
-        applied.observed["expired"] = applied.hub(
-            f"{HEADSCALE} nodes expire --identifier {mine[0]['id']} --force > /dev/null; "
-            + _node_script()
-        )
-        # An expiry reaches this node when the server hands it a map without that
-        # peer in it, which is a moment later than the tool's own answer. Waited
-        # on by asking the node, because a report run before the map arrived would
-        # read the route that is about to go and say `current`.
+        applied.observed["node"] = str(mine[0]["id"])
+        applied.expel(str(mine[0]["id"]))
+        applied.observed["after"] = str(applied.members())
+        # An expulsion reaches this node when the server hands it a map without
+        # that peer in it, which is a moment later than the verb's own answer.
+        # Waited on by asking the node, because a report run before the map
+        # arrived would read the route that is about to go and say `current`.
         for _ in range(PATIENCE):
             if FRIEND_ADDRESS not in _routed(mesh, applied.cluster):
                 break
@@ -853,7 +879,7 @@ def test_an_expired_node_reads_as_unreachable(expired: Run) -> None:
     non-zero status is the report's own rule for a machine that answered nothing
     - a rule this change did not have to add.
     """
-    nodes = expired.nodes(expired.observed["expired"])
+    nodes = expired.members()
     mine = [node for node in nodes if node.get("given_name") == FRIEND]
     assert len(mine) == 1, nodes
     assert mine[0]["expiry"] is not None, mine[0]
@@ -867,3 +893,23 @@ def test_an_expired_node_reads_as_unreachable(expired: Run) -> None:
     # The value the deployment declares reaches no machine, so no machine was
     # ever asked about it and no line of the report is about one.
     assert DEPLOYMENT.values[VALUE].delivery == (), DEPLOYMENT.values[VALUE].delivery
+
+
+def test_no_argument_vector_of_this_run_carried_a_credential(expired: Run) -> None:
+    """The bytes reached the two presenters and no invocation of the command.
+
+    Every `planner` invocation this session made is recorded, and the assertion
+    is over all of them at once, made last so that the whole session is in
+    scope: the mints, the listings, the expulsion, the applies and the reports.
+    A credential travels on a step's own output stream into the value source and
+    is read from there, so the only argument vectors that carry one are the
+    presenters' own, which are the guest's client and this run's node.
+    """
+    assert expired.credentials, expired.credentials
+    spoken = [word for argv in expired.verbs for word in argv]
+    for name, key in expired.credentials.items():
+        assert key, name
+        for word in spoken:
+            assert key not in word, f"the credential of {name} is in {word}"
+        for observed in expired.observed.values():
+            assert key not in observed, f"the credential of {name} is in an observation"

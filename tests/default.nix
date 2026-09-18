@@ -118,6 +118,15 @@ let
         operatorSource
         ;
     };
+    published = import ./unit/published.nix {
+      inherit
+        planner
+        support
+        nixpkgsLib
+        imageSource
+        repoSource
+        ;
+    };
     layers = import ./unit/layers.nix { inherit support repoSource; };
 
     # coverage is handed the names of every suite including its own. Not a cycle:

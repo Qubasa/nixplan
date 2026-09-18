@@ -200,15 +200,17 @@ reader edits first. [docs/README.md](docs/README.md) shows them and
 
 | Command | What it does |
 | --- | --- |
-| `nix run . -- --help`, or `nix run .#planner` | the operator's command: `plan`, `build`, `apply`, `status`, `rollback` |
+| `nix run . -- --help`, or `nix run .#planner` | the operator's command: `plan`, `build`, `apply`, `status`, `rollback`, `diagnose`, `invite`, `members`, `expel` |
+| `nix run .#planner -- diagnose <target> [--json]` | what the planner said about a deployment, realising nothing |
 | `nix run .#planner-view -- <target>` | the read-only view of a built deployment, served on the loopback interface: the machines, the entries, the typed edges and the rows. It takes a deployment this checkout can build and a browser to read it in, which this repository does not publish - see [docs/view.md](docs/view.md) |
+| `nix run .#planner -- invite <target> --values DIR` | mint a join credential for the mesh with the deployment's own generator, writing it where a run reads values from; `members` and `expel` read and end a membership. The deployment states which entry coordinates - see [docs/operator.md](docs/operator.md) |
 | `nix build .#checks.x86_64-linux.planner-tests` | the unit suites |
 | `nix build .#checks.x86_64-linux.planner-perf` | the evaluation-cost gate |
 | `nix build .#checks.x86_64-linux.treefmt` | formatters, linters, type checker and prose |
 | `nix develop` | the one shell, with the interpreter the machine layer runs under |
 
 The machine layer needs real VMs, so it is an app rather than a check:
-`nix run .#planner-e2e` boots the guests and runs all six folders. It resolves **rookery**
+`nix run .#planner-e2e` boots the guests and runs every folder. It resolves **rookery**
 (`git+ssh://git@github.com/Qubasa/rookery`) at run time, and that repository is private and is
 not published here: a reader without access to it cannot run that command, and every folder of
 the machine layer skips itself saying so. Everything above needs nothing but this checkout.

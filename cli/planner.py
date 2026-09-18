@@ -1,8 +1,13 @@
-"""The operator's command: five subcommands over a built deployment.
+"""The operator's command: nine subcommands over a built deployment.
 
 `plan` and `build` answer what a deployment is and what building it produced.
 `apply` puts it on the machines it names, `status` asks those machines what they
-hold, and `rollback` returns one entry to its previous generation.
+hold, and `rollback` returns one entry to its previous generation. `diagnose`
+answers the one question that needs no artifact: what the planner said about the
+deployment, which is why it is the only subcommand that realises nothing. And
+`invite`, `members` and `expel` are the membership acts against the coordination
+server the deployment states, which are acts against that server rather than
+steps of an apply.
 
 A target is a built directory or a flake reference, and it is resolved once per
 invocation, because a second build of the same reference is a second evaluation
@@ -25,6 +30,7 @@ from pathlib import Path
 
 import apply
 import diagnose
+import enrollment
 import manifest
 import remote
 import report
@@ -108,6 +114,44 @@ def _diagnose(args: argparse.Namespace) -> int:
     return 1 if answered.errors else 0
 
 
+def _invite(args: argparse.Namespace) -> int:
+    deployment = manifest.read(manifest.resolve(args.target))
+    enrollment.invite(
+        deployment,
+        remote.Subprocess(),
+        source=Path(args.values),
+        ssh_key=Path(args.ssh_key) if args.ssh_key else None,
+        user=args.user,
+        log=print,
+    )
+    return 0
+
+
+def _members(args: argparse.Namespace) -> int:
+    deployment = manifest.read(manifest.resolve(args.target))
+    enrollment.members(
+        deployment,
+        remote.Subprocess(),
+        ssh_key=Path(args.ssh_key) if args.ssh_key else None,
+        user=args.user,
+        log=print,
+    )
+    return 0
+
+
+def _expel(args: argparse.Namespace) -> int:
+    deployment = manifest.read(manifest.resolve(args.target))
+    enrollment.expel(
+        deployment,
+        remote.Subprocess(),
+        args.node,
+        ssh_key=Path(args.ssh_key) if args.ssh_key else None,
+        user=args.user,
+        log=print,
+    )
+    return 0
+
+
 SUBCOMMANDS: dict[str, Subcommand] = {
     "plan": _plan,
     "build": _build,
@@ -115,6 +159,9 @@ SUBCOMMANDS: dict[str, Subcommand] = {
     "status": _status,
     "rollback": _rollback,
     "diagnose": _diagnose,
+    "invite": _invite,
+    "members": _members,
+    "expel": _expel,
 }
 
 
@@ -161,10 +208,37 @@ def parser() -> argparse.ArgumentParser:
         ("status", "ask each machine what it holds of a deployment"),
         ("rollback", "return one entry to its previous generation"),
         ("diagnose", "print the diagnostics of a deployment, realising nothing"),
+        ("invite", "mint the join credential of the mesh a deployment coordinates"),
+        ("members", "print what the coordination server of a deployment admits"),
+        ("expel", "end one membership at the coordination server of a deployment"),
     ):
         description = help_text
         if name == "rollback":
             description += ". It takes exactly one --only, the entry to roll back"
+        if name == "diagnose":
+            description += (
+                ". A directory a build produced is read from the two files that build wrote, and "
+                "any other target is evaluated once for the two attributes a deployment publishes "
+                "the rows and the rendered table under. It exits 1 where a row carries an error"
+            )
+        if name == "invite":
+            description += (
+                ". The credential is the generator the deployment declared, run on the machine "
+                "the server answers on: its bytes arrive on the step's own output stream, reach "
+                "no argument vector and no machine, and are written under --values for the "
+                "operator to hand over out of band"
+            )
+        if name == "members":
+            description += (
+                ". The server's answer is printed as the server made it, and nothing of it is "
+                "read back into the deployment: the server's database is no source the planner "
+                "reads"
+            )
+        if name == "expel":
+            description += (
+                ". It takes the node identifier the listing printed, and refuses a machine the "
+                "registry declares in its place: a node is the server's own fact"
+            )
         sub = subcommands.add_parser(
             name,
             help=help_text,
@@ -200,9 +274,20 @@ def parser() -> argparse.ArgumentParser:
                     else "restrict the run to this plan key; repeatable"
                 ),
             )
+        if name in ("apply", "status", "rollback", "invite", "members", "expel"):
             sub.add_argument("--ssh-key", metavar="PATH", help="the private key to connect with")
             sub.add_argument(
                 "--user", default="root", metavar="USER", help="the login user on each machine"
+            )
+        if name == "invite":
+            sub.add_argument(
+                "--values",
+                required=True,
+                metavar="DIR",
+                help=(
+                    "the value source the minted bytes are written into, laid out "
+                    "<DIR>/<entry-key>/<file>; the same directory an apply reads them from"
+                ),
             )
         if name == "apply":
             sub.add_argument(

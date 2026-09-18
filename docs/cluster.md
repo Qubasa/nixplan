@@ -386,17 +386,22 @@ that needs a machine to answer.
 
 Two machines, and the difference between their addresses is the whole folder. `hub` declares an
 address the cluster's own network resolves and runs the coordination server as a planned entry like
-any other, with a unit, a state directory and a configuration file the module derives from its own
-identity, rather than as something the guest image was wired with. `friend` declares no address the
-operator can route to: its registry `address` is the name the mesh gives it, and its record states
-`scope = "user"`, so once it is a member the entry placed there is an ordinary account's image
-entry and nothing about that entry is about enrollment.
+any other, with a unit, a state directory and a configuration file - and it runs it by composing
+the module this repository publishes, `plannerModules.coordination`, rather than by holding a
+second copy of it. Everything the cluster needs and an operator outside one would not want is
+stated there as settings: the listener on every interface, an embedded relay, clients unverified,
+no expiry. `friend` declares no address the operator can route to: its registry `address` is the
+name the mesh gives it, and its record states `scope = "user"`, so once it is a member the entry
+placed there is an ordinary account's image entry and nothing about that entry is about enrollment.
 
-The credential is a generated secret of the deployment. The hub entry's generator mints one
-single-use key with a stated expiry, `deploy = false` keeps it off every machine, and the operator
-reads it out of the value source and hands it over outside the tree, which is the one step no
-command of this repository takes. Its bytes reach no plan field and no argument vector, the
-discipline every secret value of this tree already has.
+The credential is a generated secret of the deployment, and the acts around it are the command's
+own verbs. The deployment states the hub entry as its `coordinate`, `planner invite` mints one
+single-use key with the stated expiry by running the value's own program where the server answers,
+`deploy = false` keeps it off every machine, and the operator reads it out of the value source and
+hands it over outside the tree - the one step no command of this repository takes. `planner
+members` reads the server's node list and `planner expel` ends a membership. The key's bytes reach
+no plan field, no printed line and no argument vector, the discipline every secret value of this
+tree already has, and the folder asserts that absence over every argv it recorded.
 
 The transport is the host's own and not the operator's network. The run brings up an unprivileged
 userspace-networking node inside the cluster's namespace, and every ssh command reaches a mesh name
@@ -577,13 +582,15 @@ breaks a boot, diff `../tests/e2e/guest.nix` against
 what keeps the guest snapshottable.
 
 `user-scope` needs the portabled an account can reach, which is a different thing from the one
-`portable-image` uses. The image therefore enables `systemd-mountfsd.socket` and
-`systemd-nsresourced.socket`, the two daemons a user portabled delegates a mount and a user
-namespace to, runs the per-user `systemd-portabled`, and provisions one unprivileged account: linger
-enabled, so its service manager is up with nobody logged in, the deployment's fixed roots writable
-by it, and the public half of the key that folder's images are signed with installed. The pinned
-nixpkgs resolves systemd 261, and the per-user portabled exists since 260, so the guest can hold
-the whole stack rather than a stand-in of it.
+`portable-image` uses, and the guest does not spell that stack out: it imports the module this
+repository publishes as `nixosModules.provisioning`, which is the same declaration an operator
+composes on a real machine and the same one the run's own preflight verifies. `systemd-mountfsd`
+and `systemd-nsresourced`, the two daemons a user portabled delegates a mount and a user namespace
+to, the per-user `systemd-portabled`, the polkit rule, the deployment's fixed roots and the
+account's traversable home all come from there, so a guest fact and an operator fact cannot drift
+apart. What stays the harness's own is the account it provisions and the public half of the key
+that folder's images are signed with. The pinned nixpkgs resolves systemd 261, and the per-user
+portabled exists since 260, so the guest can hold the whole stack rather than a stand-in of it.
 
 A mesh is two programs rather than a configuration, so the image runs the mesh client as a system
 daemon (`tailscaled`) and carries the coordination server as a machine program (`headscale`). The

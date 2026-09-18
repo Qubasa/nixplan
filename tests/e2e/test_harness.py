@@ -34,6 +34,7 @@ import pytest
 import apply
 import delivery
 import diagnose
+import enrollment
 import errors
 import generation
 import manifest
@@ -281,6 +282,7 @@ def _built(
     values: dict[str, dict[str, Any]] | None = None,
     machines: dict[str, Any] | None = None,
     realisers: dict[str, Any] | None = None,
+    coordination: dict[str, str] | None = None,
     rows: list[dict[str, str]] | None = None,
     table: str = "",
 ) -> manifest.Deployment:
@@ -300,6 +302,9 @@ def _built(
             own and sealing nothing by default.
         rows: The diagnostics rows.
         realisers: The scopes each realiser publishes, the two real ones by default.
+        coordination: What the build published about the entry that coordinates
+            a mesh, absent where the deployment stated none - which is what
+            every deployment that places no coordination server states.
         table: The rendered diagnostics table.
 
     Returns:
@@ -317,6 +322,7 @@ def _built(
                 "values": values or {},
                 "machines": reached,
                 "realisers": REALISERS if realisers is None else realisers,
+                **({} if coordination is None else {manifest.COORDINATION: coordination}),
             }
         )
     )
@@ -3762,6 +3768,433 @@ def test_no_argv_of_a_run_carries_the_credential(tmp_path: Path) -> None:
         said = word.encode(errors="surrogateescape")
         for what, needle in _leaks(CREDENTIAL).items():
             assert needle not in said, f"{what} of the credential is in {word}"
+
+
+# The entry that coordinates a mesh, the machine it is placed on, and the two
+# store objects the deployment's own `coordinate` statement named. The build
+# resolved both against that entry's closure, so what the record carries is a
+# path and the command derives none of them.
+MESH_KEY = "mesh:hub@hub"
+MESH_ADDRESS = "10.0.0.20"
+MESH_PROGRAM = "/nix/store/1y8q4wz3jv6x0r5kbn2hcpm7dslg9afj-planner-coordination"
+MESH_CONFIG = "/nix/store/6p2wq8zx4jvn0r5kbm3hcds7lya91gfj-planner-coordination.yaml"
+MINT_PROGRAM = "/nix/store/4b7ydq2zxk9vn0r5jpm3hcds8lwa61gf-planner-coordination-mint"
+
+# What the server minted, and what it said it minted it under. The expiry is
+# public and the key is not, which is what makes one of them printable.
+EXPIRY = b"1758240000"
+
+MESH_RECORD = {
+    "entry": MESH_KEY,
+    "credential": ENROLLMENT_VALUE,
+    "program": MESH_PROGRAM,
+    "configuration": MESH_CONFIG,
+}
+
+
+def _credential_value() -> dict[str, Any]:
+    """The join credential as the plan records it: two files, one program, no machine."""
+    return {
+        "per": "instance",
+        "deploy": False,
+        "delivery": [],
+        "program": MINT_PROGRAM,
+        "files": {
+            "preauthkey": _delivered("/run/vars/mesh/enrollment/preauthkey", "secret"),
+            "expiry": _delivered("/run/vars/mesh/enrollment/expiry", "public"),
+        },
+    }
+
+
+def _coordinating(
+    root: Path,
+    *,
+    scope: str = "system",
+    stated: dict[str, str] | None = MESH_RECORD,
+) -> manifest.Deployment:
+    """A build placing a coordination server, and a second entry that is not one.
+
+    The second entry is what makes "the entry the record states" a claim with
+    something to be wrong about: a verb that addressed the first placed entry,
+    or the only one on a machine, would pass without it.
+    """
+    value = _credential_value()
+    return _built(
+        root,
+        plan={
+            **PLAN,
+            "machine:hub": {"address": MESH_ADDRESS, "tags": ["coordinates"], "scope": scope},
+            MESH_KEY: {"key": PUBLISHED, "target": {"address": MESH_ADDRESS, "scope": scope}},
+            ENROLLMENT_VALUE: value,
+        },
+        entries={
+            SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10"),
+            MESH_KEY: {
+                **_stated(MESH_KEY, "hub", MESH_ADDRESS),
+                "realiser": "flakelet" if scope == "system" else "image",
+            },
+        },
+        values={ENROLLMENT_VALUE: value},
+        coordination=stated,
+    )
+
+
+def _minted(files: dict[str, bytes]) -> str:
+    """What one mint step answers: a name and its bytes per line, then what it wrote.
+
+    The encoding is the step's own, not this harness's invention: a credential
+    is arbitrary bytes and a step's answer is decoded as text, so the step
+    prints base64 and the last line is the directory listing that tells a
+    program which wrote the wrong file set from one which wrote nothing.
+    """
+    lines = [f"{name} {base64.b64encode(content).decode()}" for name, content in files.items()]
+    return "\n".join([*lines, " ".join(files)]) + "\n"
+
+
+class Refusing(Recorder):
+    """A machine that refuses every step it is handed, exiting ``status``."""
+
+    def __init__(self, status: int, said: str) -> None:
+        super().__init__()
+        self.status = status
+        self.said = said
+
+    def output(
+        self, cmd: list[str], *, env: dict[str, str] | None = None, stdin: bytes | None = None
+    ) -> str:
+        super().output(cmd, env=env, stdin=stdin)
+        raise remote.Refused(cmd[-2], self.status, self.said)
+
+
+def _scripts(recorder: Recorder) -> list[str]:
+    """The script each recorded step handed its machine."""
+    return [command[-1] for command in recorder.commands]
+
+
+def test_a_verb_reads_the_coordination_entry_off_the_built_deployment(tmp_path: Path) -> None:
+    """The entry a verb addresses is the record's, and the machine is that entry's own.
+
+    Two entries are placed and only one of them is the coordination server, so
+    the address the step was taken at is evidence rather than the only address
+    there was. Both objects the step spends are the paths the record carries: a
+    verb that rebuilt either from a name would be reproducing a rule of the
+    module's.
+    """
+    deployment = _coordinating(tmp_path / "built")
+    recorder = Recorder()
+
+    enrollment.members(deployment, recorder, base_env={})
+
+    assert len(recorder.commands) == 1
+    assert f"root@{MESH_ADDRESS}" in recorder.commands[0]
+    assert not [word for word in recorder.commands[0] if "10.0.0.10" in word]
+    script = _scripts(recorder)[0]
+    assert MESH_PROGRAM in script
+    assert MESH_CONFIG in script
+
+
+def test_a_deployment_states_no_coordination_entry(tmp_path: Path) -> None:
+    """A build that states none is the command's own refusal, and nothing is dialled.
+
+    The refusal names the statement to add rather than a diagnostics row: the
+    plan holds no runtime fact about a coordination server, so a deployment
+    that places none is not a refused deployment - it is a deployment these
+    verbs are not about.
+    """
+    deployment = _coordinating(tmp_path / "built", stated=None)
+    recorder = Recorder()
+
+    with pytest.raises(errors.ApplyError) as raised:
+        enrollment.members(deployment, recorder, base_env={})
+
+    message = str(raised.value)
+    assert enrollment.STATEMENT in message
+    assert "realise" in message
+    assert recorder.commands == []
+
+
+def test_the_minted_bytes_are_the_declared_programs_own(tmp_path: Path) -> None:
+    """The verb runs the program the plan records for the value, and nothing else.
+
+    One step, running the store path the plan records as that value's program
+    under the contract every generator's program is run under, and what lands
+    in the value source is what that program answered. The server's own tool is
+    named nowhere: a verb that minted with an invocation of its own would make
+    the deployment's declaration decoration.
+    """
+    deployment = _coordinating(tmp_path / "built")
+    source = tmp_path / "values"
+    machine = Answering(MINT_PROGRAM, _minted({"preauthkey": CREDENTIAL, "expiry": EXPIRY}))
+
+    enrollment.invite(deployment, machine, source=source, base_env={})
+
+    assert len(machine.commands) == 1
+    script = _scripts(machine)[0]
+    assert MINT_PROGRAM in script
+    assert "out=" in script
+    assert MESH_PROGRAM not in script
+    assert "headscale" not in script
+    assert (source / ENROLLMENT_VALUE / "preauthkey").read_bytes() == CREDENTIAL
+    assert (source / ENROLLMENT_VALUE / "expiry").read_bytes() == EXPIRY
+
+
+def test_a_minted_credential_enters_no_argument_vector(tmp_path: Path) -> None:
+    """The bytes travel on the step's stream, so no vector and no line carries them.
+
+    Every encoding a step could have reached for is asked of every word of
+    every vector the verb took, and of every line it printed, which is the
+    assertion a delivered secret already earns. The public half is a fact the
+    operator is told, so it is asked of the vectors alone.
+    """
+    deployment = _coordinating(tmp_path / "built")
+    source = tmp_path / "values"
+    machine = Answering(MINT_PROGRAM, _minted({"preauthkey": CREDENTIAL, "expiry": EXPIRY}))
+
+    lines = enrollment.invite(deployment, machine, source=source, base_env={})
+
+    assert (source / ENROLLMENT_VALUE / "preauthkey").read_bytes() == CREDENTIAL
+    for word in [word for command in machine.commands for word in command]:
+        spoken = word.encode(errors="surrogateescape")
+        for what, needle in _leaks(CREDENTIAL).items():
+            assert needle not in spoken, f"{what} of the credential is in {word}"
+    for line in lines:
+        printed = line.encode(errors="surrogateescape")
+        for what, needle in _leaks(CREDENTIAL).items():
+            assert needle not in printed, f"{what} of the credential is in {line}"
+
+
+def test_a_verb_prints_where_the_credential_is(tmp_path: Path) -> None:
+    """What the verb prints is the path it wrote and the expiry it minted under.
+
+    The operator is told where the bytes are, not what they are, because the
+    handover happens from the value source and outside this tree. The expiry is
+    printable for the reason the plan calls it public: it is a fact about the
+    credential and no byte of it.
+    """
+    deployment = _coordinating(tmp_path / "built")
+    source = tmp_path / "values"
+    machine = Answering(MINT_PROGRAM, _minted({"preauthkey": CREDENTIAL, "expiry": EXPIRY}))
+
+    lines = enrollment.invite(deployment, machine, source=source, base_env={})
+
+    written = str(source / ENROLLMENT_VALUE / "preauthkey")
+    assert [line for line in lines if written in line]
+    assert [line for line in lines if EXPIRY.decode() in line]
+    assert [line for line in lines if "outside this tree" in line and written in line]
+
+
+def test_a_mint_program_wrote_files_the_plan_does_not_name(tmp_path: Path) -> None:
+    """A program that wrote something else is refused, and the source stays empty.
+
+    The file set is the plan's, so a program answering with a name nobody
+    declared is a program the deployment did not describe. Nothing is written
+    from a partial answer: a value source holding half a minting is a source an
+    apply would read.
+    """
+    deployment = _coordinating(tmp_path / "built")
+    source = tmp_path / "values"
+    machine = Answering(MINT_PROGRAM, _minted({"authkey": CREDENTIAL}))
+
+    with pytest.raises(errors.ApplyError) as raised:
+        enrollment.invite(deployment, machine, source=source, base_env={})
+
+    message = str(raised.value)
+    assert ENROLLMENT_VALUE in message
+    assert "authkey" in message
+    assert "preauthkey" in message
+    assert not (source / ENROLLMENT_VALUE).exists()
+
+
+def test_a_verb_addresses_the_machine_by_its_stated_scope(tmp_path: Path) -> None:
+    """A user-scope machine's step states the account's runtime directory itself.
+
+    A non-interactive login has no session, so nothing else sets it and the
+    account's own manager is unreachable without it. A machine whose record
+    states the other scope is addressed without it, which is the half that says
+    the statement is read rather than the flag always passed.
+    """
+    account = Recorder()
+    enrollment.members(
+        _coordinating(tmp_path / "account", scope="user"), account, user="deployer", base_env={}
+    )
+
+    system = Recorder()
+    enrollment.members(_coordinating(tmp_path / "system"), system, base_env={})
+
+    assert _scripts(account)[0].startswith(remote.BUS)
+    assert f"deployer@{MESH_ADDRESS}" in account.commands[0]
+    assert "XDG_RUNTIME_DIR" not in _scripts(system)[0]
+
+
+def test_a_machine_refusing_a_verb_is_named_with_what_it_said(tmp_path: Path) -> None:
+    """The refusal names the entry, the machine and the machine's own words.
+
+    Neither a traceback nor the argument vector: a step's script is the one
+    place a path or a payload appears, and a refusal that echoed it would put
+    the step's own words in front of an operator who asked about a machine.
+    """
+    deployment = _coordinating(tmp_path / "built")
+    said = "dial tcp: connect: no such file or directory"
+    machine = Refusing(1, said)
+
+    with pytest.raises(errors.ApplyError) as raised:
+        enrollment.members(deployment, machine, base_env={})
+
+    message = str(raised.value)
+    assert MESH_KEY in message
+    assert "hub" in message
+    assert said in message
+    assert "Traceback" not in message
+    assert _scripts(machine)[0] not in message
+
+
+def test_a_verb_refuses_a_program_the_machine_does_not_hold(tmp_path: Path) -> None:
+    """A machine holding no such program is named with the path and with the remedy.
+
+    The program arrives with the entry's own closure, so the machine that does
+    not hold it is a machine the copy has not reached: the verb reconstructs
+    nothing and copies nothing, and says which command does.
+    """
+    deployment = _coordinating(tmp_path / "built")
+    machine = Refusing(127, "")
+
+    with pytest.raises(errors.ApplyError) as raised:
+        enrollment.members(deployment, machine, base_env={})
+
+    message = str(raised.value)
+    assert "hub" in message
+    assert MESH_PROGRAM in message
+    assert "apply the deployment" in message
+
+
+def test_a_listing_is_printed_as_the_server_answered(tmp_path: Path) -> None:
+    """The answer is printed as it came back, masked fragment and all.
+
+    A listing may be read back whole because the server masks a credential it
+    minted to its leading fragment, so the answer carries no bearer authority;
+    the verb neither parses it nor edits it, the server's database being a
+    source nothing here reads.
+    """
+    answered = json.dumps(
+        [{"id": "7", "given_name": "friend", "pre_auth_key": {"key": "3f1c2b9e4d0a***"}}], indent=1
+    )
+    deployment = _coordinating(tmp_path / "built")
+    machine = Answering(MESH_PROGRAM, answered)
+
+    lines = enrollment.members(deployment, machine, base_env={})
+
+    assert "list" in _scripts(machine)[0]
+    assert [line[2:] for line in lines if line.startswith("  ")] == answered.splitlines()
+    assert [line for line in lines if "3f1c2b9e4d0a***" in line]
+
+
+def test_an_expulsion_names_the_node_the_listing_printed(tmp_path: Path) -> None:
+    """The identifier is the server's, and a registry machine is refused in its place.
+
+    A node is the coordination server's own fact and the registry's name for a
+    machine is not the server's name for a node, so the two verbs compose -
+    the listing first, the expulsion on what it printed - rather than the
+    command inventing a mapping between two namespaces.
+    """
+    deployment = _coordinating(tmp_path / "built")
+    machine = Recorder()
+
+    enrollment.expel(deployment, machine, "7", base_env={})
+
+    assert shlex.split(_scripts(machine)[0])[-3:] == ["expel", MESH_CONFIG, "7"]
+
+    named = Recorder()
+    with pytest.raises(errors.ApplyError) as raised:
+        enrollment.expel(deployment, named, "hub", base_env={})
+
+    assert "hub" in str(raised.value)
+    assert "the listing printed" in str(raised.value)
+    assert named.commands == []
+
+
+def test_a_verb_writes_nothing_into_the_deployment(tmp_path: Path) -> None:
+    """Every file of the build is the file it was, so a later plan is the plan it was.
+
+    The verb that writes the most is the one that mints, and what it writes is
+    the value source it was handed, which is not the build. The only gate from
+    a mesh back into evaluation is an operator-reviewed declaration edit, and a
+    verb that recorded a node would be a second one.
+    """
+    root = tmp_path / "built"
+    deployment = _coordinating(root)
+    before = {
+        path.relative_to(root): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+    machine = Answering(MINT_PROGRAM, _minted({"preauthkey": CREDENTIAL, "expiry": EXPIRY}))
+
+    enrollment.invite(deployment, machine, source=tmp_path / "values", base_env={})
+    enrollment.members(deployment, machine, base_env={})
+    enrollment.expel(deployment, machine, "7", base_env={})
+
+    after = {
+        path.relative_to(root): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+    assert after == before
+    assert manifest.read(root).plan == deployment.plan
+
+
+def test_a_run_creates_no_provisioning_fact(tmp_path: Path) -> None:
+    """A run verifies the machine's provisioning and creates, enables and relaxes none.
+
+    Root at provision time, never at deploy time: every fact the published
+    declaration carries is one the run asks about and one no step of it writes.
+    The other half of the same rule is the second assertion - a machine missing
+    one is refused at its first step naming that fact, which is the answer the
+    question was asked for.
+    """
+    deployment = _user_scope(tmp_path / "built")
+    source = _source(tmp_path / "values", {f"{SESSION_VALUE}/token": "s3cret"})
+    machine = Provisioned()
+
+    apply.apply(deployment, machine, source=source, base_env={})
+
+    # The verbs that would make one of the declaration's facts true. A value
+    # write chmods the file it wrote, which is its own bytes and no fact of a
+    # machine's role, so the account, the lingering, the trusted login, the
+    # certificate, the authorization rule and the two delegating daemons are
+    # asked for by name instead.
+    creating = (
+        "useradd",
+        "usermod",
+        "groupadd",
+        "enable-linger",
+        "systemctl enable",
+        "trusted-users",
+        "polkit",
+        "verity.d",
+        "additionalUpstream",
+    )
+    for script in _scripts(machine):
+        for verb in creating:
+            assert verb not in script, f"a step of the run states {verb}"
+
+    # The three fixed roots are provisioning's and stay provisioning's: every
+    # mention of one in a step below is a read or a path under it, and a step
+    # that made or relaxed a root itself would be the run doing root's work.
+    fixed = (remote.VALUES_ROOT, remote.SEALED_ROOT, remote.STAGING_ROOT)
+    roots = "|".join(map(re.escape, fixed))
+    made = re.compile(
+        rf"(?:mkdir|install|chmod|chown|setfacl)\b[^;]*?(?<![\w/])(?:{roots})(?![\w/])"
+    )
+    for script in _scripts(machine):
+        assert made.search(script) is None, script
+
+    missing = "no manager answers on that account's bus"
+    refused = Provisioned({"user-manager": missing})
+    with pytest.raises(errors.ApplyError) as raised:
+        apply.apply(deployment, refused, source=source, base_env={})
+
+    assert "service manager" in str(raised.value)
+    assert missing in str(raised.value)
 
 
 IMAGE_KEY = "watch:file@alpha"

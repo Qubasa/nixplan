@@ -106,6 +106,11 @@ let
     "changes/show-a-deployment-in-a-browser/specs/tooling/repository-shape/spec.md"
     "changes/author-a-deployment-from-outside/specs/operator/deployment-build/spec.md"
     "changes/author-a-deployment-from-outside/specs/tooling/consumer-surface/spec.md"
+    "changes/enroll-a-friend-outside-the-harness/specs/delivery/real-cluster/spec.md"
+    "changes/enroll-a-friend-outside-the-harness/specs/operator/enrollment-command/spec.md"
+    "changes/enroll-a-friend-outside-the-harness/specs/operator/machine-provisioning/spec.md"
+    "changes/enroll-a-friend-outside-the-harness/specs/tooling/consumer-surface/spec.md"
+    "changes/enroll-a-friend-outside-the-harness/specs/tooling/repository-shape/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -135,16 +140,6 @@ let
       "an unimplemented change: no task of name-the-machine-a-run-dials has been done, so nothing in this package claims to satisfy it yet";
     "changes/name-the-machine-a-run-dials/specs/planner/secret-delivery/spec.md" =
       "an unimplemented change: no task of name-the-machine-a-run-dials has been done, so nothing in this package claims to satisfy it yet";
-    "changes/enroll-a-friend-outside-the-harness/specs/delivery/real-cluster/spec.md" =
-      "an unimplemented change: no task of enroll-a-friend-outside-the-harness has been done, so nothing in this package claims to satisfy it yet";
-    "changes/enroll-a-friend-outside-the-harness/specs/operator/enrollment-command/spec.md" =
-      "an unimplemented change: no task of enroll-a-friend-outside-the-harness has been done, so nothing in this package claims to satisfy it yet";
-    "changes/enroll-a-friend-outside-the-harness/specs/operator/machine-provisioning/spec.md" =
-      "an unimplemented change: no task of enroll-a-friend-outside-the-harness has been done, so nothing in this package claims to satisfy it yet";
-    "changes/enroll-a-friend-outside-the-harness/specs/tooling/consumer-surface/spec.md" =
-      "an unimplemented change: no task of enroll-a-friend-outside-the-harness has been done, so nothing in this package claims to satisfy it yet";
-    "changes/enroll-a-friend-outside-the-harness/specs/tooling/repository-shape/spec.md" =
-      "an unimplemented change: no task of enroll-a-friend-outside-the-harness has been done, so nothing in this package claims to satisfy it yet";
   };
 
   isSpecFile = path: match ".*/spec\\.md" path != null;

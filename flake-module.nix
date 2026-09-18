@@ -157,6 +157,11 @@ in
       # end-to-end path scan holds it to.
       operator = import ./operator { korora = inputs.korora; };
 
+      # The published leaf modules, handed to every folder the same way, so a
+      # folder composes what a consumer outside this checkout composes rather
+      # than a module of its own that nothing outside it can name.
+      coordination = import ./published/coordination;
+
       e2eRoot = ./tests/e2e;
 
       # Discovery rather than registration: a folder holding a deployment is a
@@ -166,11 +171,30 @@ in
         name: builtins.pathExists (e2eRoot + "/${name}/deployment/default.nix")
       ) (builtins.attrNames (builtins.readDir e2eRoot));
 
+      # What every folder is handed, and what a folder is handed only where it
+      # names it. A published module goes in the second set, so handing it to
+      # every folder widens the argument pattern of none of the folders that
+      # compose one of nothing.
+      e2eArguments = {
+        inherit pkgs planner operator;
+      };
+
+      e2eOffered = e2eArguments // {
+        inherit coordination;
+      };
+
+      # `builtins.functionArgs` answers `{ }` for a lambda with no attribute
+      # pattern, and a folder whose deployment is `args: …` forwards whatever it
+      # was handed to a deployment of its own whose pattern is closed - so such
+      # a folder is handed the base set rather than the offered one, and naming
+      # a published module is what asks for it.
       buildsOf =
         folder:
-        import (e2eRoot + "/${folder}/deployment/default.nix") {
-          inherit pkgs planner operator;
-        };
+        let
+          deployment = import (e2eRoot + "/${folder}/deployment/default.nix");
+          named = builtins.functionArgs deployment;
+        in
+        deployment (if named == { } then e2eArguments else builtins.intersectAttrs named e2eOffered);
 
       # A folder's `default` build is the folder's own package name; any other
       # build of the same folder is suffixed with its own.
@@ -191,6 +215,11 @@ in
         inherit pkgs system;
         nixpkgs = inputs.nixpkgs;
         flakeletModule = inputs.flakelet.nixosModules.flakelet;
+        # The machine module this repository publishes, imported by the guest
+        # rather than restated in it: the machines under test and a reader's
+        # own machine are one text, so a fact added to the declaration cannot
+        # be forgotten here.
+        provisioningModule = import ./published/provisioning;
       };
 
       lemmalog = pkgs.callPackage ./lemmalog.nix { };

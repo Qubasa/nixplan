@@ -336,6 +336,8 @@ caller reads them in the same table as the planner's own.
 | `operator-plan-field-malformed` | a plan record carries a configuration file's `owner`, `group` or `mode` as a value of another kind, and every comparison this reading makes against the record interpolates the three. The planner's own row about that file is what the resolution names, and neither comparison is made |
 | `operator-entry-unit-file-collision` | two entries placed on one machine derive one unit file name. A realiser derives that name from the instance, the member and the unit name, so the second entry's file replaces the first on the machine and one entry runs the other's unit |
 | `operator-entry-probe-unit-file-taken` | one entry declares a unit whose file is the one its own probe derives, so the entry claims one unit file name twice and the file that decides the activation is a unit's own. The row names the entry, the declared unit and the file, and renaming either the unit or the service removes it |
+| `operator-coordination-names-nothing` | the coordination statement names, as the entry that runs a mesh's membership authority or as the generated value that is its join credential, a key the plan carries no record of that kind for. The statement is read by plan key the way the realisation statement is, so a field naming no record is a decision about nothing |
+| `operator-coordination-object-unheld` | the coordination statement names a program or a configuration object that is not one store path of the stated entry's closure. A verb runs the program out of the entry's own closure, so an object the entry does not carry is one the copy never put on the machine |
 
 ### Every row the secrets reading can produce
 

@@ -26,6 +26,8 @@ let
     isString
     length
     mapAttrs
+    stringLength
+    substring
     typeOf
     ;
 
@@ -648,19 +650,163 @@ let
         )
       ) (buckets (c: c.machine) claims)
     );
+
+  # The statement of which entry coordinates a mesh, read the way the
+  # realisation statement is: a fact stated beside the deployment and inferred
+  # from nothing at all. Recognising a coordination server by a module's
+  # identity, by a package in a closure or by the text of a plan key would be
+  # the first name-matching reading in this tree.
+  #
+  # Four fields, each naming something the plan already carries: the entry that
+  # runs the server, the generated value that is its join credential, and the
+  # two store objects a verb spends - the program and the configuration it is
+  # handed - each by the name the module that rendered it publishes. The names
+  # are resolved here against that entry's own closure, so what the record
+  # publishes is a path, a command reproduces no rule of a module's, and a
+  # statement naming an object the entry does not carry is a row rather than a
+  # step that fails on the machine.
+  storeRootName =
+    storeDir: path:
+    let
+      hashed = "${storeDir}/";
+      prefix = stringLength hashed + 33;
+    in
+    if planner.util.storePathsIn storeDir path == [ path ] && stringLength path > prefix then
+      substring prefix (stringLength path) path
+    else
+      null;
+
+  coordinationOf =
+    {
+      plan,
+      coordinate,
+      storeDir,
+      placedKeys,
+      valueKeys,
+    }:
+    let
+      statedRecord = if isAttrs coordinate then coordinate else { };
+      stated =
+        field:
+        let
+          value = statedRecord.${field} or null;
+        in
+        if isString value && value != "" then value else null;
+
+      entry = stated "entry";
+      credential = stated "credential";
+
+      # A statement naming an entry names the key that row is about. One whose
+      # entry is not a name at all has no key to name, so the subject is the
+      # statement itself, spelled the way a subject is spelled.
+      subject = if entry == null then "coordinate:statement" else entry;
+
+      namesNothing =
+        {
+          field,
+          candidates,
+          kind,
+        }:
+        optional (stated field == null || !(elem (stated field) candidates)) (
+          planner.error {
+            id = "operator-coordination-names-nothing";
+            inherit subject;
+            message = "the coordination statement names ${
+              shown (statedRecord.${field} or null)
+            } as its ${field}, and the ${kind} the plan carries are ${quoteList (sortStrings candidates)}";
+            evidence = "a coordination statement is read by plan key the way a realisation statement is, so a field naming no record of the kind it is about is a decision about nothing";
+            resolution = "state one of ${quoteList (sortStrings candidates)} as ${quote field} in the `coordinate` argument of the deployment, or delete the statement";
+          }
+        );
+
+      closure = if entry == null then [ ] else (plan.${entry}.closure or [ ]);
+
+      resolved =
+        field:
+        let
+          name = stated field;
+          held = filter (path: storeRootName storeDir path == name) (filter isString closure);
+        in
+        if name == null || length held != 1 then null else head held;
+
+      unresolved =
+        field:
+        optional (resolved field == null) (
+          planner.error {
+            id = "operator-coordination-object-unheld";
+            inherit subject;
+            message = "the coordination statement names ${
+              shown (statedRecord.${field} or null)
+            } as its ${field}, and the closure of ${quote subject} carries ${
+              quoteList (
+                sortStrings (filter (n: n != null) (map (storeRootName storeDir) (filter isString closure)))
+              )
+            }";
+            evidence = "a verb runs a program out of the entry's own closure, so an object the entry does not carry is one the copy never put on the machine";
+            resolution = "declare the object named ${quote field} among the `closure` roots of the entry ${quote subject} declares, and state the name its module publishes";
+          }
+        );
+
+      entryRows = namesNothing {
+        field = "entry";
+        candidates = placedKeys;
+        kind = "placed entries";
+      };
+
+      credentialRows = namesNothing {
+        field = "credential";
+        candidates = valueKeys;
+        kind = "generated values";
+      };
+
+      # The objects are resolved against the entry the statement named, so a
+      # statement whose entry names nothing earns that row alone: two rows about
+      # one mistake would name the closure of no entry.
+      objectRows = if entryRows != [ ] then [ ] else unresolved "program" ++ unresolved "configuration";
+
+      # A deployment that places no coordination server states nothing, and an
+      # unstated statement is no statement: it earns no row here and no record
+      # below, and every verb refuses on that absence naming what to add.
+      rows = if statedRecord == { } then [ ] else entryRows ++ credentialRows ++ objectRows;
+
+      # A field the reading could not resolve is published as the name that was
+      # stated: the record stays the shape a reader decodes, and the rows above
+      # have already made the deployment inapplicable.
+      publish = field: if resolved field == null then orEmpty (stated field) else resolved field;
+
+      orEmpty = value: if value == null then "" else value;
+    in
+    {
+      inherit rows;
+      # A statement nobody made is no record, and the verbs refuse on the
+      # absence naming the statement to add. A statement that earned a row
+      # publishes what it stated, the build being refused before a verb reads it.
+      record =
+        if statedRecord == { } then
+          null
+        else
+          {
+            entry = orEmpty entry;
+            credential = orEmpty credential;
+            program = publish "program";
+            configuration = publish "configuration";
+          };
+    };
 in
 {
   inherit projected parseKey realisers;
 
   # plan is the plan artifact, realise the statement of how each entry is
-  # realised, storeDir the store the artifacts are copied out of, and diagnostics
-  # the planner's own table. The table is an argument rather than a fact of this
+  # realised, coordinate the statement of which entry coordinates a mesh,
+  # storeDir the store the artifacts are copied out of, and diagnostics the
+  # planner's own table. The table is an argument rather than a fact of this
   # file because a plan does not carry the rows that produced it, and refusing an
   # inapplicable deployment is a decision the reading owns.
   read =
     {
       plan,
       realise ? { },
+      coordinate ? { },
       storeDir ? builtins.storeDir,
       diagnostics ? [ ],
     }:
@@ -720,11 +866,22 @@ in
             filter (stated: stated != "default" && !(elem stated addressable)) (sortStrings (attrNames realise))
           );
 
+      coordination = coordinationOf {
+        inherit
+          plan
+          coordinate
+          storeDir
+          placedKeys
+          valueKeys
+          ;
+      };
+
       # One index over the plan's value records, built once for the whole
       # reading: every entry's shown values are looked up in it, and a
       # `groupBy` inside each entry would walk the fleet's values per entry for
       # one relation.
       index = imageReader.valueIndex plan;
+
       entries = builtins.listToAttrs (
         map (key: {
           name = key;
@@ -763,6 +920,7 @@ in
         ++ concatLists (map (key: values.${key}.rows) valueKeys)
         ++ shapeRows
         ++ statementRows
+        ++ coordination.rows
         ++ collisionRows entries
         ++ unitFileRows entries
         ++ keyRows;
@@ -825,7 +983,14 @@ in
           }
           // (if m.artifact == null then { } else { path = m.artifact; })
         ) machines;
-      };
+      }
+      # What a verb needs about the entry that coordinates a mesh, published the
+      # way each realiser's own statements are: which entry it is, the value
+      # that is its join credential, and the two objects a verb spends, resolved
+      # to paths of that entry's own closure. A deployment that states no
+      # coordination entry carries no key at all, and the verbs refuse on that
+      # absence naming the statement to add.
+      // (if coordination.record == null then { } else { coordination = coordination.record; });
     in
     {
       inherit

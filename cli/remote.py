@@ -24,6 +24,8 @@ caller who states one keeps it.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import contextlib
 import json
 import os
@@ -794,6 +796,93 @@ def activate_script(name: str, artifact: Path) -> str:
     and resolved nothing.
     """
     return f"flakelet activate {shlex.quote(name)} {shlex.quote(str(artifact))} 2>&1"
+
+
+def coordination_script(
+    program: str, configuration: str, argv: Sequence[str], *, scope: str = SYSTEM
+) -> str:
+    """Return the one step an enrollment verb takes on the coordination machine.
+
+    The program and the configuration object are both store paths of the
+    entry's own closure, which the build published and this reproduces no rule
+    for. The calling convention is the one every program a coordination
+    statement names carries: the verb, then the configuration, then whatever
+    the verb takes. The path is tested before it is run, so a machine that does
+    not hold what this build names exits `127` and the command names the entry
+    and the path rather than echoing a shell's own words.
+
+    Args:
+        program: The store path of the program the record names.
+        configuration: The store path of the object that program reads.
+        argv: The verb and its own arguments.
+        scope: The scope the machine's record states, which decides whether the
+            step states the account's own runtime directory.
+    """
+    verb, *taken = argv
+    words = " ".join(shlex.quote(word) for word in [verb, configuration, *taken])
+    quoted = shlex.quote(program)
+    return _addressed(f"test -x {quoted} || exit {MISSING[1]}; exec {quoted} {words}", scope)
+
+
+def mint_script(
+    program: str, configuration: str, files: Sequence[str], *, scope: str = SYSTEM
+) -> str:
+    """Return the step that runs one credential generator where the server answers.
+
+    The contract is the one every generator's program is run under: one
+    program, an output directory in `out`, and the files it writes under it.
+    What comes back is one line per file, its name and its bytes in base64,
+    because a credential is arbitrary bytes and a step's answer is decoded as
+    text; the bytes travel on that stream and in no argument vector. The
+    directory is the machine's own temporary and it is removed whatever the
+    program did, so the machine keeps no copy of what it minted.
+
+    Args:
+        program: The store path the plan records as that value's program.
+        configuration: The store path of the object the program reads.
+        files: The file names the plan names for that value, which is what the
+            step prints back and nothing else.
+        scope: The scope the machine's record states.
+    """
+    quoted = shlex.quote(program)
+    named = " ".join(shlex.quote(name) for name in files)
+    return _addressed(
+        f"test -x {quoted} || exit {MISSING[1]}; "
+        'd="$(mktemp -d)"; trap \'rm -rf "$d"\' EXIT; '
+        f'out="$d" {quoted} {shlex.quote(configuration)} >&2 || exit $?; '
+        f"for f in {named}; do "
+        '[ -f "$d/$f" ] || continue; '
+        'printf \'%s %s\\n\' "$f" "$(base64 -w0 < "$d/$f")"; '
+        "done; "
+        "printf '%s\\n' \"$(cd \"$d\" && ls -A | tr '\\n' ' ')\"",
+        scope,
+    )
+
+
+def minted(reported: str, files: Sequence[str]) -> tuple[dict[str, bytes], tuple[str, ...]]:
+    """Return what one mint step answered: the bytes per file, and what it wrote.
+
+    The last line is the whole of what the program wrote under its output
+    directory, so a program that wrote a file set the plan does not name is
+    told apart from one that wrote nothing at all.
+
+    Raises:
+        ApplyError: If a line the step printed is not a name and its bytes.
+    """
+    lines = [line for line in reported.splitlines() if line.strip()]
+    wrote = tuple(sorted(lines[-1].split())) if lines else ()
+    got: dict[str, bytes] = {}
+    for line in lines[:-1]:
+        name, _, encoded = line.partition(" ")
+        if name not in files:
+            continue
+        try:
+            got[name] = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error) as malformed:
+            raise ApplyError(
+                f"the generator's answer for {name} is not the bytes it wrote: {malformed}"
+            ) from malformed
+    return got, wrote
 
 
 def attach_script(artifact: Path, *, scope: str = SYSTEM) -> str:

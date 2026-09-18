@@ -23,6 +23,12 @@
       realise ? {
         default.realiser = "flakelet";
       },
+      # Which entry of this deployment coordinates a mesh, stated beside the
+      # realisation statement and inferred by nothing: a verb of the command
+      # reads it off the record this build writes. A deployment that places no
+      # coordination server states none, and the verbs refuse naming it.
+      coordinate ? { },
+
       # The operator's own image signing key, one per operator and never per
       # entry: a user-scope image is attached from outside the system trusted
       # directories, so its dm-verity roothash has to be signed. It reaches the
@@ -46,7 +52,7 @@
 
       reading = reader.read {
         inherit (result) plan diagnostics;
-        inherit realise;
+        inherit realise coordinate;
         storeDir = args.storeDir or builtins.storeDir;
       };
 

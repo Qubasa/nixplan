@@ -453,6 +453,60 @@ let
     };
   };
 
+  # Three store objects a coordination entry carries: the program a verb runs,
+  # the object the server's own loader accepts, and the program the join
+  # credential's generator declares. Named by hand, because the reading
+  # resolves a stated name against the closure and a suite realises nothing.
+  coordinationProgram = "/nix/store/3q8xk1p7v2mz9jd4rlnb6ycsfwg0h5ar-planner-coordination";
+  coordinationObject = "/nix/store/1w9k3zc7yq2mb5xj8vdl4rns6fga0h1q-planner-coordination.yaml";
+  mintProgram = "/nix/store/3q8xk1p7v2mz9jd4rlnb6ycsfwg0h5as-planner-coordination-mint";
+
+  # A deployment that places a coordination server: one placed entry carrying
+  # both objects, and the generated value that is its join credential.
+  coordinatingPlan = {
+    "machine:hub" = {
+      address = "hub.example";
+      tags = [ ];
+    };
+    "mesh:hub@hub" = {
+      key = "sha256-0000000000000010";
+      placement.reason = "every";
+      closure = [
+        coordinationProgram
+        coordinationObject
+      ];
+      units.serve.command = "${coordinationProgram} serve /etc/planner-coordination/mesh-hub/config.yaml";
+    };
+    "mesh:vars/enrollment" = {
+      delivery = [ ];
+      deliveryDerivedFrom = [ ];
+      program = mintProgram;
+      files.preauthkey = {
+        path = "/run/vars/mesh/enrollment/preauthkey";
+        secrecy = "secret";
+        owner = "root";
+        group = "root";
+        mode = "0400";
+      };
+    };
+  };
+
+  # What a deployment placing that server writes into its `coordinate`
+  # statement: two plan keys and the two names the module publishes.
+  coordinateStatement = {
+    entry = "mesh:hub@hub";
+    credential = "mesh:vars/enrollment";
+    program = "planner-coordination";
+    configuration = "planner-coordination.yaml";
+  };
+
+  coordinated =
+    statement:
+    reader.read {
+      plan = coordinatingPlan;
+      coordinate = statement;
+    };
+
   # The separators of one derived unit file name, counted: `split` answers the
   # pieces and the matches alternately, so one hyphen is two extra elements.
   hyphens = name: (builtins.length (builtins.split "-" name) - 1) / 2;
@@ -2838,6 +2892,102 @@ in
         emptyDeliverySet = {
           carriesIt = true;
           table = { };
+        };
+      };
+    };
+
+  testACoordinationStatementNamesNoPlacedEntry =
+    let
+      reading = coordinated (coordinateStatement // { entry = "mesh:server@hub"; });
+      row = builtins.head (rowsById "operator-coordination-names-nothing" reading);
+    in
+    {
+      expr = {
+        ids = idsOf reading;
+        subject = row.subject;
+        namesTheKeys = hasInfix "`mesh:hub@hub`" row.message;
+        # The row names the deployment argument the statement is written in.
+        namesTheStatement = hasInfix "`coordinate` argument" row.resolution;
+        refused = reading.refused;
+        # The objects are resolved against the entry the statement named, so a
+        # statement whose entry names nothing earns that row alone.
+        objects = rowsById "operator-coordination-object-unheld" reading;
+        # The record still carries what was stated: the build is refused before
+        # a verb reads it.
+        record = reading.manifest.coordination.entry;
+      };
+      expected = {
+        ids = [ "operator-coordination-names-nothing" ];
+        subject = "mesh:server@hub";
+        namesTheKeys = true;
+        namesTheStatement = true;
+        refused = true;
+        objects = [ ];
+        record = "mesh:server@hub";
+      };
+    };
+
+  testACoordinationStatementNamesAnObjectTheEntryDoesNotCarry =
+    let
+      reading = coordinated (coordinateStatement // { program = "headscale"; });
+      row = builtins.head (rowsById "operator-coordination-object-unheld" reading);
+    in
+    {
+      expr = {
+        ids = idsOf reading;
+        # The subject is the entry whose closure was searched.
+        subject = row.subject;
+        namesWhatIsCarried = hasInfix "`planner-coordination.yaml`" row.message;
+        namesTheClosure = hasInfix "`closure`" row.resolution;
+        refused = reading.refused;
+        # A credential naming no generated value is the other field's row, and
+        # the two are read independently.
+        credential = idsOf (coordinated (coordinateStatement // { credential = "mesh:vars/other"; }));
+      };
+      expected = {
+        ids = [ "operator-coordination-object-unheld" ];
+        subject = "mesh:hub@hub";
+        namesWhatIsCarried = true;
+        namesTheClosure = true;
+        refused = true;
+        credential = [ "operator-coordination-names-nothing" ];
+      };
+    };
+
+  # What a verb needs about the entry that coordinates a mesh, published the way
+  # each realiser's own statements are: a verb derives no path and reproduces no
+  # rule of the module that rendered the objects.
+  testTheRecordPublishesTheCoordinationEntryAVerbAddresses =
+    let
+      reading = coordinated coordinateStatement;
+      unstated = reader.read { plan = coordinatingPlan; };
+    in
+    {
+      expr = {
+        rows = idsOf reading;
+        record = reading.manifest.coordination;
+        # The machine a verb dials is the one that entry's own record names,
+        # which the manifest already publishes per entry.
+        machine = reading.manifest.entries."mesh:hub@hub".machine;
+        # A deployment that states no coordination entry carries no key at all,
+        # and the verbs refuse on that absence.
+        unstated = {
+          carriesIt = unstated.manifest ? coordination;
+          rows = idsOf unstated;
+        };
+      };
+      expected = {
+        rows = [ ];
+        record = {
+          entry = "mesh:hub@hub";
+          credential = "mesh:vars/enrollment";
+          program = coordinationProgram;
+          configuration = coordinationObject;
+        };
+        machine = "hub";
+        unstated = {
+          carriesIt = false;
+          rows = [ ];
         };
       };
     };
