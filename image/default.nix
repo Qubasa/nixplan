@@ -29,16 +29,24 @@ in
 
   # plan is the whole plan, key the placed entry to build, profile the confinement
   # profile the attachment is stated to run under. compression is a build input
-  # like the profile and never a plan fact.
+  # like the profile and never a plan fact, and so is signing: the key of a
+  # user-scope image's verity signature is the operator's, held by the operator,
+  # recorded in no plan and written into no artifact.
   build =
     {
       plan,
       key,
       profile,
       compression ? "xz -Xdict-size 100%",
+      signing ? null,
     }:
     let
       image = reader.read { inherit plan key profile; };
+
+      # Which manager, which portabled and which image layout this artifact is
+      # for. The scope is the entry's target's, read off the artifact, so the
+      # operator hands the scripts below no decision of their own.
+      userScope = image.scope == "user";
 
       rendered = reader.renderedUnits image;
 
@@ -67,24 +75,29 @@ in
       # every host path the entry is shown. Those empty files are the bind mounts'
       # destinations, and the image root is a read-only squashfs on the machine, so a
       # missing one is a unit that cannot start at all.
-      osRelease = pkgs.writeText "${image.name}-os-release" ''
-        PORTABLE_ID=${image.name}
-        PORTABLE_PRETTY_NAME=${image.instance}:${image.service} on ${image.machine}
-        ID=nixos
-        PRETTY_NAME=NixOS
-        BUILD_ID=rolling
-      '';
+      osRelease = pkgs.writeText "${image.name}-os-release" (
+        ''
+          PORTABLE_ID=${image.name}
+          PORTABLE_PRETTY_NAME=${image.instance}:${image.service} on ${image.machine}
+          ID=nixos
+          PRETTY_NAME=NixOS
+          BUILD_ID=rolling
+        ''
+        # The field attachment is gated on, unset meaning the system scope, so a
+        # system-scope image states it no more than it states any other default.
+        + lib.optionalString userScope "PORTABLE_SCOPE=${image.scope}\n"
+      );
 
       imageRoot = pkgs.runCommand "${image.name}-root" { } (
         ''
-          mkdir -p $out/etc/systemd/system $out/proc $out/sys $out/dev $out/run \
+          mkdir -p $out${image.unitDirectory} $out/etc $out/proc $out/sys $out/dev $out/run \
                    $out/tmp $out/var/tmp $out/var/lib $out/var/cache $out/var/log
           touch $out/etc/resolv.conf $out/etc/machine-id
           cp ${osRelease} $out/etc/os-release
         ''
         + concatStringsSep "" (
           map (unit: ''
-            cp ${unit} $out/etc/systemd/system/${unit.name}
+            cp ${unit} $out${image.unitDirectory}/${unit.name}
           '') unitFiles
         )
         + concatStringsSep "" (
@@ -102,6 +115,8 @@ in
         )
       );
 
+      # The image's own bytes, which are the same squashfs in both scopes: what
+      # a user-scope attachment adds is the verity data beside it.
       raw =
         pkgs.runCommand "${image.name}-img-${image.version}"
           {
@@ -122,6 +137,54 @@ in
             SOURCE_DATE_EPOCH=0 mksquashfs nix ${imageRoot}/* $out/${attachment.image} \
               -quiet -noappend -exit-on-error -keep-as-directory \
               -all-root -root-mode 755 -b 1M -comp ${compression}
+          '';
+
+      # The two paths that sign, refused by the reading where this build was
+      # handed no key.
+      signature = reader.signatureOf {
+        inherit signing;
+        key = image.key;
+      };
+
+      sidecars = reader.sidecarsOf attachment.image;
+
+      # `veritysetup` draws a salt and a uuid from the machine's randomness
+      # unless it is handed them, and the root hash is over both, so two builds
+      # of one image would carry two hashes and two signatures. The digest the
+      # artifact already states is what they come from.
+      salt = image.version + image.version + image.version + image.version;
+
+      uuid =
+        let
+          hex = image.version + image.version;
+          at = n: len: builtins.substring n len hex;
+        in
+        "${at 0 8}-${at 8 4}-${at 12 4}-${at 16 4}-${at 20 12}";
+
+      # What `systemd-mountfsd` verifies before it mounts an image outside the
+      # system trusted directories, `image_policy_untrusted` demanding a signed
+      # dm-verity root: a hash tree beside the image, its root hash, and a
+      # PKCS7 signature over that hash. An unsigned image escalates to an
+      # interactive polkit action a non-interactive run cannot answer. The three
+      # files are public and are what the artifact carries; the key signs and is
+      # written nowhere.
+      verity =
+        pkgs.runCommand "${image.name}-verity-${image.version}"
+          {
+            nativeBuildInputs = [
+              pkgs.cryptsetup
+              pkgs.openssl
+            ];
+          }
+          ''
+            install -d "$out"
+            veritysetup format ${raw}/${attachment.image} "$out"/${sidecars.verity} \
+              --salt=${salt} --uuid=${uuid} --root-hash-file="$out"/${sidecars.roothash}
+            openssl smime -sign -nocerts -noattr -binary -outform der \
+              -in "$out"/${sidecars.roothash} \
+              -inkey ${lib.escapeShellArg (toString signature.privateKey)} \
+              -signer ${lib.escapeShellArg (toString signature.certificate)} \
+              -out "$out"/${sidecars.signature}
           '';
 
       attachment = reader.attachment image;
@@ -172,6 +235,15 @@ in
           installing = ''"$root"'' + lib.escapeShellArg file.installing;
           candidate = if file.source != null then lib.escapeShellArg file.source else partial;
           ownership = lib.escapeShellArg "${file.owner}:${file.group}";
+
+          # An account owns what it creates and can hand a file to nobody else,
+          # so the ownership is stated where the scope grants it: a delivered
+          # record a user scope cannot honor is a planner refusal long before
+          # this script exists, and the mode is the account's own to set.
+          record =
+            target:
+            (if userScope then "" else "chown ${ownership} ${target}\n  ")
+            + "chmod ${lib.escapeShellArg file.mode} ${target}";
         in
         (
           if file.source != null then
@@ -186,12 +258,10 @@ in
         )
         + ''
           if [ -e ${staged} ] && cmp -s ${candidate} ${staged}; then
-            chown ${ownership} ${staged}
-            chmod ${lib.escapeShellArg file.mode} ${staged}
+            ${record staged}
           else
             install -m 0600 ${candidate} ${installing}
-            chown ${ownership} ${installing}
-            chmod ${lib.escapeShellArg file.mode} ${installing}
+            ${record installing}
             mv ${installing} ${staged}
             echo "assembled "${shellQuote file.path}
             changed=1
@@ -291,8 +361,8 @@ in
           case " $reloaded " in
             *" $1 "*) return 0 ;;
           esac
-          systemctl is-active --quiet "$1" || return 0
-          systemctl "$2" "$1"
+          ${systemctl} is-active --quiet "$1" || return 0
+          ${systemctl} "$2" "$1"
           reloaded="$reloaded $1"
           echo "$3 $1 for $4"
           changed=1
@@ -326,8 +396,81 @@ in
       # arguments with a space, which is what the message below spends.
       unitWords = concatStringsSep " " (map shellQuote attachment.units);
 
+      # The account's own manager and portabled where the scope is the
+      # account's, which is one unprivileged `systemd-portabled --user` on the
+      # session bus, and the machine's where it is the machine's.
+      systemctl = if userScope then "systemctl --user" else "systemctl";
+
+      portablectl = if userScope then "portablectl --user" else "portablectl";
+
+      # The account's image pool. A persistent user attach of an out-of-tree
+      # path copies the image to `~/.config/portables`, which the user image
+      # search path never scans, so the image is placed in the pool that path
+      # does scan and attached by name: attaching by path strands an image the
+      # account can neither list nor detach by name again.
+      poolLine = lib.optionalString userScope ''
+        pool="''${XDG_STATE_HOME:-$HOME/.local/state}/portables"
+      '';
+
+      poolImage = ''"$pool"/'' + lib.escapeShellArg attachment.image;
+
+      poolSidecar = name: ''"$pool"/'' + lib.escapeShellArg name;
+
+      # What an attach names and what the manager reports as a unit's
+      # `RootImage`: the image's own name in the pool for an account, the store
+      # path itself for the machine.
+      attachRef =
+        if userScope then
+          lib.escapeShellArg "${image.name}_${image.version}"
+        else
+          "${raw}/${attachment.image}";
+
+      heldImage = if userScope then poolImage else "${raw}/${attachment.image}";
+
+      # The verity data arrives before the name a resolution finds does, and the
+      # image is moved onto that name last, so an attach that finds the image
+      # finds what verifies it and never a half-copied one. The copy is the
+      # account's alone: the store object it comes from is the bytes every other
+      # machine of this entry attaches. Every component of the pool path is
+      # named at the traversable mode rather than left to `install -d` to create
+      # along the way, because portabled extracts the metadata in a child that
+      # joined a delegated user namespace the account's own uid is unmapped in:
+      # a component that uid cannot traverse answers the extraction EACCES and
+      # the attach reports `Access denied` and no path.
+      placement = lib.optionalString userScope ''
+        if [ -n "''${XDG_STATE_HOME:-}" ]; then
+          install -d -m 0711 "$XDG_STATE_HOME" "$pool"
+        else
+          install -d -m 0711 "$HOME/.local" "$HOME/.local/state" "$pool"
+        fi
+        if [ ! -e ${poolImage} ]; then
+          install -m 0444 ${verity}/${sidecars.verity} ${poolSidecar sidecars.verity}
+          install -m 0444 ${verity}/${sidecars.roothash} ${poolSidecar sidecars.roothash}
+          install -m 0444 ${verity}/${sidecars.signature} ${poolSidecar sidecars.signature}
+          install -m 0444 ${raw}/${attachment.image} ${poolImage}.installing
+          mv ${poolImage}.installing ${poolImage}
+          echo "placed "${shellQuote attachment.image}
+          changed=1
+        fi
+      '';
+
+      # An image a replaced attachment ran from is the pool copy an earlier
+      # attach of this entry placed, so removing it and its verity data removes
+      # what this script created; a path outside the pool is the machine's and
+      # is left alone.
+      dropReplaced = lib.optionalString userScope ''
+        case "$held" in
+          "$pool"/*)
+            if [ "$held" != ${poolImage} ]; then
+              rm -f "$held" "''${held%.raw}".verity "''${held%.raw}".roothash "''${held%.raw}".roothash.p7s
+            fi
+            ;;
+        esac
+      '';
+
       attach = pkgs.writeShellScript "${image.name}-attach" (
         preamble
+        + poolLine
         + guards
         + concatStringsSep "" (
           map (f: ''
@@ -345,24 +488,28 @@ in
           }
         ''
         + concatStringsSep "" (lib.imap0 assemble staged)
+        + placement
         + ''
           # Which image this entry runs from, read from the service manager because two
           # builds of one entry render the same unit file names.
-          held="$(systemctl show -P RootImage ${lib.escapeShellArg firstUnit} 2> /dev/null || true)"
-          if [ -n "$held" ] && [ "$held" != ${raw}/${attachment.image} ]; then
-            systemctl stop ${unitWords}
-            portablectl detach "$held" > /dev/null
+          held="$(${systemctl} show -P RootImage ${lib.escapeShellArg firstUnit} 2> /dev/null || true)"
+          if [ -n "$held" ] && [ "$held" != ${heldImage} ]; then
+            ${systemctl} stop ${unitWords}
+            ${portablectl} detach "$held" > /dev/null
             echo "replaced $held"
             changed=1
           fi
+        ''
+        + dropReplaced
+        + ''
 
           # Starting is the attachment's own step, so a unit an operator stopped
           # stays stopped and a rerun over a running entry replaces no process.
           # Which units run at all is decided here and never by the reload below.
-          if [ "$(portablectl is-attached ${raw}/${attachment.image} 2> /dev/null || echo detached)" = detached ]; then
-            portablectl attach --profile=${lib.escapeShellArg image.profile} ${raw}/${attachment.image} > /dev/null
+          if [ "$(${portablectl} is-attached ${attachRef} 2> /dev/null || echo detached)" = detached ]; then
+            ${portablectl} attach --profile=${lib.escapeShellArg image.profile} ${attachRef} > /dev/null
             echo "attached "${shellQuote attachment.image}
-            systemctl start ${unitWords}
+            ${systemctl} start ${unitWords}
             echo "started "${unitWords}
             changed=1
           fi
@@ -377,10 +524,14 @@ in
       # nothing it was shown: a generated file and a source store path are the host's.
       detach = pkgs.writeShellScript "${image.name}-detach" (
         preamble
+        + poolLine
         + ''
-          systemctl stop ${unitWords}
-          portablectl detach ${raw}/${attachment.image}
+          ${systemctl} stop ${unitWords}
+          ${portablectl} detach ${attachRef}
           rm -rf "$root"${lib.escapeShellArg image.staging}
+        ''
+        + lib.optionalString userScope ''
+          rm -f ${poolImage} ${poolSidecar sidecars.verity} ${poolSidecar sidecars.roothash} ${poolSidecar sidecars.signature}
         ''
       );
 
@@ -440,12 +591,22 @@ in
           units = planner.util.indexBy (u: u.file) (u: u.text) rendered;
         };
       }
-      ''
-        mkdir -p "$out/bin"
-        ln -s ${raw}/${attachment.image} "$out/${attachment.image}"
-        ln -s ${description} "$out/attachment.json"
-        ln -s ${attach} "$out/bin/attach"
-        ln -s ${detach} "$out/bin/detach"
-        ln -s ${check} "$out/bin/check"
-      '';
+      (
+        ''
+          mkdir -p "$out/bin"
+          ln -s ${raw}/${attachment.image} "$out/${attachment.image}"
+          ln -s ${description} "$out/attachment.json"
+          ln -s ${attach} "$out/bin/attach"
+          ln -s ${detach} "$out/bin/detach"
+          ln -s ${check} "$out/bin/check"
+        ''
+        # The verity data travels with the image, beside it and under the names
+        # a dissection derives from the image's own, because what a machine is
+        # handed is this tree.
+        + lib.optionalString userScope ''
+          ln -s ${verity}/${sidecars.verity} "$out/${sidecars.verity}"
+          ln -s ${verity}/${sidecars.roothash} "$out/${sidecars.roothash}"
+          ln -s ${verity}/${sidecars.signature} "$out/${sidecars.signature}"
+        ''
+      );
 }
