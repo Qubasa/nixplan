@@ -395,3 +395,8 @@ things it does not:
 All three are documented as propagating rather than claimed to be contained. Inside
 library source they are bugs, and `tests/unit/diagnostics.nix` greps this tree
 to keep `throw`, `abort`, `assert` and korora's raising `check` out of it.
+
+What each one prints and the edit that resolves it are in one place, beside a
+fourth condition that ends an evaluation without earning a row:
+[authoring.md](authoring.md#what-ends-an-evaluation). This page stays the short
+statement of the class.

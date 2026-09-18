@@ -26,8 +26,27 @@ package set rather than choosing one:
 | `debug` | the worked fixture, the suites and their failures, for reading a value while iterating |
 
 `lib` and `mkLib` are the two answers to one question and a consumer picks one;
-`debug` is this repository's own and no consumer needs it. The per-system
-attributes are `packages`, `apps` and `checks`, each tabled further down.
+`debug` is this repository's own and no consumer needs it.
+
+Two more are system-independent for a different reason, being a directory and a
+projection rather than a build:
+
+| Output | What it is |
+| --- | --- |
+| `templates.default` | the scaffold, initialised with `nix flake init -t github:Qubasa/nixplan`: the one directory two documents show and a machine of the end-to-end layer proves, published as a name rather than as a copy |
+| `lib.vocabulary` | the authoring vocabulary as data, and `packages.<system>.planner-schema` is the same value as one JSON file |
+
+The vocabulary is a **projection** of the tables the library reads a declaration
+against, and it describes rather than validates: it names every key a
+declaration may carry, the type each unit field is held to, and the values an
+enumerated type admits. It carries no predicate, because a type's validator is a
+function - it can be named and not serialised. What a particular value satisfies
+is one `planner diagnose` away, and the catalogue of row identifiers is
+deliberately not in it: that catalogue's home is
+[diagnostics.md](diagnostics.md) and the sites that produce the rows.
+
+The per-system attributes are `packages`, `apps` and `checks`, each tabled
+further down.
 
 ## The two layers
 
@@ -395,6 +414,7 @@ Everything the flake exposes, so a reader can tell what runs where:
 | --- | --- |
 | `planner` | the command itself, as `result/bin/planner` |
 | `planner-src` | its source root, which `test_harness.py` imports the pure half from |
+| `planner-schema` | the authoring vocabulary as one JSON file, which is `lib.vocabulary` serialised and describes rather than validates |
 | `planner-view-src` | the view's source root, which its own tests import with no wrapper |
 | `planner-e2e-wired-pair` | one folder's deployment, built: the plan, `manifest.json`, the diagnostics and one artifact per placed entry |
 | `planner-e2e-wired-pair-changed` | the second build of that same folder, which differs in the file it serves |

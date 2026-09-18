@@ -104,6 +104,8 @@ let
     "changes/show-a-deployment-in-a-browser/specs/operator/deployment-view/spec.md"
     "changes/show-a-deployment-in-a-browser/specs/tooling/consumer-surface/spec.md"
     "changes/show-a-deployment-in-a-browser/specs/tooling/repository-shape/spec.md"
+    "changes/author-a-deployment-from-outside/specs/operator/deployment-build/spec.md"
+    "changes/author-a-deployment-from-outside/specs/tooling/consumer-surface/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -133,10 +135,6 @@ let
       "an unimplemented change: no task of name-the-machine-a-run-dials has been done, so nothing in this package claims to satisfy it yet";
     "changes/name-the-machine-a-run-dials/specs/planner/secret-delivery/spec.md" =
       "an unimplemented change: no task of name-the-machine-a-run-dials has been done, so nothing in this package claims to satisfy it yet";
-    "changes/author-a-deployment-from-outside/specs/operator/deployment-build/spec.md" =
-      "an unimplemented change: no task of author-a-deployment-from-outside has been done, so nothing in this package claims to satisfy it yet";
-    "changes/author-a-deployment-from-outside/specs/tooling/consumer-surface/spec.md" =
-      "an unimplemented change: no task of author-a-deployment-from-outside has been done, so nothing in this package claims to satisfy it yet";
     "changes/enroll-a-friend-outside-the-harness/specs/delivery/real-cluster/spec.md" =
       "an unimplemented change: no task of enroll-a-friend-outside-the-harness has been done, so nothing in this package claims to satisfy it yet";
     "changes/enroll-a-friend-outside-the-harness/specs/operator/enrollment-command/spec.md" =

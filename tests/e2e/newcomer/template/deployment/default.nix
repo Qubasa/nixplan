@@ -16,33 +16,15 @@ let
     '';
   };
 
-  hello = {
-    services.default = import ./modules/hello/default.nix { greeter = "${greeter}"; };
-  };
-
-  deployment = import ./instances.nix { inherit hello; };
-  registry = import ./machines.nix;
+  # The deployment is stated in `args.nix` and nowhere else. This file builds the
+  # programs its units run and hands the same declarations to the build, so the
+  # two entry points differ in the package set and never in the deployment. A
+  # module is handed the store path as a string: an unbuilt derivation is an
+  # attribute set whose inputs reach nixpkgs' own stdenv, where the reading that
+  # walks a unit record runs out of stack.
+  deployment = import ./args.nix { packages.greeter = "${greeter}"; };
 in
 operator.mkDeployment {
   inherit pkgs planner;
-
-  args = {
-    inherit (deployment) instances;
-    inherit (registry) machines;
-
-    # A module that declares no interface wires to nothing, so the attribution
-    # this argument carries is empty rather than absent.
-    interfaces = { };
-
-    sources = {
-      deployment = "instances.nix";
-      machines = "machines.nix";
-      modules = {
-        greeter = "hello/default.nix";
-      };
-      leaves = {
-        greeter.greet = "hello/greet.nix";
-      };
-    };
-  };
+  inherit (deployment) args;
 }

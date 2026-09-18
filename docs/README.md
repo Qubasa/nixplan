@@ -54,7 +54,8 @@ evaluated as committed by `tests/unit/worked.nix`.
 
 ## The smallest thing that works
 
-One service, two machines, and a tag that places it on both. This is not a
+One service, two machines, and a tag that places it on both. `nix flake init -t
+github:Qubasa/nixplan` writes it into a directory of your own. This is not a
 transcription of an example: it is the deployment
 `tests/e2e/newcomer/template/deployment/` holds, `nix build
 .#planner-e2e-newcomer` builds it, and the machines of `tests/e2e/newcomer/`
@@ -132,10 +133,15 @@ What the one of them runs, `modules/hello/greet.nix`:
 }
 ```
 
-Two more files hold those three together, and a reader copies the directory
-rather than this page: `modules/hello/default.nix` is the root that names the one
-member, and `default.nix` builds the program the unit runs and hands the whole
-thing to `mkDeployment`, which is [operator.md](operator.md)'s subject.
+Three more files hold those three together, and a reader initialises the
+scaffold rather than copying this page: `modules/hello/default.nix` is the root
+that names the one member, `args.nix` states the deployment and takes every
+package a module interpolates as an argument, and `default.nix` builds those
+packages out of a caller's own set and hands the same value to `mkDeployment`,
+which is [operator.md](operator.md)'s subject. The two entry points are one
+deployment text: the rows below are readable through `args.nix` with no package
+set instantiated, and the build over a real one stays the authority for a row
+about the store path a package resolves to. [README.md](../README.md) shows both.
 
 `result.plan` carries `greeter:greet@alpha`, `greeter:greet@beta`,
 `machine:alpha` and `machine:beta`; `result.diagnostics` is `[ ]`;
@@ -230,6 +236,7 @@ its own rather than under a literal written in the library.
 | `render`, `mkTable` | render a diagnostics table to text; build one from rows |
 | `registry`, `fileOf`, `label`, `atomRows`, `exportNames`, `secrecyOf`, `foldOf`, `foldName`, `foldApply`, `identityOf` | the attribution helpers row text is written with: index a caller's `interfaces` by value, find an interface's declaring file by value and then by claim, print `` `name` (file) ``, check one interface's atoms, list its exports, read an atom's `secrecy`, read an interface's `fold`, its fold's name and the function under it, and the identity it claims — `null` where it claims none |
 | `excluded` | the exclusion table as data: construct -> the trigger that would bring it back |
+| `vocabulary` | the authoring vocabulary as data, projected from the tables a declaration is read against: every key each half may carry, the type name each unit field is held to, the values an enumerated type admits, the directory kinds, the port range, and the exclusion table. It describes and never validates, and it carries no predicate — see [authoring.md](authoring.md) |
 | `util` | the list and attrset helpers the library runs on |
 
 That value is `lib` of this flake, and `mkLib` returns the same attributes

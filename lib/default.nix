@@ -46,6 +46,15 @@ let
       ;
   };
   plan = import ./plan.nix { inherit util diag module; };
+  vocabulary = import ./vocabulary.nix {
+    inherit
+      atoms
+      excluded
+      module
+      resolve
+      util
+      ;
+  };
 
   defaultSources = {
     deployment = "deployment/instances.nix";
@@ -61,6 +70,7 @@ in
     platform
     platformSource
     util
+    vocabulary
     ;
 
   korora = atoms // {

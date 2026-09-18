@@ -490,6 +490,11 @@ in
           '';
 
       packages = e2eDeployments // {
+        # The authoring vocabulary as one file a program reads without evaluating
+        # anything of its own. A projection and not a validator: it names what a
+        # declaration may carry, and whether one value satisfies its type is
+        # `planner diagnose`'s answer.
+        planner-schema = pkgs.writeText "planner-schema.json" (builtins.toJSON planner.vocabulary);
         planner-perf = perf;
         planner-perf-results = measurement;
         planner-e2e-guest = e2eGuest;

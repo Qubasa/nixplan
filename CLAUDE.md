@@ -738,6 +738,17 @@ Prose: `docs/operator.md`, under "The command", "Where the bytes of a generated 
 - The one shell takes its root from `git rev-parse --show-toplevel`, and `planner-e2e-env` refuses
   to run outside a checkout of this repository: entered from a foreign tree it would export the
   paths of a checkout the reader is not editing.
+- `planner diagnose` is the one subcommand that realises nothing: it prints the rendered table and
+  exits 1 where a row carries an error, which is the status `build` reports, and `--json` prints the
+  rows instead, in the table's order and with every field a row carries. A target that is a built
+  directory is answered from the two files the build wrote with no `nix` at all, and any other
+  target by one `nix eval --apply` selecting the two published attributes by name, `diagnostics` and
+  `rendered`. The record as a whole is never evaluated - every entry and machine attribute of an
+  inapplicable deployment is `throw reading.refusal`, and an inapplicable deployment is the one an
+  author is iterating on - and a target answering neither attribute is the command's own
+  `ApplyError` naming the target and both attributes, never an empty table and never a row of the
+  command's own. `cli/diagnose.py` owns that reading and decodes no row itself: the built-directory
+  branch spends `manifest.read`, whose `_rows` stays the one decode.
 - The view reads a build and mutates nothing: no route applies, retires, rolls back, builds or
   writes, every method but `GET` and `HEAD` is refused, and it binds the loopback interface, an
   instruction to listen elsewhere being refused naming the reason. The target is resolved once
@@ -855,6 +866,21 @@ silently unobserved.
   when its first segment is a real top-level entry, so `/documents/...` and `/page.css` are routes
   and `docs/...` would be a path the scan demands resolve. `view/routes.py` is the one home of the
   route set and `layers.testAServedDocumentNamesARouteRatherThanAPath` reads it there.
+- The scaffold is published as `flake.templates.default` naming `./tests/e2e/newcomer/template` and
+  never as a copy of it: a second text kept equal by hand is what "the example a document shows is
+  the example a test builds" exists to refuse. It is in `flake.nix` rather than in
+  `flake-module.nix`, whose text may name no end-to-end folder
+  (`layers.testAnEndToEndFolderIsAddedWithoutEditingTheFlake`). `layers.consumerCalls` exempts
+  `template/flake.nix` from the builder scan for `mkPlan` alone: that flake is a consumer's, calling
+  the published planner by name, and it may still not realise.
+- The scaffold carries two entry points over one deployment text. `deployment/args.nix` states the
+  declarations and takes every package a module interpolates as an argument, and
+  `deployment/default.nix` builds those packages and composes it, stating no instance of its own.
+  Its formals are `{ packages, ... }`: the ellipsis answers the library and the state a secrets
+  generation hands every `args.nix`. The flake's rows-only output plans those args against
+  store-shaped stand-ins, because `util.storePathsIn` recognises a store path by the store directory
+  and 32 characters of Nix's base 32 - a bare name turns the closure family off and leaves a table
+  that is clean for the wrong reason.
 
 ## Fixtures and goldens
 
@@ -1158,6 +1184,9 @@ Prose: `docs/cluster.md`, under "Where the machines come from", for the cut, its
 - New files are invisible to the flake until `git add`, and the coverage cross-walk then reports
   the spec it cannot read rather than the file you forgot to stage.
 - `-k wire` selects every `wired-pair` test: pytest matches the folder name too.
+- deadnix, through `nix fmt`, deletes an unused formal of a function, including one belonging to a
+  stand-in whose whole point is to accept the argument the real builder takes. A stub builder
+  therefore takes `...`, or the next `nix fmt` turns it into `called with unexpected argument`.
 - Deleting a comment leaves the blank line that framed it, and `checks.treefmt` then fails on
   formatting rather than on prose. `nix fmt` after any comment removal.
 - The comment strip cut five comments in half, leaving a mid-sentence fragment above the argument
@@ -1170,6 +1199,17 @@ Prose: `docs/cluster.md`, under "Where the machines come from", for the cut, its
   `testAFileNamesAPathThatIsNotThere` catches stale path references that live in comments. A path
   written in a comment therefore has to resolve, and a foreign repository's file is named without
   a repository-rooted prefix.
+- The four conditions that end an evaluation instead of earning a row are named in one place,
+  `docs/authoring.md` under "What ends an evaluation", each with what the interpreter prints and
+  the edit: an `abort`, a missing attribute, a function called without an argument its pattern
+  requires, and a derivation handed to a module in place of `"${drv}"`. `docs/diagnostics.md` stays
+  the short statement of the class and names that section, and `lib/vocabulary.nix` names the
+  document and the heading and carries no sentence of either.
+- `builtins.functionArgs` answers `{ }` for a lambda with no attribute pattern, so narrowing a
+  folder's arguments by `intersectAttrs (functionArgs deployment)` hands nothing at all to a
+  deployment written `args: …` - which `tests/e2e/newcomer/deployment/default.nix` is, on purpose,
+  so the folder holds no second copy of the template's deployment. `buildsOf` in
+  `flake-module.nix` hands such a folder the base argument set instead.
 - The external generator's `generate.py` at the pinned revision writes PEP 758 unparenthesized
   `except A, B:`, so it parses under python 3.14 and under nothing older. The pinned nixpkgs'
   `python3` is 3.14, which is the only reason the composition runs at all.

@@ -210,6 +210,7 @@ let
 in
 rec {
   inherit
+    moduleKeys
     unitVocabulary
     directoryKinds
     unitKeys

@@ -94,11 +94,37 @@ REALISER = "flakelet"
 CONSUMER = "/root/consumer"
 
 # The same template with one mistake in it, and the mistake: a closure root that
-# is not a path under the store the plan is read against.
+# is not a path under the store the plan is read against. The second copy carries
+# a second such root, so its deployment is one nothing in this folder builds.
 REFUSED = "/root/refused"
+UNBUILT = "/root/unbuilt"
 OUTSIDE = "/opt/vendor/greeter"
 GUEST_KEY = "/root/id_ed25519"
 TEMPLATE = "tests/e2e/newcomer/template"
+
+# Where the reader who asked this flake for its scaffold by name gets it, the two
+# names the deployment publishes its table under, and the entry table an answer
+# about the record as a whole has to force.
+INITIALISED = "/root/initialised"
+STATISTICS = "/root/stats.json"
+CHEAP = ".#diagnostics.diagnostics"
+WHOLE = ".#default.diagnostics"
+TEXT = ".#default.rendered"
+RECORD = ".#default.entries"
+OUTPATH = ".#default.outPath"
+
+# What the scaffold's own files are, so a reader is handed that set and no more.
+# Written without a leading `./`: the path scan reads a relative path in this file
+# as this folder's own, and these name the reader's directory rather than it.
+SCAFFOLD = (
+    "deployment/args.nix",
+    "deployment/default.nix",
+    "deployment/instances.nix",
+    "deployment/machines.nix",
+    "deployment/modules/hello/default.nix",
+    "deployment/modules/hello/greet.nix",
+    "flake.nix",
+)
 
 SUBSTITUTER = "https://cache.nixos.org"
 
@@ -390,10 +416,12 @@ def test_the_shell_is_entered_from_outside_this_checkout(tmp_path: Path) -> None
 def test_the_help_text_is_read_as_the_only_document() -> None:
     """A reader with the help and no repository can name a target and restrict a run.
 
-    The help named five subcommands, a target and four options, and nothing in it
-    said what makes a directory a built deployment, what a plan key looks like or
-    that a fuller document exists. A constraint the parser refuses on is stated by
-    the subcommand that enforces it, which is why `rollback` is asked separately.
+    The help named a target and four options, and nothing in it said what makes a
+    directory a built deployment, what a plan key looks like or that a fuller
+    document exists. What is asserted is phrases rather than a count, so a
+    subcommand adds its own phrases here. A constraint the parser refuses on is
+    stated by the subcommand that enforces it, which is why `rollback` and
+    `diagnose` are asked separately.
     """
     helped = _out("nix", "run", str(FLAKE), "--", "--help", timeout=PATIENT)
     for stated in (
@@ -403,6 +431,7 @@ def test_the_help_text_is_read_as_the_only_document() -> None:
         "<instance>:<service>@<machine>",
         "<instance>:vars/<generator>",
         "docs/operator.md",
+        "realising nothing",
     ):
         assert stated in helped, helped
 
@@ -415,6 +444,13 @@ def test_the_help_text_is_read_as_the_only_document() -> None:
     rolling = _out("nix", "run", str(FLAKE), "--", "rollback", "--help", timeout=PATIENT)
     assert "exactly one" in rolling, rolling
     assert "docs/operator.md" in rolling, rolling
+
+    diagnosing = _out("nix", "run", str(FLAKE), "--", "diagnose", "--help", timeout=PATIENT)
+    assert "the two files that build wrote" in diagnosing, diagnosing
+    assert "the rows and the rendered table" in diagnosing, diagnosing
+    assert "exits 1 where a row carries an error" in diagnosing, diagnosing
+    assert "--json" in diagnosing, diagnosing
+    assert "docs/operator.md" in diagnosing, diagnosing
 
 
 def _planner(work: Workstation, *argv: str, timeout: float = PATIENT) -> str:
@@ -734,3 +770,217 @@ def test_both_halves_of_the_table_are_reachable_for_a_refused_deployment(
     ], sorted(plan)
 
     assert vm.ssh(f"test -e {refused}/entries", timeout=BRIEF).returncode != 0
+
+
+def _observed(printed: str) -> dict[str, str]:
+    """Read the `key=value` lines one command on a machine echoed."""
+    stated = (line.split("=", 1) for line in printed.splitlines() if "=" in line)
+    return {key: value for key, value in stated}
+
+
+def _counted(work: Workstation, where: str, attribute: str) -> dict[str, int]:
+    """The counters one evaluation on the machine reports about itself.
+
+    `NIX_SHOW_STATS_PATH` rather than stderr, because the figure is read as data
+    and an interpreter's own notes are not.
+    """
+    counted = work.vm.ssh_succeed(
+        f"cd {where} && NIX_SHOW_STATS=1 NIX_SHOW_STATS_PATH={STATISTICS} "
+        f"nix eval --json {attribute} >/dev/null && cat {STATISTICS}",
+        timeout=PATIENT,
+    )
+    reported = json.loads(counted)
+    return {
+        "values": int(reported["values"]["number"]),
+        "thunks": int(reported["nrThunks"]),
+    }
+
+
+def test_a_reader_is_handed_the_scaffold_by_name(workstation: Workstation) -> None:
+    """A reader asks this flake for its scaffold by name and gets the committed bytes.
+
+    The reference is the flake, never a path inside its source: what the name
+    resolves to is the one directory two documents show and this folder proves,
+    so a published copy of it could not drift from the text under test.
+    """
+    reference = f"path:{workstation.source}"
+    assert TEMPLATE not in reference, reference
+
+    observed = _observed(
+        workstation.vm.ssh_succeed(
+            f"rm -rf {INITIALISED} && mkdir -p {INITIALISED} && cd {INITIALISED} && "
+            f"nix flake init -t {reference} >/dev/null && "
+            f"printf 'files=%s\\n' \"$(find . -type f | sort | tr '\\n' ' ')\" && "
+            f"diff -r . {workstation.source}/{TEMPLATE} >/dev/null && printf 'equal=yes\\n'",
+            timeout=PATIENT,
+        )
+    )
+
+    assert observed.get("equal") == "yes", observed
+    written = tuple(name.removeprefix("./") for name in observed["files"].split())
+    assert written == SCAFFOLD, observed
+
+
+def test_an_author_reads_the_vocabulary_as_one_file() -> None:
+    """The authoring vocabulary is one file, and it is the value the library publishes.
+
+    Its closure is itself: reading it needs no deployment of the reader's own and
+    no package set, which is the whole point of publishing a projection as data.
+    """
+    built = Path(
+        _out(
+            "nix",
+            "build",
+            "--no-link",
+            "--print-out-paths",
+            f"{FLAKE}#planner-schema",
+            timeout=PATIENT,
+        )
+        .strip()
+        .splitlines()[-1]
+    )
+    decoded = json.loads(built.read_text())
+    published = json.loads(
+        _out("nix", "eval", "--json", f"{FLAKE}#lib.vocabulary", timeout=PATIENT)
+    )
+
+    assert decoded == published, sorted(decoded)
+    # The projection's own shape, without naming the planner's entry point here:
+    # a folder that names it reads as a folder that took the machinery back.
+    assert sorted(decoded) == [
+        "declarations",
+        "describes",
+        "directoryKinds",
+        "domains",
+        "excluded",
+        "failures",
+        "portRange",
+        "unitFields",
+        "validator",
+    ], sorted(decoded)
+    assert decoded["declarations"]["machine"], decoded["declarations"]
+    assert decoded["failures"]["document"] == "docs/authoring.md", decoded["failures"]
+
+    closure = _out("nix", "path-info", "-r", str(built), timeout=BRIEF).split()
+    assert closure == [str(built)], closure
+
+
+def test_the_two_answers_agree_where_both_can_decide(
+    workstation: Workstation, refused: str
+) -> None:
+    """One deployment text, two entry points, and one answer where both can decide.
+
+    The mutation is the closure root outside the store, which is a declaration and
+    not a package, so the reading that instantiates no package set reports the same
+    identifier about the same subject as the build over the consumer's own.
+    """
+    vm = workstation.vm
+    cheap = json.loads(vm.ssh_succeed(f"cd {REFUSED} && nix eval --json {CHEAP}", timeout=PATIENT))
+    whole = json.loads(vm.ssh_succeed(f"cat {refused}/diagnostics.json", timeout=BRIEF))
+
+    decided = {(row["id"], row["subject"]) for row in cheap if row["severity"] == "error"}
+    assert decided == {(row["id"], row["subject"]) for row in whole if row["severity"] == "error"}
+    assert decided == {("closure-root-outside-store", f"{ENTRY}@{name}") for name in TARGETS}
+
+    shipped = json.loads(
+        vm.ssh_succeed(f"cd {CONSUMER} && nix eval --json {CHEAP}", timeout=PATIENT)
+    )
+    assert [row for row in shipped if row["severity"] == "error"] == [], shipped
+    assert shipped == [], shipped
+
+
+def test_the_rows_of_a_deployment_are_read_with_no_package_set_instantiated(
+    workstation: Workstation,
+) -> None:
+    """The cheap entry point answers the planner's rows for a fraction of the values.
+
+    The bound is an order of magnitude rather than a budget: the larger figure is
+    the consumer's package set forcing itself, which this repository does not gate
+    because `perf/eval.nix` evaluates no package set at all.
+    """
+    asked = _counted(workstation, CONSUMER, CHEAP)
+    through = _counted(workstation, CONSUMER, WHOLE)
+
+    assert asked["values"] * 10 < through["values"], (asked, through)
+    assert asked["thunks"] * 10 < through["thunks"], (asked, through)
+
+
+def test_the_rows_and_the_rendered_table_are_read_from_an_evaluation(
+    workstation: Workstation, refused: str
+) -> None:
+    """The two published names answer the bytes the build wrote, from an evaluation.
+
+    One rendering, spent twice: the text a person reads out of the farm and the
+    text an answer carries are compared on the machine rather than through this
+    reader, so nothing here can normalise a byte of either.
+    """
+    vm = workstation.vm
+    observed = _observed(
+        vm.ssh_succeed(
+            f"cd {REFUSED} && nix eval --raw {TEXT} > {STATISTICS}.txt"
+            f" && echo text=$(cmp -s {STATISTICS}.txt {refused}/diagnostics.txt && echo same)",
+            timeout=PATIENT,
+        )
+    )
+    assert observed.get("text") == "same", observed
+
+    answered = json.loads(
+        vm.ssh_succeed(f"cd {REFUSED} && nix eval --json {WHOLE}", timeout=PATIENT)
+    )
+    written = json.loads(vm.ssh_succeed(f"cat {refused}/diagnostics.json", timeout=BRIEF))
+    assert answered == written, answered
+    assert [row["id"] for row in answered] == sorted(row["id"] for row in answered), answered
+
+
+def test_a_caller_asking_for_the_whole_record_is_answered_with_the_refusal(
+    workstation: Workstation, refused: str
+) -> None:
+    """The record of a refused deployment is the refusal; the table still answers.
+
+    Asking for what the build would place is the one question an inapplicable
+    deployment cannot answer, and the sentence it answers with is the table, so
+    nobody has to know which attribute to ask for to learn why.
+    """
+    vm = workstation.vm
+    asked = vm.ssh(f"cd {REFUSED} && nix eval --json {RECORD} 2>&1", timeout=PATIENT)
+    assert asked.returncode != 0, asked.stdout
+    assert OUTSIDE in asked.stdout, asked.stdout
+
+    rendered = vm.ssh_succeed(f"cat {refused}/diagnostics.txt", timeout=BRIEF)
+    assert rendered.split("\n")[0] in asked.stdout, asked.stdout
+
+
+def test_the_table_of_an_inapplicable_deployment_is_read_without_building_it(
+    workstation: Workstation,
+) -> None:
+    """Both halves of a refused table answer for a deployment nothing has built.
+
+    The mistake is a second closure root outside the store, so this deployment's
+    own store path is one no run of this folder has realised: the table answers
+    and the path it would have been written to is not there.
+    """
+    vm = workstation.vm
+    mistake = f"{OUTSIDE}/lib"
+    vm.ssh_succeed(
+        f"rm -rf {UNBUILT} && cp -r {CONSUMER} {UNBUILT} && chmod -R u+w {UNBUILT} && "
+        f"sed -i 's|closure = \\[ greeter \\];|closure = [ greeter \"{mistake}\" ];|' "
+        f"{UNBUILT}/deployment/modules/hello/greet.nix",
+        timeout=BRIEF,
+    )
+
+    rows = json.loads(vm.ssh_succeed(f"cd {UNBUILT} && nix eval --json {WHOLE}", timeout=PATIENT))
+    errors = [row for row in rows if row["severity"] == "error"]
+    assert {row["id"] for row in errors} == {"closure-root-outside-store"}, rows
+    assert mistake in errors[0]["message"], errors
+
+    observed = _observed(
+        vm.ssh_succeed(
+            f"cd {UNBUILT} && nix eval --raw {TEXT} > {STATISTICS}.unbuilt"
+            f' && echo named=$(grep -c -- "{mistake}" {STATISTICS}.unbuilt)'
+            f" && farm=$(nix eval --raw {OUTPATH})"
+            f' && echo realised=$(test -e "$farm" && echo yes || echo no)',
+            timeout=PATIENT,
+        )
+    )
+    assert observed["named"] != "0", observed
+    assert observed["realised"] == "no", observed

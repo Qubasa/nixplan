@@ -265,15 +265,24 @@ let
     "flakeletBuilder"
   ];
 
+  # The published scaffold's own flake is a consumer's rather than a folder's: it
+  # calls the planner by the name this repository publishes, which is exactly what
+  # the rows-only output a reader is handed is. It may plan and it may still not
+  # realise, so the exemption is that one call in that one file.
+  consumerCalls = {
+    "template/flake.nix" = [ "mkPlan" ];
+  };
+
   builders = sorted (
     concatLists (
       map (
         entry:
         let
           text = readFile (e2eRoot + "/${entry.folder}/${entry.rel}");
+          allowed = consumerCalls.${entry.rel} or [ ];
         in
         map (needle: "tests/e2e/${entry.folder}/${entry.rel} names ${needle}") (
-          filter (needle: hasInfix needle text) builderNeedles
+          filter (needle: !(elem needle allowed) && hasInfix needle text) builderNeedles
         )
       ) allFolderFiles
     )
@@ -389,7 +398,8 @@ let
   # path this tree writes has to resolve from the file that writes it, which
   # `testAFileNamesAPathThatIsNotThere` holds every document under a scanned
   # directory to. The root document is the one the scan does not read, so it is
-  # where the consumer's flake is shown.
+  # where the consumer's flake and both of the deployment's entry points are
+  # shown: each of those three imports a sibling.
   exampleFolder = "tests/e2e/newcomer/template/deployment";
   shownTexts = [
     {
@@ -407,6 +417,14 @@ let
     {
       document = "README.md";
       file = "tests/e2e/newcomer/template/flake.nix";
+    }
+    {
+      document = "README.md";
+      file = "tests/e2e/newcomer/template/deployment/args.nix";
+    }
+    {
+      document = "README.md";
+      file = "tests/e2e/newcomer/template/deployment/default.nix";
     }
   ];
 
@@ -767,6 +785,44 @@ let
   ruleUnstated = map (needle: "README.md does not say ${needle}") (
     filter (needle: !(hasInfix needle (flattened rootDocument))) ruleSentences
   );
+
+  # The one section that names every condition which ends an evaluation instead
+  # of earning a row, read from its heading to the next one and with the line
+  # breaks flattened: the claim is what the section states rather than where a
+  # sentence wraps.
+  sectionOf =
+    document: heading:
+    let
+      parts = split heading (readFile (docsRoot + "/${document}"));
+    in
+    if length parts < 3 then "" else flattened (head (split "\n### " (elemAt parts 2)));
+
+  endingSection = sectionOf "authoring.md" "### What ends an evaluation";
+
+  # Each is stated with what the interpreter prints and the edit that resolves
+  # it, so the three are read back separately: a name with no message beside it
+  # is a sentence a reader cannot recognise their own failure in.
+  endingFailures = [
+    "An `abort` anywhere a declaration is forced"
+    "A missing attribute"
+    "A function called without an argument its pattern requires"
+    "A derivation handed to a module in place of its store path"
+  ];
+
+  endingPrints = [
+    "evaluation aborted with the following error message"
+    "attribute '<name>' missing"
+    "called without required argument"
+    "stack overflow; max-call-depth exceeded"
+  ];
+
+  endingUnstated = sorted (
+    map (needle: "docs/authoring.md does not state ${needle}") (
+      filter (needle: !(hasInfix needle endingSection)) (endingFailures ++ endingPrints)
+    )
+  );
+
+  endingEdits = length (filter (part: !isString part) (split "\\*\\*The edit:\\*\\*" endingSection));
 
   # The three homes a counterexample has, by what its own failure does: a suite
   # that reports every assertion, a probe evaluated in a process of its own, and
@@ -1149,6 +1205,7 @@ in
     expected = {
       unshown = [ ];
       held = [
+        "args.nix"
         "default.nix"
         "instances.nix"
         "machines.nix"
@@ -1365,6 +1422,21 @@ in
     expected = {
       present = true;
       unstated = [ ];
+    };
+  };
+
+  testEveryFailureThatEndsAnEvaluationIsNamedInOnePlace = {
+    expr = {
+      unstated = endingUnstated;
+      edits = endingEdits;
+      shortStatementNamesTheSection = hasInfix "what-ends-an-evaluation" (
+        readFile (docsRoot + "/diagnostics.md")
+      );
+    };
+    expected = {
+      unstated = [ ];
+      edits = 4;
+      shortStatementNamesTheSection = true;
     };
   };
 

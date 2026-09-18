@@ -45,9 +45,16 @@ Two outputs are the whole interface: `lib`, the planner, and `operator`, the bui
 a plan. Neither is system-specific, because both take your own `pkgs`. `mkLib` is beside
 them for a consumer who wants their own package set to elaborate the platform records too.
 
-This is not an illustration of that wiring: it is `tests/e2e/newcomer/template/flake.nix`,
-byte for byte, and a machine of `tests/e2e/newcomer/` locks it against this checkout, builds
-the deployment it names and applies it to two other machines.
+Start from the scaffold rather than from a path in this source:
+
+```bash
+nix flake init -t github:Qubasa/nixplan
+```
+
+That writes one service, two machines and a tag that places it on both. The three blocks
+below are the files it writes, byte for byte, and a machine of the end-to-end layer locks
+the same text against this checkout, builds the deployment and applies it to two other
+machines. Its `flake.nix`:
 
 ```nix
 {
@@ -68,6 +75,19 @@ the deployment it names and applies it to two other machines.
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
+
+      # The declarations asked with no package set instantiated. `args.nix` takes
+      # the packages its modules interpolate, so a stand-in answers for one, and
+      # the stand-in is a store path rather than a name: the planner recognises a
+      # store path by the store directory and the shape of a hash, so a name it
+      # cannot recognise turns the rows about declared closure roots off instead
+      # of answering them. Those rows are about whatever was handed in, which is
+      # why `packages.default` stays the authority for them.
+      asked =
+        nixplan.lib.mkPlan
+          (import ./deployment/args.nix {
+            packages.greeter = "/nix/store/9zv4c8m2kq7r5xn3bdlp6yfs0agh1jw2-greet";
+          }).args;
     in
     {
       packages.${system}.default = import ./deployment {
@@ -75,12 +95,105 @@ the deployment it names and applies it to two other machines.
         planner = nixplan.lib;
         operator = nixplan.operator;
       };
+
+      # The rows and the table rendered from them, under the two names the
+      # deployment build publishes them under, so one command reads either
+      # answer: `planner diagnose .#diagnostics` here, `planner diagnose
+      # .#default` over the build.
+      diagnostics = {
+        inherit (asked) diagnostics;
+        rendered = nixplan.lib.render asked.diagnostics + "\n";
+      };
     };
 }
 ```
 
-The `template/` directory beside that file holds the deployment: one service, two machines,
-and a tag that places it on both. [docs/README.md](docs/README.md) shows it and
+The deployment has two entry points over one text. `deployment/args.nix` states the
+declarations and takes every package a module interpolates as an argument, so the rows it
+earns are readable with no package set instantiated:
+
+```nix
+# The deployment itself, stated once and with no package set: every package a
+# module interpolates is an argument here, so asking what these declarations earn
+# costs one evaluation of the library and instantiates nothing. `default.nix`
+# beside this file is the other entry point - it builds those packages out of a
+# caller's own set and hands the same value to the deployment build.
+#
+# The ellipsis answers the arguments this deployment needs nothing from: the
+# convention hands an `args.nix` the library, the packages and the state its
+# generated values exist in, and this one declares no interface and no generator.
+{ packages, ... }:
+let
+  inherit (packages) greeter;
+
+  hello = {
+    services.default = import ./modules/hello/default.nix { inherit greeter; };
+  };
+
+  deployment = import ./instances.nix { inherit hello; };
+  registry = import ./machines.nix;
+in
+{
+  args = {
+    inherit (deployment) instances;
+    inherit (registry) machines;
+
+    # A module that declares no interface wires to nothing, so the attribution
+    # this argument carries is empty rather than absent.
+    interfaces = { };
+
+    sources = {
+      deployment = "instances.nix";
+      machines = "machines.nix";
+      modules = {
+        greeter = "hello/default.nix";
+      };
+      leaves = {
+        greeter.greet = "hello/greet.nix";
+      };
+    };
+  };
+}
+```
+
+`deployment/default.nix` composes it with your own package set and builds it, stating no
+part of the deployment itself:
+
+```nix
+{
+  pkgs,
+  planner,
+  operator,
+}:
+let
+  greeter = pkgs.writeShellApplication {
+    name = "greet";
+    # `sleep` comes from here rather than from the machine: a unit of a service
+    # artifact runs with the PATH the artifact carries, and the machine's own is
+    # not a fact the plan records.
+    runtimeInputs = [ pkgs.coreutils ];
+    text = ''
+      printf 'hello %s from %s\n' "$GREET_WHO" "$GREET_WHERE" > "$GREET_PATH"
+      exec sleep infinity
+    '';
+  };
+
+  # The deployment is stated in `args.nix` and nowhere else. This file builds the
+  # programs its units run and hands the same declarations to the build, so the
+  # two entry points differ in the package set and never in the deployment. A
+  # module is handed the store path as a string: an unbuilt derivation is an
+  # attribute set whose inputs reach nixpkgs' own stdenv, where the reading that
+  # walks a unit record runs out of stack.
+  deployment = import ./args.nix { packages.greeter = "${greeter}"; };
+in
+operator.mkDeployment {
+  inherit pkgs planner;
+  inherit (deployment) args;
+}
+```
+
+Three more files hold the deployment: the registry, the instances, and the one module a
+reader edits first. [docs/README.md](docs/README.md) shows them and
 [docs/operator.md](docs/operator.md) walks the build and the apply end to end.
 
 ## Commands

@@ -11,6 +11,16 @@ unit extension and a `pin` — are quoted from `tests/unit/support.nix`,
 `tests/unit/units.nix` and `tests/unit/closure.nix` instead, and named as
 such where they appear.
 
+Every key table on this page has a machine-readable half, `lib.vocabulary`,
+published as data and as one JSON file
+([tooling.md](tooling.md#what-this-flake-publishes)). It is a projection of the
+same tables the library reads a declaration against rather than a second copy of
+them, so a key added to one is described there by existing. It states a type by
+its name and, where the type is an enumeration, by the values it admits; a
+predicate is named and never serialised, because a validator is a function.
+Whether one value satisfies its type is `planner diagnose`'s answer and not the
+projection's.
+
 ## 1. Interfaces
 
 An interface is a value you import. It is identified by that value or by an
@@ -671,6 +681,51 @@ renders. Every other refused read is a wiring row the planner produced before
 any implementation ran — an unwired slot is `slot-unwired` whatever the module
 does next — so those slots are read unguarded, and guarding one would hide a
 wiring mistake behind a fallback.
+
+### What ends an evaluation
+
+Four conditions produce no row at all. The first three are the ones the
+interpreter does not let a library catch — `builtins.tryEval` catches a `throw`
+and a failed `assert` and none of these — and the fourth is a walk that runs out
+of stack before it can report anything. Each costs the whole table rather than
+one row, for the reason above: `applicable` forces every row of every entry.
+
+This is the list; a failure that ends an evaluation and is absent from it is a
+gap in this section rather than in the planner.
+
+- **An `abort` anywhere a declaration is forced.** The interpreter prints
+  `error: evaluation aborted with the following error message: '<yours>'` and
+  stops. No `tryEval` catches it, so a module that aborts takes the table with
+  it. **The edit:** return the fact instead of aborting. A module has one
+  channel for refusing another module's value, which is the `fold` of an
+  interface it declares, and everything else a module might abort about is a
+  declaration the planner already reads and reports.
+- **A missing attribute.** The interpreter prints `error: attribute '<name>'
+  missing` and names the file and column of the selection. The common case is an
+  `impl` reading `results.<slot>` for a slot that did not deliver, because a
+  refused read leaves `results` without that key at all. **The edit:** fix the
+  wire the row names — the row was produced, it just never reached a table — and
+  guard only a slot whose interface declares a `fold` that can refuse, as
+  described above.
+- **A function called without an argument its pattern requires.** The
+  interpreter prints `error: function '<name>' called without required argument
+  '<formal>'`. A leaf module's `impl` is the one place this is caught instead:
+  its pattern is read before it is applied, so a closed pattern earns
+  `implementation-formals-closed` and is never called. Every other function a
+  deployment writes — a root, an interfaces file, a module file — is called by
+  whoever imports it. **The edit:** end the pattern with `...` where the caller
+  hands more than the function names, and name every argument it does need.
+- **A derivation handed to a module in place of its store path.** The
+  interpreter prints `error: stack overflow; max-call-depth exceeded` and points
+  inside `pkgs/stdenv/generic/default.nix`, naming nothing of the deployment.
+  Every reading walks a unit record for line breaks and for the store paths it
+  mentions (`lib/util.nix`), and a derivation is an attribute set whose inputs
+  reach the package set's own `stdenv`, so the walk descends into it and does not
+  come back. **The edit:** interpolate. Write `"${greeter}"` and never `greeter`,
+  which is also what a plan can record: a plan holds paths and never
+  expressions. This one is reducible to a row — a derivation is recognisable by
+  the attributes it carries before anything forces its inputs — and the row is
+  not written yet.
 
 ### Where a refusal lives
 

@@ -204,6 +204,13 @@ let
   emptyRoot = _: { };
 in
 {
+  inherit
+    machineRegistryKeys
+    instanceKeys
+    everyKeys
+    reservationKeys
+    ;
+
   resolve =
     {
       reg,

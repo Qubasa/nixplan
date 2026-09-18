@@ -24,6 +24,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import apply
+import diagnose
 import manifest
 import remote
 import report
@@ -97,12 +98,23 @@ def _rollback(args: argparse.Namespace) -> int:
     return 0
 
 
+def _diagnose(args: argparse.Namespace) -> int:
+    answered = diagnose.answer(args.target)
+    if args.json:
+        print(json.dumps(list(answered.rows), indent=2))
+    else:
+        for line in answered.rendered.splitlines():
+            print(line)
+    return 1 if answered.errors else 0
+
+
 SUBCOMMANDS: dict[str, Subcommand] = {
     "plan": _plan,
     "build": _build,
     "apply": _apply,
     "status": _status,
     "rollback": _rollback,
+    "diagnose": _diagnose,
 }
 
 
@@ -148,6 +160,7 @@ def parser() -> argparse.ArgumentParser:
         ("apply", "put a built deployment on the machines it names"),
         ("status", "ask each machine what it holds of a deployment"),
         ("rollback", "return one entry to its previous generation"),
+        ("diagnose", "print the diagnostics of a deployment, realising nothing"),
     ):
         description = help_text
         if name == "rollback":
@@ -160,6 +173,20 @@ def parser() -> argparse.ArgumentParser:
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
         sub.add_argument("target", help=TARGET)
+        if name == "diagnose":
+            sub.add_argument(
+                "--json",
+                action="store_true",
+                help=(
+                    "print the rows themselves instead of the table, in the order the table put "
+                    "them and with every field a row carries"
+                ),
+            )
+        if name == "expel":
+            sub.add_argument(
+                "node",
+                help="the node identifier the listing printed, and never a registry machine name",
+            )
         if name in ("apply", "status", "rollback"):
             sub.add_argument(
                 "--only",

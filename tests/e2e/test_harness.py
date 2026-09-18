@@ -33,6 +33,7 @@ import pytest
 
 import apply
 import delivery
+import diagnose
 import errors
 import generation
 import manifest
@@ -2695,6 +2696,99 @@ ORDERED = [
 ]
 
 ROW_FIELDS = ["evidence", "id", "message", "resolution", "severity", "subject"]
+
+
+def _no_program(*argv: object, **named: object) -> NoReturn:
+    """Stand in for running a program, and fail the test that reached it."""
+    raise AssertionError(f"the command ran a program: {argv!r}")
+
+
+def test_the_command_answers_a_target_it_did_not_build(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A built directory is answered from the two files that build wrote.
+
+    No evaluation and no build: running a program at all fails the test, because
+    the whole point of the subcommand is an answer that costs neither.
+    """
+    root = tmp_path / "built"
+    _built(
+        root,
+        plan=PLAN,
+        entries={SERVER_KEY: _stated(SERVER_KEY, "alpha", "10.0.0.10")},
+        rows=[_row("warning")],
+        table=f"{TABLE}\n",
+    )
+    monkeypatch.setattr(subprocess, "run", _no_program)
+
+    assert planner.main(["diagnose", str(root)]) == 0
+
+    assert capsys.readouterr().out == f"{TABLE}\n"
+
+
+def test_an_error_among_the_rows_is_the_exit_status(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The status is the build's, and the table is printed either way."""
+    for severity, status in (("error", 1), ("warning", 0)):
+        root = tmp_path / severity
+        _built(root, plan=PLAN, entries={}, rows=[_row(severity)], table=f"{TABLE}\n")
+
+        assert planner.main(["diagnose", str(root)]) == status
+
+        assert capsys.readouterr().out == f"{TABLE}\n"
+
+
+def test_the_rows_a_program_reads_are_the_rows_the_table_ordered(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Asked for the rows as data twice, one deployment answers the same list twice."""
+    root = tmp_path / "built"
+    _built(root, plan=PLAN, entries={}, rows=ORDERED, table=f"{TABLE}\n")
+
+    assert planner.main(["diagnose", str(root), "--json"]) == 1
+    first = json.loads(capsys.readouterr().out)
+    assert planner.main(["diagnose", str(root), "--json"]) == 1
+    second = json.loads(capsys.readouterr().out)
+
+    assert first == second
+    assert [row["id"] for row in first] == [row["id"] for row in ORDERED]
+    assert [sorted(row) for row in first] == [ROW_FIELDS, ROW_FIELDS]
+    assert first == ORDERED
+
+
+def test_a_target_that_answers_no_table_is_refused_by_the_command(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A target publishing neither attribute is the command's own refusal.
+
+    Not a traceback, not an empty table, and not a row of the command's own: the
+    message names the target and both attributes it looked for.
+    """
+    target = ".#not-a-deployment"
+
+    def answered(argv: list[str], **named: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=argv,
+            returncode=0,
+            stdout=json.dumps({"diagnostics": None, "rendered": None}),
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", answered)
+
+    with pytest.raises(errors.ApplyError) as refused:
+        diagnose.answer(target)
+    for stated in (target, "diagnostics", "rendered"):
+        assert stated in str(refused.value)
+
+    assert planner.main(["diagnose", target]) == 1
+    assert capsys.readouterr().out == ""
 
 
 def _written(script: str, *, umask: int, content: bytes = b"s3cret") -> int:
