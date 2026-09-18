@@ -1163,7 +1163,7 @@ in
     };
     expected = {
       committed = producedRows;
-      count = 2;
+      count = 5;
       table = readFile (folder + "/plan/diagnostics.txt");
     };
   };
@@ -3767,6 +3767,136 @@ in
         ];
         count = 1;
         namesTheStatedProtocol = true;
+      };
+    };
+
+  # A field enters a key only where its value differs from the default it would
+  # resolve to unstated, and neither of these has one, so a unit declaring
+  # neither carries neither and keys exactly as it did before the vocabulary
+  # grew. The other half is that stating one does move the key: a changed probe
+  # is a new generation and a new image.
+  testAnEntryThatDeclaresNoProbeKeepsItsKey =
+    let
+      bare = support.entryPlan { } (_: {
+        units.web.command = "/bin/web";
+      });
+      probed = support.entryPlan { } (_: {
+        units.web = {
+          command = "/bin/web";
+          probe = "/bin/web-ready";
+          probeTimeout = "30s";
+        };
+      });
+      entry = bare.plan."svc:only@one";
+    in
+    {
+      expr = {
+        rows = rowIds bare;
+        fields = attrNames entry.units.web;
+        keyMentionsAProbe = hasInfix "probe" (toJSON entry.units);
+        statingOneMovesTheKey = entry.key != probed.plan."svc:only@one".key;
+      };
+      expected = {
+        rows = [ ];
+        fields = [ "command" ];
+        keyMentionsAProbe = false;
+        statingOneMovesTheKey = true;
+      };
+    };
+
+  # The plan is a function of a declaration and health is a fact about a running
+  # machine, so the record carries the command and the bound and no third field:
+  # a health, readiness or liveness state would be the planner restating an
+  # answer it cannot have, and whether the probe is enabled is a realiser's.
+  testThePlanSaysHowToProbeAndNeverWhetherItIsHealthy =
+    let
+      result = support.entryPlan { } (_: {
+        units.web = {
+          command = "/bin/web";
+          probe = "/bin/web-ready";
+          probeTimeout = "30s";
+        };
+      });
+      # The names the plan carries and not its text: a probe's own command is a
+      # word the deployment chose, and refusing a plan because a module called
+      # its program `web-ready` would be reading a declaration's vocabulary as
+      # the planner's.
+      namesDeep =
+        value:
+        if isAttrs value then
+          concatLists (map (name: [ name ] ++ namesDeep value.${name}) (attrNames value))
+        else if isList value then
+          concatLists (map namesDeep value)
+        else
+          [ ];
+      fields = namesDeep result.plan;
+      carries = needle: any (name: hasInfix needle name) fields;
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        recorded = result.plan."svc:only@one".units.web;
+        absent = map carries [
+          "health"
+          "Health"
+          "ready"
+          "Ready"
+          "liveness"
+          "Liveness"
+          "enabled"
+          "Enabled"
+        ];
+      };
+      expected = {
+        rows = [ ];
+        recorded = {
+          command = "/bin/web";
+          probe = "/bin/web-ready";
+          probeTimeout = "30s";
+        };
+        absent = [
+          false
+          false
+          false
+          false
+          false
+          false
+          false
+          false
+        ];
+      };
+    };
+
+  # Which file a realiser derives for a probe is the realiser's; the plan records
+  # the units the module declared and rewrites no reference between them.
+  testAProbeAddsNoUnitToThePlan =
+    let
+      result = support.entryPlan { } (_: {
+        units.web = {
+          command = "/bin/web";
+          probe = "/bin/web-ready";
+          probeTimeout = "30s";
+          requires = [ "socket" ];
+        };
+        units.socket.command = "/bin/socket";
+      });
+      entry = result.plan."svc:only@one";
+    in
+    {
+      expr = {
+        rows = rowIds result;
+        units = sortStrings (attrNames entry.units);
+        requires = entry.units.web.requires;
+        socket = attrNames entry.units.socket;
+      };
+      expected = {
+        rows = [ ];
+        units = [
+          "socket"
+          "web"
+        ];
+        requires = [ "socket" ];
+        socket = [ "command" ];
       };
     };
 }
