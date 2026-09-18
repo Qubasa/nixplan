@@ -16,6 +16,7 @@
         packages = [
           pytestEnv
           config.packages.planner
+          config.packages.planner-view
           config.packages.planner-e2e-env
           config.packages.planner-lemmalog
           config.packages.lemmalog

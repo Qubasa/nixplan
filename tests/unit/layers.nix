@@ -59,6 +59,7 @@ let
     "flakelet" = "a realiser";
     "operator" = "the deployment build";
     "cli" = "the operator's command";
+    "view" = "the read-only view of a built deployment";
     "secrets" = "a realiser";
     "tests" = "the tests";
     "pytest.ini" = "the tests";
@@ -300,6 +301,7 @@ let
     "flakelet"
     "operator"
     "cli"
+    "view"
     "secrets"
     "perf"
     "tests"
@@ -970,6 +972,70 @@ let
       ) otherPytestFiles
     )
   );
+
+  # The files the read-only view serves a document out of. A token one of them
+  # carries is a route the view answers, and the two are told apart by
+  # construction: a route whose leading segment named a top-level entry would be
+  # read by the scan above as a path of this repository.
+  servingFiles = [
+    "view/routes.py"
+    "view/page.py"
+  ];
+
+  leadingSegmentOf =
+    route:
+    let
+      m = match "/([^/]+).*" route;
+    in
+    if m == null then null else head m;
+
+  servedRoutes = sorted (
+    filter (token: match "/.+" token != null) (tokensIn (readFile (repoRoot + "/view/routes.py")))
+  );
+
+  routesNamingAnEntry = sorted (
+    map (route: "view/routes.py: ${route} leads with a top-level entry") (
+      filter (route: elem (leadingSegmentOf route) topLevelNames) servedRoutes
+    )
+  );
+
+  pathsNamedByAServedDocument = sorted (
+    map (p: "${p.rel}: ${toString p.line}: ${p.token}") (
+      namedPathsOf repoRoot servingFiles ++ rootedPathsOf repoRoot servingFiles
+    )
+  );
+
+  # Being classified is not being checked: a directory nobody named as a root is
+  # not type-checked at all and fails nothing.
+  pythonModuleDirectories = sorted (
+    filter (
+      name:
+      classOf ? ${name}
+      && (entriesOf repoRoot).${name} == "directory"
+      && filter (rel: match "[^/]+\\.py" rel != null) (filesUnder (repoRoot + "/${name}")) != [ ]
+    ) topLevelNames
+  );
+
+  formatterText = readFile (repoRoot + "/treefmt.nix");
+  linterText = readFile (repoRoot + "/ruff.toml");
+
+  typeChecked =
+    dir: hasInfix "\"${dir}\".options" formatterText || hasInfix "\"${dir}\" = {" formatterText;
+
+  uncheckedDirectories = sorted (
+    concatLists (
+      map (
+        dir:
+        (if typeChecked dir then [ ] else [ "${dir} (${classOf.${dir}}) is no mypy root" ])
+        ++ (
+          if hasInfix "\"${dir}\"" linterText then
+            [ ]
+          else
+            [ "${dir} (${classOf.${dir}}) is in no src of the linter" ]
+        )
+      ) pythonModuleDirectories
+    )
+  );
 in
 {
   # Three kinds of test and two files beside them. `counterexamples` is the third
@@ -1349,6 +1415,39 @@ in
       counted = true;
       answering = true;
       inTwoKinds = [ ];
+    };
+  };
+
+  # A token a served document carries is a route the serving program answers and
+  # not a path of this repository, and the two are told apart by construction
+  # rather than by an exemption.
+  testAServedDocumentNamesARouteRatherThanAPath = {
+    expr = {
+      read = servedRoutes != [ ];
+      leadingWithAnEntry = routesNamingAnEntry;
+      namingAPathOfThisSource = pathsNamedByAServedDocument;
+    };
+    expected = {
+      read = true;
+      leadingWithAnEntry = [ ];
+      namingAPathOfThisSource = [ ];
+    };
+  };
+
+  # The crossing between the stated classes and the roots the type checker and
+  # the linter read, because three of those four fail quietly rather than red.
+  testAClassifiedDirectoryOfModulesIsCheckedAsWellAsClassified = {
+    expr = {
+      unchecked = uncheckedDirectories;
+      directories = pythonModuleDirectories;
+    };
+    expected = {
+      unchecked = [ ];
+      directories = [
+        "cli"
+        "perf"
+        "view"
+      ];
     };
   };
 }

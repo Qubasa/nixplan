@@ -101,6 +101,9 @@ let
     "changes/bind-a-value-an-entry-did-not-generate/specs/realiser/portable-service-image/spec.md"
     "changes/answer-a-machine-question-as-a-record/specs/operator/deployment-build/spec.md"
     "changes/answer-a-machine-question-as-a-record/specs/operator/machine-report/spec.md"
+    "changes/show-a-deployment-in-a-browser/specs/operator/deployment-view/spec.md"
+    "changes/show-a-deployment-in-a-browser/specs/tooling/consumer-surface/spec.md"
+    "changes/show-a-deployment-in-a-browser/specs/tooling/repository-shape/spec.md"
   ];
 
   # Every other spec.md in the repository, with the reason it has no test. Listed
@@ -130,12 +133,6 @@ let
       "an unimplemented change: no task of name-the-machine-a-run-dials has been done, so nothing in this package claims to satisfy it yet";
     "changes/name-the-machine-a-run-dials/specs/planner/secret-delivery/spec.md" =
       "an unimplemented change: no task of name-the-machine-a-run-dials has been done, so nothing in this package claims to satisfy it yet";
-    "changes/show-a-deployment-in-a-browser/specs/operator/deployment-view/spec.md" =
-      "an unimplemented change: no task of show-a-deployment-in-a-browser has been done, so nothing in this package claims to satisfy it yet";
-    "changes/show-a-deployment-in-a-browser/specs/tooling/consumer-surface/spec.md" =
-      "an unimplemented change: no task of show-a-deployment-in-a-browser has been done, so nothing in this package claims to satisfy it yet";
-    "changes/show-a-deployment-in-a-browser/specs/tooling/repository-shape/spec.md" =
-      "an unimplemented change: no task of show-a-deployment-in-a-browser has been done, so nothing in this package claims to satisfy it yet";
     "changes/author-a-deployment-from-outside/specs/operator/deployment-build/spec.md" =
       "an unimplemented change: no task of author-a-deployment-from-outside has been done, so nothing in this package claims to satisfy it yet";
     "changes/author-a-deployment-from-outside/specs/tooling/consumer-surface/spec.md" =
@@ -247,6 +244,10 @@ let
     {
       rel = "cli/counterexample_test.py";
       file = repoSource + "/cli/counterexample_test.py";
+    }
+    {
+      rel = "view/test_view.py";
+      file = repoSource + "/view/test_view.py";
     }
   ];
 

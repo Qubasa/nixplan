@@ -84,6 +84,17 @@ in
       extraPythonPackages = [ pkgs.python3Packages.pytest ];
     };
 
+    # The view reads a build with the command's own reader, so `cli` is on the
+    # type checker's source path here too, and its tests live beside its
+    # modules.
+    "view" = {
+      options = [
+        "--strict"
+        "--config-file=${mypyConfig}"
+      ];
+      extraPythonPackages = [ pkgs.python3Packages.pytest ];
+    };
+
     # mypy descends into a subdirectory only when it is a package, and an
     # end-to-end folder is not. Naming them as roots is what gets them checked at
     # all, and the list is read rather than written: a folder is added by existing.

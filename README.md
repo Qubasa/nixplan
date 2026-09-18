@@ -88,6 +88,7 @@ and a tag that places it on both. [docs/README.md](docs/README.md) shows it and
 | Command | What it does |
 | --- | --- |
 | `nix run . -- --help`, or `nix run .#planner` | the operator's command: `plan`, `build`, `apply`, `status`, `rollback` |
+| `nix run .#planner-view -- <target>` | the read-only view of a built deployment, served on the loopback interface: the machines, the entries, the typed edges and the rows. It takes a deployment this checkout can build and a browser to read it in, which this repository does not publish - see [docs/view.md](docs/view.md) |
 | `nix build .#checks.x86_64-linux.planner-tests` | the unit suites |
 | `nix build .#checks.x86_64-linux.planner-perf` | the evaluation-cost gate |
 | `nix build .#checks.x86_64-linux.treefmt` | formatters, linters, type checker and prose |

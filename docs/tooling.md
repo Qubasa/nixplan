@@ -339,9 +339,9 @@ nix fmt                                                  # the same set, applied
 `treefmt.nix` runs `ruff format`, `ruff check` and `mypy --strict` over the
 Python here beside the Nix formatters, so an edit is told about a lint by
 `nix fmt` rather than by a build. `ruff.toml` holds the rules, and its `src`
-names the three roots a first-party module is imported from: `cli`, `perf` and
-`tests/e2e`. mypy runs once per directory of top-level modules, because that is
-what each `import` expects to be beside:
+names the four roots a first-party module is imported from: `cli`, `perf`,
+`tests/e2e` and `view`. mypy runs once per directory of top-level modules,
+because that is what each `import` expects to be beside:
 
 | mypy root | Holds | Also sees |
 | --- | --- | --- |
@@ -349,6 +349,7 @@ what each `import` expects to be beside:
 | `cli` | the operator's command | nothing else |
 | `tests/e2e` | the harness and `test_harness.py` | `cli`, and pytest |
 | `e2e-folders` | each folder under `tests/e2e/`, as a module list | `cli`, and pytest |
+| `view` | the read-only view of a built deployment and its own tests | `cli`, and pytest |
 
 The last row is a label rather than a path: mypy descends into a subdirectory
 only when it is a package, and an end-to-end folder is not one, so naming the
@@ -365,6 +366,13 @@ module reads `PLANNER_CLI` and `PLANNER_CLI_SRC` off the two attributes that
 module publishes rather than constructing either, so a rename cannot leave the
 app and the machine layer's environment disagreeing.
 
+The read-only view carries its own flake module the same way,
+`view/flake-module.nix`, publishing the program as `planner-view`, its source
+root as `planner-view-src`, and the check that runs its tests as
+`planner-view-tests` - a third name, because a name that names a program a
+reader runs must not also name a check. What it serves is
+[view.md](view.md).
+
 Everything the flake exposes, so a reader can tell what runs where:
 
 | `nix build .#checks.x86_64-linux.<name>` | Needs | Subject |
@@ -374,17 +382,20 @@ Everything the flake exposes, so a reader can tell what runs where:
 | `planner-perf` | nothing | the counter budgets and the growth bound |
 | `planner-perf-checker` | nothing | the budget checker's own tests |
 | `treefmt` | nothing | formatting and linting, repository-wide: nixfmt, deadnix, shellcheck, yamlfmt, vale, `ruff`, `mypy --strict` |
+| `planner-view-tests` | nothing | the view over a built deployment: the documents it answers, the layout it computes, the page it renders and the questions its live half puts |
 
 | `nix run .#<name>` | Needs | Subject |
 | --- | --- | --- |
 | `planner` | `nix`, and ssh reach to the machines for `apply` | the operator's command: build a deployment and put it on the machines it names - [operator.md](operator.md) |
 | `planner-e2e` | `/dev/kvm`, `/dev/net/tun`, `/dev/vhost-vsock`, `$ROOKERY_FLAKE`, and `$NIXOS_SECRETS_FLAKE` for `tests/e2e/generated-secret` | real machines, a delivery between them, and the wire the planner resolved - [cluster.md](cluster.md) |
 | `planner-perf` | nothing | the same measurement and check, on your machine rather than in a sandbox |
+| `planner-view` | a built deployment and a browser | the read-only view, served on the loopback interface, changing nothing - [view.md](view.md) |
 
 | `nix build .#packages.x86_64-linux.<name>` | Subject |
 | --- | --- |
 | `planner` | the command itself, as `result/bin/planner` |
 | `planner-src` | its source root, which `test_harness.py` imports the pure half from |
+| `planner-view-src` | the view's source root, which its own tests import with no wrapper |
 | `planner-e2e-wired-pair` | one folder's deployment, built: the plan, `manifest.json`, the diagnostics and one artifact per placed entry |
 | `planner-e2e-wired-pair-changed` | the second build of that same folder, which differs in the file it serves |
 | `planner-e2e-portable-image` | that folder's deployment: two images, one of them for a machine this host is not |

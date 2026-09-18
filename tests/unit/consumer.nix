@@ -16,13 +16,20 @@ let
   inherit (builtins)
     attrNames
     attrValues
+    concatStringsSep
     filter
     fromJSON
+    head
     listToAttrs
     mapAttrs
+    match
     readFile
     removeAttrs
     sort
+    ;
+
+  inherit (support)
+    hasInfix
     ;
 
   sorted = sort (a: b: a < b);
@@ -81,6 +88,53 @@ let
         )
       )
     );
+  # The published names, read off the modules that publish them: this layer is a
+  # pure evaluation and cannot read the flake that runs it, so what a consumer
+  # reaches by name is read as text.
+  publishingFiles = [
+    "flake-module.nix"
+    "cli/flake-module.nix"
+    "view/flake-module.nix"
+  ];
+
+  publishedText = concatStringsSep "\n" (
+    map (rel: readFile (repoSource + "/${rel}")) publishingFiles
+  );
+
+  namesOf =
+    namespace: text:
+    sorted (
+      filter (name: name != null) (
+        map (
+          line:
+          let
+            m = match " *${namespace}\\.([a-zA-Z0-9-]+) *=.*" line;
+          in
+          if m == null then null else head m
+        ) (support.lines text)
+      )
+    );
+
+  applications = namesOf "apps" publishedText;
+  publishedChecks = namesOf "checks" publishedText;
+
+  bothProgramAndCheck = sorted (
+    map (name: "${name} names a program and a check") (
+      filter (name: builtins.elem name publishedChecks) applications
+    )
+  );
+
+  viewModule = readFile (repoSource + "/view/flake-module.nix");
+
+  viewUnpublished = filter (needle: !(hasInfix needle viewModule)) [
+    "packages.planner-view ="
+    "packages.planner-view-src ="
+    "apps.planner-view ="
+  ];
+
+  viewImported = hasInfix "view/flake-module.nix" (readFile (repoSource + "/flake.nix"));
+
+  pinnedInputs = sorted (attrNames (removeAttrs lock.nodes [ "root" ]));
 in
 {
   testTheLibraryStatesWhoseNixpkgsElaboratedItsPlatforms = {
@@ -108,4 +162,46 @@ in
       otherwise = withoutIdentity ourPlan;
     };
   };
+
+  # The view is reached by output name and adds no input of its own: the standard
+  # library is what it is written against, so the pinned set is the set it was
+  # before.
+  testAConsumerReadsTheViewOffAnOutput = {
+    expr = {
+      unpublished = viewUnpublished;
+      imported = viewImported;
+      ownInput = hasInfix "inputs." viewModule;
+      inputs = pinnedInputs;
+    };
+    expected = {
+      unpublished = [ ];
+      imported = true;
+      ownInput = false;
+      inputs = [
+        "adios"
+        "flake-parts"
+        "flakelet"
+        "korora"
+        "nixpkgs"
+        "treefmt-nix"
+      ];
+    };
+  };
+
+  # A check is a value of this repository's own development and a program is the
+  # thing a reader runs, so no name answers one command with the program and
+  # another with its check.
+  testACheckOverAPublishedProgramTakesANameOfItsOwn = {
+    expr = {
+      answering = bothProgramAndCheck;
+      program = builtins.elem "planner-view" applications;
+      check = builtins.elem "planner-view-tests" publishedChecks;
+    };
+    expected = {
+      answering = [ ];
+      program = true;
+      check = true;
+    };
+  };
+
 }

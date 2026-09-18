@@ -738,6 +738,18 @@ Prose: `docs/operator.md`, under "The command", "Where the bytes of a generated 
 - The one shell takes its root from `git rev-parse --show-toplevel`, and `planner-e2e-env` refuses
   to run outside a checkout of this repository: entered from a foreign tree it would export the
   paths of a checkout the reader is not editing.
+- The view reads a build and mutates nothing: no route applies, retires, rolls back, builds or
+  writes, every method but `GET` and `HEAD` is refused, and it binds the loopback interface, an
+  instruction to listen elsewhere being refused naming the reason. The target is resolved once
+  through `manifest.resolve` before the port is open, so the one branch that invokes nix runs in the
+  foreground and no request is ever a build. The live half calls `report.status` with the command's
+  own runner and renders the record it answers with - no question, no remote script, no verdict
+  vocabulary and no parsing of another layer's sentences - and it asks only when a reader asks, the
+  answer carrying when it was taken. A fact the report does not answer is a requirement against the
+  report's own capability, never a question the view invents. The graph's column is the index of an
+  entry's strong component in `order.walk`'s order, the row is plan key order within it, a value is
+  a cell in the column before its readers, and a read recorded in neither recognised shape is named
+  by consumer and slot rather than dropped.
 
 ## Registration points
 
@@ -829,6 +841,20 @@ silently unobserved.
 - A count a document records is no longer crossed against the tree: `testASuiteGainsATest`,
   `documentFigures` and `treeFigures` are gone and the requirement is withdrawn rather than
   excused, so a figure in `docs/tooling.md` is a figure a reader maintains.
+- `view/` is the read-only view of a built deployment, and it is registered in four places: a row
+  in `classOf` and an entry in `scannedDirectories` in `tests/unit/layers.nix`, a
+  `programs.mypy.directories` root in `treefmt.nix`, and an entry in `src` in `ruff.toml`. Three of
+  those four fail quietly rather than red, which is why
+  `layers.testAClassifiedDirectoryOfModulesIsCheckedAsWellAsClassified` crosses the classified
+  python-module directories - `cli`, `perf`, `view` - against the mypy roots and the linter's `src`
+  read as text. Its own `flake-module.nix` is one `imports` line in `flake.nix`, and its pytest file
+  is one entry in `besideFiles` in `tests/unit/coverage.nix` or the cross-walk cannot see a name it
+  answers a scenario with.
+- A served route's leading segment names no top-level entry, and a served document names its own
+  assets by route and never by a path of this source: `repoTokens` counts a token as a path exactly
+  when its first segment is a real top-level entry, so `/documents/...` and `/page.css` are routes
+  and `docs/...` would be a path the scan demands resolve. `view/routes.py` is the one home of the
+  route set and `layers.testAServedDocumentNamesARouteRatherThanAPath` reads it there.
 
 ## Fixtures and goldens
 
@@ -936,6 +962,14 @@ hand".
 - vulture and harper are deliberately not run. Vulture's only finding is `cmd` in the `Runner`
   protocol of `cli/remote.py`, an interface parameter name, and harper flags `realiser`,
   `flakelet` and `keyset`.
+- The view is python over the standard library, and its page carries no client-side dependency and
+  no script, which is what keeps the toolchain at one formatter, one linter, one type checker and
+  one test runner. Its layout is computed where it is served, so two showings of one build are
+  byte-equal and a test can assert the picture. Its check is named for the tests,
+  `planner-view-tests`, and never for the program: a name that names a program a reader runs must
+  not also name a check, which `consumer.testACheckOverAPublishedProgramTakesANameOfItsOwn` holds
+  over every `apps.` and `checks.` name the publishing modules carry. `planner-perf` stays one name
+  because it is one subject reached two ways and neither half is a program.
 - Build the individual check. Never `nix flake check` the whole flake.
 
 ## No host path in a deployment
