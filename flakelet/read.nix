@@ -14,6 +14,7 @@
 let
   inherit (builtins)
     concatStringsSep
+    elem
     filter
     head
     match
@@ -21,7 +22,7 @@ let
     stringLength
     ;
 
-  inherit (planner.util) escapeRegex quote;
+  inherit (planner.util) escapeRegex quote quoteList;
 
   # Every refusal this reading can make, and the row that reports the same
   # condition first. The pairing is data the refusal carries, so rewording a
@@ -32,6 +33,7 @@ let
     unitRefused.id = "operator-entry-name-refused";
     pathNotAssembled.id = "operator-entry-path-not-assembled";
     pathNotInstallable.id = "operator-entry-path-not-installable";
+    scopeUnsupported.id = "operator-entry-scope-unsupported";
   };
 
   fail = _account: message: throw "planner flakelet: ${message}";
@@ -73,6 +75,28 @@ let
     name: unit:
     match "${escapeRegex name}(-${unitWord}+)?(@${unitWord}*)?\\.(${concatStringsSep "|" unitSuffixes})" unit
     != null;
+
+  # The scopes this realiser can realise, published beside the two rules above
+  # because the reading crosses it against the machine rather than testing which
+  # realiser it is. flakelet's core writes its unit files into
+  # `/run/systemd/system` (systemd.rs:13) and keeps its generations under
+  # `/var/lib/flakelet`, so its endpoint addresses the system manager and a user
+  # mode is upstream work: rendering into a user unit directory would produce an
+  # artifact the endpoint's own linking never reads.
+  scopes = [ "system" ];
+
+  scopeRule = "this realiser realises ${quoteList scopes}: its endpoint writes its unit files into `/run/systemd/system` (systemd.rs:13) and keeps its generations under `/var/lib/flakelet`, both of which belong to the system manager and to root, and a user mode is the upstream endpoint's work rather than a rendering this realiser can choose";
+
+  # The prefix of the `flake_url` this realiser registers, bound once here and
+  # spent by `meta` below, so the string a machine's own answer carries and the
+  # string the record publishes are the one binding. What follows it is the plan
+  # key, which is how an answer this endpoint gives is read as a holding of this
+  # planner at all. Data and no pattern: the record's reader is python.
+  urlPrefix = "plan:";
+
+  holdings = {
+    inherit urlPrefix;
+  };
 
   # The two rules above, as the shared reading is handed them: it renders the
   # units of either realiser, so the refusal it makes is the endpoint's own
@@ -139,6 +163,9 @@ in
     confinement
     nameRule
     unitRule
+    scopes
+    holdings
+    scopeRule
     pathRule
     recordRule
     acceptsName
@@ -164,13 +191,17 @@ in
         profile = confinement;
       };
 
+      scope = (image.entry.target or { }).scope or "system";
+
       shownPaths = sort (a: b: a.path < b.path) (filter (p: !(acceptsHostPath p)) image.hostPaths);
 
       shownRecords = sort (a: b: a.path < b.path) (
         filter (p: acceptsHostPath p && !(acceptsRecord p)) image.hostPaths
       );
     in
-    if shownPaths != [ ] then
+    if !(elem scope scopes) then
+      fail accounts.scopeUnsupported "entry ${quote key} is placed on a machine whose scope is ${quote scope}, and ${scopeRule}"
+    else if shownPaths != [ ] then
       let
         first = head shownPaths;
       in
@@ -191,7 +222,7 @@ in
   meta = image: {
     version = 1;
     inherit (image) name;
-    flake_url = "plan:${image.key}";
+    flake_url = "${urlPrefix}${image.key}";
     flake_rev = "";
     settings_hash = image.version;
   };
