@@ -2,16 +2,6 @@
 
 **WIP**: This is in heavy LLM assisted prototyping phase, not for general use.
 
-A prototype to make selfhosted agentic app distribution feasable.
-Problem: You vibe code an app, but you want to distribute it to your friends,
-it needs a postgresql on a server and an app with credentials on your friends computer.
-
-
-Making someone join a space is then equivalent to building a set of user services and handing them over.
-
-We achieve this by allowing services to be deployed anywhere, Android / embedded devices,
-even where there is no root and the machine is not part of the space.
-
 
 ---
 
@@ -204,6 +194,7 @@ reader edits first. [docs/README.md](docs/README.md) shows them and
 | `nix run .#planner -- diagnose <target> [--json]` | what the planner said about a deployment, realising nothing |
 | `nix run .#planner-view -- <target>` | the read-only view of a built deployment, served on the loopback interface: the machines, the entries, the typed edges and the rows. It takes a deployment this checkout can build and a browser to read it in, which this repository does not publish - see [docs/view.md](docs/view.md) |
 | `nix run .#planner -- invite <target> --values DIR` | mint a join credential for the mesh with the deployment's own generator, writing it where a run reads values from; `members` and `expel` read and end a membership. The deployment states which entry coordinates - see [docs/operator.md](docs/operator.md) |
+| `nix run .#planner-demo` | the whole product on real machines: two guests, one of them reached only by its mesh name and deployed as an account, applied in one command, then held up with the view serving them until you end it - see [docs/demonstration.md](docs/demonstration.md). It needs the machine layer's prerequisites, which the paragraph below states |
 | `nix build .#checks.x86_64-linux.planner-tests` | the unit suites |
 | `nix build .#checks.x86_64-linux.planner-perf` | the evaluation-cost gate |
 | `nix build .#checks.x86_64-linux.treefmt` | formatters, linters, type checker and prose |
